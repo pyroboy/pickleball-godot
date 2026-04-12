@@ -1,0 +1,42 @@
+# Godot
+.godot/
+*.import
+.import/
+*.tscn.import
+*.u.pkl
+*.u.scn
+export/
+exports/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.env
+.eggs/
+*.egg-info/
+
+# Node
+node_modules/
+package-lock.json
+
+# macOS
+.DS_Store
+._*
+
+# VS Code
+.vscode/
+
+# Logs
+logs/
+
+# Data (runtime)
+data/
+
+# MCP (session state)
+.mcp/
+
+# Temp / OS
+*.swp
+*.swo
+*~

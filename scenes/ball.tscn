@@ -1,0 +1,30 @@
+[gd_scene load_steps=5 format=3 uid="uid://ball_scene"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_ball"]
+radius = 0.06
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_ball"]
+bounce = 0.8
+friction = 0.3
+
+[sub_resource type="SphereMesh" id="SphereMesh_ball"]
+radius = 0.06
+height = 0.12
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ball"]
+albedo_color = Color(1, 1, 0, 1)
+
+[node name="Ball" type="RigidBody3D"]
+physics_material_override = SubResource("PhysicsMaterial_ball")
+mass = 0.04
+gravity_scale = 2.0
+linear_damp = 0.0
+angular_damp = 0.0
+continuous_cd = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("SphereShape3D_ball")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+mesh = SubResource("SphereMesh_ball")
+surface_material_override/0 = SubResource("StandardMaterial3D_ball")

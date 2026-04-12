@@ -1,0 +1,32 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+[Settings] loaded from user://settings.cfg
+[FXPool] ready — 8 bursts, 4 decals
+[ENV] Sun created: energy=1.79999995231628 shadow=true mode=ORTHOGONAL ambient=0.31999999284744
+[COURT] SHOW_DEBUG_ZONES=true
+[DEBUG_ZONES] half_length=6.7 half_width=3.05 nz=2.134
+[DEBUG_ZONES] service_depth=4.566 service_box_center_z=4.417
+[COURT] Debug zones created!
+[PlayerBodyBuilder] Skeleton created with 19 bones
+[PlayerBodyBuilder] Skeleton created with 19 bones
+[BOS] reset by set_ai_movement_enabled(false)
+[HitFeedback] setup — ball=true rig=true fxpool=true
+[BallTrail] ready (ribbon)
+[DEBUG] visuals OFF
+[P0] L arm IK: elbow=(1.904771, 0.902895, 6.609967)
+[P0] Leg: ankle=0.40 gap=-0.60 hip2foot=0.52 (51%)
+[P0] Arms: R(s=1.10 e=0.88 h=0.70) L(s=1.10 e=0.90 h=0.75)
+[P1] Leg: ankle=0.46 gap=-0.54 hip2foot=0.52 (51%)
+[P1] Arms: R(s=1.12 e=0.80 h=0.52) L(s=1.12 e=1.62 h=2.10)
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+[PURPLE✗] commit=-1 stage=-1 ball_d=1.0 traj=0 pose=FOREHAND greens=[] gh=1.00 gl=0.00 gu=0.0 gc=0
+WARNING: ObjectDB instances leaked at exit (run with --verbose for details).
+     at: cleanup (core/object/object.cpp:2641)
+ERROR: 2 resources still in use at exit (run with --verbose for details).
+   at: clear (core/io/resource.cpp:810)

@@ -1,0 +1,32 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/right_arm.gd" id="1_arm"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_arm"]
+radius = 0.05
+height = 0.35
+
+[sub_resource type="BoxMesh" id="BoxMesh_hand"]
+size = Vector3(0.08, 0.08, 0.1)
+
+[node name="RightArm" type="Node3D"]
+script = ExtResource("1_arm")
+
+[node name="UpperArmPivot" type="Node3D" parent="."]
+
+[node name="UpperMesh" type="MeshInstance3D" parent="UpperArmPivot"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.175)
+mesh = SubResource("CapsuleMesh_arm")
+
+[node name="ForearmPivot" type="Node3D" parent="UpperArmPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.35)
+
+[node name="ForeMesh" type="MeshInstance3D" parent="UpperArmPivot/ForearmPivot"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.175)
+mesh = SubResource("CapsuleMesh_arm")
+
+[node name="HandPivot" type="Node3D" parent="UpperArmPivot/ForearmPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.35)
+
+[node name="HandMesh" type="MeshInstance3D" parent="UpperArmPivot/ForearmPivot/HandPivot"]
+mesh = SubResource("BoxMesh_hand")

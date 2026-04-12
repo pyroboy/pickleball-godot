@@ -1,0 +1,33 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/leg.gd" id="1_leg"]
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_thigh"]
+radius = 0.06
+height = 0.38
+
+[sub_resource type="BoxMesh" id="BoxMesh_foot"]
+size = Vector3(0.1, 0.05, 0.16)
+
+[node name="RightLeg" type="Node3D"]
+script = ExtResource("1_leg")
+
+[node name="ThighPivot" type="Node3D" parent="."]
+
+[node name="ThighMesh" type="MeshInstance3D" parent="ThighPivot"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.19)
+mesh = SubResource("CapsuleMesh_thigh")
+
+[node name="ShinPivot" type="Node3D" parent="ThighPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.38)
+
+[node name="ShinMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot"]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.18)
+mesh = SubResource("CapsuleMesh_thigh")
+
+[node name="FootPivot" type="Node3D" parent="ThighPivot/ShinPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.36)
+
+[node name="FootMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot/FootPivot"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, -0.03)
+mesh = SubResource("BoxMesh_foot")

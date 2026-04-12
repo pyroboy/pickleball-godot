@@ -1,0 +1,92 @@
+[gd_scene load_steps=4 format=3 uid="uid://court_scene"]
+
+[ext_resource type="Script" path="res://scripts/court.gd" id="1_court"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_floor"]
+bounce = 0.7
+friction = 0.5
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_net"]
+bounce = 0.3
+friction = 0.8
+
+[node name="Court" type="Node3D"]
+script = ExtResource("1_court")
+
+[node name="CourtFloor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+physics_material_override = SubResource("PhysicsMaterial_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="CourtFloor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+mesh = ExtResource("2_floor_mesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="CourtFloor"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0)
+shape = SubResource("BoxShape3D_floor")
+
+[node name="Net" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.455, 0)
+physics_material_override = SubResource("PhysicsMaterial_net")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Net"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+mesh = ExtResource("3_net_mesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Net"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+shape = SubResource("BoxShape3D_net")
+
+[node name="WallBack" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -7.2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallBack"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_wall")
+
+[node name="WallFront" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 7.2)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallFront"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_wall")
+
+[node name="WallLeft" type="StaticBody3D" parent="."]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -3.35, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallLeft"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_wall_side")
+
+[node name="WallRight" type="StaticBody3D" parent="."]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, 3.35, 1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallRight"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("BoxShape3D_wall_side")
+
+[node name="OutOfBoundsAreas" type="Node3D" parent="."]
+
+[node name="OutLeft" type="Area3D" parent="OutOfBoundsAreas"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="OutOfBoundsAreas/OutLeft"]
+shape = SubResource("BoxShape3D_out")
+
+[node name="OutRight" type="Area3D" parent="OutOfBoundsAreas"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.5, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="OutOfBoundsAreas/OutRight"]
+shape = SubResource("BoxShape3D_out")
+
+[node name="OutTop" type="Area3D" parent="OutOfBoundsAreas"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -8)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="OutOfBoundsAreas/OutTop"]
+shape = SubResource("BoxShape3D_out_side")
+
+[node name="OutBottom" type="Area3D" parent="OutOfBoundsAreas"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 8)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="OutOfBoundsAreas/OutBottom"]
+shape = SubResource("BoxShape3D_out_side")
