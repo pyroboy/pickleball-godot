@@ -2,11 +2,11 @@
 
 ## Godot Application Location
 
-**Path**: `~/Downloads/Godot.app`
+**Path**: `/Applications/Godot.app`
 
 > If the path above doesn't exist, try:
+> - `~/Downloads/Godot.app`
 > - `~/Downloads/Godot-4.6.2.app`
-> - `/Applications/Godot.app`
 > - `brew --prefix godot` (if installed via Homebrew)
 > - `ls ~/Downloads/` and look for any `Godot*.app`
 
@@ -14,7 +14,7 @@
 
 ### Via Godot GUI
 ```bash
-open ~/Downloads/Godot.app
+open /Applications/Godot.app
 # Then File → Open → select pickleball-godot/project.godot
 ```
 
@@ -34,7 +34,7 @@ godot --headless --path /Users/arjomagno/Documents/github-repos/pickleball-godot
 **Required**: Godot 4.6.2 (stable)
 - Download: https://godotengine.org/download/macos
 - Filename: `Godot_v4.6.2-stable_macos.universal.zip`
-- Extract to `~/Downloads/Godot.app` (rename if needed)
+- Extract to `/Applications/Godot.app` (rename if needed)
 
 ## Project Structure
 
