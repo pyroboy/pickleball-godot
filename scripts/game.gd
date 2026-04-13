@@ -807,8 +807,14 @@ func _toggle_posture_editor() -> void:
 	if posture_editor_ui == null:
 		push_warning("[POSTURE EDITOR] posture_editor_ui is null — editor not initialized")
 		return
-	posture_editor_ui.visible = not posture_editor_ui.visible
-	print("[POSTURE EDITOR] ", "ON" if posture_editor_ui.visible else "OFF")
+	var was_visible = posture_editor_ui.visible
+	posture_editor_ui.visible = not was_visible
+	if not was_visible:
+		_on_editor_opened()
+		print("[POSTURE EDITOR] ON")
+	else:
+		_on_editor_closed()
+		print("[POSTURE EDITOR] OFF")
 
 var _editor_previous_camera_mode: int = 0
 var _editor_previous_camera_pos: Vector3 = Vector3.ZERO
