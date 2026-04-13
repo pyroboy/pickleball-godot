@@ -28,6 +28,7 @@ var _current_constraint: Constraint = Constraint.NONE
 # Visual feedback
 var _selection_highlight: MeshInstance3D
 var _axis_lines: Node3D
+var _tab_label: Label3D
 
 func _ready() -> void:
 	# Find camera
@@ -53,6 +54,19 @@ func _ready() -> void:
 	_axis_lines = Node3D.new()
 	_axis_lines.name = "AxisLines"
 	add_child(_axis_lines)
+	
+	# Create tab-name billboard label
+	_tab_label = Label3D.new()
+	_tab_label.name = "TabLabel"
+	_tab_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_tab_label.text = ""
+	_tab_label.font_size = 48
+	_tab_label.modulate = Color(1, 0.95, 0.6, 0.9)
+	_tab_label.outline_modulate = Color(0.1, 0.1, 0.1, 0.8)
+	_tab_label.pixel_size = 0.005
+	_tab_label.no_depth_test = true
+	_tab_label.visible = false
+	add_child(_tab_label)
 
 func _input(event: InputEvent) -> void:
 	if not _camera:
@@ -62,12 +76,17 @@ func _input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				_try_select_gizmo(event.position)
+				# Consume input so camera orbit doesn't also fire
+				if _dragging:
+					get_viewport().set_input_as_handled()
 			else:
 				_stop_drag()
+				get_viewport().set_input_as_handled()
 				
 	elif event is InputEventMouseMotion:
 		if _dragging and _selected_gizmo:
 			_update_drag(event.position)
+			get_viewport().set_input_as_handled()
 		else:
 			_update_hover(event.position)
 
@@ -106,6 +125,11 @@ func _select_gizmo(gizmo: GizmoHandle) -> void:
 	# Show axis lines
 	_show_axis_lines(gizmo.global_position)
 	
+	# Show tab label on selected gizmo
+	_tab_label.global_position = gizmo.global_position + Vector3(0, 0.3, 0)
+	_tab_label.text = "[%s]" % gizmo.tab_name
+	_tab_label.visible = true
+	
 	gizmo_selected.emit(gizmo)
 
 func _deselect_gizmo() -> void:
@@ -115,6 +139,7 @@ func _deselect_gizmo() -> void:
 	
 	_selection_highlight.visible = false
 	_axis_lines.visible = false
+	_tab_label.visible = false
 	
 	gizmo_deselected.emit()
 
@@ -138,6 +163,15 @@ func _update_hover(screen_pos: Vector2) -> void:
 		_hovered_gizmo = hovered
 		if _hovered_gizmo:
 			_hovered_gizmo.set_hovered(true)
+	
+	# Update tab label — show on hovered (or selected) gizmo
+	if _hovered_gizmo:
+		var target_gizmo: GizmoHandle = _selected_gizmo if _selected_gizmo else _hovered_gizmo
+		_tab_label.global_position = target_gizmo.global_position + Vector3(0, 0.3, 0)
+		_tab_label.text = "[%s]" % target_gizmo.tab_name
+		_tab_label.visible = true
+	else:
+		_tab_label.visible = false
 
 func _start_drag(gizmo: GizmoHandle, screen_pos: Vector2) -> void:
 	_dragging = true
@@ -178,6 +212,9 @@ func _update_drag(screen_pos: Vector2) -> void:
 		_selection_highlight.global_position = new_pos
 		_update_axis_lines_position(new_pos)
 		gizmo_moved.emit(_selected_gizmo, new_pos)
+	
+	# Keep tab label on top of gizmo while dragging
+	_tab_label.global_position = _selected_gizmo.global_position + Vector3(0, 0.3, 0)
 
 func _stop_drag() -> void:
 	if _dragging and _selected_gizmo:
