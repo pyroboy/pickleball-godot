@@ -1054,16 +1054,36 @@ func _color_for_family(family: int) -> Color:
 		_: return Color(0.7, 0.7, 0.7)   # Default: gray
 
 func _on_gizmo_selected(gizmo) -> void:
-	# Select corresponding posture in list
-	if gizmo.posture_id >= 0:
-		var defs = _base_pose_library.definitions if _is_base_pose_mode() else _library.definitions
-		for i in range(defs.size()):
-			var def = defs[i]
-			var def_id: int = def.base_pose_id if _is_base_pose_mode() else def.posture_id
-			if def_id == gizmo.posture_id:
-				_posture_list.select(i)
-				_on_posture_selected(i)
-				break
+	# Select corresponding posture in list — don't call _on_posture_selected
+	# since that triggers full gizmo recreation which can cause is_inside_tree() errors.
+	# Just sync _current_id, list selection, and properties panel.
+	if gizmo.posture_id < 0:
+		return
+	var defs = _base_pose_library.definitions if _is_base_pose_mode() else _library.definitions
+	var found_index := -1
+	for i in range(defs.size()):
+		var def = defs[i]
+		var def_id: int = def.base_pose_id if _is_base_pose_mode() else def.posture_id
+		if def_id == gizmo.posture_id:
+			found_index = i
+			break
+	if found_index < 0:
+		return
+	
+	# Sync _current_id without rebuilding gizmos
+	if _is_base_pose_mode():
+		_current_base_def = _base_pose_library.definitions[found_index]
+		_current_def = null
+		_current_id = _current_base_def.base_pose_id
+	else:
+		_current_def = _library.definitions[found_index]
+		_current_base_def = null
+		_current_id = _current_def.posture_id
+	
+	_posture_list.select(found_index)
+	_populate_properties()
+	_update_gizmo_visibility()  # Refresh visibility for new _current_id
+	_status_label.text = "Selected: %s (ID: %d)" % [_current_display_name(), _current_id]
 
 func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 	var body_def = _current_body_resource()
@@ -1238,6 +1258,7 @@ func _create_head_gizmos() -> void:
 
 func _create_arm_gizmos() -> void:
 	if not _player or not _player.paddle_node: return
+	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
 	
 	var def = _current_body_resource()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
@@ -1274,6 +1295,7 @@ func _create_arm_gizmos() -> void:
 
 func _create_leg_gizmos() -> void:
 	if not _player: return
+	if not _player.is_inside_tree(): return
 	
 	var def = _current_body_resource()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
@@ -1374,12 +1396,17 @@ func _update_gizmo_visibility() -> void:
 				if not gizmo.has_method("get_posture_id"): continue
 				var gh: GizmoHandle = gizmo as GizmoHandle
 				# Filter by posture_id AND tab_name (empty tab_name = show on all tabs)
-				var posture_match: bool = (gh.posture_id == _current_id)
+				# When _current_id < 0 (no posture selected yet), show all gizmos for current tab
+				var posture_match: bool = (_current_id < 0) or (gh.posture_id == _current_id)
 				var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
 				gizmo.visible = posture_match and tab_match
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		# Auto-select first posture if none selected yet (gizmos need _current_def to be valid)
+		if visible and _current_def == null and _posture_list.get_item_count() > 0:
+			_on_posture_selected(0)
+		
 		# Create gizmos if needed when editor becomes visible
 		if visible and _player and _player.is_inside_tree():
 			if _player.global_position.length() > 0.01:
