@@ -272,10 +272,17 @@ func set_debug_visible(v: bool) -> void:
 			dv.set_debug_visible(v)
 
 
-func set_debug_zones_visible(_v: bool) -> void:
-	# DebugZones is a child of game.gd node; we can't find it directly from here
-	# so this is a no-op — game.gd calls this on itself
-	pass
+func set_debug_zones_visible(v: bool) -> void:
+	# DebugZones is a child of game.gd; traverse up from canvas to find it
+	var dz_node: Node = null
+	var parent = get_parent()
+	while parent:
+		dz_node = parent.find_child("DebugZones", true, false)
+		if dz_node:
+			break
+		parent = parent.get_parent()
+	if dz_node:
+		dz_node.visible = v
 
 
 func _set_debug_visuals_visible(v: bool) -> void:
