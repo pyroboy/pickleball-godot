@@ -20,6 +20,25 @@ var posture_id: int = -1
 var field_name: String = ""
 var is_right_side: bool = true  # For paired gizmos (left/right)
 var tab_name: String = ""  # Which editor tab this gizmo belongs to
+var body_part_name: String = ""  # "chest", "head", "hips", "right_hand", etc.
+
+## Custom ray test — body part gizmos return -1 so they never block
+## body-mesh hover detection. Paddle gizmos use normal sphere intersection.
+func raycast_test(ray_origin: Vector3, ray_dir: Vector3) -> float:
+	if body_part_name != "":
+		return -1.0  # Body gizmos are invisible to raycasts; body mesh detection is used instead
+	# Fall back to sphere intersection for paddle gizmos
+	var to_center := global_position - ray_origin
+	var proj := to_center.dot(ray_dir)
+	if proj < 0:
+		return -1.0
+	var closest_point: Vector3 = ray_origin + ray_dir * proj
+	var dist_sq: float = closest_point.distance_squared_to(global_position)
+	var radius: float = gizmo_size * maxf(scale.x, maxf(scale.y, scale.z))
+	if dist_sq > radius * radius:
+		return -1.0
+	var offset: float = sqrt(radius * radius - dist_sq)
+	return proj - offset
 
 func _ready() -> void:
 	_setup_visuals()

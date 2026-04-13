@@ -1221,6 +1221,7 @@ func _create_torso_gizmos() -> void:
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "hip_rotation"
 		gizmo.tab_name = "Torso"
+		gizmo.body_part_name = "hips"
 		gizmo.gizmo_color = Color(0, 1, 1)
 		gizmo.ring_radius = 0.3
 		gizmo.global_position = hip_pos
@@ -1235,6 +1236,7 @@ func _create_torso_gizmos() -> void:
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "torso_rotation"
 		gizmo.tab_name = "Torso"
+		gizmo.body_part_name = "chest"
 		gizmo.gizmo_color = Color(1, 0.5, 0)
 		gizmo.ring_radius = 0.25
 		gizmo.global_position = chest_pos
@@ -1251,6 +1253,7 @@ func _create_head_gizmos() -> void:
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "head_rotation"
 		gizmo.tab_name = "Head"
+		gizmo.body_part_name = "head"
 		gizmo.gizmo_color = Color(1, 1, 1)
 		gizmo.ring_radius = 0.15
 		gizmo.global_position = head_pos
@@ -1395,8 +1398,12 @@ func _update_gizmo_visibility() -> void:
 			for gizmo in _gizmo_controller.get_children():
 				if not gizmo.has_method("get_posture_id"): continue
 				var gh: GizmoHandle = gizmo as GizmoHandle
-				# Filter by posture_id AND tab_name (empty tab_name = show on all tabs)
-				# When _current_id < 0 (no posture selected yet), show all gizmos for current tab
+				# Body-part gizmos (chest, head, hands, feet) are ONLY shown by hover.
+				# They stay hidden here regardless of posture/tab match.
+				if gh.body_part_name != "":
+					gizmo.visible = false
+					continue
+				# Paddle gizmos: visible if posture and tab match
 				var posture_match: bool = (_current_id < 0) or (gh.posture_id == _current_id)
 				var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
 				gizmo.visible = posture_match and tab_match
@@ -1433,6 +1440,36 @@ func _process(_delta: float) -> void:
 	# Update gizmo positions when editor is visible (except selected gizmo)
 	if visible and _player:
 		_update_gizmo_positions()
+	
+	# Push body-part world positions to gizmo controller for hover detection
+	if _gizmo_controller and _player and _player.is_inside_tree() and _player.skeleton:
+		var positions: Dictionary = {}
+		var skel = _player.skeleton
+		for bone_name in ["chest", "head", "hips"]:
+			var idx: int = skel.find_bone(bone_name)
+			if idx >= 0:
+				positions[bone_name] = skel.to_global(skel.get_bone_global_pose(idx).origin)
+		# Hand and foot positions from current posture definition
+		var def = _current_body_resource()
+		if def:
+			var forehand_axis: Vector3 = _player._get_forehand_axis()
+			var forward_axis: Vector3 = _player._get_forward_axis()
+			# Right hand
+			if _player.paddle_node and _player.paddle_node.is_inside_tree():
+				var r_base = _player.paddle_node.to_global(Vector3(0, 0.07, 0))
+				positions["right_hand"] = r_base + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_hand_offset, forehand_axis, forward_axis)
+				var l_base: Vector3
+				match def.left_hand_mode:
+					1: l_base = _player.paddle_node.to_global(Vector3(0, 0.20, 0))
+					2: l_base = _player.global_position + forehand_axis * -0.2 + forward_axis * 0.2 + Vector3(0, 0.45, 0)
+					3: l_base = _player.global_position + Vector3(0, 1.05, 0) + forward_axis * 0.15
+					_: l_base = _player.global_position
+				positions["left_hand"] = l_base + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_hand_offset, forehand_axis, forward_axis)
+			# Foot positions
+			var foot_stance: Vector3 = forehand_axis * 0.5 * def.stance_width
+			positions["right_foot"] = _player.global_position + foot_stance + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_foot_offset, forehand_axis, forward_axis)
+			positions["left_foot"] = _player.global_position - foot_stance + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_foot_offset, forehand_axis, forward_axis)
+		_gizmo_controller.update_body_part_positions(positions)
 
 func _input(event: InputEvent) -> void:
 	if not visible:
