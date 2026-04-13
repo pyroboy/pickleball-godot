@@ -1,18 +1,18 @@
 class_name PoseController extends Node
 
-const LANDING_RECOVERY_FALLBACK := 0.16
-const LUNGE_RECOVERY_FALLBACK := 0.18
-const JUMP_TAKEOFF_FALLBACK := 0.18
-const SPLIT_STEP_FALLBACK := 0.12
-const DECEL_PLANT_FALLBACK := 0.14
-const LUNGE_LATERAL_THRESHOLD := 0.72
-const LOW_SCOOP_HEIGHT := 0.28
-const RUN_SPEED_THRESHOLD := 3.0
-const SHUFFLE_SPEED_THRESHOLD := 1.2
-const DECEL_TRIGGER_SPEED_DELTA := 2.2
+const LANDING_RECOVERY_FALLBACK = 0.16
+const LUNGE_RECOVERY_FALLBACK = 0.18
+const JUMP_TAKEOFF_FALLBACK = 0.18
+const SPLIT_STEP_FALLBACK = 0.12
+const DECEL_PLANT_FALLBACK = 0.14
+const LUNGE_LATERAL_THRESHOLD = 0.72
+const LOW_SCOOP_HEIGHT = 0.28
+const RUN_SPEED_THRESHOLD = 3.0
+const SHUFFLE_SPEED_THRESHOLD = 1.2
+const DECEL_TRIGGER_SPEED_DELTA = 2.2
 
-var _player: PlayerController
-var _library: BasePoseLibrary
+var _player
+var _library
 
 var base_pose_state: int = 0
 var pose_intent: int = 0
@@ -28,17 +28,17 @@ var _prev_is_jumping: bool = false
 var _prev_speed: float = 0.0
 var _prev_commit_stage: int = -1
 
-var _editor_base_pose_override: BasePoseDefinition = null
+var _editor_base_pose_override
 var _editor_state_override: int = -1
-var _composed_pose_cache: PostureDefinition = null
+var _composed_pose_cache
 var _cache_posture_id: int = -999
 var _cache_state_id: int = -999
-var _cache_override_ref: PostureDefinition = null
+var _cache_override_ref
 
 
 func _ready() -> void:
-	_player = get_parent() as PlayerController
-	_library = BasePoseLibrary.instance()
+	_player = get_parent()
+	_library = load("res://scripts/base_pose_library.gd").new()
 
 
 func invalidate_cache() -> void:
@@ -48,7 +48,7 @@ func invalidate_cache() -> void:
 	_cache_override_ref = null
 
 
-func set_editor_base_pose_override(def: BasePoseDefinition) -> void:
+func set_editor_base_pose_override(def) -> void:
 	_editor_base_pose_override = def
 	invalidate_cache()
 
@@ -68,20 +68,20 @@ func clear_editor_state_override() -> void:
 	invalidate_cache()
 
 
-func get_base_pose_def() -> BasePoseDefinition:
+func get_base_pose_def():
 	if _editor_base_pose_override != null:
 		return _editor_base_pose_override
 	var state_id: int = _editor_state_override if _editor_state_override >= 0 else base_pose_state
 	return _library.get_def(state_id)
 
 
-func compose_runtime_posture(def_override: PostureDefinition = null) -> PostureDefinition:
+func compose_runtime_posture(def_override = null):
 	if _player == null:
 		return def_override
 
-	var stroke_def: PostureDefinition = def_override
+	var stroke_def = def_override
 	if stroke_def == null:
-		stroke_def = PostureLibrary.instance().get_def(_player.paddle_posture)
+		stroke_def = load("res://scripts/posture_library.gd").new().get_def(_player.paddle_posture)
 	if stroke_def == null:
 		return def_override
 
@@ -91,11 +91,11 @@ func compose_runtime_posture(def_override: PostureDefinition = null) -> PostureD
 		and _cache_state_id == state_id:
 		return _composed_pose_cache
 
-	var base_def := get_base_pose_def()
+	var base_def = get_base_pose_def()
 	if base_def == null:
 		return stroke_def
 
-	var composed := base_def.blend_onto_stroke(stroke_def)
+	var composed = base_def.blend_onto_stroke(stroke_def)
 	if def_override == null:
 		_composed_pose_cache = composed
 		_cache_posture_id = stroke_def.posture_id
@@ -104,10 +104,10 @@ func compose_runtime_posture(def_override: PostureDefinition = null) -> PostureD
 	return composed
 
 
-func compose_preview_posture(base_def: BasePoseDefinition, stroke_posture_id: int) -> PostureDefinition:
-	var stroke_def := PostureLibrary.instance().get_def(stroke_posture_id)
+func compose_preview_posture(base_def, stroke_posture_id: int):
+	var stroke_def = load("res://scripts/posture_library.gd").new().get_def(stroke_posture_id)
 	if stroke_def == null:
-		stroke_def = PostureLibrary.instance().get_def(_player.PaddlePosture.READY)
+		stroke_def = load("res://scripts/posture_library.gd").new().get_def(_player.PaddlePosture.READY)
 	if stroke_def == null or base_def == null:
 		return stroke_def
 	return base_def.to_preview_posture(stroke_def)
@@ -119,24 +119,24 @@ func update_runtime_pose_state(delta: float) -> void:
 
 	var speed: float = Vector3(_player.current_velocity.x, 0.0, _player.current_velocity.z).length()
 	var commit_stage: int = _player.posture._last_commit_stage if _player.posture else -1
-	var ball: Ball = _player._get_ball_ref() as Ball
+	var ball = _player._get_ball_ref()
 
 	if _prev_is_jumping and not _player.is_jumping:
-		var landing_def := _library.get_def(_player.BasePoseState.LANDING_RECOVERY)
+		var landing_def = _library.get_def(_player.BasePoseState.LANDING_RECOVERY)
 		landing_recovery_timer = maxf(
 			landing_recovery_timer,
 			landing_def.landing_lockout_time if landing_def else LANDING_RECOVERY_FALLBACK
 		)
 		decel_timer = maxf(decel_timer, DECEL_PLANT_FALLBACK)
 	if not _prev_is_jumping and _player.is_jumping:
-		var takeoff_def := _library.get_def(_player.BasePoseState.JUMP_TAKEOFF)
+		var takeoff_def = _library.get_def(_player.BasePoseState.JUMP_TAKEOFF)
 		jump_takeoff_timer = maxf(
 			jump_takeoff_timer,
 			takeoff_def.jump_window * 0.5 if takeoff_def else JUMP_TAKEOFF_FALLBACK
 		)
 	if commit_stage >= 1 and commit_stage != _prev_commit_stage and not _player.is_jumping:
 		if ball == null or not ball.ball_bounced_since_last_hit:
-			var split_def := _library.get_def(_player.BasePoseState.SPLIT_STEP)
+			var split_def = _library.get_def(_player.BasePoseState.SPLIT_STEP)
 			split_step_timer = maxf(
 				split_step_timer,
 				split_def.recovery_time if split_def else SPLIT_STEP_FALLBACK
@@ -150,7 +150,7 @@ func update_runtime_pose_state(delta: float) -> void:
 	jump_takeoff_timer = maxf(jump_takeoff_timer - delta, 0.0)
 	decel_timer = maxf(decel_timer - delta, 0.0)
 
-	var context := _resolve_live_context()
+	var context = _resolve_live_context()
 	last_contact_context = context
 	var was_lunge: bool = base_pose_state in [
 		_player.BasePoseState.FOREHAND_LUNGE,
@@ -164,7 +164,7 @@ func update_runtime_pose_state(delta: float) -> void:
 		_player.BasePoseState.BACKHAND_LUNGE,
 		_player.BasePoseState.LOW_SCOOP_LUNGE,
 	]:
-		var recovery_def := _library.get_def(_player.BasePoseState.RECOVERY_READY)
+		var recovery_def = _library.get_def(_player.BasePoseState.RECOVERY_READY)
 		lunge_recovery_timer = maxf(
 			lunge_recovery_timer,
 			recovery_def.recovery_time if recovery_def else LUNGE_RECOVERY_FALLBACK
@@ -284,7 +284,7 @@ func _resolve_live_context() -> Dictionary:
 	var pre_bounce: bool = true
 	var has_contact_hint: bool = false
 
-	var ball: Ball = _player._get_ball_ref() as Ball
+	var ball = _player._get_ball_ref()
 	if ball != null:
 		pre_bounce = not ball.ball_bounced_since_last_hit
 		contact_point = ball.global_position
@@ -330,7 +330,7 @@ func _resolve_live_context() -> Dictionary:
 	var hit_h: float = maxf(0.0, contact_point.y - _player.ground_y)
 	var lateral_reach: float = (contact_point - _player.global_position).dot(forehand_axis)
 	var forward_reach: float = (contact_point - _player.global_position).dot(forward_axis)
-	var intent_desc := describe_contact_intent(hit_h, player_z_abs, pre_bounce)
+	var intent_desc = describe_contact_intent(hit_h, player_z_abs, pre_bounce)
 	var speed: float = vel_flat.length()
 	return {
 		"intent": intent_desc["intent"],

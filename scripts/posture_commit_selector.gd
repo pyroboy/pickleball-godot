@@ -40,10 +40,6 @@ const COURT_FLOOR_Y: float = 0.08
 ## ── State ─────────────────────────────────────────────────────────────────────
 
 var _trajectory_points: Array[Vector3] = []
-var _green_lit_postures: Dictionary = {}   # posture int → true (persists while ball incoming)
-var _committed_incoming_posture: int = -1
-var _contact_point_local: Vector3 = Vector3.ZERO
-var _first_green_posture: int = -1
 
 ## ── Public API ────────────────────────────────────────────────────────────────
 
@@ -135,10 +131,9 @@ func find_best_green_posture(ref_pos: Vector3, posture_ghosts: Dictionary,
 	# Descending-arc correction: clamp local_ht to the lower of the
 	# grid-reported height and the predicted floor-relative height.
 	# Prevents mid-arc trajectory samples from masking true low contacts.
-	var ball_ref = null
+	var _ball_ref = null
 	if awareness_grid and awareness_grid.has_method("_get_ball_ref"):
-		ball_ref = awareness_grid._get_ball_ref()
-	# (awareness_grid ball-ref access is optional; leave as no-op if unavailable)
+		_ball_ref = awareness_grid._get_ball_ref()
 
 	# ── GREEN PATH ──────────────────────────────────────────────────────────
 	var green_set: Dictionary = build_green_set(posture_ghosts,

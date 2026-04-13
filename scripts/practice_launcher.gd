@@ -1,5 +1,6 @@
 extends Node
 class_name PracticeLauncher
+const _Ball = preload("res://scripts/ball.gd")
 
 ## PracticeLauncher.gd - Logic for the training/practice ball launcher.
 ## Handles spawning balls from realistic court zones with USAPA-spec trajectory bundles.
@@ -174,7 +175,7 @@ func launch_ball() -> void:
 		_:
 			launch_angle_deg = randf_range(10.0, 20.0)
 
-	var grav = Ball.get_effective_gravity()
+	var grav = _Ball.get_effective_gravity()
 	var dx = target_x - _ball.global_position.x; var dz = target_z - _ball.global_position.z; var hdist = sqrt(dx * dx + dz * dz)
 	
 	const MAX_LAUNCH_V: float = 18.0

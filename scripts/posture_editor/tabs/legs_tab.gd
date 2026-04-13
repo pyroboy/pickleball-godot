@@ -7,26 +7,26 @@ signal field_changed(field_name: String, value: Variant)
 var _def: Resource = null
 
 # Stance fields
-var _stance_slider: SliderField
-var _front_foot_slider: SliderField
-var _back_foot_slider: SliderField
+var _stance_slider
+var _front_foot_slider
+var _back_foot_slider
 
 # Foot yaw
-var _right_yaw_slider: SliderField
-var _left_yaw_slider: SliderField
+var _right_yaw_slider
+var _left_yaw_slider
 
 # Knee poles
-var _right_knee_editor: Vector3Editor
-var _left_knee_editor: Vector3Editor
+var _right_knee_editor
+var _left_knee_editor
 
 # Foot fine offsets (stance basis)
-var _right_foot_off: Vector3Editor
-var _left_foot_off: Vector3Editor
-var _lead_foot_opt: OptionButton
+var _right_foot_off
+var _left_foot_off
+var _lead_foot_opt
 
 # Other
-var _crouch_slider: SliderField
-var _weight_shift_slider: SliderField
+var _crouch_slider
+var _weight_shift_slider
 
 func _ready() -> void:
 	add_child(_create_section_label("Stance"))

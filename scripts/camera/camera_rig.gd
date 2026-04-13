@@ -21,7 +21,7 @@ const MAX_CAMERA_OFFSET: float = 3.0
 const EDITOR_CAMERA_V_OFFSET: float = 0.0
 
 var camera: Camera3D
-var _shake: CameraShake
+var _shake
 
 # External refs (set via setup)
 var _player_left: CharacterBody3D

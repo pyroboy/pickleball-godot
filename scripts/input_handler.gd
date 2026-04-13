@@ -136,7 +136,10 @@ func _handle_swing_charge(delta: float) -> void:
 			serve_charge_time = min(serve_charge_time + delta, MAX_SERVE_CHARGE_TIME)
 			var charge_ratio = serve_charge_time / MAX_SERVE_CHARGE_TIME
 			if _player_left: _player_left.set_serve_charge_visual(charge_ratio)
-			_game._update_charge_ui(charge_ratio)
+			if _game.has_method("_update_charge_ui"):
+				_game._update_charge_ui(charge_ratio)
+			elif _game.get("game_serve") and _game.game_serve.has_method("_update_charge_ui"):
+				_game.game_serve._update_charge_ui(charge_ratio)
 		else:
 			# Released
 			serve_is_charging = false

@@ -8,13 +8,13 @@ extends Node3D
 const ImpactBurstScript = preload("res://scripts/fx/impact_burst.gd")
 const BounceDecalScript = preload("res://scripts/fx/bounce_decal.gd")
 
-const INIT_BURSTS: int = 8   # Mobile: reduced from 12
-const INIT_DECALS: int = 4   # Mobile: reduced from 8
-const MAX_BURSTS: int = 8   # Mobile: reduced from 24
-const MAX_DECALS: int = 4   # Mobile: reduced from 16
+const INIT_BURSTS: int = 8
+const INIT_DECALS: int = 4
+const MAX_BURSTS: int = 8
+const MAX_DECALS: int = 4
 
-var _bursts: Array[ImpactBurst] = []
-var _decals: Array[BounceDecal] = []
+var _bursts: Array = []
+var _decals: Array = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -24,14 +24,14 @@ func _ready() -> void:
 		_add_decal()
 	print("[FXPool] ready — ", _bursts.size(), " bursts, ", _decals.size(), " decals")
 
-func _add_burst() -> ImpactBurst:
-	var b: ImpactBurst = ImpactBurstScript.new()
+func _add_burst() -> Node3D:
+	var b: Node3D = ImpactBurstScript.new()
 	add_child(b)
 	_bursts.append(b)
 	return b
 
-func _add_decal() -> BounceDecal:
-	var d: BounceDecal = BounceDecalScript.new()
+func _add_decal() -> Node3D:
+	var d: Node3D = BounceDecalScript.new()
 	add_child(d)
 	_decals.append(d)
 	return d
@@ -41,7 +41,7 @@ func spawn_burst(pos: Vector3, color: Color, strength: float = 1.0, upward: bool
 		print("[FXPool] burst skipped — particles off")
 		return
 	print("[FXPool] spawn_burst at ", pos, " color=", color, " strength=", "%.2f" % strength)
-	var free_burst: ImpactBurst = _find_free_burst()
+	var free_burst: Node3D = _find_free_burst()
 	if free_burst == null:
 		if _bursts.size() < MAX_BURSTS:
 			free_burst = _add_burst()
@@ -54,7 +54,7 @@ func spawn_burst(pos: Vector3, color: Color, strength: float = 1.0, upward: bool
 func spawn_decal(pos: Vector3, color: Color) -> void:
 	if not _settings_particles_on():
 		return
-	var free_decal: BounceDecal = _find_free_decal()
+	var free_decal: Node3D = _find_free_decal()
 	if free_decal == null:
 		if _decals.size() < MAX_DECALS:
 			free_decal = _add_decal()
@@ -64,13 +64,13 @@ func spawn_decal(pos: Vector3, color: Color) -> void:
 	_decals.erase(free_decal)
 	_decals.append(free_decal)
 
-func _find_free_burst() -> ImpactBurst:
+func _find_free_burst() -> Node3D:
 	for b in _bursts:
 		if not b.is_active():
 			return b
 	return null
 
-func _find_free_decal() -> BounceDecal:
+func _find_free_decal() -> Node3D:
 	for d in _decals:
 		if not d.is_active():
 			return d

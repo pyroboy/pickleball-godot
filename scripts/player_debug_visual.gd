@@ -2,14 +2,15 @@ class_name PlayerDebugVisual extends Node
 ## PlayerDebugVisual — extracted from player.gd
 ## All debug visualization and indicator logic for AI and human players.
 
-const HUMAN_INTERCEPT_POOL_SIZE := 4  # Mobile: reduced from 8
-const AI_MARKER_HEIGHT := 0.09
-const AI_MARKER_SMOOTHING := 0.08
-const AI_POST_BOUNCE_MARKER_SMOOTHING := 0.12
-const NON_VOLLEY_ZONE := PickleballConstants.NON_VOLLEY_ZONE
-const MEDIUM_OVERHEAD_TRIGGER_HEIGHT := PickleballConstants.MEDIUM_OVERHEAD_TRIGGER_HEIGHT
-const HIGH_OVERHEAD_TRIGGER_HEIGHT := PickleballConstants.HIGH_OVERHEAD_TRIGGER_HEIGHT
-const DEBUG_STEP_PLANNER := true
+const HUMAN_INTERCEPT_POOL_SIZE = 4  # Mobile: reduced from 8
+const AI_MARKER_HEIGHT = 0.09
+const AI_MARKER_SMOOTHING = 0.08
+const AI_POST_BOUNCE_MARKER_SMOOTHING = 0.12
+const NON_VOLLEY_ZONE = PickleballConstants.NON_VOLLEY_ZONE
+const MEDIUM_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.MEDIUM_OVERHEAD_TRIGGER_HEIGHT
+const HIGH_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.HIGH_OVERHEAD_TRIGGER_HEIGHT
+const _Ball = preload("res://scripts/ball.gd")
+const DEBUG_STEP_PLANNER = true
 
 var _debug_hidden: bool = true  # hidden by default — Z key toggles
 var _intent_hidden: bool = false  # N key toggles — independent of Z. Shows
@@ -56,7 +57,7 @@ var _debug_right_origin_marker: MeshInstance3D = null
 var _debug_left_origin_marker: MeshInstance3D = null
 
 
-var _player: PlayerController
+var _player
 
 
 func _ready() -> void:
@@ -117,12 +118,12 @@ func draw_step_debug(r_target: Vector3, l_target: Vector3, r_origin: Vector3, l_
 
 
 func create_debug_marker(color: Color, radius: float) -> MeshInstance3D:
-	var marker := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
+	var marker = MeshInstance3D.new()
+	var sphere = SphereMesh.new()
 	sphere.radius = radius
 	sphere.height = radius * 2.0
 	marker.mesh = sphere
-	var mat := StandardMaterial3D.new()
+	var mat = StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -313,7 +314,7 @@ func create_human_indicators() -> void:
 		human_postbounce_indicators.append(node)
 
 	# --- Dash-lines for pre-bounce (ImmediateMesh, one per pool slot) ---
-	var dash_mat_base := StandardMaterial3D.new()
+	var dash_mat_base = StandardMaterial3D.new()
 	dash_mat_base.albedo_color = Color(1.0, 0.6, 0.1, 0.7)
 	dash_mat_base.emission_enabled = true
 	dash_mat_base.emission = Color(1.0, 0.5, 0.0)
@@ -322,7 +323,7 @@ func create_human_indicators() -> void:
 	dash_mat_base.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	dash_mat_base.cull_mode = BaseMaterial3D.CULL_DISABLED
 	for _i2 in range(HUMAN_INTERCEPT_POOL_SIZE):
-		var dl := MeshInstance3D.new()
+		var dl = MeshInstance3D.new()
 		dl.mesh = ImmediateMesh.new()
 		dl.material_override = dash_mat_base.duplicate()
 		dl.top_level = true
@@ -331,9 +332,9 @@ func create_human_indicators() -> void:
 		human_prebounce_dashlines.append(dl)
 
 	# --- Labels for pre-bounce ---
-	var pre_label_names := ["VOLLEY", "", "", "", "", "", "", ""]
+	var pre_label_names = ["VOLLEY", "", "", "", "", "", "", ""]
 	for li in range(HUMAN_INTERCEPT_POOL_SIZE):
-		var lbl := Label3D.new()
+		var lbl = Label3D.new()
 		lbl.text = pre_label_names[li]
 		lbl.font_size = 28
 		lbl.modulate = Color(1.0, 0.75, 0.1, 1.0)
@@ -345,9 +346,9 @@ func create_human_indicators() -> void:
 		human_prebounce_labels.append(lbl)
 
 	# --- Labels for post-bounce ---
-	var post_label_names := ["RETURN", "DROP", "", "", "", "", "", ""]
+	var post_label_names = ["RETURN", "DROP", "", "", "", "", "", ""]
 	for li in range(HUMAN_INTERCEPT_POOL_SIZE):
-		var lbl := Label3D.new()
+		var lbl = Label3D.new()
 		lbl.text = post_label_names[li]
 		lbl.font_size = 28
 		lbl.modulate = Color(0.2, 0.95, 1.0, 1.0)
@@ -394,27 +395,27 @@ func update_ai_indicators() -> void:
 
 
 func predict_human_intercept_points(ball: RigidBody3D) -> Dictionary:
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	var pos: Vector3 = ball.global_position
 	var vel: Vector3 = ball.linear_velocity
 	var omega: Vector3 = ball.angular_velocity
 	var floor_h: float = 0.08
 
 	# Height windows for the three tier postures
-	const MIN_HIT_HEIGHT := 0.18   # LOW posture minimum
-	const MAX_HIT_HEIGHT := 1.5    # HIGH_OVERHEAD maximum
-	const STEP := 0.045
-	const MAX_STEPS := 80
-	const MIN_GAP := 0.25          # Min metres between sampled dots so they don't pile up
+	const MIN_HIT_HEIGHT = 0.18   # LOW posture minimum
+	const MAX_HIT_HEIGHT = 1.5    # HIGH_OVERHEAD maximum
+	const STEP = 0.045
+	const MAX_STEPS = 80
+	const MIN_GAP = 0.25          # Min metres between sampled dots so they don't pile up
 
 	var pre_bounce: Array[Vector3] = []
 	var post_bounce: Array[Vector3] = []
-	var has_bounced := false
-	var last_pre := Vector3.ZERO
-	var last_post := Vector3.ZERO
+	var has_bounced = false
+	var last_pre = Vector3.ZERO
+	var last_post = Vector3.ZERO
 
 	for _i in range(MAX_STEPS):
-		var stepped: Array = Ball.predict_aero_step(pos, vel, omega, gravity, STEP)
+		var stepped: Array = _Ball.predict_aero_step(pos, vel, omega, gravity, STEP)
 		if stepped.is_empty():
 			break
 		pos = stepped[0]
@@ -425,7 +426,7 @@ func predict_human_intercept_points(ball: RigidBody3D) -> Dictionary:
 			if not has_bounced:
 				has_bounced = true
 				pos.y = floor_h
-				var bounced: Array = Ball.predict_bounce_spin(vel, omega)
+				var bounced: Array = _Ball.predict_bounce_spin(vel, omega)
 				if bounced.is_empty():
 					break
 				vel = bounced[0]
@@ -443,7 +444,7 @@ func predict_human_intercept_points(ball: RigidBody3D) -> Dictionary:
 		if pos.y >= MIN_HIT_HEIGHT and pos.y <= MAX_HIT_HEIGHT:
 			if not has_bounced:
 				# Skip if inside the no-volley zone (kitchen) -- player 0 is +Z side
-				var in_kitchen := (_player.player_num == 0 and pos.z < NON_VOLLEY_ZONE) or \
+				var in_kitchen = (_player.player_num == 0 and pos.z < NON_VOLLEY_ZONE) or \
 								  (_player.player_num == 1 and pos.z > -NON_VOLLEY_ZONE)
 				if not in_kitchen:
 					if last_pre == Vector3.ZERO or pos.distance_to(last_pre) >= MIN_GAP:
@@ -470,7 +471,7 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 		incoming_traj_instance.visible = false
 		return points
 
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	var pos: Vector3 = ball.global_position
 	var vel: Vector3 = ball.linear_velocity
 	var omega: Vector3 = ball.angular_velocity
@@ -489,7 +490,7 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 		incoming_traj_mesh.surface_begin(Mesh.PRIMITIVE_LINES, incoming_traj_material)
 
 	for _step in range(max_steps):
-		var stepped: Array = Ball.predict_aero_step(pos, vel, omega, gravity, step_time)
+		var stepped: Array = _Ball.predict_aero_step(pos, vel, omega, gravity, step_time)
 		if stepped.is_empty():
 			break
 		pos = stepped[0]
@@ -500,7 +501,7 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 			pos.y = 0.08
 			if not has_bounced:
 				has_bounced = true
-				var bounced: Array = Ball.predict_bounce_spin(vel, omega)
+				var bounced: Array = _Ball.predict_bounce_spin(vel, omega)
 				if bounced.is_empty():
 					break
 				vel = bounced[0]
@@ -553,8 +554,11 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 				var nearest_ghost: String = "-"
 				var nearest_ghost_d: float = INF
 				if _player.posture:
+					var resolver = _player.posture.get_node_or_null("OffsetResolver")
+					if resolver == null and _player.posture.has_method("get_posture_offset_for"):
+						resolver = _player.posture
 					for posture in _player.posture.posture_ghosts.keys():
-						var gw: Vector3 = player_pos + _player.posture.get_posture_offset_for(posture)
+						var gw: Vector3 = player_pos + (resolver.get_posture_offset_for(posture) if resolver else Vector3.ZERO)
 						var gd: float = gw.distance_to(pt)
 						if gd < nearest_ghost_d:
 							nearest_ghost_d = gd
@@ -578,19 +582,19 @@ func update_human_intercept_pools(ball: RigidBody3D) -> void:
 		if incoming_traj_instance:
 			incoming_traj_instance.visible = false
 	# Commit when the OPPONENT hits the ball (not self)
-	var opponent_num := 1 - _player.player_num
+	var opponent_num = 1 - _player.player_num
 	var current_hit_by: int = -1
 	if ball.has_method("get_last_hit_by"):
 		current_hit_by = int(ball.get_last_hit_by())
-	var opponent_just_hit := (current_hit_by == opponent_num and human_last_hit_by_seen != opponent_num)
+	var opponent_just_hit = (current_hit_by == opponent_num and human_last_hit_by_seen != opponent_num)
 	human_last_hit_by_seen = current_hit_by
 
 	# Fallback: detect velocity direction toward our court
 	var ball_vel_sign: float = sign(ball.linear_velocity.z)
 	# For player 0 (+Z court), ball coming toward us = positive Z vel
 	# For player 1 (-Z court), ball coming toward us = negative Z vel
-	var toward_us := (_player.player_num == 0 and ball_vel_sign > 0) or (_player.player_num == 1 and ball_vel_sign < 0)
-	var vel_flipped := (ball_vel_sign != human_last_ball_vel_sign and toward_us)
+	var toward_us = (_player.player_num == 0 and ball_vel_sign > 0) or (_player.player_num == 1 and ball_vel_sign < 0)
+	var vel_flipped = (ball_vel_sign != human_last_ball_vel_sign and toward_us)
 	human_last_ball_vel_sign = ball_vel_sign
 
 	# Recompute on new opponent hit, velocity flip inbound, or first time
@@ -605,14 +609,14 @@ func update_human_intercept_pools(ball: RigidBody3D) -> void:
 		human_committed_pre_intercepts.clear()
 		if pre.size() > 0:
 			# Tier 1: VOLLEY  (0.18m - MEDIUM_OVERHEAD_TRIGGER_HEIGHT)
-			var best_volley := Vector3.ZERO
-			var best_volley_score := INF
+			var best_volley = Vector3.ZERO
+			var best_volley_score = INF
 			# Tier 2: SEMI-SMASH (MEDIUM -> HIGH threshold)
-			var best_semi := Vector3.ZERO
-			var best_semi_score := INF
+			var best_semi = Vector3.ZERO
+			var best_semi_score = INF
 			# Tier 3: FULL SMASH (>= HIGH threshold)
-			var best_smash := Vector3.ZERO
-			var best_smash_score := INF
+			var best_smash = Vector3.ZERO
+			var best_smash_score = INF
 			for pt in pre:
 				var dist = _player.global_position.distance_to(pt)
 				if pt.y < MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
@@ -864,18 +868,18 @@ func _classify_post_bounce_shot(hit_h: float, player_z_abs: float, _pt_z_abs: fl
 
 
 func draw_dash_line(mesh_inst: MeshInstance3D, from_pos: Vector3, to_pos: Vector3) -> void:
-	var imesh := mesh_inst.mesh as ImmediateMesh
+	var imesh = mesh_inst.mesh as ImmediateMesh
 	if imesh == null:
 		return
 	imesh.clear_surfaces()
-	var height := to_pos.y - from_pos.y
+	var height = to_pos.y - from_pos.y
 	if height < 0.05:
 		return
-	const NUM_DASHES := 7
+	var NUM_DASHES = 7
 	imesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	for d in range(NUM_DASHES):
-		var t_start := float(d) / float(NUM_DASHES)
-		var t_end := (float(d) + 0.5) / float(NUM_DASHES)  # Half the segment = dash, other half = gap
+		var t_start = float(d) / float(NUM_DASHES)
+		var t_end = (float(d) + 0.5) / float(NUM_DASHES)  # Half the segment = dash, other half = gap
 		imesh.surface_add_vertex(Vector3(from_pos.x, from_pos.y + t_start * height, from_pos.z))
 		imesh.surface_add_vertex(Vector3(from_pos.x, from_pos.y + t_end   * height, from_pos.z))
 	imesh.surface_end()

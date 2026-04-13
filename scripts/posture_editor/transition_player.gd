@@ -25,18 +25,18 @@ var _loop: bool = false
 var _speed: float = 1.0
 
 # Posture definitions for each phase
-var _ready_def: PostureDefinition = null
-var _charge_def: PostureDefinition = null
-var _contact_def: PostureDefinition = null
-var _follow_through_defs: Array[PostureDefinition] = []
+var _ready_def = null
+var _charge_def = null
+var _contact_def = null
+var _follow_through_defs: Array = []
 
 # Player reference
 var _player: PlayerController = null
 var _restore_posture_id: int = -1
 
-func setup(player: PlayerController, ready_def: PostureDefinition, 
-		   charge_def: PostureDefinition, contact_def: PostureDefinition,
-		   ft_defs: Array[PostureDefinition]) -> void:
+func setup(player, ready_def, 
+		   charge_def, contact_def,
+		   ft_defs: Array) -> void:
 	_player = player
 	_ready_def = ready_def if ready_def != null else contact_def
 	_charge_def = charge_def if charge_def != null else contact_def
@@ -202,7 +202,7 @@ func _restore_live_posture() -> void:
 
 	var restore_id := _restore_posture_id
 	if restore_id >= 0:
-		var restore_def := PostureLibrary.instance().get_def(restore_id)
+		var restore_def = load("res://scripts/posture_library.gd").new().get_def(restore_id)
 		if restore_def != null:
 			_apply_posture(restore_def)
 		else:
@@ -210,7 +210,7 @@ func _restore_live_posture() -> void:
 	_clear_transition_blend_override()
 
 
-func _apply_posture(def: PostureDefinition) -> void:
+func _apply_posture(def) -> void:
 	if not _player or not def or not _player.posture:
 		return
 	# Avoid PlayerController.paddle_posture setter — it would re-apply the library skeleton.
@@ -218,8 +218,8 @@ func _apply_posture(def: PostureDefinition) -> void:
 	_player.posture.paddle_posture = def.posture_id
 	_player.posture.force_posture_update(def)
 
-func _lerp_postures(from_def: PostureDefinition, to_def: PostureDefinition, t: float) -> void:
+func _lerp_postures(from_def, to_def, t: float) -> void:
 	if not _player or not from_def or not to_def:
 		return
-	var blended: PostureDefinition = from_def.lerp_with(to_def, t)
+	var blended = from_def.lerp_with(to_def, t)
 	_apply_posture(blended)

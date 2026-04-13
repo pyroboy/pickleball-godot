@@ -9,7 +9,6 @@ class_name GameServe
 ## this node. The game node retains game_state, scoring, and rally logic.
 
 signal serve_launched(team: int)
-signal fault_triggered(reason: String)
 
 # ── Serve charge state ─────────────────────────────────────────────────────────
 var _serve_charge_time: float = 0.0
@@ -26,9 +25,9 @@ var _game: Node                       # game.gd (parent)
 var ball: RigidBody3D
 var player_left: CharacterBody3D
 var player_right: CharacterBody3D
-var rally_scorer: RallyScorer
-var scoreboard_ui: ScoreboardUI
-var ShotPhysics: Script               # ShotPhysics class
+var rally_scorer
+var scoreboard_ui
+var _ShotPhysicsRef: Script           # ShotPhysics class (renamed to avoid shadowing global class)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Setup
@@ -39,8 +38,8 @@ func setup(
 	ball_node: RigidBody3D,
 	p_left: CharacterBody3D,
 	p_right: CharacterBody3D,
-	scorer: RallyScorer,
-	ui: ScoreboardUI,
+	scorer,
+	ui,
 	shot_phys: Script
 ) -> void:
 	_game = game
@@ -49,7 +48,7 @@ func setup(
 	player_right = p_right
 	rally_scorer = scorer
 	scoreboard_ui = ui
-	ShotPhysics = shot_phys
+	_ShotPhysicsRef = shot_phys
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Charge control
@@ -61,7 +60,7 @@ func start_charge() -> void:
 
 func tick_charge(delta: float) -> void:
 	var MAX_SERVE_CHARGE_TIME := PickleballConstants.MAX_SERVE_CHARGE_TIME
-	_serve_charge_time = mini(_serve_charge_time + delta, MAX_SERVE_CHARGE_TIME)
+	_serve_charge_time = minf(_serve_charge_time + delta, MAX_SERVE_CHARGE_TIME)
 	_update_charge_ui(get_charge_ratio())
 
 func get_charge_ratio() -> float:
@@ -137,7 +136,7 @@ func perform_serve(charge_ratio: float) -> void:
 	ball.audio_synth.play_serve_sound()
 	scoreboard_ui.show_speed(ball.linear_velocity.length())
 	scoreboard_ui.show_shot_type(_classify_trajectory(ball.linear_velocity))
-	_game._awaiting_return = true
+	_game._awaiting_return = true  # using direct write; getter is_awaiting_return() exists for warning suppression
 	_serve_was_hit = true
 	serve_launched.emit(serving_team)
 
@@ -153,11 +152,11 @@ func get_serve_launch_position(is_red_side: bool) -> Vector3:
 func get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool = false) -> Vector3:
 	var MIN_SERVE_SPEED := PickleballConstants.MIN_SERVE_SPEED
 	var MAX_SERVE_SPEED := PickleballConstants.MAX_SERVE_SPEED
-	var SERVE_AIM_MAX := PickleballConstants.SERVE_AIM_MAX
-	var SERVE_AIM_STEP := PickleballConstants.SERVE_AIM_STEP
-	var ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
-	var ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
-	var ARC_INTENT_STEP := PickleballConstants.ARC_INTENT_STEP
+	var _SERVE_AIM_MAX := PickleballConstants.SERVE_AIM_MAX
+	var _SERVE_AIM_STEP := PickleballConstants.SERVE_AIM_STEP
+	var _ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
+	var _ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
+	var _ARC_INTENT_STEP := PickleballConstants.ARC_INTENT_STEP
 
 	var serve_speed: float = lerp(MIN_SERVE_SPEED, MAX_SERVE_SPEED, clampf(charge_ratio, 0.0, 1.0))
 	var serve_origin: Vector3 = get_serve_launch_position(from_red_side)
@@ -172,7 +171,7 @@ func get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool = fal
 		# Even score: stand RIGHT (X>0), serve to LEFT diagonal (X<0)
 		# Odd score:  stand LEFT  (X<0), serve to RIGHT diagonal (X>0)
 		if serve_from_right:
-			target_x_offset = mini(_serve_aim_offset_x, -1.5)
+			target_x_offset = minf(_serve_aim_offset_x, -1.5)
 		else:
 			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
 
@@ -188,7 +187,7 @@ func get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool = fal
 		if serve_from_right:
 			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
 		else:
-			target_x_offset = mini(_serve_aim_offset_x, -1.5)
+			target_x_offset = minf(_serve_aim_offset_x, -1.5)
 
 		var target_z: float = 4.6   # Blue's service box (positive Z)
 		var target_position: Vector3 = Vector3(target_x_offset, 0.08, target_z)

@@ -1,6 +1,30 @@
 class_name PlayerAIBrain extends Node
 ## PlayerAIBrain — AI prediction, intercept, and hitting logic extracted from player.gd
 
+const _PC = preload("res://scripts/player.gd")
+# Alias PaddlePosture enum values as local constants to avoid class_name resolution issues
+const PP_FOREHAND: int = _PC.PaddlePosture.FOREHAND
+const PP_FORWARD: int = _PC.PaddlePosture.FORWARD
+const PP_BACKHAND: int = _PC.PaddlePosture.BACKHAND
+const PP_MEDIUM_OVERHEAD: int = _PC.PaddlePosture.MEDIUM_OVERHEAD
+const PP_HIGH_OVERHEAD: int = _PC.PaddlePosture.HIGH_OVERHEAD
+const PP_LOW_FOREHAND: int = _PC.PaddlePosture.LOW_FOREHAND
+const PP_LOW_FORWARD: int = _PC.PaddlePosture.LOW_FORWARD
+const PP_LOW_BACKHAND: int = _PC.PaddlePosture.LOW_BACKHAND
+const PP_CHARGE_FOREHAND: int = _PC.PaddlePosture.CHARGE_FOREHAND
+const PP_CHARGE_BACKHAND: int = _PC.PaddlePosture.CHARGE_BACKHAND
+const PP_WIDE_FOREHAND: int = _PC.PaddlePosture.WIDE_FOREHAND
+const PP_WIDE_BACKHAND: int = _PC.PaddlePosture.WIDE_BACKHAND
+const PP_VOLLEY_READY: int = _PC.PaddlePosture.VOLLEY_READY
+const PP_MID_LOW_FOREHAND: int = _PC.PaddlePosture.MID_LOW_FOREHAND
+const PP_MID_LOW_BACKHAND: int = _PC.PaddlePosture.MID_LOW_BACKHAND
+const PP_MID_LOW_FORWARD: int = _PC.PaddlePosture.MID_LOW_FORWARD
+const PP_MID_LOW_WIDE_FOREHAND: int = _PC.PaddlePosture.MID_LOW_WIDE_FOREHAND
+const PP_MID_LOW_WIDE_BACKHAND: int = _PC.PaddlePosture.MID_LOW_WIDE_BACKHAND
+const PP_LOW_WIDE_FOREHAND: int = _PC.PaddlePosture.LOW_WIDE_FOREHAND
+const PP_LOW_WIDE_BACKHAND: int = _PC.PaddlePosture.LOW_WIDE_BACKHAND
+const PP_READY: int = _PC.PaddlePosture.READY
+
 # ── AI constants ──────────────────────────────────────────────────────────────
 const AI_RECEIVE_X_TOLERANCE := 0.25
 const AI_RECEIVE_Z_TOLERANCE := 0.20
@@ -42,6 +66,7 @@ const OVERHEAD_RELEASE_HEIGHT := 0.62
 const OVERHEAD_RELEASE_RADIUS := 2.0
 const JUMP_VELOCITY := PickleballConstants.JUMP_VELOCITY
 const JUMP_GRAVITY := PickleballConstants.JUMP_GRAVITY
+const _Ball := preload("res://scripts/ball.gd")
 const SMASH_FORCE_BONUS := 1.35
 const SMASH_DOWNWARD_BIAS := 0.22
 const AI_MARKER_HEIGHT := 0.09
@@ -67,8 +92,8 @@ enum AIState {
 	HIT_BALL,
 }
 
-var ai_state: int = PlayerController.AIState.INTERCEPT_POSITION
-var ai_desired_posture: int = 0  # PlayerController.PaddlePosture.FOREHAND
+var ai_state: int = AIState.INTERCEPT_POSITION
+var ai_desired_posture: int = 0  # PP_FOREHAND
 var ai_target_position: Vector3 = Vector3.ZERO
 var ai_predicted_bounce_position: Vector3 = Vector3.ZERO
 var ai_predicted_contact_position: Vector3 = Vector3.ZERO
@@ -118,7 +143,7 @@ var human_committed_target_position: Vector3 = Vector3.ZERO
 var human_last_hit_by_seen: int = -1
 var human_last_ball_vel_sign: float = 0.0
 
-var _player: PlayerController  # set in _ready
+var _player  # set in _ready
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
@@ -214,11 +239,11 @@ func get_ai_input() -> Vector3:
 			ai_ball_bounced_on_side, ai_is_charging])
 
 	# Don't override CHARGING state — AI is committed to swinging
-	if ai_state != PlayerController.AIState.CHARGING:
+	if ai_state != AIState.CHARGING:
 		if paddle_target_position.distance_to(proactive_contact_point) <= 0.5:
-			ai_state = PlayerController.AIState.HIT_BALL
+			ai_state = AIState.HIT_BALL
 		else:
-			ai_state = PlayerController.AIState.INTERCEPT_POSITION
+			ai_state = AIState.INTERCEPT_POSITION
 	target_x = intercept_target.x
 	target_z = intercept_target.z
 	_commit_ai_target_position(Vector3(target_x, _player.ground_y, target_z))
@@ -231,7 +256,7 @@ func get_ai_input() -> Vector3:
 	# When charging, use tighter deadzone and don't oscillate
 	var x_tol: float = AI_RECEIVE_X_TOLERANCE
 	var z_tol: float = AI_RECEIVE_Z_TOLERANCE
-	if ai_state == PlayerController.AIState.CHARGING:
+	if ai_state == AIState.CHARGING:
 		x_tol = 0.06
 		z_tol = 0.06
 
@@ -253,30 +278,30 @@ func _get_posture_for_height(rel_height: float) -> Array[int]:
 	# Typical rally ball heights: 0.4–1.8 m above floor.
 	# Thresholds match _update_paddle_tracking (also floor-relative now).
 	if rel_height >= HIGH_OVERHEAD_TRIGGER_HEIGHT:
-		return [PlayerController.PaddlePosture.HIGH_OVERHEAD, PlayerController.PaddlePosture.MEDIUM_OVERHEAD]
+		return [PP_HIGH_OVERHEAD, PP_MEDIUM_OVERHEAD]
 	elif rel_height >= MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-		return [PlayerController.PaddlePosture.MEDIUM_OVERHEAD, PlayerController.PaddlePosture.HIGH_OVERHEAD, PlayerController.PaddlePosture.FORWARD]
+		return [PP_MEDIUM_OVERHEAD, PP_HIGH_OVERHEAD, PP_FORWARD]
 	elif rel_height >= 0.55:
 		# Normal height (hip and above) — full lateral coverage
 		return [
-			PlayerController.PaddlePosture.FOREHAND, PlayerController.PaddlePosture.FORWARD, PlayerController.PaddlePosture.BACKHAND,
-			PlayerController.PaddlePosture.WIDE_FOREHAND, PlayerController.PaddlePosture.WIDE_BACKHAND,
-			PlayerController.PaddlePosture.VOLLEY_READY,
+			PP_FOREHAND, PP_FORWARD, PP_BACKHAND,
+			PP_WIDE_FOREHAND, PP_WIDE_BACKHAND,
+			PP_VOLLEY_READY,
 		]
 	elif rel_height >= 0.22:
 		# Mid-low / knee height (0.22–0.55 m above floor)
 		return [
-			PlayerController.PaddlePosture.MID_LOW_FOREHAND, PlayerController.PaddlePosture.MID_LOW_BACKHAND,
-			PlayerController.PaddlePosture.MID_LOW_FORWARD,
-			PlayerController.PaddlePosture.MID_LOW_WIDE_FOREHAND, PlayerController.PaddlePosture.MID_LOW_WIDE_BACKHAND,
-			PlayerController.PaddlePosture.FOREHAND, PlayerController.PaddlePosture.BACKHAND,  # fallback for borderline
+			PP_MID_LOW_FOREHAND, PP_MID_LOW_BACKHAND,
+			PP_MID_LOW_FORWARD,
+			PP_MID_LOW_WIDE_FOREHAND, PP_MID_LOW_WIDE_BACKHAND,
+			PP_FOREHAND, PP_BACKHAND,  # fallback for borderline
 		]
 	else:
 		# Low / ankle height (< 0.22 m above floor — just after bounce)
 		return [
-			PlayerController.PaddlePosture.LOW_FOREHAND, PlayerController.PaddlePosture.LOW_BACKHAND, PlayerController.PaddlePosture.LOW_FORWARD,
-			PlayerController.PaddlePosture.LOW_WIDE_FOREHAND, PlayerController.PaddlePosture.LOW_WIDE_BACKHAND,
-			PlayerController.PaddlePosture.MID_LOW_FOREHAND, PlayerController.PaddlePosture.MID_LOW_BACKHAND,  # fallback
+			PP_LOW_FOREHAND, PP_LOW_BACKHAND, PP_LOW_FORWARD,
+			PP_LOW_WIDE_FOREHAND, PP_LOW_WIDE_BACKHAND,
+			PP_MID_LOW_FOREHAND, PP_MID_LOW_BACKHAND,  # fallback
 		]
 
 # ── Intercept solution ────────────────────────────────────────────────────────
@@ -288,7 +313,7 @@ func _get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 
 	var best_target: Vector3 = _player.global_position
 	var best_score: float = INF
-	var best_posture: int = PlayerController.PaddlePosture.FOREHAND
+	var best_posture: int = PP_FOREHAND
 	var best_contact: Vector3 = predicted_ball_pos
 
 	for contact_point in contact_candidates:
@@ -320,27 +345,27 @@ func _get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 # ── Posture preference ────────────────────────────────────────────────────────
 func _get_ai_posture_preference(posture: int) -> float:
 	match posture:
-		PlayerController.PaddlePosture.FOREHAND:              return AI_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.FORWARD:               return AI_FORWARD_PREFERENCE
-		PlayerController.PaddlePosture.BACKHAND:              return AI_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.MEDIUM_OVERHEAD:       return AI_OVERHEAD_PREFERENCE
-		PlayerController.PaddlePosture.HIGH_OVERHEAD:         return AI_OVERHEAD_PREFERENCE
-		PlayerController.PaddlePosture.LOW_FOREHAND:          return AI_LOW_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.LOW_FORWARD:           return AI_LOW_FORWARD_PREFERENCE
-		PlayerController.PaddlePosture.LOW_BACKHAND:          return AI_LOW_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.WIDE_FOREHAND:         return AI_WIDE_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.WIDE_BACKHAND:         return AI_WIDE_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.VOLLEY_READY:          return AI_VOLLEY_READY_PREFERENCE
-		PlayerController.PaddlePosture.MID_LOW_FOREHAND:      return AI_MID_LOW_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.MID_LOW_BACKHAND:      return AI_MID_LOW_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.MID_LOW_FORWARD:       return AI_MID_LOW_FORWARD_PREFERENCE
-		PlayerController.PaddlePosture.MID_LOW_WIDE_FOREHAND: return AI_MID_LOW_WIDE_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.MID_LOW_WIDE_BACKHAND: return AI_MID_LOW_WIDE_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.LOW_WIDE_FOREHAND:     return AI_LOW_WIDE_FOREHAND_PREFERENCE
-		PlayerController.PaddlePosture.LOW_WIDE_BACKHAND:     return AI_LOW_WIDE_BACKHAND_PREFERENCE
-		PlayerController.PaddlePosture.READY:
+		PP_FOREHAND:              return AI_FOREHAND_PREFERENCE
+		PP_FORWARD:               return AI_FORWARD_PREFERENCE
+		PP_BACKHAND:              return AI_BACKHAND_PREFERENCE
+		PP_MEDIUM_OVERHEAD:       return AI_OVERHEAD_PREFERENCE
+		PP_HIGH_OVERHEAD:         return AI_OVERHEAD_PREFERENCE
+		PP_LOW_FOREHAND:          return AI_LOW_FOREHAND_PREFERENCE
+		PP_LOW_FORWARD:           return AI_LOW_FORWARD_PREFERENCE
+		PP_LOW_BACKHAND:          return AI_LOW_BACKHAND_PREFERENCE
+		PP_WIDE_FOREHAND:         return AI_WIDE_FOREHAND_PREFERENCE
+		PP_WIDE_BACKHAND:         return AI_WIDE_BACKHAND_PREFERENCE
+		PP_VOLLEY_READY:          return AI_VOLLEY_READY_PREFERENCE
+		PP_MID_LOW_FOREHAND:      return AI_MID_LOW_FOREHAND_PREFERENCE
+		PP_MID_LOW_BACKHAND:      return AI_MID_LOW_BACKHAND_PREFERENCE
+		PP_MID_LOW_FORWARD:       return AI_MID_LOW_FORWARD_PREFERENCE
+		PP_MID_LOW_WIDE_FOREHAND: return AI_MID_LOW_WIDE_FOREHAND_PREFERENCE
+		PP_MID_LOW_WIDE_BACKHAND: return AI_MID_LOW_WIDE_BACKHAND_PREFERENCE
+		PP_LOW_WIDE_FOREHAND:     return AI_LOW_WIDE_FOREHAND_PREFERENCE
+		PP_LOW_WIDE_BACKHAND:     return AI_LOW_WIDE_BACKHAND_PREFERENCE
+		PP_READY:
 			return 0.50  # neutral ready-position — valid transition posture
-		PlayerController.PaddlePosture.CHARGE_FOREHAND, PlayerController.PaddlePosture.CHARGE_BACKHAND:
+		PP_CHARGE_FOREHAND, PP_CHARGE_BACKHAND:
 			return 0.0  # AI shouldn't auto-select charge postures
 	return 0.30  # safe fallback — neutral, low priority
 
@@ -416,14 +441,14 @@ func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	_last_ball_pos_cached = perceived_pos
 	_last_ball_vel_cached = perceived_vel
 	
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	var predicted_position: Vector3 = perceived_pos
 	var predicted_velocity: Vector3 = perceived_vel
 	var predicted_omega: Vector3 = _perceived_ball_omega(ball)
 	var floor_height: float = 0.08
 
 	for _step in range(AI_LANDING_PREDICTION_STEPS):
-		var stepped: Array = Ball.predict_aero_step(
+		var stepped: Array = _Ball.predict_aero_step(
 			predicted_position, predicted_velocity, predicted_omega,
 			gravity, AI_LANDING_PREDICTION_STEP
 		)
@@ -441,7 +466,7 @@ func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	return predicted_position
 
 func _predict_ball_position(ball: RigidBody3D, time_ahead: float) -> Vector3:
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	# GAP-47: perceived state seeds the prediction.
 	var predicted_position: Vector3 = _perceived_ball_pos(ball) + _perceived_ball_vel(ball) * time_ahead
 	predicted_position.y += -0.5 * gravity * time_ahead * time_ahead
@@ -455,7 +480,7 @@ func _predict_ai_contact_candidates(ball: RigidBody3D) -> Array[Vector3]:
 	if _prediction_cache_valid and _last_ball_pos_cached.distance_squared_to(perceived_pos) < 0.005:
 		return _cached_contact_candidates
 	
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	var predicted_position: Vector3 = perceived_pos
 	var predicted_velocity: Vector3 = perceived_vel
 	var predicted_omega: Vector3 = _perceived_ball_omega(ball)
@@ -468,7 +493,7 @@ func _predict_ai_contact_candidates(ball: RigidBody3D) -> Array[Vector3]:
 	var _has_entered_ai_side: bool = predicted_position.z <= z_limit_max
 
 	for _step in range(AI_CONTACT_PREDICTION_STEPS):
-		var stepped: Array = Ball.predict_aero_step(
+		var stepped: Array = _Ball.predict_aero_step(
 			predicted_position, predicted_velocity, predicted_omega,
 			gravity, AI_CONTACT_PREDICTION_STEP
 		)
@@ -483,7 +508,7 @@ func _predict_ai_contact_candidates(ball: RigidBody3D) -> Array[Vector3]:
 			predicted_position.y = floor_height
 			if not has_bounced:
 				has_bounced = true
-				var bounced: Array = Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
+				var bounced: Array = _Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
 				predicted_velocity = bounced[0]
 				predicted_omega = bounced[1]
 			else:
@@ -514,7 +539,7 @@ func _predict_ai_contact_point(ball: RigidBody3D) -> Vector3:
 	return candidates[0]
 
 func _predict_ai_intercept_marker_point(ball: RigidBody3D) -> Vector3:
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	# GAP-47: perceived state seeds the prediction.
 	var predicted_position: Vector3 = _perceived_ball_pos(ball)
 	var predicted_velocity: Vector3 = _perceived_ball_vel(ball)
@@ -528,7 +553,7 @@ func _predict_ai_intercept_marker_point(ball: RigidBody3D) -> Vector3:
 	var _has_entered_ai_side: bool = predicted_position.z <= z_limit_max
 
 	for _step in range(AI_CONTACT_PREDICTION_STEPS):
-		var stepped: Array = Ball.predict_aero_step(
+		var stepped: Array = _Ball.predict_aero_step(
 			predicted_position, predicted_velocity, predicted_omega,
 			gravity, AI_CONTACT_PREDICTION_STEP
 		)
@@ -543,7 +568,7 @@ func _predict_ai_intercept_marker_point(ball: RigidBody3D) -> Vector3:
 			predicted_position.y = floor_height
 			if not has_bounced:
 				has_bounced = true
-				var bounced: Array = Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
+				var bounced: Array = _Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
 				predicted_velocity = bounced[0]
 				predicted_omega = bounced[1]
 				continue
@@ -625,7 +650,7 @@ func _try_ai_hit_ball() -> void:
 	if not ai_is_charging and paddle_distance <= AI_CHARGE_START_DISTANCE and ball.global_position.z < 0.0:
 		ai_is_charging = true
 		ai_charge_time = 0.0
-		ai_state = PlayerController.AIState.CHARGING
+		ai_state = AIState.CHARGING
 		# Shot power varies by difficulty
 		match ai_difficulty:
 			0:  # EASY — mostly dinks, rare medium shots
@@ -646,30 +671,30 @@ func _try_ai_hit_ball() -> void:
 		# Switch to charge posture based on INTENDED contact posture (ai_desired_posture),
 		# not the current visual posture — this way low/mid-low hits stay low.
 		if _player.ai_desired_posture in _player.BACKHAND_POSTURES:
-			var _is_low_bh := (
-				_player.ai_desired_posture == PlayerController.PaddlePosture.LOW_BACKHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.LOW_WIDE_BACKHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.MID_LOW_BACKHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.MID_LOW_WIDE_BACKHAND
+			var _is_low_bh: bool = (
+				_player.ai_desired_posture == PP_LOW_BACKHAND or
+				_player.ai_desired_posture == PP_LOW_WIDE_BACKHAND or
+				_player.ai_desired_posture == PP_MID_LOW_BACKHAND or
+				_player.ai_desired_posture == PP_MID_LOW_WIDE_BACKHAND
 			)
 			if not _is_low_bh:
-				_player.paddle_posture = PlayerController.PaddlePosture.CHARGE_BACKHAND
+				_player.paddle_posture = PP_CHARGE_BACKHAND
 			# else: keep low backhand posture — generic charge animation applies
 		elif _player.ai_desired_posture in _player.FOREHAND_POSTURES:
 			# Only convert normal-height forehand to CHARGE_FOREHAND (full swing back).
 			# Low/mid-low forehand postures keep their posture — generic charge animation applies.
-			var _is_low := (
-				_player.ai_desired_posture == PlayerController.PaddlePosture.LOW_FOREHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.LOW_WIDE_FOREHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.MID_LOW_FOREHAND or
-				_player.ai_desired_posture == PlayerController.PaddlePosture.MID_LOW_WIDE_FOREHAND
+			var _is_low: bool = (
+				_player.ai_desired_posture == PP_LOW_FOREHAND or
+				_player.ai_desired_posture == PP_LOW_WIDE_FOREHAND or
+				_player.ai_desired_posture == PP_MID_LOW_FOREHAND or
+				_player.ai_desired_posture == PP_MID_LOW_WIDE_FOREHAND
 			)
 			if not _is_low:
-				_player.paddle_posture = PlayerController.PaddlePosture.CHARGE_FOREHAND
+				_player.paddle_posture = PP_CHARGE_FOREHAND
 			# else: keep low posture — set_serve_charge_visual's else branch handles the pullback
 		else:
 			# CENTER / OVERHEAD / VOLLEY_READY → default to forehand charge
-			_player.paddle_posture = PlayerController.PaddlePosture.CHARGE_FOREHAND
+			_player.paddle_posture = PP_CHARGE_FOREHAND
 
 	# Phase 2: Charging — animate the paddle pullback
 	if ai_is_charging:
@@ -691,7 +716,7 @@ func _try_ai_hit_ball() -> void:
 		if charge_ratio >= 1.0 and paddle_distance > AI_CHARGE_START_DISTANCE:
 			ai_is_charging = false
 			ai_charge_time = 0.0
-			ai_state = PlayerController.AIState.INTERCEPT_POSITION
+			ai_state = AIState.INTERCEPT_POSITION
 
 	# Fallback: paddle hitbox overlap (ball flew right into paddle)
 	if ai_ball_bounced_on_side or can_volley_now:
@@ -745,7 +770,7 @@ func _apply_ai_hit(body: Node3D, charge_ratio: float = 0.55) -> void:
 	ai_is_charging = false
 	ai_charge_time = 0.0
 	ai_ball_bounced_on_side = false
-	ai_state = PlayerController.AIState.INTERCEPT_POSITION
+	ai_state = AIState.INTERCEPT_POSITION
 	print("[BOS] reset by _apply_ai_hit")
 
 	# Draw AI trajectory line (estimate post-impulse velocity)
@@ -778,7 +803,7 @@ func _draw_ai_trajectory(ball_pos: Vector3, ball_vel: Vector3) -> void:
 		_setup_ai_trajectory()
 	ai_trajectory_mesh.clear_surfaces()
 	ai_trajectory_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, ai_trajectory_material)
-	var gravity: float = Ball.get_effective_gravity()
+	var gravity: float = _Ball.get_effective_gravity()
 	var pos: Vector3 = ball_pos
 	var vel: Vector3 = ball_vel
 	for step in range(28):

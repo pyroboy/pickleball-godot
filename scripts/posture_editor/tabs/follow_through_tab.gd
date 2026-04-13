@@ -2,17 +2,17 @@ class_name FollowThroughTab extends VBoxContainer
 
 signal field_changed(field_name: String, value: Variant)
 
-var _def: PostureDefinition = null
+var _def = null
 
-var _paddle_off: Vector3Editor
-var _paddle_rot: Vector3Editor
-var _hip_uncoil: SliderField
-var _front_foot_load: SliderField
-var _dur_strike: SliderField
-var _dur_sweep: SliderField
-var _dur_settle: SliderField
-var _dur_hold: SliderField
-var _ease_opt: OptionButton
+var _paddle_off
+var _paddle_rot
+var _hip_uncoil
+var _front_foot_load
+var _dur_strike
+var _dur_sweep
+var _dur_settle
+var _dur_hold
+var _ease_opt
 
 func _ready() -> void:
 	add_child(_section("Follow-through"))
@@ -80,7 +80,7 @@ func _section(text: String) -> Label:
 	return lbl
 
 
-func set_definition(def: PostureDefinition) -> void:
+func set_definition(def) -> void:
 	_def = def
 	if def == null:
 		return

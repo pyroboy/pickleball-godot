@@ -19,7 +19,7 @@ var ball_has_bounced := false
 var serve_charge_time := 0.0         # Updated by game_serve.tick_charge
 var serve_is_charging := false        # Updated by game_serve.start_charge/cleanup
 var _pending_shot_type: String = ""  # set on space press, consumed by _perform_player_swing
-var _awaiting_return: bool = false
+var _awaiting_return: bool = false  # set by game_serve, read by game_serve to track serve state
 
 # ── Constants ────────────────────────────────────────────────────────────────
 const MIN_SERVE_SPEED := PickleballConstants.MIN_SERVE_SPEED
@@ -36,37 +36,63 @@ const ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
 const ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
 const SERVE_ZONE_CENTER_TOLERANCE := 0.2
 
+# ── Preloaded class_name scripts (force load order to avoid parse errors) ──
+const _RallyScorer = preload("res://scripts/rally_scorer.gd")
+const _ShotPhysics = preload("res://scripts/shot_physics.gd")
+const _InputHandler = preload("res://scripts/input_handler.gd")
+const _ScoreboardUI = preload("res://scripts/scoreboard_ui.gd")
+const _PracticeLauncher = preload("res://scripts/practice_launcher.gd")
+const _BallPhysicsProbe = preload("res://scripts/ball_physics_probe.gd")
+const _GameServe = preload("res://scripts/game_serve.gd")
+const _GameTrajectory = preload("res://scripts/game_trajectory.gd")
+const _GameShots = preload("res://scripts/game_shots.gd")
+const _GameDropTest = preload("res://scripts/game_drop_test.gd")
+const _GameDebugUI = preload("res://scripts/game_debug_ui.gd")
+const _GameSoundTune = preload("res://scripts/game_sound_tune.gd")
+const _PostureEditorUI = preload("res://scripts/posture_editor_ui.gd")
+const _ReactionHitButton = preload("res://scripts/reaction_hit_button.gd")
+const _SwingE2EProbe = preload("res://scripts/swing_e2e_probe.gd")
+
+# ── Posture system class_name scripts (subfolder scripts need early preload for class resolution) ──
+const _PostureDefinition = preload("res://scripts/posture_definition.gd")
+const _BasePoseDefinition = preload("res://scripts/base_pose_definition.gd")
+const _BasePoseLibrary = preload("res://scripts/base_pose_library.gd")
+const _PostureLibrary = preload("res://scripts/posture_library.gd")
+const _PostureSkeletonApplier = preload("res://scripts/posture_skeleton_applier.gd")
+
+# ── Posture editor subfolder class_name scripts (loaded lazily by PostureEditorUI) ──
+# GizmoHandle/RotationGizmo hierarchy has complex interdependencies - loaded at runtime by PostureEditorUI
+
 # ── Node references ──────────────────────────────────────────────────────────
 var player_left: CharacterBody3D
 var player_right: CharacterBody3D
 var ball: RigidBody3D
-var rally_scorer: RallyScorer
-var shot_physics: ShotPhysics
-var input_handler: InputHandler
-var scoreboard_ui: ScoreboardUI
-var practice_launcher: PracticeLauncher
-var ball_physics_probe: BallPhysicsProbe
-var swing_e2e_probe  # SwingE2EProbe — typed after setup() to avoid load-order issue
+var rally_scorer
+var shot_physics
+var input_handler
+var scoreboard_ui
+var practice_launcher
+var ball_physics_probe
+var swing_e2e_probe  # typed after setup() to avoid load-order issue
 var hud: CanvasLayer
 
 # ── Child subsystems ─────────────────────────────────────────────────────────
-var game_serve: GameServe
-var game_trajectory: GameTrajectory
-var game_shots: GameShots
-var game_drop_test: GameDropTest
-var game_debug_ui: GameDebugUI
-var game_sound_tune: GameSoundTune
+var game_serve
+var game_trajectory
+var game_shots
+var game_drop_test
+var game_debug_ui
+var game_sound_tune
 
 # ── AI / Debug ───────────────────────────────────────────────────────────────
 var ai_difficulty: int = 0          # 0=EASY, 1=MEDIUM, 2=HARD
 var debug_visuals_visible: bool = false
-var _intent_indicators_visible := true
 var _practice_mode: bool = false
 var ai_serve_timer: float = 0.0
 
 # ── Camera ──────────────────────────────────────────────────────────────────
 const CameraRigScript = preload("res://scripts/camera/camera_rig.gd")
-var camera_rig: CameraRig
+var camera_rig
 var main_camera: Camera3D
 
 # ── Serve aim/arc (delegated to game_serve but kept here for quick access) ──
@@ -74,8 +100,8 @@ var serve_aim_offset_x: float = 0.0
 var trajectory_arc_offset: float = 0.0
 
 # ── Reaction button ──────────────────────────────────────────────────────────
-var posture_editor_ui: PostureEditorUI
-var reaction_button: ReactionHitButton
+var posture_editor_ui
+var reaction_button
 var _in_slow_mo: bool = false
 
 # ── Missing variable declarations ────────────────────────────────────────────
@@ -85,11 +111,18 @@ var _serve_was_hit: bool = false
 var fault_headline: Label = null
 var fault_detail: Label = null
 
+# ── Orphaned helper nodes (freed in _exit_tree) ──────────────────────────────
+var _court_helper: Node        # court_script.new() — used for create_court/create_lines
+var _net_helper: Node          # net_script.new()  — used for create_net
+
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
 func _is_practice() -> bool:
 	return _practice_mode or (practice_launcher != null and practice_launcher.is_active)
+
+func is_awaiting_return() -> bool:
+	return _awaiting_return  # read by game_serve.gd externally; getter marks variable as "used"
 
 func get_serve_charge_time() -> float:
 	return serve_charge_time
@@ -179,14 +212,14 @@ func _setup_game() -> void:
 	var ball_script: Script = load("res://scripts/ball.gd")
 	var player_script: Script = load("res://scripts/player.gd")
 
-	var court: Node = court_script.new()
-	var net_node: Node = net_script.new()
+	_court_helper = court_script.new()
+	_net_helper = net_script.new()
 
-	court.create_court(self)
-	court.create_lines(self)
-	net_node.create_net(self)
+	_court_helper.create_court(self)
+	_court_helper.create_lines(self)
+	_net_helper.create_net(self)
 
-	var bounds: Dictionary = court.get_court_bounds()
+	var bounds: Dictionary = _court_helper.get_court_bounds()
 
 	player_left = player_script.new()
 	add_child(player_left)
@@ -205,29 +238,28 @@ func _setup_game() -> void:
 	ball.bounced.connect(_on_ball_bounced)
 	ball.hit_by_paddle.connect(_on_any_paddle_hit)
 
-	rally_scorer = RallyScorer.new()
+	rally_scorer = _RallyScorer.new()
 	rally_scorer.name = "RallyScorer"
 	add_child(rally_scorer)
 	rally_scorer.bind(ball, player_left, player_right)
 	rally_scorer.rally_ended.connect(_on_rally_ended)
 
-	shot_physics = ShotPhysics.new()
+	shot_physics = _ShotPhysics.new()
 	shot_physics.setup(ball, player_left, player_right)
 
-	scoreboard_ui = ScoreboardUI.new()
+	scoreboard_ui = _ScoreboardUI.new()
 	add_child(scoreboard_ui)
 
 	# Ball physics probe must be created BEFORE practice_launcher.setup()
-	ball_physics_probe = BallPhysicsProbe.new()
+	ball_physics_probe = _BallPhysicsProbe.new()
 	ball_physics_probe.name = "BallPhysicsProbe"
 	add_child(ball_physics_probe)
 
-	const SwingE2EProbeScript := preload("res://scripts/swing_e2e_probe.gd")
-	swing_e2e_probe = SwingE2EProbeScript.new()
+	swing_e2e_probe = _SwingE2EProbe.new()
 	swing_e2e_probe.name = "SwingE2EProbe"
 	add_child(swing_e2e_probe)
 
-	practice_launcher = PracticeLauncher.new()
+	practice_launcher = _PracticeLauncher.new()
 	add_child(practice_launcher)
 	practice_launcher.setup(self, ball, player_left, player_right, ball_physics_probe)
 
@@ -241,7 +273,7 @@ func _setup_game() -> void:
 	_setup_subsystems()
 
 	# input_handler must be set up AFTER game_sound_tune exists (so sound_tune_panel is available)
-	input_handler = InputHandler.new()
+	input_handler = _InputHandler.new()
 	add_child(input_handler)
 	input_handler.setup(self, ball, player_left, player_right, camera_rig, practice_launcher, posture_editor_ui, game_sound_tune.sound_tune_panel, reaction_button)
 
@@ -250,37 +282,36 @@ func _setup_game() -> void:
 
 func _setup_subsystems() -> void:
 	# GameServe — serve charge, aim, arc, execution
-	game_serve = GameServe.new()
+	game_serve = _GameServe.new()
 	add_child(game_serve)
-	game_serve.setup(self, ball, player_left, player_right, rally_scorer, scoreboard_ui, ShotPhysics)
+	game_serve.setup(self, ball, player_left, player_right, rally_scorer, scoreboard_ui, _ShotPhysics)
 	game_serve.serve_launched.connect(_on_serve_launched)
-	game_serve.fault_triggered.connect(_on_serve_fault)
 
 	# GameTrajectory — trajectory visualization
-	game_trajectory = GameTrajectory.new()
+	game_trajectory = _GameTrajectory.new()
 	add_child(game_trajectory)
 	game_trajectory.setup(self, ball)
 
 	# GameShots — shot classification, out indicator
-	game_shots = GameShots.new()
+	game_shots = _GameShots.new()
 	add_child(game_shots)
 	game_shots.setup(ball, player_left, player_right, scoreboard_ui)
 	game_shots.cleanup()  # init state
 
 	# GameDropTest — kinematic bounce calibration
-	game_drop_test = GameDropTest.new()
+	game_drop_test = _GameDropTest.new()
 	add_child(game_drop_test)
 	game_drop_test.setup(ball)
 	game_drop_test.test_complete.connect(_on_drop_test_complete)
 
 	# GameDebugUI — posture debug, zone debug, difficulty cycling
-	game_debug_ui = GameDebugUI.new()
+	game_debug_ui = _GameDebugUI.new()
 	add_child(game_debug_ui)
 	game_debug_ui.setup(player_left, player_right, scoreboard_ui, rally_scorer, ball,
 		serve_charge_time, ai_difficulty, serve_aim_offset_x, trajectory_arc_offset)
 
 	# GameSoundTune — sound signature tuning panel
-	game_sound_tune = GameSoundTune.new()
+	game_sound_tune = _GameSoundTune.new()
 	add_child(game_sound_tune)
 	game_sound_tune.setup(ball.audio_synth, scoreboard_ui, hud)
 
@@ -328,7 +359,7 @@ func _apply_setting(key: String, value: Variant) -> void:
 # Camera + FX setup
 # ═══════════════════════════════════════════════════════════════════════════════
 func _setup_camera_rig() -> void:
-	camera_rig = CameraRigScript.new()
+	camera_rig = CameraRigScript.new()  # CameraRigScript is a preload const
 	main_camera = camera_rig.setup(self, player_left, player_right, ball, Callable(self, "_is_practice"))
 
 func _setup_hit_feedback() -> void:
@@ -359,7 +390,7 @@ func _create_ui() -> void:
 	var canvas: CanvasLayer = hud
 
 	# Reaction HIT button — lower-right, easy mode only
-	reaction_button = ReactionHitButton.new()
+	reaction_button = _ReactionHitButton.new()
 	reaction_button.name = "ReactionHitButton"
 	reaction_button.anchor_left = 1.0
 	reaction_button.anchor_right = 1.0
@@ -375,8 +406,8 @@ func _create_ui() -> void:
 		player_left.posture.grade_flashed.connect(_on_player_grade_flashed)
 	reaction_button.auto_fire_requested.connect(_on_reaction_auto_fire)
 
-	# Posture Editor UI — hotkey E toggles visibility
-	posture_editor_ui = PostureEditorUI.new()
+	# Posture Editor UI
+	posture_editor_ui = _PostureEditorUI.new()
 	posture_editor_ui.name = "PostureEditorUI"
 	posture_editor_ui.visible = false
 	posture_editor_ui.editor_opened.connect(_on_editor_opened)
@@ -557,12 +588,8 @@ func _on_player_swing_release(charge_ratio: float) -> void:
 func _perform_serve(charge_ratio: float) -> void:
 	game_serve.perform_serve(charge_ratio)
 
-func _on_serve_launched(team: int) -> void:
+func _on_serve_launched(_team: int) -> void:
 	# game_serve.perform_serve already set game_state = SERVING
-	pass
-
-func _on_serve_fault(reason: String) -> void:
-	# fault_triggered signal — game_serve already handled the timer + _on_point_scored
 	pass
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -742,9 +769,43 @@ func _set_debug_zones_visible(v: bool) -> void:
 	if dz_node:
 		dz_node.visible = v
 
-# Posture editor callbacks
+# ── Hotkey delegation callbacks (input_handler.gd uses has_method() to call these) ──
+
+func _cycle_debug_visuals() -> void:
+	# Delegates to game_debug_ui which owns the debug visual cycling state
+	if game_debug_ui and game_debug_ui.has_method("cycle_debug_visuals"):
+		game_debug_ui.cycle_debug_visuals()
+
+func _toggle_intent_indicators() -> void:
+	# Delegates to game_debug_ui which owns the intent indicator state
+	if game_debug_ui and game_debug_ui.has_method("toggle_intent_indicators"):
+		game_debug_ui.toggle_intent_indicators()
+
+func _cycle_difficulty() -> void:
+	# Delegates to game_debug_ui which owns the difficulty cycling state
+	if game_debug_ui and game_debug_ui.has_method("cycle_difficulty"):
+		game_debug_ui.cycle_difficulty()
+
+func _start_drop_test() -> void:
+	# Delegates to game_drop_test which owns the drop test state
+	if game_drop_test and game_drop_test.has_method("start"):
+		game_drop_test.start()
+
+func _refresh_sound_tune_panel() -> void:
+	# Delegates to game_sound_tune which owns the sound panel
+	if game_sound_tune and game_sound_tune.has_method("_refresh_sound_tune_panel"):
+		game_sound_tune._refresh_sound_tune_panel()
+
+func _print_sound_tunings() -> void:
+	if ball and ball.has_method("get_sound_tunings"):
+		var tunings: Dictionary = ball.get_sound_tunings()
+		print("[SOUND TUNINGS] ", tunings)
+
+# ── Posture editor callbacks ────────────────────────────────────────────────────
+
 func _toggle_posture_editor() -> void:
 	if posture_editor_ui == null:
+		push_warning("[POSTURE EDITOR] posture_editor_ui is null — editor not initialized")
 		return
 	posture_editor_ui.visible = not posture_editor_ui.visible
 	print("[POSTURE EDITOR] ", "ON" if posture_editor_ui.visible else "OFF")
@@ -774,7 +835,7 @@ func _restore_window_after_editor() -> void:
 	var window: Window = get_window()
 	if window == null:
 		return
-	window.mode = _editor_previous_window_mode
+	window.mode = _editor_previous_window_mode as Window.Mode
 	if not _editor_window_geometry_saved:
 		return
 	window.size = _editor_previous_window_size
@@ -869,3 +930,18 @@ func run_swing_e2e_test() -> String:
 	if swing_e2e_probe:
 		swing_e2e_probe.begin_test(self, player_left, ball)
 	return "SwingE2EProbe started — results in ~4s via get_verdict()"
+
+func _exit_tree() -> void:
+	# Free orphaned helper nodes created via script.new() that were never added to the scene tree.
+	# These are the script-instance wrappers for court.gd and net.gd — their methods
+	# (create_court/create_lines/create_net) add children to 'self', but the wrapper nodes
+	# themselves stay unparented and require explicit cleanup to avoid:
+	#   WARNING: ObjectDB instances leaked at exit
+	#   ERROR: 2 resources still in use at exit
+	#   (plus orphaned StringNames from the script's static constants)
+	if _court_helper != null:
+		_court_helper.free()
+		_court_helper = null
+	if _net_helper != null:
+		_net_helper.free()
+		_net_helper = null

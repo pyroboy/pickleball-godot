@@ -9,13 +9,14 @@ extends RefCounted
 ## The resolver is a RefCounted (not Node) so it can be used headlessly
 ## (e.g. by tools / tests that have no scene tree).
 
-const _PC := preload("res://scripts/posture_constants.gd")
+const _PC = preload("res://scripts/posture_constants.gd")
+const _Ball = preload("res://scripts/ball.gd")
 
 ## Weak reference to the player — may be null for headless use.
 ## When non-null, enables library-backed posture resolution.
-var _player: PlayerController = null
+var _player = null
 
-func _init(player: PlayerController = null) -> void:
+func _init(player = null) -> void:
 	_player = player
 
 
@@ -31,13 +32,21 @@ func get_posture_offset_for(posture: int) -> Vector3:
 	if _is_ft_key(posture):
 		return Vector3.ZERO
 
-	if _player.transition_pose_blend != null and posture == _player.paddle_posture:
-		return _compute_offsets_from_def(_player.transition_pose_blend)
+	# If a live translation blend override exists, use it instantly.
+	# Ensures the arm and shoulder smoothly interpolate between source/target offsets.
+	var blend_def = null
+	if "posture" in _player and _player.posture != null and "transition_pose_blend" in _player.posture:
+		blend_def = _player.posture.transition_pose_blend
+	elif "transition_pose_blend" in _player:
+		blend_def = _player.transition_pose_blend
+		
+	if blend_def != null and posture == _player.paddle_posture:
+		return _compute_offsets_from_def(blend_def)
 
 	# Try the library first (Phase 2+), fall back to hardcoded for safety
-	var lib := _get_posture_lib()
+	var lib = _get_posture_lib()
 	if lib:
-		var def := lib.get_def(posture)
+		var def = lib.get_def(posture)
 		if def:
 			return _compute_offsets_from_def(def)
 
@@ -51,12 +60,18 @@ func get_posture_rotation_offset_for(posture: int) -> Vector3:
 	if _player == null:
 		return Vector3.ZERO
 
-	if _player.transition_pose_blend != null and posture == _player.paddle_posture:
-		return _compute_rotation_from_def(_player.transition_pose_blend)
+	var blend_def = null
+	if "posture" in _player and _player.posture != null and "transition_pose_blend" in _player.posture:
+		blend_def = _player.posture.transition_pose_blend
+	elif "transition_pose_blend" in _player:
+		blend_def = _player.transition_pose_blend
+		
+	if blend_def != null and posture == _player.paddle_posture:
+		return _compute_rotation_from_def(blend_def)
 
-	var lib := _get_posture_lib()
+	var lib = _get_posture_lib()
 	if lib:
-		var def := lib.get_def(posture)
+		var def = lib.get_def(posture)
 		if def:
 			return _compute_rotation_from_def(def)
 
@@ -69,20 +84,9 @@ func get_posture_charge_sign() -> float:
 	if _player == null:
 		return 1.0
 	match _player.paddle_posture:
-		_player.PaddlePosture.BACKHAND,
-		_player.PaddlePosture.LOW_BACKHAND,
-		_player.PaddlePosture.CHARGE_BACKHAND,
-		_player.PaddlePosture.WIDE_BACKHAND,
-		_player.PaddlePosture.MID_LOW_BACKHAND,
-		_player.PaddlePosture.MID_LOW_WIDE_BACKHAND,
-		_player.PaddlePosture.LOW_WIDE_BACKHAND:
+		_player.PaddlePosture.BACKHAND, _player.PaddlePosture.LOW_BACKHAND, _player.PaddlePosture.CHARGE_BACKHAND, _player.PaddlePosture.WIDE_BACKHAND, _player.PaddlePosture.MID_LOW_BACKHAND, _player.PaddlePosture.MID_LOW_WIDE_BACKHAND, _player.PaddlePosture.LOW_WIDE_BACKHAND:
 			return -_player._get_swing_sign()
-		_player.PaddlePosture.FORWARD,
-		_player.PaddlePosture.LOW_FORWARD,
-		_player.PaddlePosture.MID_LOW_FORWARD,
-		_player.PaddlePosture.MEDIUM_OVERHEAD,
-		_player.PaddlePosture.HIGH_OVERHEAD,
-		_player.PaddlePosture.VOLLEY_READY:
+		_player.PaddlePosture.FORWARD, _player.PaddlePosture.LOW_FORWARD, _player.PaddlePosture.MID_LOW_FORWARD, _player.PaddlePosture.MEDIUM_OVERHEAD, _player.PaddlePosture.HIGH_OVERHEAD, _player.PaddlePosture.VOLLEY_READY:
 			return 0.0
 	return _player._get_swing_sign()
 
@@ -90,7 +94,7 @@ func get_posture_charge_sign() -> float:
 ## ── Internal helpers ───────────────────────────────────────────────────────
 
 ## Computes paddle offset from PostureDefinition using player's dynamic axes.
-func _compute_offsets_from_def(def: PostureDefinition) -> Vector3:
+func _compute_offsets_from_def(def) -> Vector3:
 	if _player == null:
 		return Vector3.ZERO
 	var forward_axis: Vector3 = _player._get_forward_axis()
@@ -102,15 +106,15 @@ func _compute_offsets_from_def(def: PostureDefinition) -> Vector3:
 
 
 ## Computes rotation offset from PostureDefinition using sign sources.
-func _compute_rotation_from_def(def: PostureDefinition) -> Vector3:
+func _compute_rotation_from_def(def) -> Vector3:
 	if _player == null:
 		return Vector3.ZERO
 	var swing_sign: float = _player._get_swing_sign()
 	var fwd_sign: float = _player._get_forward_axis().z
 
-	var pitch := def.paddle_pitch_base_deg + def.paddle_pitch_signed_deg * _get_sign_value(def.paddle_pitch_sign_source, swing_sign, fwd_sign)
-	var yaw := def.paddle_yaw_base_deg + def.paddle_yaw_signed_deg * _get_sign_value(def.paddle_yaw_sign_source, swing_sign, fwd_sign)
-	var roll := def.paddle_roll_base_deg + def.paddle_roll_signed_deg * _get_sign_value(def.paddle_roll_sign_source, swing_sign, fwd_sign)
+	var pitch = def.paddle_pitch_base_deg + def.paddle_pitch_signed_deg * _get_sign_value(def.paddle_pitch_sign_source, swing_sign, fwd_sign)
+	var yaw = def.paddle_yaw_base_deg + def.paddle_yaw_signed_deg * _get_sign_value(def.paddle_yaw_sign_source, swing_sign, fwd_sign)
+	var roll = def.paddle_roll_base_deg + def.paddle_roll_signed_deg * _get_sign_value(def.paddle_roll_sign_source, swing_sign, fwd_sign)
 
 	return Vector3(pitch, yaw, roll)
 
@@ -230,10 +234,16 @@ func _get_posture_rotation_hardcoded(posture: int) -> Vector3:
 
 ## ── Private ────────────────────────────────────────────────────────────────
 
-func _get_posture_lib() -> PostureLibrary:
+var _cached_library = null
+
+func _get_posture_lib():
+	if _cached_library != null:
+		return _cached_library
 	if _player and _player.has_method("_get_posture_library"):
-		return _player._get_posture_library()
-	return PostureLibrary.instance() if PostureLibrary else null
+		_cached_library = _player._get_posture_library()
+	else:
+		_cached_library = load("res://scripts/posture_library.gd").new()
+	return _cached_library
 
 
 func _is_ft_key(posture: int) -> bool:
@@ -281,7 +291,7 @@ func get_height_zone(rel_h: float) -> int:
 func compute_contact_at_player_z(ball_pos: Vector3, ball_vel: Vector3, player_z: float) -> Vector3:
 	if _player == null:
 		return ball_pos
-	var g: float = Ball.get_effective_gravity()
+	var g: float = _Ball.get_effective_gravity()
 	if abs(ball_vel.z) < 0.1:
 		return ball_pos
 	var t: float = (player_z - ball_pos.z) / ball_vel.z
@@ -298,7 +308,7 @@ func compute_contact_at_player_z(ball_pos: Vector3, ball_vel: Vector3, player_z:
 			var bounce_x: float = ball_pos.x + ball_vel.x * t_floor
 			var bounce_z: float = ball_pos.z + ball_vel.z * t_floor
 			var vy_at_floor: float = ball_vel.y - g * t_floor
-			var bounce_vy: float = abs(vy_at_floor) * Ball.cor_for_impact_speed(abs(vy_at_floor))
+			var bounce_vy: float = abs(vy_at_floor) * _Ball.cor_for_impact_speed(abs(vy_at_floor))
 			var rem_t: float = (player_z - bounce_z) / ball_vel.z
 			if rem_t > 0.0:
 				return Vector3(

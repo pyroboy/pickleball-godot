@@ -30,7 +30,7 @@ var crouch_amount: float = 0.0
 var idle_sway_phase: float = 0.0
 var prev_velocity: Vector3 = Vector3.ZERO
 
-var _player: PlayerController
+var _player
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
@@ -41,7 +41,7 @@ func update_body_lean(delta: float) -> void:
 
 	var fh_axis: Vector3 = _player._get_forehand_axis()
 	var fwd_axis: Vector3 = _player._get_forward_axis()
-	var runtime_def: PostureDefinition = _player.get_runtime_posture_def()
+	var runtime_def = _player.get_runtime_posture_def()
 	var base_pitch_deg: float = runtime_def.body_pitch_deg if runtime_def else 0.0
 	var base_roll_deg: float = runtime_def.body_roll_deg * _player._get_swing_sign() if runtime_def else 0.0
 
@@ -95,7 +95,7 @@ func update_crouch(delta: float) -> void:
 	if _player.manual_crouch:
 		target_crouch = maxf(target_crouch, CROUCH_LOW_POSTURE_AMOUNT)
 		halflife = CROUCH_LOW_HALFLIFE
-	var pdef_c: PostureDefinition = _player.get_runtime_posture_def()
+	var pdef_c = _player.get_runtime_posture_def()
 	if pdef_c:
 		target_crouch = maxf(target_crouch, pdef_c.crouch_amount)
 	crouch_amount = _player._damp(crouch_amount, target_crouch, halflife, delta)
@@ -146,7 +146,7 @@ func update_body_track_ball(delta: float) -> void:
 		return
 
 	# Base stance rotation — backhand postures rotate body perpendicular, forehand slight angle
-	var runtime_def: PostureDefinition = _player.get_runtime_posture_def()
+	var runtime_def = _player.get_runtime_posture_def()
 	var stance_base: float
 	if runtime_def and absf(runtime_def.body_yaw_deg) > 0.01:
 		stance_base = deg_to_rad(runtime_def.body_yaw_deg) * _player._get_swing_sign()
@@ -171,7 +171,7 @@ func update_body_track_ball(delta: float) -> void:
 	var forward: Vector3 = _player._get_forward_axis()
 	var angle_to_ball: float = forward.signed_angle_to(to_ball.normalized(), Vector3.UP)
 	var track_w: float = 1.0
-	var pdef_t: PostureDefinition = runtime_def
+	var pdef_t = runtime_def
 	if pdef_t:
 		track_w = pdef_t.head_track_ball_weight
 	var max_rad: float = deg_to_rad(BODY_TRACK_BALL_MAX_DEGREES) * clampf(track_w, 0.0, 1.0)

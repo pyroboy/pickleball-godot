@@ -1,16 +1,18 @@
 class_name PlayerPaddlePosture extends Node
 
+const _PostureColors = preload("res://scripts/posture_colors.gd")
+const _BallInfo = preload("res://scripts/ball.gd")
 ## PostureLibrary singleton for Phase 2+ wiring.
-var _posture_lib: PostureLibrary
+var _posture_lib
 
 ## Phase 3: Full-body skeleton applier (wired when skeleton exists)
-var _skeleton_applier: PostureSkeletonApplier = null
+var _skeleton_applier = null
 
 ## Phase 2: Offset/rotation resolver
-var _offset_resolver: PostureOffsetResolver
+var _offset_resolver
 
 ## Phase 3: Commit-selection logic (extracted to RefCounted for headless testability)
-var _commit_selector: PostureCommitSelector
+var _commit_selector
 
 ## Emitted every physics frame while a posture is committed (and once on clear).
 ## stage: -1 = no commit / cleared, 0 = PINK (far), 1 = PURPLE (close), 2 = BLUE (contact imminent)
@@ -150,7 +152,7 @@ const GHOST_TIGHTEN_RATIO := _PC.GHOST_TIGHTEN_RATIO  # pull 20% toward committe
 
 ## When non-null, paddle offset/rotation lerp targets use this definition instead of the library
 ## (used by TransitionPlayer for in-between blended poses).
-var transition_pose_blend: PostureDefinition = null
+var transition_pose_blend = null
 
 # --- Solo Mode state (Wave 5) ---
 var solo_mode: bool = true
@@ -170,14 +172,14 @@ const FT_OVERHEAD := -4
 const FT_KEYS := [FT_FOREHAND, FT_BACKHAND, FT_CENTER, FT_OVERHEAD]
 var ft_ghosts: Dictionary = {}  # FT_KEY -> Node3D (static, not updated per frame)
 
-var _player: PlayerController
+var _player
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
-	_posture_lib = PostureLibrary.instance()
-	_skeleton_applier = PostureSkeletonApplier.new(_player)
-	_offset_resolver = PostureOffsetResolver.new(_player)
-	_commit_selector = PostureCommitSelector.new()
+	_posture_lib = load("res://scripts/posture_library.gd").new()
+	_skeleton_applier = load("res://scripts/posture_skeleton_applier.gd").new(_player)
+	_offset_resolver = load("res://scripts/posture_offset_resolver.gd").new(_player)
+	_commit_selector = load("res://scripts/posture_commit_selector.gd").new()
 	_init_posture_zones()
 
 # Emits incoming_stage_changed(-1,...) for the human player — called after every
@@ -374,7 +376,7 @@ func update_paddle_tracking(force: bool = false) -> void:
 
 	_player._cache_paddle_rest_transform()
 
-func force_posture_update(def: PostureDefinition) -> void:
+func force_posture_update(def) -> void:
 	if not _player or not _player._ensure_paddle_ready():
 		return
 	
@@ -728,7 +730,7 @@ func update_posture_ghosts() -> void:
 	if _player.player_num == 0 and ball != null and not _scored_this_ball:
 		var toward: float = ball.linear_velocity.dot(-_player._get_forward_axis())
 		if toward > 0.5 and _committed_incoming_posture < 0:
-			var pre_ttc: float = _compute_ttc(ball, _player.global_position)
+			var pre_ttc: float = _commit_selector.compute_ttc(ball.global_position, ball.linear_velocity, _player.global_position)
 			var pre_stage: int = 0
 			if pre_ttc < TTC_BLUE:
 				pre_stage = 2
@@ -739,7 +741,7 @@ func update_posture_ghosts() -> void:
 
 	# Fallback trajectory feed — only if player.gd didn't already feed this frame
 	if _trajectory_points.is_empty() and ball != null and ball is RigidBody3D and ball.linear_velocity.length() > 0.5:
-			var traj: Array[Vector3] = _commit_selector.compute_simple_trajectory(ball.global_position, ball.linear_velocity, Ball.get_effective_gravity(), _player.COURT_FLOOR_Y)
+		var traj: Array[Vector3] = _commit_selector.compute_simple_trajectory(ball.global_position, ball.linear_velocity, _BallInfo.get_effective_gravity(), _player.COURT_FLOOR_Y)
 		if not traj.is_empty():
 			set_trajectory_points(traj)
 			if _player.awareness_grid:
@@ -896,7 +898,7 @@ func update_posture_ghosts() -> void:
 			var hit_t: float = _hit_flash_t / POSTURE_GHOST_HIT_FLASH_DURATION
 
 			if is_hit_flash:
-				var hf: Dictionary = PostureColors.hit_flash(hit_t)
+				var hf: Dictionary = _PostureColors.hit_flash(hit_t)
 				ghost_material.albedo_color = hf.albedo
 				ghost_material.emission = hf.emission
 				ghost_material.emission_energy_multiplier = hf.em_mult
@@ -907,18 +909,18 @@ func update_posture_ghosts() -> void:
 				if ball_to_ghost < _closest_ball2ghost:
 					_closest_ball2ghost = ball_to_ghost
 				var commit_dist: float = Vector2(ball.global_position.x - _player.global_position.x, ball.global_position.z - _player.global_position.z).length()
-				var ttc: float = _compute_ttc(ball, ghost_world)
+				var ttc: float = _commit_selector.compute_ttc(ball.global_position, ball.linear_velocity, ghost_world)
 
 				# ── PHASE B — Stage (TTC-driven, one-shot BLUE latch) ─────────────
 				if _blue_hold_timer > 0.0:
 					_blue_hold_timer -= get_physics_process_delta_time()
-				var stage: int = PostureColors.compute_stage(ttc, ball_to_ghost, _blue_hold_timer, _blue_latched)
+				var stage: int = _PostureColors.compute_stage(ttc, ball_to_ghost, _blue_hold_timer, _blue_latched)
 				if stage == 2 and not _blue_latched:
 					_blue_latched = true
 					_blue_hold_timer = BLUE_HOLD_DURATION
 					_ghost_frozen_at = ghost_world
 
-				var sc: Dictionary = PostureColors.stage_colors(stage)
+				var sc: Dictionary = _PostureColors.stage_colors(stage)
 				ghost_material.albedo_color = Color(sc.albedo.r, sc.albedo.g, sc.albedo.b, sc.alpha)
 				ghost_material.emission = sc.emission
 				ghost_material.emission_energy_multiplier = sc.em_mult
@@ -995,22 +997,22 @@ func update_posture_ghosts() -> void:
 				var frames_since_lit: int = Engine.get_physics_frames() - int(_green_lit_postures[posture])
 				var secs_since: float = frames_since_lit * get_physics_process_delta_time()
 				var fade_t: float = clampf(secs_since / INCOMING_FADE_DURATION, 0.0, 1.0)
-				var fade_result: Dictionary = PostureColors.green_fading(fade_t, _ghost_base_color)
+				var fade_result: Dictionary = _PostureColors.green_fading(fade_t, _ghost_base_color)
 				if fade_t >= 1.0:
 					_green_lit_postures.erase(posture)
 				ghost_material.albedo_color = fade_result.albedo
 				ghost_material.emission = fade_result.emission
 				ghost_material.emission_energy_multiplier = fade_result.em_mult
 			elif is_near:
-				var pc: Dictionary = PostureColors.proximity_color(near_t, false, _ghost_base_color)
+				var pc: Dictionary = _PostureColors.proximity_color(near_t, false, _ghost_base_color)
 				ghost_material.albedo_color = pc.albedo
 				ghost_material.emission_energy_multiplier = pc.em_mult
 			elif is_active:
-				var pc: Dictionary = PostureColors.proximity_color(0.0, true, _ghost_base_color)
+				var pc: Dictionary = _PostureColors.proximity_color(0.0, true, _ghost_base_color)
 				ghost_material.albedo_color = pc.albedo
 				ghost_material.emission_energy_multiplier = pc.em_mult
 			else:
-				var pc: Dictionary = PostureColors.proximity_color(0.0, false, _ghost_base_color)
+				var pc: Dictionary = _PostureColors.proximity_color(0.0, false, _ghost_base_color)
 				ghost_material.albedo_color = pc.albedo
 				ghost_material.emission_energy_multiplier = pc.em_mult
 			var is_purple: bool = posture == _committed_incoming_posture and _ball_incoming
@@ -1026,7 +1028,7 @@ func update_posture_ghosts() -> void:
 				var g_ttc: float = _player.awareness_grid.get_ttc_at_world_point(ghost.global_position, 0.45)
 				if g_ttc < 1.5:
 					var tier: Color = _player.awareness_grid._get_time_color(g_ttc)
-					var ov: Dictionary = PostureColors.grid_override(g_ttc, tier)
+					var ov: Dictionary = _PostureColors.grid_override(g_ttc, tier)
 					ghost_material.albedo_color = ov.albedo
 					ghost_material.emission = ov.emission
 					ghost_material.emission_energy_multiplier = ov.em_mult
@@ -1034,9 +1036,13 @@ func update_posture_ghosts() -> void:
 			_apply_ghost_material(ghost, ghost_material)
 
 	_update_ft_ghosts()
+	
+	if _ball_incoming and _frame_lit_postures != _last_lit_postures:
+		_last_lit_postures = _frame_lit_postures.duplicate()
+	elif not _ball_incoming:
+		_last_lit_postures.clear()
 
 	_apply_ghost_separation()
-
 
 func _update_ft_ghosts() -> void:
 	# Update follow-through ghost glow — brighten the one matching current charge family
@@ -1067,11 +1073,6 @@ func _update_ft_ghosts() -> void:
 		_apply_ghost_material(ft_ghost, ft_mat)
 
 
-	if _ball_incoming and _frame_lit_postures != _last_lit_postures:
-		_last_lit_postures = _frame_lit_postures.duplicate()
-	elif not _ball_incoming:
-		_last_lit_postures.clear()
-
 
 # ── Posture offset helpers ────────────────────────────────────────────────────
 
@@ -1094,15 +1095,15 @@ func _get_posture_offset() -> Vector3:
 		var ghost: Node3D = posture_ghosts.get(_committed_incoming_posture)
 		if ghost:
 			return ghost.position
-	return get_posture_offset_for(paddle_posture)
+	return _offset_resolver.get_posture_offset_for(paddle_posture)
 
 
 ## Phase 3: Apply full-body posture fields to skeleton.
 ## Pass `def_override` when applying a temporary blend (e.g. transition player) not equal to the library entry.
-func _apply_full_body_posture(def_override: PostureDefinition = null) -> void:
+func _apply_full_body_posture(def_override = null) -> void:
 	if _skeleton_applier == null or _posture_lib == null:
 		return
-	var def: PostureDefinition = _player.get_runtime_posture_def(def_override)
+	var def = _player.get_runtime_posture_def(def_override)
 	if def:
 		_skeleton_applier.apply(def)
 

@@ -1,6 +1,7 @@
 class_name PostureColors
 extends RefCounted
 
+const _PostureConstants = preload("res://scripts/posture_constants.gd")
 ## Extracted color math and blend logic for posture ghosts.
 ## Phase 4: consolidated from player_paddle_posture.gd update_posture_ghosts()
 ## and create_posture_ghosts().
@@ -19,39 +20,39 @@ extends RefCounted
 const STAGE_PINK_ALBEDO:       Color = Color(1.0, 0.3, 0.7)
 const STAGE_PINK_EMISSION:     Color = Color(0.95, 0.2, 0.6)
 const STAGE_PINK_EM_MULT:      float = 0.5
-const STAGE_PINK_ALPHA:        float = PostureConstants.POSTURE_GHOST_ACTIVE_ALPHA
+const STAGE_PINK_ALPHA:        float = _PostureConstants.POSTURE_GHOST_ACTIVE_ALPHA
 
 ## Stage 1 — PURPLE: ball approaching, TTC < TTC_PURPLE.
 const STAGE_PURPLE_ALBEDO:     Color = Color(0.6, 0.1, 1.0)
 const STAGE_PURPLE_EMISSION:   Color = Color(0.5, 0.05, 0.95)
-const STAGE_PURPLE_EM_MULT:    float = PostureConstants.POSTURE_GHOST_NEAR_EMISSION
-const STAGE_PURPLE_ALPHA:      float = PostureConstants.POSTURE_GHOST_NEAR_ALPHA
+const STAGE_PURPLE_EM_MULT:    float = _PostureConstants.POSTURE_GHOST_NEAR_EMISSION
+const STAGE_PURPLE_ALPHA:      float = _PostureConstants.POSTURE_GHOST_NEAR_ALPHA
 
 ## Stage 2 — BLUE: committed, TTC < TTC_BLUE or within BLUE_DIST_FALLBACK.
 const STAGE_BLUE_ALBEDO:       Color = Color(0.15, 0.5, 1.0)
 const STAGE_BLUE_EMISSION:     Color = Color(0.1, 0.4, 1.0)
-const STAGE_BLUE_EM_MULT:      float = PostureConstants.POSTURE_GHOST_NEAR_EMISSION * 1.4
+const STAGE_BLUE_EM_MULT:      float = _PostureConstants.POSTURE_GHOST_NEAR_EMISSION * 1.4
 const STAGE_BLUE_ALPHA:        float = 0.75
 
 ## ── Green-lit (ghost near trajectory) ───────────────────────────────────────
 const GREEN_ALBEDO:            Color = Color(0.1, 1.0, 0.2)
 const GREEN_EMISSION:          Color = Color(0.0, 1.0, 0.1)
-const GREEN_EM_MULT:           float = PostureConstants.POSTURE_GHOST_NEAR_EMISSION
+const GREEN_EM_MULT:           float = _PostureConstants.POSTURE_GHOST_NEAR_EMISSION
 
 ## ── Hit flash ────────────────────────────────────────────────────────────────
 const HIT_ALBEDO:              Color = Color(1.0, 0.45, 0.0)
 const HIT_EMISSION:            Color = Color(1.0, 0.3, 0.0)
 const HIT_EM_MULT_MIN:         float = 0.1
 const HIT_EM_MULT_MAX:         float = 3.0
-const HIT_ALPHA_MIN:           float = PostureConstants.POSTURE_GHOST_ALPHA
+const HIT_ALPHA_MIN:           float = _PostureConstants.POSTURE_GHOST_ALPHA
 const HIT_ALPHA_MAX:           float = 0.85
 
 ## ── Proximity ramp defaults (non-green, non-stage, non-hit) ─────────────────
 const NEAR_EM_MULT_MIN:        float = 0.24
-const NEAR_EM_MULT_MAX:        float = PostureConstants.POSTURE_GHOST_NEAR_EMISSION  # 1.8
+const NEAR_EM_MULT_MAX:        float = _PostureConstants.POSTURE_GHOST_NEAR_EMISSION  # 1.8
 const BASE_EM_MULT:            float = 0.12
-const BASE_ALPHA:              float = PostureConstants.POSTURE_GHOST_ALPHA            # 0.12
-const ACTIVE_ALPHA:            float = PostureConstants.POSTURE_GHOST_ACTIVE_ALPHA    # 0.3
+const BASE_ALPHA:              float = _PostureConstants.POSTURE_GHOST_ALPHA            # 0.12
+const ACTIVE_ALPHA:            float = _PostureConstants.POSTURE_GHOST_ACTIVE_ALPHA    # 0.3
 
 ## ── Awareness-grid TTC-tiered override ───────────────────────────────────────
 ## When an awareness grid is present and ball is incoming, ghost colors can be
@@ -60,7 +61,7 @@ const ACTIVE_ALPHA:            float = PostureConstants.POSTURE_GHOST_ACTIVE_ALP
 ## Threshold TTC below which the override activates.
 const GRID_TTC_THRESHOLD:      float = 1.5
 ## Alpha range for grid override (0.55 → 0.95 as TTC shrinks).
-const GRID_ALPHA_MIN:          float = PostureConstants.POSTURE_GHOST_NEAR_ALPHA
+const GRID_ALPHA_MIN:          float = _PostureConstants.POSTURE_GHOST_NEAR_ALPHA
 const GRID_ALPHA_MAX:          float = 0.95
 ## Emission multiplier range for grid override.
 const GRID_EM_MULT_MIN:        float = 0.35
@@ -76,13 +77,13 @@ static func ghost_base_albedo(paddle_color: Color, is_charge: bool) -> Color:
 			paddle_color.r * 0.5,
 			paddle_color.g * 0.5,
 			paddle_color.b * 0.5,
-			PostureConstants.POSTURE_GHOST_ALPHA * 1.5,
+			_PostureConstants.POSTURE_GHOST_ALPHA * 1.5,
 		)
 	return Color(
 		paddle_color.r,
 		paddle_color.g,
 		paddle_color.b,
-		PostureConstants.POSTURE_GHOST_ALPHA,
+		_PostureConstants.POSTURE_GHOST_ALPHA,
 	)
 
 
@@ -144,14 +145,14 @@ static func stage_colors(stage: int) -> Dictionary:
 static func compute_stage(
 	ttc: float,
 	ball_to_ghost_dist: float,
-	blue_hold_timer: float,
+	_blue_hold_timer: float,
 	blue_latched: bool,
 ) -> int:
 	if blue_latched:
 		return 2
-	if ttc < PostureConstants.TTC_BLUE or ball_to_ghost_dist < PostureConstants.BLUE_DIST_FALLBACK:
+	if ttc < _PostureConstants.TTC_BLUE or ball_to_ghost_dist < _PostureConstants.BLUE_DIST_FALLBACK:
 		return 2
-	if ttc < PostureConstants.TTC_PURPLE:
+	if ttc < _PostureConstants.TTC_PURPLE:
 		return 1
 	return 0
 
@@ -167,7 +168,7 @@ static func green_fading(
 	var green_col := GREEN_ALBEDO  # use as base for lerp
 	var base_col := Color(paddle_color.r, paddle_color.g, paddle_color.b)
 	var blended := green_col.lerp(base_col, t)
-	var alpha: float = lerpf(PostureConstants.POSTURE_GHOST_NEAR_ALPHA, PostureConstants.POSTURE_GHOST_ALPHA, t)
+	var alpha: float = lerpf(_PostureConstants.POSTURE_GHOST_NEAR_ALPHA, _PostureConstants.POSTURE_GHOST_ALPHA, t)
 	var em_green := GREEN_EMISSION
 	var em_base := Color(paddle_color.r * 0.7 + 0.2, paddle_color.g * 0.7 + 0.2, paddle_color.b * 0.7 + 0.2)
 	var em_blended := em_green.lerp(em_base, t)
@@ -190,8 +191,8 @@ static func proximity_color(
 	var alpha: float
 	var em_mult: float
 	if near_t > 0.0:
-		alpha = lerpf(ACTIVE_ALPHA, PostureConstants.POSTURE_GHOST_NEAR_ALPHA, near_t)
-		em_mult = lerpf(NEAR_EM_MULT_MIN, PostureConstants.POSTURE_GHOST_NEAR_EMISSION, near_t)
+		alpha = lerpf(ACTIVE_ALPHA, _PostureConstants.POSTURE_GHOST_NEAR_ALPHA, near_t)
+		em_mult = lerpf(NEAR_EM_MULT_MIN, _PostureConstants.POSTURE_GHOST_NEAR_EMISSION, near_t)
 	elif is_active:
 		alpha = ACTIVE_ALPHA
 		em_mult = NEAR_EM_MULT_MIN
@@ -223,7 +224,7 @@ static func hit_flash(hit_t: float) -> Dictionary:
 static func grid_override(
 	g_ttc: float,
 	tier_color: Color,
-) -> Dictionary:
+):
 	if g_ttc >= GRID_TTC_THRESHOLD:
 		return null
 	var urgency: float = clampf(1.0 - g_ttc / 1.0, 0.0, 1.0)

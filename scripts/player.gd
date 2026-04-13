@@ -192,16 +192,16 @@ var left_hand_rest_pos: Vector3 = Vector3.ZERO
 var has_debug_printed: bool = false
 
 # --- Child node references ---
-var ai_brain: PlayerAIBrain
-var hitting: PlayerHitting
-var leg_ik: PlayerLegIK
-var body_anim: PlayerBodyAnimation
-var pose_controller: PoseController
-var posture: PlayerPaddlePosture
-var debug_visual: PlayerDebugVisual
-var arm_ik: PlayerArmIK
+var ai_brain
+var hitting
+var leg_ik
+var body_anim
+var pose_controller
+var posture
+var debug_visual
+var arm_ik
 var awareness_grid = null
-var body_builder: PlayerBodyBuilder
+var body_builder
 
 @warning_ignore("unused_signal")
 signal hit_ball(ball: RigidBody3D, direction: Vector3)
@@ -235,48 +235,48 @@ func setup(player_id: int, bounds: Dictionary, paddle_color: Color, start_pos: V
 	global_position = start_pos
 	ground_y = start_pos.y
 
-	body_builder = PlayerBodyBuilder.new()
+	body_builder = load("res://scripts/player_body_builder.gd").new()
 	body_builder.name = "BodyBuilder"
 	body_builder._player = self
 	add_child(body_builder)
 	body_builder.build(paddle_color)
 
 	# Instantiate extracted modules as child nodes
-	ai_brain = PlayerAIBrain.new()
+	ai_brain = load("res://scripts/player_ai_brain.gd").new()
 	ai_brain.name = "AIBrain"
 	ai_brain._player = self
 	add_child(ai_brain)
 
-	hitting = PlayerHitting.new()
+	hitting = load("res://scripts/player_hitting.gd").new()
 	hitting.name = "Hitting"
 	hitting._player = self
 	add_child(hitting)
 
-	leg_ik = PlayerLegIK.new()
+	leg_ik = load("res://scripts/player_leg_ik.gd").new()
 	leg_ik.name = "LegIK"
 	leg_ik._player = self
 	add_child(leg_ik)
 
-	body_anim = PlayerBodyAnimation.new()
+	body_anim = load("res://scripts/player_body_animation.gd").new()
 	body_anim.name = "BodyAnim"
 	body_anim._player = self
 	add_child(body_anim)
 
-	pose_controller = PoseController.new()
+	pose_controller = load("res://scripts/pose_controller.gd").new()
 	pose_controller.name = "PoseController"
 	add_child(pose_controller)
 
-	posture = PlayerPaddlePosture.new()
+	posture = load("res://scripts/player_paddle_posture.gd").new()
 	posture.name = "Posture"
 	posture._player = self
 	add_child(posture)
 
-	debug_visual = PlayerDebugVisual.new()
+	debug_visual = load("res://scripts/player_debug_visual.gd").new()
 	debug_visual.name = "DebugVisual"
 	debug_visual._player = self
 	add_child(debug_visual)
 
-	arm_ik = PlayerArmIK.new()
+	arm_ik = load("res://scripts/player_arm_ik.gd").new()
 	arm_ik.name = "ArmIK"
 	arm_ik._player = self
 	add_child(arm_ik)
@@ -454,14 +454,14 @@ func _get_ball_ref() -> RigidBody3D:
 		return ball_ref
 	return null
 
-func get_runtime_posture_def(def_override: PostureDefinition = null) -> PostureDefinition:
+func get_runtime_posture_def(def_override = null):
 	if def_override != null:
 		return def_override
 	if pose_controller:
-		var composed := pose_controller.compose_runtime_posture(def_override)
+		var composed = pose_controller.compose_runtime_posture(def_override)
 		if composed != null:
 			return composed
-	return PostureLibrary.instance().get_def(paddle_posture)
+	return load("res://scripts/posture_library.gd").new().get_def(paddle_posture)
 
 func _get_human_input() -> Vector3:
 	var input_2d: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")

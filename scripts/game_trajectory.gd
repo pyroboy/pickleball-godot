@@ -187,13 +187,8 @@ func _update_red_target_marker() -> void:
 	if target_marker == null or _game == null:
 		return
 	
-	var score_left: int = 0
-	var score_right: int = 0
-	if _game.has("score_left"):
-		score_left = _game.score_left
-	if _game.has("score_right"):
-		score_right = _game.score_right
-	
+	var score_left: int = _game.score_left
+	var score_right: int = _game.score_right
 	var total_score: int = score_left + score_right
 	var serve_from_right: bool = (total_score % 2) == 0
 	var target_x: float
@@ -225,13 +220,8 @@ func _get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool) -> 
 		_game.player_right.global_position if from_red_side else _game.player_left.global_position)
 	
 	# Pickleball diagonal serve rules (opposite adjacent box)
-	var score_left: int = 0
-	var score_right: int = 0
-	if _game.has("score_left"):
-		score_left = _game.score_left
-	if _game.has("score_right"):
-		score_right = _game.score_right
-	
+	var score_left: int = _game.score_left
+	var score_right: int = _game.score_right
 	var total_score: int = score_left + score_right
 	var serve_from_right: bool = (total_score % 2) == 0  # Even = serve from right side
 	

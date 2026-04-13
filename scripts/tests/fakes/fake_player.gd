@@ -1,4 +1,4 @@
-class_name FakePlayer extends RefCounted
+class_name FakePlayer extends Node
 ## Plain RefCounted stub matching the scorer's view of a player. Mirrors the
 ## minimum surface of scripts/player.gd that RallyScorer reads:
 ##   - global_position (Vector3)

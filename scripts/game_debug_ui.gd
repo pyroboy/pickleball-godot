@@ -18,15 +18,6 @@ var _ai_difficulty: int = 0  # Reference to game.gd ai_difficulty (0=EASY, 1=MED
 var _serve_aim_offset_x: float = 0.0
 var _trajectory_arc_offset: float = 0.0
 
-# ── Callbacks set by game.gd ───────────────────────────────────────────────────
-var _on_cycle_difficulty: Callable
-var _on_cycle_debug_visuals: Callable
-var _on_toggle_intent_indicators: Callable
-var _on_set_debug_visuals_visible: Callable
-var _on_set_debug_zones_visible: Callable
-var _on_get_game_state: Callable  # () -> GameState
-var _on_get_serving_team: Callable  # () -> int
-
 # ─────────────────────────────────────────────────────────────────────────────
 func setup(
 	player_left: CharacterBody3D,
@@ -34,10 +25,10 @@ func setup(
 	scoreboard_ui: Node,
 	rally_scorer: Node,
 	ball: RigidBody3D,
-	serve_charge_time_ref: float,
-	ai_difficulty_ref: int,
-	serve_aim_offset_x_ref: float,
-	trajectory_arc_offset_ref: float
+	_serve_charge_time_ref: float,
+	_ai_difficulty_ref: int,
+	_serve_aim_offset_x_ref: float,
+	_trajectory_arc_offset_ref: float
 ) -> void:
 	_player_left = player_left
 	_player_right = player_right
@@ -142,9 +133,8 @@ func update_service_zone_debug() -> void:
 	_update_service_zone_debug(0, _ball)
 
 
-func _update_service_zone_debug(game_state: int, ball: RigidBody3D) -> void:
-	const NON_VOLLEY_ZONE: float = 1.8  # Match PickleballConstants.NON_VOLLEY_ZONE
-	if game_state != 2 or ball == null:  # GameState.PLAYING == 2
+func _update_service_zone_debug(_game_state: int, ball: RigidBody3D) -> void:
+	if _game_state != 2 or ball == null:  # GameState.PLAYING == 2
 		return
 	var bpos: Vector3 = ball.global_position
 	if bpos.y > 0.4:
@@ -282,7 +272,7 @@ func set_debug_visible(v: bool) -> void:
 			dv.set_debug_visible(v)
 
 
-func set_debug_zones_visible(v: bool) -> void:
+func set_debug_zones_visible(_v: bool) -> void:
 	# DebugZones is a child of game.gd node; we can't find it directly from here
 	# so this is a no-op — game.gd calls this on itself
 	pass

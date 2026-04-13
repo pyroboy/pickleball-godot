@@ -2,7 +2,7 @@ class_name PoseTrigger extends RefCounted
 
 ## Handles snapping player to a posture for inspection (Trigger Pose feature)
 
-var _player: PlayerController
+var _player
 var _original_time_scale: float = 1.0
 var _is_frozen: bool = false
 var _target_posture_id: int = -1  # Last triggered posture to preserve on release
@@ -25,11 +25,11 @@ var _target_body_pivot_rot: Vector3
 signal pose_triggered(posture_id: int)
 signal pose_released()
 
-func _init(player: PlayerController) -> void:
+func _init(player) -> void:
 	_player = player
 
 ## Trigger a pose - freeze game and animate cleanly to posture
-func trigger_pose(posture_def: PostureDefinition) -> void:
+func trigger_pose(posture_def) -> void:
 	if not _player or not posture_def:
 		return
 	
@@ -78,7 +78,7 @@ func trigger_pose(posture_def: PostureDefinition) -> void:
 
 
 ## While frozen: snap paddle, bones, and skeleton to match an edited definition (live preview).
-func refresh_from_definition(posture_def: PostureDefinition) -> void:
+func refresh_from_definition(posture_def) -> void:
 	if not _player or not posture_def:
 		return
 	# When frozen: keep transition_pose_blend set so the live lerp system
@@ -188,7 +188,7 @@ func release_pose() -> void:
 	pose_released.emit()
 
 ## Toggle pose state
-func toggle_pose(posture_def: PostureDefinition) -> void:
+func toggle_pose(posture_def) -> void:
 	if _is_frozen:
 		release_pose()
 	else:
@@ -206,7 +206,7 @@ func _capture_current_bones() -> Dictionary:
 			result[b_name] = _player.skeleton.get_bone_pose(idx)
 	return result
 
-func _calculate_target_bones(def: PostureDefinition) -> Dictionary:
+func _calculate_target_bones(def) -> Dictionary:
 	var result: Dictionary = {}
 	if not _player.skeleton or _player.skeleton_bones.is_empty():
 		return result

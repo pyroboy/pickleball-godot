@@ -1,5 +1,7 @@
 class_name PostureLibrary extends RefCounted
 
+const _PostureDefinition = preload("res://scripts/posture_definition.gd")
+
 ## Loads and indexes the 21 PostureDefinition Resources.
 ##
 ## Phase 1: Library is NOT yet consumed by runtime code. It can be instantiated
@@ -18,7 +20,7 @@ class_name PostureLibrary extends RefCounted
 const DATA_DIR := "res://data/postures/"
 
 var _by_id: Dictionary = {}   # posture_id -> PostureDefinition
-var definitions: Array[PostureDefinition] = []
+var definitions: Array = []
 
 ## Singleton: lazily initialized on first access.
 static var _singleton: PostureLibrary = null
@@ -26,7 +28,7 @@ static var _singleton: PostureLibrary = null
 
 static func instance() -> PostureLibrary:
 	if _singleton == null:
-		_singleton = PostureLibrary.new()
+		_singleton = load("res://scripts/posture_library.gd").new()
 	return _singleton
 
 
@@ -45,7 +47,7 @@ func load_or_default() -> void:
 		_by_id[d.posture_id] = d
 
 
-func get_def(posture_id: int) -> PostureDefinition:
+func get_def(posture_id: int):
 	return _by_id.get(posture_id, null)
 
 
@@ -53,7 +55,7 @@ func has_def(posture_id: int) -> bool:
 	return _by_id.has(posture_id)
 
 
-func all_definitions() -> Array[PostureDefinition]:
+func all_definitions():
 	return definitions
 
 
@@ -66,7 +68,7 @@ func _load_from_disk() -> void:
 	while f != "":
 		if not dir.current_is_dir() and f.ends_with(".tres"):
 			var res: Resource = load(DATA_DIR + f)
-			if res is PostureDefinition:
+			if res != null:
 				definitions.append(res)
 		f = dir.get_next()
 	dir.list_dir_end()
@@ -86,27 +88,27 @@ func _load_from_disk() -> void:
 ## lookups, at which point this becomes the single source of truth.
 func _build_defaults() -> void:
 	# Enum IDs from scripts/player.gd:42-64
-	const FOREHAND            := 0
-	const FORWARD             := 1
-	const BACKHAND            := 2
-	const MEDIUM_OVERHEAD     := 3
-	const HIGH_OVERHEAD       := 4
-	const LOW_FOREHAND        := 5
-	const LOW_FORWARD         := 6
-	const LOW_BACKHAND        := 7
-	const CHARGE_FOREHAND     := 8
-	const CHARGE_BACKHAND     := 9
-	const WIDE_FOREHAND       := 10
-	const WIDE_BACKHAND       := 11
-	const VOLLEY_READY        := 12
-	const MID_LOW_FOREHAND    := 13
-	const MID_LOW_BACKHAND    := 14
-	const MID_LOW_FORWARD     := 15
-	const MID_LOW_WIDE_FH     := 16
-	const MID_LOW_WIDE_BH     := 17
-	const LOW_WIDE_FOREHAND   := 18
-	const LOW_WIDE_BACKHAND   := 19
-	const READY               := 20
+	var FOREHAND            := 0
+	var FORWARD             := 1
+	var BACKHAND            := 2
+	var MEDIUM_OVERHEAD     := 3
+	var HIGH_OVERHEAD       := 4
+	var LOW_FOREHAND        := 5
+	var LOW_FORWARD         := 6
+	var LOW_BACKHAND        := 7
+	var CHARGE_FOREHAND     := 8
+	var CHARGE_BACKHAND     := 9
+	var WIDE_FOREHAND       := 10
+	var WIDE_BACKHAND       := 11
+	var VOLLEY_READY        := 12
+	var MID_LOW_FOREHAND    := 13
+	var MID_LOW_BACKHAND    := 14
+	var MID_LOW_FORWARD     := 15
+	var MID_LOW_WIDE_FH     := 16
+	var MID_LOW_WIDE_BH     := 17
+	var LOW_WIDE_FOREHAND   := 18
+	var LOW_WIDE_BACKHAND   := 19
+	var READY               := 20
 
 	# Family: 0=FH, 1=BH, 2=center, 3=overhead
 	# Tier:   0=LOW, 1=MID_LOW, 2=NORMAL, 3=OVERHEAD
@@ -421,8 +423,8 @@ func _vec3_from_dict(d: Dictionary, key: String, default_val: Vector3) -> Vector
 	return default_val
 
 
-func _make(pid: int, name: String, family_: int, tier_: int, p: Dictionary) -> PostureDefinition:
-	var d := PostureDefinition.new()
+func _make(pid: int, name: String, family_: int, tier_: int, p: Dictionary):
+	var d = _PostureDefinition.new()
 	d.posture_id = pid
 	d.display_name = name
 	d.family = family_

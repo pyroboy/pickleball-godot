@@ -14,8 +14,8 @@ signal gizmo_moved(gizmo: GizmoHandle, new_position: Vector3)
 signal gizmo_rotated(gizmo: GizmoHandle, euler_delta: Vector3)
 
 var _camera: Camera3D
-var _selected_gizmo: GizmoHandle = null
-var _hovered_gizmo: GizmoHandle = null
+var _selected_gizmo = null
+var _hovered_gizmo = null
 var _dragging: bool = false
 var _drag_plane: Plane
 var _drag_start_pos: Vector3

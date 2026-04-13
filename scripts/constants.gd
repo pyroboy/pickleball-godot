@@ -1,4 +1,4 @@
-class_name PickleballConstants extends RefCounted
+extends Node
 
 # Court
 const COURT_LENGTH: float = 13.4

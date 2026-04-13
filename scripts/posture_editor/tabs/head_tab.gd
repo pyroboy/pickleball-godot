@@ -7,11 +7,11 @@ signal field_changed(field_name: String, value: Variant)
 var _def: Resource = null
 
 # Head rotation
-var _yaw_slider: SliderField
-var _pitch_slider: SliderField
+var _yaw_slider
+var _pitch_slider
 
 # Tracking weight
-var _track_weight_slider: SliderField
+var _track_weight_slider
 
 func _ready() -> void:
 	add_child(_create_section_label("Head Rotation (degrees)"))

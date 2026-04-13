@@ -1,6 +1,8 @@
 extends RefCounted
 class_name ShotPhysics
 
+const _Ball = preload("res://scripts/ball.gd")
+
 ## ShotPhysics.gd - Encapsulates ball-hitting physics for pickleball.
 ## Calculates target velocities, spin injection, and iterative aero-trajectories.
 
@@ -19,7 +21,7 @@ func setup(_ball: Node, p_left: Node, p_right: Node) -> void:
 func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: int, shot_type: String, ai_difficulty: int) -> Vector3:
 	var speed_curve: float = pow(clamp(charge_ratio, 0.0, 1.0), 0.7)
 	var target_speed: float = lerp(MIN_SWING_SPEED_MS, MAX_SWING_SPEED_MS, speed_curve)
-	var grav: float = Ball.get_effective_gravity()
+	var grav: float = _Ball.get_effective_gravity()
 
 	var target_z: float = 0.0
 	var target_x: float = randf_range(-2.0, 2.0)
@@ -200,15 +202,8 @@ func compute_shot_spin(shot_type: String, vel: Vector3, charge_ratio: float, _pl
 
 	var sidespin_mag: float = 0.0
 	if posture >= 0:
-		var is_backhand: bool = (
-			posture == PlayerController.PaddlePosture.BACKHAND
-			or posture == PlayerController.PaddlePosture.WIDE_BACKHAND
-			or posture == PlayerController.PaddlePosture.LOW_BACKHAND
-			or posture == PlayerController.PaddlePosture.MID_LOW_BACKHAND
-			or posture == PlayerController.PaddlePosture.LOW_WIDE_BACKHAND
-			or posture == PlayerController.PaddlePosture.MID_LOW_WIDE_BACKHAND
-			or posture == PlayerController.PaddlePosture.CHARGE_BACKHAND
-		)
+		# BACKHAND=2, WIDE_BACKHAND=11, LOW_BACKHAND=7, MID_LOW_BACKHAND=14, LOW_WIDE_BACKHAND=19, MID_LOW_WIDE_BACKHAND=17, CHARGE_BACKHAND=9
+		var is_backhand: bool = posture in [2, 11, 7, 14, 19, 17, 9]
 		var lateral_sign: float = signf(vel.x)
 		sidespin_mag = lateral_sign * (8.0 if not is_backhand else -6.0) * charge_gain
 
@@ -258,7 +253,7 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 
 	for _step in range(max_steps):
 		prev_pos = pos
-		var stepped: Array = Ball.predict_aero_step(pos, cur_vel, cur_omega, grav, dt)
+		var stepped: Array = _Ball.predict_aero_step(pos, cur_vel, cur_omega, grav, dt)
 		pos = stepped[0]
 		cur_vel = stepped[1]
 		cur_omega = stepped[2]

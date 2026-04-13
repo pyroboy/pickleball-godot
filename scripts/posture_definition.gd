@@ -159,9 +159,9 @@ func resolve_paddle_offset(forehand_axis: Vector3, forward_axis: Vector3) -> Vec
 
 
 ## Blend numeric fields toward `other` for smooth transition playback (t = 0 → self, 1 → other).
-func lerp_with(other: PostureDefinition, w: float) -> PostureDefinition:
+func lerp_with(other, w: float):
 	var t: float = clampf(w, 0.0, 1.0)
-	var o := PostureDefinition.new()
+	var o = load("res://scripts/posture_definition.gd").new()
 	o.posture_id = posture_id
 	o.display_name = display_name
 	o.family = family

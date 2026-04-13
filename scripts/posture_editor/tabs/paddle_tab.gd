@@ -4,31 +4,31 @@ class_name PaddleTab extends VBoxContainer
 
 signal field_changed(field_name: String, value: Variant)
 
-var _def: PostureDefinition = null
+var _def = null
 
-var _forehand_slider: SliderField
-var _forward_slider: SliderField
-var _y_offset_slider: SliderField
+var _forehand_slider
+var _forward_slider
+var _y_offset_slider
 
-var _pitch_slider: SliderField
-var _yaw_slider: SliderField
-var _roll_slider: SliderField
+var _pitch_slider
+var _yaw_slider
+var _roll_slider
 
-var _pitch_signed_slider: SliderField
-var _yaw_signed_slider: SliderField
-var _roll_signed_slider: SliderField
+var _pitch_signed_slider
+var _yaw_signed_slider
+var _roll_signed_slider
 
-var _pitch_sign_opt: OptionButton
-var _yaw_sign_opt: OptionButton
-var _roll_sign_opt: OptionButton
+var _pitch_sign_opt
+var _yaw_sign_opt
+var _roll_sign_opt
 
-var _floor_clear_slider: SliderField
+var _floor_clear_slider
 
-var _has_zone_check: CheckButton
-var _zone_xmin: SliderField
-var _zone_xmax: SliderField
-var _zone_ymin: SliderField
-var _zone_ymax: SliderField
+var _has_zone_check
+var _zone_xmin
+var _zone_xmax
+var _zone_ymin
+var _zone_ymax
 
 func _ready() -> void:
 	add_child(_create_section_label("Position"))
@@ -138,7 +138,7 @@ func _create_section_label(text: String) -> Label:
 	return lbl
 
 
-func set_definition(def: PostureDefinition) -> void:
+func set_definition(def) -> void:
 	_def = def
 	if def == null:
 		return

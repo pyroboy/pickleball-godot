@@ -173,7 +173,7 @@ func calculate_rotation_from_drag(start_pos: Vector3, end_pos: Vector3, camera_p
 	
 	return result
 
-func _calculate_ring_rotation(start: Vector3, end: Vector3, camera: Vector3, axis: Vector3) -> float:
+func _calculate_ring_rotation(start: Vector3, end: Vector3, _camera: Vector3, axis: Vector3) -> float:
 	# Project points onto plane perpendicular to rotation axis
 	var center := global_position
 	var to_start := (start - center).normalized()

@@ -7,20 +7,20 @@ signal field_changed(field_name: String, value: Variant)
 var _def: Resource = null
 
 # Hip
-var _hip_yaw_slider: SliderField
+var _hip_yaw_slider
 
 # Torso
-var _torso_yaw_slider: SliderField
-var _torso_pitch_slider: SliderField
-var _torso_roll_slider: SliderField
+var _torso_yaw_slider
+var _torso_pitch_slider
+var _torso_roll_slider
 
 # Spine
-var _spine_curve_slider: SliderField
+var _spine_curve_slider
 
 # Body Pivot
-var _body_yaw_slider: SliderField
-var _body_pitch_slider: SliderField
-var _body_roll_slider: SliderField
+var _body_yaw_slider
+var _body_pitch_slider
+var _body_roll_slider
 
 func _ready() -> void:
 	add_child(_create_section_label("Hip (degrees)"))

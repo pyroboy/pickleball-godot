@@ -12,6 +12,7 @@ const SMASH_DOWNWARD_BIAS := 0.22
 const AI_HIT_COOLDOWN := 0.16
 const AI_CHARGE_DURATION := 0.28
 const AI_TRAJECTORY_DURATION := 0.6
+const _PL = preload("res://scripts/posture_library.gd")
 
 # ── Paddle velocity tracking (GAP-X: animation → ball speed coupling) ─────────
 # Tracks paddle world-space velocity so the kinetic chain's final velocity
@@ -36,17 +37,17 @@ var _ft_phase_times: Array = []  # [strike_end, sweep_end, settle_end, hold_end]
 var paddle_swing_tween: Tween = null
 
 # ── Parent reference ─────────────────────────────────────────────────────────
-var _player: PlayerController
+var _player
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 
 
-func _get_posture_def(posture_id: int) -> PostureDefinition:
-	return PostureLibrary.instance().get_def(posture_id)
+func _get_posture_def(posture_id: int):
+	return load("res://scripts/posture_library.gd").new().get_def(posture_id)
 
 
-func _has_authored_follow_through(def: PostureDefinition) -> bool:
+func _has_authored_follow_through(def) -> bool:
 	if def == null:
 		return false
 	return def.ft_paddle_offset.length_squared() > 0.0001 \
@@ -63,8 +64,8 @@ func _tween_transition_for_curve(curve: int) -> Tween.TransitionType:
 			return Tween.TRANS_EXPO
 
 
-func _authored_follow_through_data(posture_id: int, charge_ratio: float) -> Dictionary:
-	var def := _get_posture_def(posture_id)
+func _authored_follow_through_data(posture_id: int, _charge_ratio: float) -> Dictionary:
+	var def = _get_posture_def(posture_id)
 	if not _has_authored_follow_through(def):
 		return {}
 
@@ -182,8 +183,8 @@ func set_serve_charge_visual(charge_ratio: float) -> void:
 	var charge_pull_sign: float = _player._get_posture_charge_sign()
 	var forward_axis: Vector3 = _player._get_forward_axis()
 	var swing_sign: float = _player._get_swing_sign()
-	var posture_lib := PostureLibrary.instance()
-	var current_def: PostureDefinition = posture_lib.get_def(_player.paddle_posture)
+	var posture_lib = load("res://scripts/posture_library.gd").new()
+	var current_def = posture_lib.get_def(_player.paddle_posture)
 
 	# ── Per-posture authored charge data (new path) ────────────────────
 	if current_def != null and current_def.charge_paddle_offset.length_squared() > 0.0001:
@@ -256,7 +257,7 @@ func _get_follow_through_offsets(ratio: float, fwd: Vector3, fh: Vector3, swing_
 	var rot := Vector3.ZERO
 
 	# ── Per-posture authored FT data ──────────────────────────────────
-	var def: PostureDefinition = _get_posture_def(posture)
+	var def = _get_posture_def(posture)
 	if _has_authored_follow_through(def):
 		# Authored offsets are FROM contact TO FT end — scale by ratio for intermediate positions
 		pos = def.ft_paddle_offset * ratio

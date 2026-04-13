@@ -13,7 +13,7 @@ Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
 [HitFeedback] setup — ball=true rig=true fxpool=true
 [BallTrail] ready (ribbon)
 [DEBUG] visuals OFF
-[P0] L arm IK: elbow=(1.904771, 0.902895, 6.609967)
+[P0] L arm IK: elbow=(1.904046, 0.904078, 6.608876)
 [P0] Leg: ankle=0.40 gap=-0.60 hip2foot=0.52 (51%)
 [P0] Arms: R(s=1.10 e=0.88 h=0.70) L(s=1.10 e=0.90 h=0.75)
 [P1] Leg: ankle=0.46 gap=-0.54 hip2foot=0.52 (51%)

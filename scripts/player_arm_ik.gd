@@ -1,13 +1,14 @@
 class_name PlayerArmIK extends Node
+const _PostureSkeletonApplier = preload("res://scripts/posture_skeleton_applier.gd")
 
-var _player: PlayerController
+var _player
 
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 
 func update_arm_ik(delta: float) -> void:
 	var b = _player._get_ball_ref()
-	var def: PostureDefinition = _player.get_runtime_posture_def()
+	var def = _player.get_runtime_posture_def()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
 	var forward_axis: Vector3 = _player._get_forward_axis()
 
@@ -17,7 +18,7 @@ func update_arm_ik(delta: float) -> void:
 			target_global = _player.paddle_node.to_global(Vector3(0, 0.07, 0) + def.right_hand_offset)
 		var pole_global: Vector3 = _player.global_position + forehand_axis * 0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
 		if def and def.right_elbow_pole.length_squared() > 1e-10:
-			pole_global = _player.global_position + PostureSkeletonApplier.stance_offset(def.right_elbow_pole, forehand_axis, forward_axis)
+			pole_global = _player.global_position + _PostureSkeletonApplier.stance_offset(def.right_elbow_pole, forehand_axis, forward_axis)
 		if _player.right_arm_node.has_method("solve_ik"):
 			_player.right_arm_node.solve_ik(target_global, pole_global, _player.paddle_node.global_transform)
 
@@ -72,11 +73,11 @@ func update_arm_ik(delta: float) -> void:
 				target_global_left = _player.left_hand_rest_pos
 
 		if def and def.left_hand_offset.length_squared() > 1e-10:
-			target_global_left += PostureSkeletonApplier.stance_offset(def.left_hand_offset, forehand_axis, forward_axis)
+			target_global_left += _PostureSkeletonApplier.stance_offset(def.left_hand_offset, forehand_axis, forward_axis)
 
 		var pole_global_left: Vector3 = _player.global_position + forehand_axis * -0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
 		if def and def.left_elbow_pole.length_squared() > 1e-10:
-			pole_global_left = _player.global_position + PostureSkeletonApplier.stance_offset(def.left_elbow_pole, forehand_axis, forward_axis)
+			pole_global_left = _player.global_position + _PostureSkeletonApplier.stance_offset(def.left_elbow_pole, forehand_axis, forward_axis)
 		if _player.left_arm_node.has_method("solve_ik"):
 			_player.left_arm_node.solve_ik(target_global_left, pole_global_left, pass_transform)
 

@@ -1,6 +1,6 @@
 class_name PlayerBodyBuilder extends Node
 
-var _player: PlayerController = null
+var _player
 
 func build(paddle_color: Color) -> void:
 	_player.name = "Player" + str(_player.player_num)

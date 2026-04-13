@@ -13,8 +13,6 @@ var sound_tune_sliders: Array[HSlider] = []
 var sound_tune_selected := 0
 
 var _sound_panel_key_state: Dictionary = {}
-var _sound_tune_toggle_pressed := false
-var _sound_tune_print_pressed := false
 
 # Injected dependencies
 var _ball_audio_synth: Node
@@ -97,7 +95,6 @@ func _create_sound_tune_panel(canvas: CanvasLayer) -> void:
 	vb.add_child(title)
 
 	for i in range(sound_tune_settings.size()):
-		var setting: Dictionary = sound_tune_settings[i]
 		var row := Label.new()
 		row.add_theme_font_size_override("font_size", 12)
 		row.focus_mode = Control.FOCUS_NONE
@@ -165,8 +162,8 @@ func _consume_panel_key(key_name: String, keycode: Key) -> bool:
 func _adjust_sound_tuning(delta: float) -> void:
 	if _ball_audio_synth == null:
 		return
-	var setting: Dictionary = sound_tune_settings[sound_tune_selected]
-	var id: String = setting["id"]
+	var _setting: Dictionary = sound_tune_settings[sound_tune_selected]
+	var id: String = _setting["id"]
 	var tunings: Dictionary = _ball_audio_synth.get_sound_tunings()
 	var next_value: float = clamp(tunings.get(id, 0.0) + delta, -1.0, 1.0)
 	_ball_audio_synth.set_sound_tuning(id, next_value)

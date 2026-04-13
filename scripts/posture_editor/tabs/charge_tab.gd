@@ -2,13 +2,13 @@ class_name ChargeTab extends VBoxContainer
 
 signal field_changed(field_name: String, value: Variant)
 
-var _def: PostureDefinition = null
+var _def = null
 
-var _paddle_off: Vector3Editor
-var _paddle_rot: Vector3Editor
-var _body_rot: SliderField
-var _hip_coil: SliderField
-var _back_foot_load: SliderField
+var _paddle_off
+var _paddle_rot
+var _body_rot
+var _hip_coil
+var _back_foot_load
 
 func _ready() -> void:
 	add_child(_section("Charge — paddle & body"))
@@ -48,7 +48,7 @@ func _section(text: String) -> Label:
 	return lbl
 
 
-func set_definition(def: PostureDefinition) -> void:
+func set_definition(def) -> void:
 	_def = def
 	if def == null:
 		return

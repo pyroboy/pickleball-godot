@@ -1,5 +1,7 @@
 class_name BasePoseDefinition extends Resource
 
+const _PostureDefinition = preload("res://scripts/posture_definition.gd")
+
 ## Body-only authored pose data that layers underneath a stroke/contact posture.
 ##
 ## These resources do not own paddle contact geometry, charge, or follow-through.
@@ -75,29 +77,29 @@ class_name BasePoseDefinition extends Resource
 @export var last_tuned_at: String = ""
 
 
-func duplicate_pose() -> BasePoseDefinition:
-	var pose := BasePoseDefinition.new()
+func duplicate_pose():
+	var pose = load("res://scripts/base_pose_definition.gd").new()
 	_copy_fields_to(pose)
 	return pose
 
 
-func blend_onto_stroke(stroke_def: PostureDefinition, weight: float = -1.0) -> PostureDefinition:
+func blend_onto_stroke(stroke_def, weight: float = -1.0):
 	if stroke_def == null:
 		return null
 
 	var mix: float = stroke_overlay_mix if weight < 0.0 else weight
 	mix = clampf(mix, 0.0, 1.0)
 
-	var blended := stroke_def.lerp_with(stroke_def, 0.0)
+	var blended = stroke_def.lerp_with(stroke_def, 0.0)
 	_apply_body_fields(blended, stroke_def, mix)
 	return blended
 
 
-func to_preview_posture(stroke_def: PostureDefinition) -> PostureDefinition:
+func to_preview_posture(stroke_def):
 	return blend_onto_stroke(stroke_def, 1.0)
 
 
-func _copy_fields_to(other: BasePoseDefinition) -> void:
+func _copy_fields_to(other) -> void:
 	other.base_pose_id = base_pose_id
 	other.display_name = display_name
 	other.canonical_intent = canonical_intent
@@ -143,7 +145,7 @@ func _copy_fields_to(other: BasePoseDefinition) -> void:
 	other.last_tuned_at = last_tuned_at
 
 
-func _apply_body_fields(target: PostureDefinition, source: PostureDefinition, mix: float) -> void:
+func _apply_body_fields(target, source, mix: float) -> void:
 	target.right_hand_offset = source.right_hand_offset.lerp(right_hand_offset, mix)
 	target.right_elbow_pole = source.right_elbow_pole.lerp(right_elbow_pole, mix)
 	target.right_shoulder_rotation_deg = source.right_shoulder_rotation_deg.lerp(right_shoulder_rotation_deg, mix)

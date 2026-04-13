@@ -46,14 +46,14 @@ func on_ball_bounced(_bounce_pos: Vector3) -> void:
 
 
 ## Called when any paddle hits the ball (wired from game.gd's paddle hit callbacks).
-func on_paddle_hit(player_num: int) -> void:
+func on_paddle_hit(_player_num: int) -> void:
 	_awaiting_return = false
 
 
 ## Per-frame update. Returns the current pending shot type (empty outside of serves).
 ## game_state: current GameState enum value from game.gd (0=WAITING, 1=SERVING, 2=PLAYING, 3=POINT_SCORED)
-func update(game_state: int, ball: RigidBody3D, serve_charge_time: float,
-		player_left: CharacterBody3D, player_right: CharacterBody3D) -> String:
+func update(_game_state: int, _p_ball: RigidBody3D, _serve_charge_time: float,
+		_p_player_left: CharacterBody3D, _p_player_right: CharacterBody3D) -> String:
 	_update_out_indicator()
 	return _pending_shot_type
 

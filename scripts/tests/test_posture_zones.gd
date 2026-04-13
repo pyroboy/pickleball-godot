@@ -13,7 +13,7 @@ extends RefCounted
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
-class FakePlayer extends RefCounted:
+class ZoneFakePlayer extends RefCounted:
 	var player_num := 0
 	var global_position := Vector3.ZERO
 	var current_velocity := Vector3.ZERO
@@ -55,33 +55,33 @@ class FakePlayer extends RefCounted:
 ## ── Zone data (mirrors player_paddle_posture.gd:_init_posture_zones) ──────────
 
 const NORMAL_ZONES := {
-	FakePlayer.PaddlePosture.FOREHAND:        {"x_min": 0.2,  "x_max": 0.55, "y_min": 0.5,  "y_max": 1.0},
-	FakePlayer.PaddlePosture.BACKHAND:        {"x_min": -0.55, "x_max": -0.2, "y_min": 0.5,  "y_max": 1.0},
-	FakePlayer.PaddlePosture.WIDE_FOREHAND:   {"x_min": 0.5,   "x_max": 1.1,  "y_min": 0.48, "y_max": 1.0},
-	FakePlayer.PaddlePosture.WIDE_BACKHAND:   {"x_min": -1.1,  "x_max": -0.5, "y_min": 0.48, "y_max": 1.0},
-	FakePlayer.PaddlePosture.FORWARD:          {"x_min": -0.15, "x_max": 0.15, "y_min": 0.5,  "y_max": 1.0},
-	FakePlayer.PaddlePosture.VOLLEY_READY:    {"x_min": -0.2,  "x_max": 0.2,  "y_min": 0.55, "y_max": 0.9},
-	FakePlayer.PaddlePosture.MEDIUM_OVERHEAD: {"x_min": -0.35, "x_max": 0.35, "y_min": 0.8,  "y_max": 1.3},
-	FakePlayer.PaddlePosture.HIGH_OVERHEAD:   {"x_min": -0.35, "x_max": 0.35, "y_min": 1.1,  "y_max": 1.8},
+	ZoneFakePlayer.PaddlePosture.FOREHAND:        {"x_min": 0.2,  "x_max": 0.55, "y_min": 0.5,  "y_max": 1.0},
+	ZoneFakePlayer.PaddlePosture.BACKHAND:        {"x_min": -0.55, "x_max": -0.2, "y_min": 0.5,  "y_max": 1.0},
+	ZoneFakePlayer.PaddlePosture.WIDE_FOREHAND:   {"x_min": 0.5,   "x_max": 1.1,  "y_min": 0.48, "y_max": 1.0},
+	ZoneFakePlayer.PaddlePosture.WIDE_BACKHAND:   {"x_min": -1.1,  "x_max": -0.5, "y_min": 0.48, "y_max": 1.0},
+	ZoneFakePlayer.PaddlePosture.FORWARD:          {"x_min": -0.15, "x_max": 0.15, "y_min": 0.5,  "y_max": 1.0},
+	ZoneFakePlayer.PaddlePosture.VOLLEY_READY:    {"x_min": -0.2,  "x_max": 0.2,  "y_min": 0.55, "y_max": 0.9},
+	ZoneFakePlayer.PaddlePosture.MEDIUM_OVERHEAD: {"x_min": -0.35, "x_max": 0.35, "y_min": 0.8,  "y_max": 1.3},
+	ZoneFakePlayer.PaddlePosture.HIGH_OVERHEAD:   {"x_min": -0.35, "x_max": 0.35, "y_min": 1.1,  "y_max": 1.8},
 }
 
 const MID_LOW_ZONES := {
-	FakePlayer.PaddlePosture.MID_LOW_FOREHAND:      {"x_min": 0.2,  "x_max": 0.55, "y_min": 0.15, "y_max": 0.52},
-	FakePlayer.PaddlePosture.MID_LOW_BACKHAND:      {"x_min": -0.55,"x_max": -0.2, "y_min": 0.15, "y_max": 0.52},
-	FakePlayer.PaddlePosture.MID_LOW_FORWARD:       {"x_min": -0.15,"x_max": 0.15, "y_min": 0.15, "y_max": 0.52},
-	FakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND: {"x_min": 0.5,  "x_max": 1.1,  "y_min": 0.1,  "y_max": 0.50},
-	FakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND: {"x_min": -1.1, "x_max": -0.5, "y_min": 0.1,  "y_max": 0.50},
+	ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND:      {"x_min": 0.2,  "x_max": 0.55, "y_min": 0.15, "y_max": 0.52},
+	ZoneFakePlayer.PaddlePosture.MID_LOW_BACKHAND:      {"x_min": -0.55,"x_max": -0.2, "y_min": 0.15, "y_max": 0.52},
+	ZoneFakePlayer.PaddlePosture.MID_LOW_FORWARD:       {"x_min": -0.15,"x_max": 0.15, "y_min": 0.15, "y_max": 0.52},
+	ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND: {"x_min": 0.5,  "x_max": 1.1,  "y_min": 0.1,  "y_max": 0.50},
+	ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND: {"x_min": -1.1, "x_max": -0.5, "y_min": 0.1,  "y_max": 0.50},
 }
 
 const LOW_ZONES := {
-	FakePlayer.PaddlePosture.LOW_FOREHAND:      {"x_min": 0.2,  "x_max": 0.55, "y_min": -0.2, "y_max": 0.2},
-	FakePlayer.PaddlePosture.LOW_BACKHAND:      {"x_min": -0.55,"x_max": -0.2, "y_min": -0.2, "y_max": 0.2},
-	FakePlayer.PaddlePosture.LOW_FORWARD:       {"x_min": -0.15,"x_max": 0.15, "y_min": -0.2, "y_max": 0.2},
-	FakePlayer.PaddlePosture.LOW_WIDE_FOREHAND: {"x_min": 0.5,  "x_max": 1.1,  "y_min": -0.2, "y_max": 0.15},
-	FakePlayer.PaddlePosture.LOW_WIDE_BACKHAND: {"x_min": -1.1, "x_max": -0.5, "y_min": -0.2, "y_max": 0.15},
+	ZoneFakePlayer.PaddlePosture.LOW_FOREHAND:      {"x_min": 0.2,  "x_max": 0.55, "y_min": -0.2, "y_max": 0.2},
+	ZoneFakePlayer.PaddlePosture.LOW_BACKHAND:      {"x_min": -0.55,"x_max": -0.2, "y_min": -0.2, "y_max": 0.2},
+	ZoneFakePlayer.PaddlePosture.LOW_FORWARD:       {"x_min": -0.15,"x_max": 0.15, "y_min": -0.2, "y_max": 0.2},
+	ZoneFakePlayer.PaddlePosture.LOW_WIDE_FOREHAND: {"x_min": 0.5,  "x_max": 1.1,  "y_min": -0.2, "y_max": 0.15},
+	ZoneFakePlayer.PaddlePosture.LOW_WIDE_BACKHAND: {"x_min": -1.1, "x_max": -0.5, "y_min": -0.2, "y_max": 0.15},
 }
 
-const ALL_ZONES := {}
+var ALL_ZONES := {}
 
 
 func _init() -> void:
@@ -132,27 +132,27 @@ func _grade_ball2ghost(d: float) -> String:
 ## Classify posture family.
 func _posture_family(p: int) -> int:
 	match p:
-		FakePlayer.PaddlePosture.FOREHAND, \
-		FakePlayer.PaddlePosture.LOW_FOREHAND, \
-		FakePlayer.PaddlePosture.WIDE_FOREHAND, \
-		FakePlayer.PaddlePosture.MID_LOW_FOREHAND, \
-		FakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND, \
-		FakePlayer.PaddlePosture.LOW_WIDE_FOREHAND, \
-		FakePlayer.PaddlePosture.CHARGE_FOREHAND:
-			return FakePlayer.FOREHAND_FAMILY
-		FakePlayer.PaddlePosture.BACKHAND, \
-		FakePlayer.PaddlePosture.LOW_BACKHAND, \
-		FakePlayer.PaddlePosture.WIDE_BACKHAND, \
-		FakePlayer.PaddlePosture.MID_LOW_BACKHAND, \
-		FakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND, \
-		FakePlayer.PaddlePosture.LOW_WIDE_BACKHAND, \
-		FakePlayer.PaddlePosture.CHARGE_BACKHAND:
-			return FakePlayer.BACKHAND_FAMILY
-		FakePlayer.PaddlePosture.MEDIUM_OVERHEAD, \
-		FakePlayer.PaddlePosture.HIGH_OVERHEAD:
-			return FakePlayer.OVERHEAD_FAMILY
+		ZoneFakePlayer.PaddlePosture.FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.LOW_FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.WIDE_FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.LOW_WIDE_FOREHAND, \
+		ZoneFakePlayer.PaddlePosture.CHARGE_FOREHAND:
+			return ZoneFakePlayer.FOREHAND_FAMILY
+		ZoneFakePlayer.PaddlePosture.BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.LOW_BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.WIDE_BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.MID_LOW_BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.LOW_WIDE_BACKHAND, \
+		ZoneFakePlayer.PaddlePosture.CHARGE_BACKHAND:
+			return ZoneFakePlayer.BACKHAND_FAMILY
+		ZoneFakePlayer.PaddlePosture.MEDIUM_OVERHEAD, \
+		ZoneFakePlayer.PaddlePosture.HIGH_OVERHEAD:
+			return ZoneFakePlayer.OVERHEAD_FAMILY
 		_:
-			return FakePlayer.CENTER_FAMILY
+			return ZoneFakePlayer.CENTER_FAMILY
 
 
 ## Height tier from ball Y (world space, relative to COURT_FLOOR_Y=0.075).
@@ -273,20 +273,20 @@ func _test_height_tier_boundaries(totals: Dictionary) -> void:
 
 func _test_height_tier_classification_examples(totals: Dictionary) -> void:
 	# LOW-tier postures should be returned for very low balls
-	var score_low := _score_posture(0.3, 0.05, FakePlayer.PaddlePosture.LOW_FOREHAND)
-	var score_norm := _score_posture(0.3, 0.05, FakePlayer.PaddlePosture.FOREHAND)
+	var score_low := _score_posture(0.3, 0.05, ZoneFakePlayer.PaddlePosture.LOW_FOREHAND)
+	var score_norm := _score_posture(0.3, 0.05, ZoneFakePlayer.PaddlePosture.FOREHAND)
 	_assert(score_low < score_norm,
 		"LOW posture scores better than NORMAL for low ball", totals)
 
 	# MID_LOW tier
-	var score_ml := _score_posture(0.3, 0.35, FakePlayer.PaddlePosture.MID_LOW_FOREHAND)
-	var score_n := _score_posture(0.3, 0.35, FakePlayer.PaddlePosture.FOREHAND)
+	var score_ml := _score_posture(0.3, 0.35, ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND)
+	var score_n := _score_posture(0.3, 0.35, ZoneFakePlayer.PaddlePosture.FOREHAND)
 	_assert(score_ml < score_n,
 		"MID_LOW posture scores better than NORMAL for mid-low ball", totals)
 
 	# NORMAL tier
-	var score_nor := _score_posture(0.3, 0.70, FakePlayer.PaddlePosture.FOREHAND)
-	var score_mid := _score_posture(0.3, 0.70, FakePlayer.PaddlePosture.MID_LOW_FOREHAND)
+	var score_nor := _score_posture(0.3, 0.70, ZoneFakePlayer.PaddlePosture.FOREHAND)
+	var score_mid := _score_posture(0.3, 0.70, ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND)
 	_assert(score_nor < score_mid,
 		"NORMAL posture scores better than MID_LOW for normal-height ball", totals)
 
@@ -295,8 +295,8 @@ func _test_height_tier_classification_examples(totals: Dictionary) -> void:
 
 func _test_green_pool_only_scores_greens(totals: Dictionary) -> void:
 	# Only LOW_FOREHAND is green
-	var result := _score_green_pool(0.3, 0.05, [FakePlayer.PaddlePosture.LOW_FOREHAND])
-	_assert_eq_int(result.posture, FakePlayer.PaddlePosture.LOW_FOREHAND,
+	var result := _score_green_pool(0.3, 0.05, [ZoneFakePlayer.PaddlePosture.LOW_FOREHAND])
+	_assert_eq_int(result.posture, ZoneFakePlayer.PaddlePosture.LOW_FOREHAND,
 		"green pool returns LOW_FOREHAND when it's the only green", totals)
 	_assert(result.score < INF, "score is finite", totals)
 
@@ -306,8 +306,8 @@ func _test_green_pool_only_scores_greens(totals: Dictionary) -> void:
 func _test_green_pool_ignores_non_greens(totals: Dictionary) -> void:
 	# Only NORMAL posture green, but ball is at low height — normal zone
 	# should give a high miss score
-	var result := _score_green_pool(0.3, 0.05, [FakePlayer.PaddlePosture.FOREHAND])
-	_assert_eq_int(result.posture, FakePlayer.PaddlePosture.FOREHAND,
+	var result := _score_green_pool(0.3, 0.05, [ZoneFakePlayer.PaddlePosture.FOREHAND])
+	_assert_eq_int(result.posture, ZoneFakePlayer.PaddlePosture.FOREHAND,
 		"green pool still returns the green even if score is high", totals)
 	_assert(result.score > 0.3,
 		"LOW ball in NORMAL zone produces non-zero miss penalty", totals)
@@ -318,14 +318,14 @@ func _test_green_pool_ignores_non_greens(totals: Dictionary) -> void:
 func _test_green_pool_tie_break_by_lat(totals: Dictionary) -> void:
 	# Forehand side (positive lat) → should pick FH over BH
 	var result := _score_green_pool(0.35, 0.7,
-		[FakePlayer.PaddlePosture.FOREHAND, FakePlayer.PaddlePosture.BACKHAND])
-	_assert_eq_int(result.posture, FakePlayer.PaddlePosture.FOREHAND,
+		[ZoneFakePlayer.PaddlePosture.FOREHAND, ZoneFakePlayer.PaddlePosture.BACKHAND])
+	_assert_eq_int(result.posture, ZoneFakePlayer.PaddlePosture.FOREHAND,
 		"forehand lateral picks forehand posture", totals)
 
 	# Backhand side (negative lat)
 	var result2 := _score_green_pool(-0.35, 0.7,
-		[FakePlayer.PaddlePosture.FOREHAND, FakePlayer.PaddlePosture.BACKHAND])
-	_assert_eq_int(result2.posture, FakePlayer.PaddlePosture.BACKHAND,
+		[ZoneFakePlayer.PaddlePosture.FOREHAND, ZoneFakePlayer.PaddlePosture.BACKHAND])
+	_assert_eq_int(result2.posture, ZoneFakePlayer.PaddlePosture.BACKHAND,
 		"backhand lateral picks backhand posture", totals)
 
 
@@ -368,49 +368,49 @@ func _test_scoring_rubric_golden_cases(totals: Dictionary) -> void:
 
 func _test_posture_family_forehand(totals: Dictionary) -> void:
 	for p in [
-		FakePlayer.PaddlePosture.FOREHAND,
-		FakePlayer.PaddlePosture.LOW_FOREHAND,
-		FakePlayer.PaddlePosture.WIDE_FOREHAND,
-		FakePlayer.PaddlePosture.MID_LOW_FOREHAND,
-		FakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND,
-		FakePlayer.PaddlePosture.LOW_WIDE_FOREHAND,
-		FakePlayer.PaddlePosture.CHARGE_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.FOREHAND,
+		ZoneFakePlayer.PaddlePosture.LOW_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.WIDE_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.LOW_WIDE_FOREHAND,
+		ZoneFakePlayer.PaddlePosture.CHARGE_FOREHAND,
 	]:
-		_assert_eq_int(_posture_family(p), FakePlayer.FOREHAND_FAMILY,
+		_assert_eq_int(_posture_family(p), ZoneFakePlayer.FOREHAND_FAMILY,
 			"posture %d is forehand family" % p, totals)
 
 
 func _test_posture_family_backhand(totals: Dictionary) -> void:
 	for p in [
-		FakePlayer.PaddlePosture.BACKHAND,
-		FakePlayer.PaddlePosture.LOW_BACKHAND,
-		FakePlayer.PaddlePosture.WIDE_BACKHAND,
-		FakePlayer.PaddlePosture.MID_LOW_BACKHAND,
-		FakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND,
-		FakePlayer.PaddlePosture.LOW_WIDE_BACKHAND,
-		FakePlayer.PaddlePosture.CHARGE_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.BACKHAND,
+		ZoneFakePlayer.PaddlePosture.LOW_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.WIDE_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.MID_LOW_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.MID_LOW_WIDE_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.LOW_WIDE_BACKHAND,
+		ZoneFakePlayer.PaddlePosture.CHARGE_BACKHAND,
 	]:
-		_assert_eq_int(_posture_family(p), FakePlayer.BACKHAND_FAMILY,
+		_assert_eq_int(_posture_family(p), ZoneFakePlayer.BACKHAND_FAMILY,
 			"posture %d is backhand family" % p, totals)
 
 
 func _test_posture_family_center(totals: Dictionary) -> void:
 	for p in [
-		FakePlayer.PaddlePosture.FORWARD,
-		FakePlayer.PaddlePosture.LOW_FORWARD,
-		FakePlayer.PaddlePosture.MID_LOW_FORWARD,
-		FakePlayer.PaddlePosture.VOLLEY_READY,
-		FakePlayer.PaddlePosture.READY,
+		ZoneFakePlayer.PaddlePosture.FORWARD,
+		ZoneFakePlayer.PaddlePosture.LOW_FORWARD,
+		ZoneFakePlayer.PaddlePosture.MID_LOW_FORWARD,
+		ZoneFakePlayer.PaddlePosture.VOLLEY_READY,
+		ZoneFakePlayer.PaddlePosture.READY,
 	]:
-		_assert_eq_int(_posture_family(p), FakePlayer.CENTER_FAMILY,
+		_assert_eq_int(_posture_family(p), ZoneFakePlayer.CENTER_FAMILY,
 			"posture %d is center family" % p, totals)
 
 
 func _test_posture_family_overhead(totals: Dictionary) -> void:
-	_assert_eq_int(_posture_family(FakePlayer.PaddlePosture.MEDIUM_OVERHEAD),
-		FakePlayer.OVERHEAD_FAMILY, "MEDIUM_OVERHEAD is overhead family", totals)
-	_assert_eq_int(_posture_family(FakePlayer.PaddlePosture.HIGH_OVERHEAD),
-		FakePlayer.OVERHEAD_FAMILY, "HIGH_OVERHEAD is overhead family", totals)
+	_assert_eq_int(_posture_family(ZoneFakePlayer.PaddlePosture.MEDIUM_OVERHEAD),
+		ZoneFakePlayer.OVERHEAD_FAMILY, "MEDIUM_OVERHEAD is overhead family", totals)
+	_assert_eq_int(_posture_family(ZoneFakePlayer.PaddlePosture.HIGH_OVERHEAD),
+		ZoneFakePlayer.OVERHEAD_FAMILY, "HIGH_OVERHEAD is overhead family", totals)
 
 
 # ── Test 13: fallback scores all zones (not just greens) ───────────────────────
@@ -427,7 +427,7 @@ func _test_fallback_scores_all_zones(totals: Dictionary) -> void:
 func _test_fallback_picks_closest_center(totals: Dictionary) -> void:
 	# Dead center of FOREHAND zone (x=0.375, y=0.75)
 	var result := _score_fallback(0.375, 0.75)
-	_assert_eq_int(result.posture, FakePlayer.PaddlePosture.FOREHAND,
+	_assert_eq_int(result.posture, ZoneFakePlayer.PaddlePosture.FOREHAND,
 		"center of FOREHAND zone picks FOREHAND", totals)
 	_assert(result.dist < 0.01,
 		"at zone center, distance is near zero", totals)
@@ -436,37 +436,31 @@ func _test_fallback_picks_closest_center(totals: Dictionary) -> void:
 # ── Test 15: zone edge miss distances ─────────────────────────────────────────
 
 func _test_zone_edge_misses(totals: Dictionary) -> void:
-	var zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.FOREHAND]
+	var zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.FOREHAND]
 	# x below zone
-	_assert_eq_float(_zone_lat_miss(0.0, zone), 0.2,
-		"x=0.0 (below x_min=0.2) miss=0.2", 0.001, totals)
+	_assert_eq_float(_zone_lat_miss(0.0, zone), 0.2, 0.001, "x=0.0 (below x_min=0.2) miss=0.2", totals)
 	# x inside zone
-	_assert_eq_float(_zone_lat_miss(0.35, zone), 0.0,
-		"x=0.35 (inside zone) miss=0.0", 0.001, totals)
+	_assert_eq_float(_zone_lat_miss(0.35, zone), 0.0, 0.001, "x=0.35 (inside zone) miss=0.0", totals)
 	# x above zone
-	_assert_eq_float(_zone_lat_miss(0.8, zone), 0.25,
-		"x=0.8 (above x_max=0.55) miss=0.25", 0.001, totals)
+	_assert_eq_float(_zone_lat_miss(0.8, zone), 0.25, 0.001, "x=0.8 (above x_max=0.55) miss=0.25", totals)
 	# y below zone
-	_assert_eq_float(_zone_ht_miss(0.3, zone), 0.2,
-		"y=0.3 (below y_min=0.5) miss=0.2", 0.001, totals)
+	_assert_eq_float(_zone_ht_miss(0.3, zone), 0.2, 0.001, "y=0.3 (below y_min=0.5) miss=0.2", totals)
 	# y inside zone
-	_assert_eq_float(_zone_ht_miss(0.75, zone), 0.0,
-		"y=0.75 (inside zone) miss=0.0", 0.001, totals)
+	_assert_eq_float(_zone_ht_miss(0.75, zone), 0.0, 0.001, "y=0.75 (inside zone) miss=0.0", totals)
 	# y above zone
-	_assert_eq_float(_zone_ht_miss(1.2, zone), 0.2,
-		"y=1.2 (above y_max=1.0) miss=0.2", 0.001, totals)
+	_assert_eq_float(_zone_ht_miss(1.2, zone), 0.2, 0.001, "y=1.2 (above y_max=1.0) miss=0.2", totals)
 
 
 # ── Test 16: low zone handles ball at ground level ────────────────────────────
 
 func _test_low_zone_ball_at_ground(totals: Dictionary) -> void:
 	# y=-0.1 is well inside LOW zone (y_min=-0.2, y_max=0.2)
-	var zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.LOW_FOREHAND]
+	var zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.LOW_FOREHAND]
 	var ht_miss := _zone_ht_miss(-0.1, zone)
-	_assert_eq_float(ht_miss, 0.0, "y=-0.1 is inside LOW_FOREHAND zone", 0.001, totals)
+	_assert_eq_float(ht_miss, 0.0, 0.001, "y=-0.1 is inside LOW_FOREHAND zone", totals)
 
 	# Same ball is way outside NORMAL zone
-	var norm_zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.FOREHAND]
+	var norm_zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.FOREHAND]
 	var norm_ht_miss := _zone_ht_miss(-0.1, norm_zone)
 	_assert(norm_ht_miss > 0.5,
 		"y=-0.1 produces large miss in NORMAL zone (%.2f)" % norm_ht_miss, totals)
@@ -476,13 +470,12 @@ func _test_low_zone_ball_at_ground(totals: Dictionary) -> void:
 
 func _test_mid_low_zone_bridges_normal_and_low(totals: Dictionary) -> void:
 	# y=0.35 is inside MID_LOW_FOREHAND zone (y_min=0.15, y_max=0.52)
-	var ml_zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.MID_LOW_FOREHAND]
+	var ml_zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.MID_LOW_FOREHAND]
 	var ml_miss := _zone_ht_miss(0.35, ml_zone)
-	_assert_eq_float(ml_miss, 0.0,
-		"y=0.35 is inside MID_LOW_FOREHAND zone", 0.001, totals)
+	_assert_eq_float(ml_miss, 0.0, 0.001, "y=0.35 is inside MID_LOW_FOREHAND zone", totals)
 
 	# But outside LOW_FOREHAND (y_max=0.2)
-	var lo_zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.LOW_FOREHAND]
+	var lo_zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.LOW_FOREHAND]
 	var lo_miss := _zone_ht_miss(0.35, lo_zone)
 	_assert(lo_miss > 0.1,
 		"y=0.35 is outside LOW_FOREHAND zone (miss=%.2f)" % lo_miss, totals)

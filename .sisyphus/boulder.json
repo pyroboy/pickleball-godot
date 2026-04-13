@@ -1,24 +1,33 @@
 {
-  "active_plan": "/Users/arjomagno/Documents/github-repos/pickleball-godot/.sisyphus/plans/physics-gaps-15-46-8.md",
-  "started_at": "2026-04-12T22:53:39Z",
+  "active_plan": "/Users/arjomagno/Documents/github-repos/pickleball-godot/.sisyphus/plans/classname-performant-fix.md",
+  "started_at": "2026-04-13T00:00:00Z",
   "session_ids": [
     "ses_27da2edadffeua7dgHsFgs8MMx",
-    "ses_27c18a05cffevv2Zv1mijAyH5H",
-    "ses_27c18b8b8ffeQUuE2YB1ji2Xau",
-    "ses_27c1699ddffeeyty4c3SsjOswH",
-    "ses_27c16d69dffeUzjmtBkU3o596k",
-    "ses_27c16f64bffe6sbbGcl1Np0iTz"
+    "ses_27b9b1ba0ffeX2w3t346OYAsNT",
+    "ses_27b9b4f34ffeszXMAqz0W5zEoY",
+    "ses_27b9b050fffeySUPy3pxDU5T1A",
+    "ses_27b9adcffffeHbFFPxFL4XOMi8",
+    "ses_27b9ac0fcffeM1ZLP3lZBrD52k",
+    "ses_27b9adec0ffeUKtZZnJkvuNWeT",
+    "ses_27b9a7d96ffe3BfwB3jynCbcwe",
+    "ses_27b9a8377ffehwjuVo12qrVyIL",
+    "ses_27b9a82f9ffekYsn3s4milN5aR",
+    "ses_27b9a5b46ffemXy7usfYlxGDbY",
+    "ses_27b996567ffe69Pj5NLcmRBI5j",
+    "ses_27b99d63dfferWAzdoqP355tiB",
+    "ses_27b92f3d5ffea8qZY48suuZ5Jc",
+    "ses_27b8d114effecVz7ZC3ooAwd89"
   ],
-  "plan_name": "physics-gaps-15-46-8",
+  "plan_name": "classname-performant-fix",
   "task_sessions": {
     "todo:1": {
       "task_key": "todo:1",
       "task_label": "1",
-      "task_title": "**GAP-15: Add off-center speed reduction to `compute_sweet_spot_speed()`**",
-      "session_id": "ses_27c16f64bffe6sbbGcl1Np0iTz",
+      "task_title": "**player_leg_ik.gd** — 3 hot-path PostureDefinition vars",
+      "session_id": "ses_27b92f3d5ffea8qZY48suuZ5Jc",
       "agent": "Sisyphus-Junior",
-      "category": "unspecified-high",
-      "updated_at": "2026-04-12T22:57:44.299Z"
+      "category": "quick",
+      "updated_at": "2026-04-13T01:21:21.624Z"
     }
   }
 }

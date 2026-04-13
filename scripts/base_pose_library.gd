@@ -1,16 +1,18 @@
 class_name BasePoseLibrary extends RefCounted
 
+const _BasePoseDefinition = preload("res://scripts/base_pose_definition.gd")
+
 const DATA_DIR := "res://data/base_poses/"
 
 var _by_id: Dictionary = {}
-var definitions: Array[BasePoseDefinition] = []
+var definitions: Array = []
 
 static var _singleton: BasePoseLibrary = null
 
 
 static func instance() -> BasePoseLibrary:
 	if _singleton == null:
-		_singleton = BasePoseLibrary.new()
+		_singleton = load("res://scripts/base_pose_library.gd").new()
 	return _singleton
 
 
@@ -29,7 +31,7 @@ func load_or_default() -> void:
 		_by_id[def.base_pose_id] = def
 
 
-func get_def(base_pose_id: int) -> BasePoseDefinition:
+func get_def(base_pose_id: int):
 	return _by_id.get(base_pose_id, null)
 
 
@@ -37,7 +39,7 @@ func has_def(base_pose_id: int) -> bool:
 	return _by_id.has(base_pose_id)
 
 
-func all_definitions() -> Array[BasePoseDefinition]:
+func all_definitions() -> Array:
 	return definitions
 
 
@@ -50,7 +52,7 @@ func _load_from_disk() -> void:
 	while file_name != "":
 		if not dir.current_is_dir() and file_name.ends_with(".tres"):
 			var res: Resource = load(DATA_DIR + file_name)
-			if res is BasePoseDefinition:
+			if res != null:
 				definitions.append(res)
 		file_name = dir.get_next()
 	dir.list_dir_end()
@@ -172,8 +174,8 @@ func _build_defaults() -> void:
 	}))
 
 
-func _make(id: int, name: String, props: Dictionary) -> BasePoseDefinition:
-	var def := BasePoseDefinition.new()
+func _make(id: int, name: String, props: Dictionary):
+	var def = _BasePoseDefinition.new()
 	def.base_pose_id = id
 	def.display_name = name
 	def.canonical_intent = props.get("intent", 0)
