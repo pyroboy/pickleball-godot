@@ -73,16 +73,24 @@ var _pose_trigger = null
 # Transition player (Wave 4)
 var _transition_player = null
 
+# Transport bar (Wave 5)
+var _transport_bar: Control
+var _transport_play_btn: Button
+var _transport_save_btn: Button
+var _transport_phase_label: Label
+var _transport_time_label: Label
+var _transport_progress: ProgressBar
+
 func _init() -> void:
 	_library = load("res://scripts/posture_library.gd").new()
 	_base_pose_library = load("res://scripts/base_pose_library.gd").new()
 
 func _ready() -> void:
-	# Bottom-docked editor sheet so the player stays visible above the controls.
-	anchor_left = 0.02
+	# Right-side editor sheet so the player stays visible on the left.
+	anchor_left = 0.65
 	anchor_right = 0.98
-	anchor_top = 0.58
-	anchor_bottom = 0.97
+	anchor_top = 0.0
+	anchor_bottom = 1.0
 	offset_left = 0.0
 	offset_top = 0.0
 	offset_right = 0.0
@@ -308,7 +316,7 @@ func _ready() -> void:
 	footer_margin.add_theme_constant_override("margin_bottom", 10)
 	footer.add_child(footer_margin)
 
-	# Bottom buttons
+	# Bottom buttons row (Preview Pose and Solo Mode only — Play/Save moved to transport bar)
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 8)
 	footer_margin.add_child(hbox)
@@ -320,20 +328,6 @@ func _ready() -> void:
 	_style_action_button(_trigger_pose_button, Color(0.33, 0.54, 0.76))
 	hbox.add_child(_trigger_pose_button)
 
-	_transition_button = Button.new()
-	_transition_button.text = "Preview Swing"
-	_transition_button.pressed.connect(_on_play_transition)
-	_transition_button.disabled = true
-	_style_action_button(_transition_button, Color(0.31, 0.64, 0.62))
-	hbox.add_child(_transition_button)
-
-	_save_button = Button.new()
-	_save_button.text = "Save to .tres"
-	_save_button.pressed.connect(_on_save)
-	_save_button.disabled = true
-	_style_action_button(_save_button, Color(0.86, 0.73, 0.25), true)
-	hbox.add_child(_save_button)
-
 	_solo_mode_button = Button.new()
 	_solo_mode_button.text = "Solo Mode: ON"
 	_solo_mode_button.pressed.connect(_on_toggle_solo_mode)
@@ -343,7 +337,172 @@ func _ready() -> void:
 	_big_save_button = null
 	_update_save_button_state()
 	_update_workspace_ui()
-	_apply_layout_preset()
+	# NOTE: right-side anchors (0.65-0.98) are set above in _ready().
+	# _apply_layout_preset() is NOT called here — it's only for the old
+	# bottom-docked HALF/WIDE presets triggered by the layout button.
+	# Transport bar is built by _build_transport_bar() and added to the
+	# canvas as a sibling of posture_editor_ui by game.gd.
+
+## Builds the transport bar Control and returns it.
+## Called by game.gd after posture_editor_ui is added to the canvas.
+## The bar spans the LEFT 65% of the FULL viewport, bottom-aligned.
+func build_transport_bar() -> Control:
+	_transport_bar = Control.new()
+	_transport_bar.name = "TransportBar"
+	_transport_bar.anchor_left = 0.0
+	_transport_bar.anchor_right = 1.0
+	_transport_bar.anchor_top = 0.0
+	_transport_bar.anchor_bottom = 1.0
+	_transport_bar.offset_left = 0
+	_transport_bar.offset_top = 0
+	_transport_bar.offset_right = 0
+	_transport_bar.offset_bottom = 0
+	_transport_bar.z_index = 10
+	_transport_bar.tree_entered.connect(_on_transport_bar_tree_entered)
+	return _transport_bar
+
+func _on_transport_bar_tree_entered() -> void:
+	# Build UI and set size once we have access to the parent viewport size.
+	await get_tree().process_frame
+	_build_transport_bar_ui()
+	_resize_transport_bar()
+
+func _build_transport_bar_ui() -> void:
+	if not _transport_bar:
+		return
+
+	var transport_panel := PanelContainer.new()
+	transport_panel.anchor_right = 1.0
+	transport_panel.anchor_bottom = 1.0
+	transport_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.10, 0.14, 0.20, 0.97), Color(0.28, 0.40, 0.56, 0.95), 12))
+	_transport_bar.add_child(transport_panel)
+
+	var transport_m := MarginContainer.new()
+	transport_m.anchor_right = 1.0
+	transport_m.anchor_bottom = 1.0
+	transport_m.add_theme_constant_override("margin_left", 16)
+	transport_m.add_theme_constant_override("margin_right", 16)
+	transport_m.add_theme_constant_override("margin_top", 10)
+	transport_m.add_theme_constant_override("margin_bottom", 10)
+	transport_panel.add_child(transport_m)
+
+	var transport_hbox := HBoxContainer.new()
+	transport_hbox.add_theme_constant_override("separation", 16)
+	transport_m.add_child(transport_hbox)
+
+	# Play / Stop button
+	_transport_play_btn = Button.new()
+	_transport_play_btn.custom_minimum_size = Vector2(80, 44)
+	_transport_play_btn.text = "▶ Play"
+	_transport_play_btn.pressed.connect(_on_transport_play)
+	_transport_play_btn.add_theme_font_size_override("font_size", 16)
+	_transport_play_btn.modulate = Color(0.31, 0.64, 0.62)
+	transport_hbox.add_child(_transport_play_btn)
+
+	# Save button
+	_transport_save_btn = Button.new()
+	_transport_save_btn.custom_minimum_size = Vector2(80, 44)
+	_transport_save_btn.text = "💾 Save"
+	_transport_save_btn.pressed.connect(_on_save)
+	_transport_save_btn.add_theme_font_size_override("font_size", 14)
+	_transport_save_btn.modulate = Color(0.86, 0.73, 0.25)
+	transport_hbox.add_child(_transport_save_btn)
+
+	# Phase separator
+	var sep := VSeparator.new()
+	sep.custom_minimum_size = Vector2(2, 30)
+	transport_hbox.add_child(sep)
+
+	# Phase + time labels
+	var phase_vbox := VBoxContainer.new()
+	phase_vbox.add_theme_constant_override("separation", 4)
+	transport_hbox.add_child(phase_vbox)
+
+	var phase_row := HBoxContainer.new()
+	phase_row.add_theme_constant_override("separation", 8)
+	phase_vbox.add_child(phase_row)
+
+	var phase_title := Label.new()
+	phase_title.text = "Phase:"
+	phase_title.modulate = Color(0.72, 0.80, 0.90)
+	phase_title.add_theme_font_size_override("font_size", 12)
+	phase_row.add_child(phase_title)
+
+	_transport_phase_label = Label.new()
+	_transport_phase_label.text = "READY"
+	_transport_phase_label.modulate = Color(0.97, 0.98, 1.0)
+	_transport_phase_label.add_theme_font_size_override("font_size", 13)
+	phase_row.add_child(_transport_phase_label)
+
+	var time_row := HBoxContainer.new()
+	time_row.add_theme_constant_override("separation", 8)
+	phase_vbox.add_child(time_row)
+
+	var time_title := Label.new()
+	time_title.text = "Time:"
+	time_title.modulate = Color(0.72, 0.80, 0.90)
+	time_title.add_theme_font_size_override("font_size", 12)
+	time_row.add_child(time_title)
+
+	_transport_time_label = Label.new()
+	_transport_time_label.text = "0.00s / 1.10s"
+	_transport_time_label.modulate = Color(0.85, 0.92, 1.0)
+	_transport_time_label.add_theme_font_size_override("font_size", 13)
+	time_row.add_child(_transport_time_label)
+
+	# Timeline progress bar
+	var timeline_sep := VSeparator.new()
+	timeline_sep.custom_minimum_size = Vector2(2, 30)
+	transport_hbox.add_child(timeline_sep)
+
+	_transport_progress = ProgressBar.new()
+	_transport_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_transport_progress.custom_minimum_size = Vector2(200, 20)
+	_transport_progress.step = 0.01
+	_transport_progress.show_percentage = false
+	_transport_progress.max_value = 1.0
+	_transport_progress.value = 0.0
+	var prog_style := StyleBoxFlat.new()
+	prog_style.bg_color = Color(0.18, 0.24, 0.32, 0.9)
+	prog_style.corner_radius_top_left = 4
+	prog_style.corner_radius_top_right = 4
+	prog_style.corner_radius_bottom_left = 4
+	prog_style.corner_radius_bottom_right = 4
+	_transport_progress.add_theme_stylebox_override("background", prog_style)
+	var fg_style := StyleBoxFlat.new()
+	fg_style.bg_color = Color(0.31, 0.64, 0.62, 0.9)
+	fg_style.corner_radius_top_left = 4
+	fg_style.corner_radius_top_right = 4
+	fg_style.corner_radius_bottom_left = 4
+	fg_style.corner_radius_bottom_right = 4
+	_transport_progress.add_theme_stylebox_override("fill", fg_style)
+	transport_hbox.add_child(_transport_progress)
+
+	_connect_transport_signals()
+
+## Positions the transport bar to span the LEFT 65% of the full viewport,
+## bottom-aligned (y: 0.90 → 1.0). Called after _build_transport_bar_ui().
+func _resize_transport_bar() -> void:
+	if not _transport_bar:
+		return
+	# Horizontal: span from viewport x=0 to x=0.65*W
+	_transport_bar.anchor_left = 0.0
+	_transport_bar.anchor_right = 0.65
+	_transport_bar.offset_left = 0
+	_transport_bar.offset_right = 0
+	# Vertical: bottom 10% of viewport
+	_transport_bar.anchor_top = 0.90
+	_transport_bar.anchor_bottom = 1.0
+	_transport_bar.offset_top = 0
+	_transport_bar.offset_bottom = 0
+	_transport_bar.z_index = 10
+
+func _connect_transport_signals() -> void:
+	if _transition_player:
+		_transition_player.playback_started.connect(_on_transport_playback_started)
+		_transition_player.playback_stopped.connect(_on_transport_playback_stopped)
+		_transition_player.playback_finished.connect(_on_transport_playback_finished)
+		_transition_player.phase_changed.connect(_on_transport_phase_changed)
 
 func _populate_posture_list() -> void:
 	_posture_list.clear()
@@ -550,7 +709,8 @@ func _update_workspace_ui() -> void:
 				if first_body_tab >= 0:
 					_tab_container.current_tab = first_body_tab
 	_populate_posture_list()
-	_transition_button.disabled = _is_base_pose_mode() or _current_def == null
+	if _transition_button:
+		_transition_button.disabled = _is_base_pose_mode() or _current_def == null
 	_update_mode_ui()
 
 func _on_posture_selected(index: int) -> void:
@@ -569,8 +729,10 @@ func _on_posture_selected(index: int) -> void:
 	_status_label.text = "Selected: %s (ID: %d)" % [_current_display_name(), _current_id]
 	_populate_properties()
 	_trigger_pose_button.disabled = false
-	_transition_button.disabled = _is_base_pose_mode()
-	_save_button.disabled = false
+	if _transition_button:
+		_transition_button.disabled = _is_base_pose_mode()
+	if _save_button:
+		_save_button.disabled = false
 	
 	_update_active_gizmos()
 	
@@ -644,6 +806,7 @@ func _setup_transition_player() -> void:
 		_transition_player.playback_started.connect(_on_transition_preview_started)
 		_transition_player.playback_stopped.connect(_on_transition_preview_ended)
 		_transition_player.playback_finished.connect(_on_transition_preview_ended)
+		_connect_transport_signals()
 	
 	var ready_def = _contextualize_posture_for_preview(_library.get_def(READY_POSTURE_ID))
 	var charge_def = _contextualize_posture_for_preview(_build_charge_preview_def(_current_def))
@@ -677,6 +840,58 @@ func _on_play_transition() -> void:
 		_transition_player.play()
 		_status_label.text = "Previewing swing for %s" % _current_display_name()
 	_update_mode_ui()
+
+# ── Transport bar callbacks (Wave 5) ──────────────────────────────────────────
+
+func _on_transport_play() -> void:
+	# Delegate to the existing swing preview logic
+	_on_play_transition()
+
+func _on_transport_playback_started() -> void:
+	if _transport_play_btn:
+		_transport_play_btn.text = "⏸ Pause"
+	_update_transport_ui()
+
+func _on_transport_playback_stopped() -> void:
+	if _transport_play_btn:
+		_transport_play_btn.text = "▶ Play"
+	_update_transport_ui()
+
+func _on_transport_playback_finished() -> void:
+	if _transport_play_btn:
+		_transport_play_btn.text = "▶ Play"
+	if _transport_phase_label:
+		_transport_phase_label.text = "READY"
+	if _transport_time_label:
+		_transport_time_label.text = "0.00s / %.2fs" % 1.1
+	if _transport_progress:
+		_transport_progress.value = 0.0
+
+func _on_transport_phase_changed(_new_phase: int) -> void:
+	_update_transport_ui()
+
+func _update_transport_ui() -> void:
+	if not _transition_player:
+		return
+	var tp: TransitionPlayer = _transition_player as TransitionPlayer
+	var phase: TransitionPlayer.Phase = tp.get_current_phase()
+	var phase_idx: int = phase as int
+	var phase_name := ""
+	match phase_idx:
+		0: phase_name = "CHARGE"
+		1: phase_name = "CONTACT"
+		2: phase_name = "FOLLOW_THROUGH"
+		3: phase_name = "SETTLE"
+		4: phase_name = "READY"
+		_: phase_name = "?"
+	if _transport_phase_label:
+		_transport_phase_label.text = phase_name
+	var total_dur: float = tp.get_total_duration()
+	var current_time: float = tp.get_total_progress() * total_dur
+	if _transport_time_label:
+		_transport_time_label.text = "%.2fs / %.2fs" % [current_time, total_dur]
+	if _transport_progress:
+		_transport_progress.value = tp.get_total_progress()
 
 func _on_save() -> void:
 	var path: String = ""
@@ -721,8 +936,10 @@ func _on_toggle_workspace() -> void:
 		_restore_live_posture_from_editor()
 	_set_dirty(false)
 	_trigger_pose_button.disabled = true
-	_transition_button.disabled = true
-	_save_button.disabled = true
+	if _transition_button:
+		_transition_button.disabled = true
+	if _save_button:
+		_save_button.disabled = true
 	_status_label.text = "Select a %s to edit" % ("base pose" if _is_base_pose_mode() else "stroke posture")
 	_update_active_gizmos()
 	_update_workspace_ui()

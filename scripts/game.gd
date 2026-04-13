@@ -101,6 +101,7 @@ var trajectory_arc_offset: float = 0.0
 
 # ── Reaction button ──────────────────────────────────────────────────────────
 var posture_editor_ui
+var _transport_bar: Control
 var reaction_button
 var _in_slow_mo: bool = false
 
@@ -415,6 +416,12 @@ func _create_ui() -> void:
 	canvas.add_child(posture_editor_ui)
 	if player_left:
 		posture_editor_ui.set_player(player_left)
+
+	# Transport bar — sibling of posture_editor_ui on canvas (spans viewport 0.0-0.65)
+	# Hidden by default; shown only when posture editor is open.
+	_transport_bar = posture_editor_ui.build_transport_bar()
+	_transport_bar.visible = false
+	canvas.add_child(_transport_bar)
 
 	# Sound tune panel — created via game_sound_tune subsystem
 	# (called after _setup_subsystems so game_sound_tune is initialized)
@@ -855,6 +862,8 @@ func _on_editor_opened() -> void:
 		reaction_button.visible = false
 	if player_left and player_left.posture:
 		player_left.posture.set_ghosts_visible(true)
+	if _transport_bar:
+		_transport_bar.visible = true
 	_expand_window_for_editor()
 	if camera_rig != null and camera_rig.camera != null:
 		_editor_previous_camera_mode = camera_rig.orbit_mode
@@ -871,6 +880,8 @@ func _on_editor_closed() -> void:
 		scoreboard_ui.show_all_hud()
 	if player_left and player_left.posture:
 		player_left.posture.set_ghosts_visible(debug_visuals_visible)
+	if _transport_bar:
+		_transport_bar.visible = false
 	_restore_window_after_editor()
 	if camera_rig != null and camera_rig.camera != null:
 		camera_rig.orbit_mode = _editor_previous_camera_mode

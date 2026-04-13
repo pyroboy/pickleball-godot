@@ -116,6 +116,9 @@ func get_total_progress() -> float:
 		accumulated += phase_durations[phase]
 	return 1.0
 
+func get_total_duration() -> float:
+	return _total_duration
+
 func is_playing() -> bool:
 	return _playing
 
