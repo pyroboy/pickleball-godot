@@ -19,6 +19,7 @@ var _base_material: StandardMaterial3D
 var posture_id: int = -1
 var field_name: String = ""
 var is_right_side: bool = true  # For paired gizmos (left/right)
+var tab_name: String = ""  # Which editor tab this gizmo belongs to
 
 func _ready() -> void:
 	_setup_visuals()

@@ -736,15 +736,23 @@ func _on_posture_selected(index: int) -> void:
 	
 	_update_active_gizmos()
 	
+	# Immediately apply the selected posture to the player body.
+	# This makes the player take the pose on selection, not just on "Preview".
+	var preview_def = _build_preview_posture_for_editor() if _is_base_pose_mode() else _current_def
+	if _player and _player.posture and preview_def:
+		_player.posture.force_posture_update(preview_def)
+		# Clear restore ID so the pose persists after the editor closes
+		_editor_restore_posture_id = -1
+	
 	# Setup transition player
 	if _player and not _is_base_pose_mode():
 		_setup_transition_player()
 		if _transition_player and _transition_player.is_playing():
 			_transition_player.stop()
 	if _pose_trigger and _pose_trigger.is_frozen():
-		var preview_def = _build_preview_posture_for_editor()
-		if preview_def:
-			_pose_trigger.trigger_pose(preview_def)
+		var trigger_def = _build_preview_posture_for_editor()
+		if trigger_def:
+			_pose_trigger.trigger_pose(trigger_def)
 		
 	if _player and _player.posture and not _is_base_pose_mode():
 		_player.posture.selected_posture_id = _current_id
@@ -1175,6 +1183,7 @@ func _create_paddle_gizmos() -> void:
 	gizmo.name = "PositionGizmo_Paddle"
 	gizmo.posture_id = def.posture_id
 	gizmo.field_name = "paddle_position"
+	gizmo.tab_name = "Paddle"
 	gizmo.gizmo_color = _color_for_family(def.family)
 	gizmo.gizmo_size = 0.08
 	gizmo.global_position = pos
@@ -1191,6 +1200,7 @@ func _create_torso_gizmos() -> void:
 		gizmo.name = "RotationGizmo_Hips"
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "hip_rotation"
+		gizmo.tab_name = "Torso"
 		gizmo.gizmo_color = Color(0, 1, 1)
 		gizmo.ring_radius = 0.3
 		gizmo.global_position = hip_pos
@@ -1204,6 +1214,7 @@ func _create_torso_gizmos() -> void:
 		gizmo.name = "RotationGizmo_Torso"
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "torso_rotation"
+		gizmo.tab_name = "Torso"
 		gizmo.gizmo_color = Color(1, 0.5, 0)
 		gizmo.ring_radius = 0.25
 		gizmo.global_position = chest_pos
@@ -1219,6 +1230,7 @@ func _create_head_gizmos() -> void:
 		gizmo.name = "RotationGizmo_Head"
 		gizmo.posture_id = _current_id
 		gizmo.field_name = "head_rotation"
+		gizmo.tab_name = "Head"
 		gizmo.gizmo_color = Color(1, 1, 1)
 		gizmo.ring_radius = 0.15
 		gizmo.global_position = head_pos
@@ -1238,6 +1250,7 @@ func _create_arm_gizmos() -> void:
 	r_gizmo.name = "PositionGizmo_RightHand"
 	r_gizmo.posture_id = _current_id
 	r_gizmo.field_name = "right_hand_offset"
+	r_gizmo.tab_name = "Arms"
 	r_gizmo.gizmo_color = Color(1, 1, 0)
 	r_gizmo.global_position = r_pos
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
@@ -1254,6 +1267,7 @@ func _create_arm_gizmos() -> void:
 	l_gizmo.name = "PositionGizmo_LeftHand"
 	l_gizmo.posture_id = _current_id
 	l_gizmo.field_name = "left_hand_offset"
+	l_gizmo.tab_name = "Arms"
 	l_gizmo.gizmo_color = Color(0, 1, 1)
 	l_gizmo.global_position = l_pos
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
@@ -1273,6 +1287,7 @@ func _create_leg_gizmos() -> void:
 	r_gizmo.name = "PositionGizmo_RightFoot"
 	r_gizmo.posture_id = _current_id
 	r_gizmo.field_name = "right_foot_offset"
+	r_gizmo.tab_name = "Legs"
 	r_gizmo.gizmo_color = Color(0.9, 0.3, 0.9)
 	r_gizmo.global_position = r_pos
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
@@ -1284,6 +1299,7 @@ func _create_leg_gizmos() -> void:
 	l_gizmo.name = "PositionGizmo_LeftFoot"
 	l_gizmo.posture_id = _current_id
 	l_gizmo.field_name = "left_foot_offset"
+	l_gizmo.tab_name = "Legs"
 	l_gizmo.gizmo_color = Color(0.3, 0.3, 0.9)
 	l_gizmo.global_position = l_pos
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
@@ -1347,10 +1363,20 @@ func _update_gizmo_visibility() -> void:
 	if _gizmo_controller:
 		_gizmo_controller.visible = visible
 		if visible:
+			# Get current tab name to filter gizmos
+			var current_tab_name := ""
+			if _tab_container:
+				var current_tab_control = _tab_container.get_child(_tab_container.current_tab)
+				if current_tab_control:
+					current_tab_name = current_tab_control.name
+			
 			for gizmo in _gizmo_controller.get_children():
 				if not gizmo.has_method("get_posture_id"): continue
-				# Now that we recreate gizmos per-selection, usually only current posture gizmos exist
-				gizmo.visible = (gizmo.posture_id == _current_id)
+				var gh: GizmoHandle = gizmo as GizmoHandle
+				# Filter by posture_id AND tab_name (empty tab_name = show on all tabs)
+				var posture_match: bool = (gh.posture_id == _current_id)
+				var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
+				gizmo.visible = posture_match and tab_match
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:

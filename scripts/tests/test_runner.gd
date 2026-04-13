@@ -19,6 +19,7 @@ func _init() -> void:
 		preload("res://scripts/tests/test_shot_physics_shallow.gd").new(),
 		preload("res://scripts/tests/test_player_hitting.gd").new(),
 		preload("res://scripts/tests/test_posture_zones.gd").new(),
+		preload("res://scripts/tests/test_posture_persistence.gd").new(),
 	]
 	var totals: Dictionary = {
 		"pass": 0,
