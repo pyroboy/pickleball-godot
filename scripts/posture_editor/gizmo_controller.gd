@@ -34,12 +34,20 @@ var _tab_label: Label3D
 # Maps body_part_name → StaticBody3D
 var _body_part_colliders: Dictionary = {}
 
+# Body-part glow meshes — appear when hovering the body part
+# Maps body_part_name → MeshInstance3D (sphere mesh, green glow)
+var _body_part_glows: Dictionary = {}
+
 # Currently hovered body part name ("" if none)
 var _hovered_body_part: String = ""
 var _last_hovered_body_part: String = ""
 
 # Collider radius for body part hover detection
 const _BODY_COLLIDER_RADIUS := 0.18
+
+# Glow mesh settings
+const _GLOW_MESH_RADIUS := 0.22  # Slightly larger than collider
+const _GLOW_COLOR := Color(0.3, 1.0, 0.5, 0.55)  # Semi-transparent green
 
 func _ready() -> void:
 	# Find camera
@@ -88,13 +96,11 @@ func set_body_part_positions(positions: Dictionary) -> void:
 		_set_body_part_collider(body_part_name, world_pos)
 
 func _set_body_part_collider(body_part_name: String, world_pos: Vector3) -> void:
-	# GizmoController is placed in world space (child of world root, not player).
-	# Body part positions are in world space, so collider.global_position = world_pos.
+	# Create/update invisible sphere collider for this body part
 	var collider: StaticBody3D
 	if _body_part_colliders.has(body_part_name):
 		collider = _body_part_colliders[body_part_name]
 	else:
-		# Create invisible sphere collider for this body part
 		collider = StaticBody3D.new()
 		collider.name = "Collider_%s" % body_part_name
 		collider.collision_layer = 0  # Not physical — pure detection
@@ -103,17 +109,41 @@ func _set_body_part_collider(body_part_name: String, world_pos: Vector3) -> void
 		shape.radius = _BODY_COLLIDER_RADIUS
 		var col_shape := CollisionShape3D.new()
 		col_shape.shape = shape
-		# Make completely invisible — no mesh at all
 		collider.add_child(col_shape)
 		add_child(collider)
 		_body_part_colliders[body_part_name] = collider
 	
 	collider.global_position = world_pos
+	
+	# Create/update glow mesh for this body part (shown on hover)
+	var glow: MeshInstance3D
+	if _body_part_glows.has(body_part_name):
+		glow = _body_part_glows[body_part_name]
+	else:
+		glow = MeshInstance3D.new()
+		glow.name = "Glow_%s" % body_part_name
+		var mesh := SphereMesh.new()
+		mesh.radius = _GLOW_MESH_RADIUS
+		mesh.height = _GLOW_MESH_RADIUS * 2.0
+		glow.mesh = mesh
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = _GLOW_COLOR
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		glow.material_override = mat
+		glow.visible = false
+		add_child(glow)
+		_body_part_glows[body_part_name] = glow
+	
+	glow.global_position = world_pos
 
 func _clear_body_part_colliders() -> void:
 	for collider in _body_part_colliders.values():
 		collider.queue_free()
 	_body_part_colliders.clear()
+	for glow in _body_part_glows.values():
+		glow.queue_free()
+	_body_part_glows.clear()
 
 ## Returns the body_part_name closest to the given ray, or "" if none.
 func _raycast_body_parts(ray_origin: Vector3, ray_dir: Vector3) -> String:
@@ -177,16 +207,18 @@ func _try_select_gizmo(screen_pos: Vector2) -> void:
 		_start_drag(closest_gizmo, screen_pos)
 		return
 	
-	# ── 2. No gizmo clicked — check if hovering a body part (reveal-on-hover)
+	# ── 2. No gizmo clicked — check if hovering a body glow (click to reveal)
+	# Only reveal if the glow is actually visible (user hovered it)
 	var body_part_hit: String = _raycast_body_parts(ray_origin, ray_dir)
 	if body_part_hit != "":
-		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(body_part_hit)
-		if gizmo_for_body:
-			# Reveal gizmo and immediately select + start drag
-			gizmo_for_body.visible = true
-			_select_gizmo(gizmo_for_body)
-			_start_drag(gizmo_for_body, screen_pos)
-			return
+		# Only allow click-to-reveal if glow is visible (user has been hovering)
+		if _body_part_glows.has(body_part_hit) and _body_part_glows[body_part_hit].visible:
+			var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(body_part_hit)
+			if gizmo_for_body:
+				gizmo_for_body.visible = true
+				_select_gizmo(gizmo_for_body)
+				_start_drag(gizmo_for_body, screen_pos)
+				return
 	
 	# ── 3. Nothing hit — deselect
 	_deselect_gizmo()
@@ -214,16 +246,22 @@ func _select_gizmo(gizmo: GizmoHandle) -> void:
 	_tab_label.visible = true
 	
 	# Ensure body gizmo is visible when selected (it may have been revealed by hover)
+	# Hide the glow since the gizmo itself is now visible
 	if gizmo.body_part_name != "":
 		gizmo.visible = true
+		if _body_part_glows.has(gizmo.body_part_name):
+			_body_part_glows[gizmo.body_part_name].visible = false
 	
 	gizmo_selected.emit(gizmo)
 
 func _deselect_gizmo() -> void:
 	if _selected_gizmo:
-		# Hide body gizmos when deselecting (paddle gizmos stay visible)
+		# Hide body gizmos and their glow when deselecting (paddle gizmos stay visible)
 		if _selected_gizmo.body_part_name != "":
 			_selected_gizmo.visible = false
+			# Also hide the glow
+			if _body_part_glows.has(_selected_gizmo.body_part_name):
+				_body_part_glows[_selected_gizmo.body_part_name].visible = false
 		_selected_gizmo.set_selected(false)
 		_selected_gizmo = null
 	
@@ -241,39 +279,46 @@ func _update_hover(screen_pos: Vector2) -> void:
 	var ray_origin := _camera.project_ray_origin(screen_pos)
 	var ray_dir := _camera.project_ray_normal(screen_pos)
 	
-	# ── 1. Body-part detection ───────────────────────────────────────────────
+	# ── 1. Body-part detection — show glow mesh on hover ─────────────────────
 	_hovered_body_part = _raycast_body_parts(ray_origin, ray_dir)
 	
-	# Show gizmo when hovering its body part (reveal-on-hover)
+	# Show glow for currently hovered body part
 	if _hovered_body_part != "":
-		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(_hovered_body_part)
-		if gizmo_for_body and not gizmo_for_body.visible:
-			gizmo_for_body.visible = true
+		if _body_part_glows.has(_hovered_body_part):
+			_body_part_glows[_hovered_body_part].visible = true
 		# Show tab label at body-part position
+		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(_hovered_body_part)
 		var gizmo_for_label: GizmoHandle = _selected_gizmo if _selected_gizmo else gizmo_for_body
 		if gizmo_for_label:
-			var label_pos: Vector3 = gizmo_for_body.global_position if not _selected_gizmo else _selected_gizmo.global_position
+			var label_pos: Vector3
+			if _body_part_colliders.has(_hovered_body_part):
+				label_pos = _body_part_colliders[_hovered_body_part].global_position
+			else:
+				label_pos = gizmo_for_body.global_position if gizmo_for_body else Vector3.ZERO
 			_tab_label.global_position = label_pos + Vector3(0, 0.3, 0)
 			_tab_label.text = "[%s]" % gizmo_for_label.tab_name
 			_tab_label.visible = true
 	
-	# Clear previously-hovered body part's gizmo if no longer hovering it
+	# Clear glow for previously-hovered body part (if not selected)
 	if _hovered_body_part != _last_hovered_body_part:
 		if _last_hovered_body_part != "":
+			# Hide glow mesh
+			if _body_part_glows.has(_last_hovered_body_part):
+				_body_part_glows[_last_hovered_body_part].visible = false
+			# Hide gizmo if it was revealed but not selected
 			var prev_gizmo: GizmoHandle = _find_gizmo_for_body_part(_last_hovered_body_part)
 			if prev_gizmo and prev_gizmo != _selected_gizmo:
 				prev_gizmo.visible = false
 		_last_hovered_body_part = _hovered_body_part
 	
 	# ── 2. Gizmo hover detection ─────────────────────────────────────────────
-	# Only check gizmos that are visible and have a body_part_name of ""
-	# (paddle gizmos, or already-revealed body gizmos)
+	# Only check paddle gizmos (body gizmos are click-to-reveal only)
 	var hovered: GizmoHandle = null
 	var closest_dist := INF
 	
 	for child in get_children():
 		if child is GizmoHandle and child.visible:
-			# Skip body-part gizmos (they're revealed by body hover, not gizmo hover)
+			# Skip body-part gizmos (they're revealed by clicking body glow)
 			if child.body_part_name != "":
 				continue
 			var hit_dist: float = child.raycast_test(ray_origin, ray_dir)
@@ -288,7 +333,7 @@ func _update_hover(screen_pos: Vector2) -> void:
 		if _hovered_gizmo:
 			_hovered_gizmo.set_hovered(true)
 	
-	# ── 3. Tab label (show on hovered gizmo OR active body part) ───────────
+	# ── 3. Tab label (show on hovered gizmo OR body glow) ───────────────────
 	if _hovered_gizmo:
 		_tab_label.global_position = _hovered_gizmo.global_position + Vector3(0, 0.3, 0)
 		_tab_label.text = "[%s]" % _hovered_gizmo.tab_name
