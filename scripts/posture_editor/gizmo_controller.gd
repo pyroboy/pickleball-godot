@@ -34,9 +34,13 @@ var _tab_label: Label3D
 # Maps body_part_name → StaticBody3D
 var _body_part_colliders: Dictionary = {}
 
-# Body-part glow meshes — appear when hovering the body part
-# Maps body_part_name → MeshInstance3D (sphere mesh, green glow)
-var _body_part_glows: Dictionary = {}
+# Body-part meshes that glow on hover (actual player body meshes)
+# Maps body_part_name → MeshInstance3D
+var _body_part_meshes: Dictionary = {}
+
+# Original materials for body meshes (restored after glow ends)
+# Maps MeshInstance3D → original material_override (or null)
+var _original_materials: Dictionary = {}
 
 # Currently hovered body part name ("" if none)
 var _hovered_body_part: String = ""
@@ -45,9 +49,8 @@ var _last_hovered_body_part: String = ""
 # Collider radius for body part hover detection
 const _BODY_COLLIDER_RADIUS := 0.18
 
-# Glow mesh settings
-const _GLOW_MESH_RADIUS := 0.22  # Slightly larger than collider
-const _GLOW_COLOR := Color(0.3, 1.0, 0.5, 0.55)  # Semi-transparent green
+# Glow mesh settings (used as material override on actual body meshes)
+const _GLOW_COLOR := Color(0.3, 1.0, 0.5, 0.6)  # Semi-transparent green
 
 func _ready() -> void:
 	# Find camera
@@ -114,36 +117,27 @@ func _set_body_part_collider(body_part_name: String, world_pos: Vector3) -> void
 		_body_part_colliders[body_part_name] = collider
 	
 	collider.global_position = world_pos
-	
-	# Create/update glow mesh for this body part (shown on hover)
-	var glow: MeshInstance3D
-	if _body_part_glows.has(body_part_name):
-		glow = _body_part_glows[body_part_name]
-	else:
-		glow = MeshInstance3D.new()
-		glow.name = "Glow_%s" % body_part_name
-		var mesh := SphereMesh.new()
-		mesh.radius = _GLOW_MESH_RADIUS
-		mesh.height = _GLOW_MESH_RADIUS * 2.0
-		glow.mesh = mesh
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = _GLOW_COLOR
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-		glow.material_override = mat
-		glow.visible = false
-		add_child(glow)
-		_body_part_glows[body_part_name] = glow
-	
-	glow.global_position = world_pos
+
+## Register body-part meshes for glow-on-hover.
+## Call this once when editor opens, or when body parts may have changed.
+## maps body_part_name → MeshInstance3D from the player's actual body mesh.
+func set_body_part_meshes(meshes: Dictionary) -> void:
+	for body_part_name in meshes:
+		var mesh: MeshInstance3D = meshes[body_part_name]
+		_body_part_meshes[body_part_name] = mesh
+		# Store original material (may be null)
+		if not _original_materials.has(mesh):
+			_original_materials[mesh] = mesh.material_override
 
 func _clear_body_part_colliders() -> void:
 	for collider in _body_part_colliders.values():
 		collider.queue_free()
 	_body_part_colliders.clear()
-	for glow in _body_part_glows.values():
-		glow.queue_free()
-	_body_part_glows.clear()
+	# Restore original materials on all body meshes
+	for mesh in _original_materials:
+		mesh.material_override = _original_materials[mesh]
+	_original_materials.clear()
+	_body_part_meshes.clear()
 
 ## Returns the body_part_name closest to the given ray, or "" if none.
 func _raycast_body_parts(ray_origin: Vector3, ray_dir: Vector3) -> String:
@@ -173,12 +167,19 @@ func _input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				_try_select_gizmo(event.position)
-				# Consume input so camera orbit doesn't also fire
+				# Immediately update drag so gizmo snaps to body part on the FIRST frame.
+				# Without this, the gizmo only moves on the next mouse-move event, causing
+				# a visual jump from its stale creation position to wherever the ray lands.
 				if _dragging:
+					_update_drag(event.position)
 					get_viewport().set_input_as_handled()
 			else:
+				var was_dragging := _dragging
 				_stop_drag()
-				get_viewport().set_input_as_handled()
+				# Only consume the release if we were actually dragging a gizmo.
+				# Otherwise let it propagate so the camera rig can stop orbiting.
+				if was_dragging:
+					get_viewport().set_input_as_handled()
 				
 	elif event is InputEventMouseMotion:
 		if _dragging and _selected_gizmo:
@@ -207,27 +208,30 @@ func _try_select_gizmo(screen_pos: Vector2) -> void:
 		_start_drag(closest_gizmo, screen_pos)
 		return
 	
-	# ── 2. No gizmo clicked — check if hovering a body glow (click to reveal)
-	# Only reveal if the glow is actually visible (user hovered it)
+	# ── 2. No gizmo clicked — check if hovering a body part (click to reveal)
+	# If raycast hits a body part collider, the mesh glow is active (applied in _update_hover)
 	var body_part_hit: String = _raycast_body_parts(ray_origin, ray_dir)
 	if body_part_hit != "":
-		# Only allow click-to-reveal if glow is visible (user has been hovering)
-		if _body_part_glows.has(body_part_hit) and _body_part_glows[body_part_hit].visible:
-			var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(body_part_hit)
-			if gizmo_for_body:
-				gizmo_for_body.visible = true
-				_select_gizmo(gizmo_for_body)
-				_start_drag(gizmo_for_body, screen_pos)
-				return
+		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(body_part_hit)
+		if gizmo_for_body:
+			gizmo_for_body.visible = true
+			_select_gizmo(gizmo_for_body)
+			_start_drag(gizmo_for_body, screen_pos)
+			return
 	
 	# ── 3. Nothing hit — deselect
 	_deselect_gizmo()
 
 func _select_gizmo(gizmo: GizmoHandle) -> void:
 	if _selected_gizmo:
-		# Hide previous body gizmo when switching to a new one
+		# Hide previous body gizmo and restore its mesh material when switching
 		if _selected_gizmo != gizmo and _selected_gizmo.body_part_name != "":
 			_selected_gizmo.visible = false
+			# Restore original material on the previous body mesh
+			if _body_part_meshes.has(_selected_gizmo.body_part_name):
+				var prev_mesh: MeshInstance3D = _body_part_meshes[_selected_gizmo.body_part_name]
+				if _original_materials.has(prev_mesh):
+					prev_mesh.material_override = _original_materials[prev_mesh]
 		_selected_gizmo.set_selected(false)
 	
 	_selected_gizmo = gizmo
@@ -246,22 +250,26 @@ func _select_gizmo(gizmo: GizmoHandle) -> void:
 	_tab_label.visible = true
 	
 	# Ensure body gizmo is visible when selected (it may have been revealed by hover)
-	# Hide the glow since the gizmo itself is now visible
+	# Restore the body mesh material since the gizmo itself is now visible
 	if gizmo.body_part_name != "":
 		gizmo.visible = true
-		if _body_part_glows.has(gizmo.body_part_name):
-			_body_part_glows[gizmo.body_part_name].visible = false
+		if _body_part_meshes.has(gizmo.body_part_name):
+			var mesh: MeshInstance3D = _body_part_meshes[gizmo.body_part_name]
+			if _original_materials.has(mesh):
+				mesh.material_override = _original_materials[mesh]
 	
 	gizmo_selected.emit(gizmo)
 
 func _deselect_gizmo() -> void:
 	if _selected_gizmo:
-		# Hide body gizmos and their glow when deselecting (paddle gizmos stay visible)
+		# Hide body gizmos and restore body mesh material when deselecting
 		if _selected_gizmo.body_part_name != "":
 			_selected_gizmo.visible = false
-			# Also hide the glow
-			if _body_part_glows.has(_selected_gizmo.body_part_name):
-				_body_part_glows[_selected_gizmo.body_part_name].visible = false
+			# Restore original material on the body mesh
+			if _body_part_meshes.has(_selected_gizmo.body_part_name):
+				var mesh: MeshInstance3D = _body_part_meshes[_selected_gizmo.body_part_name]
+				if _original_materials.has(mesh):
+					mesh.material_override = _original_materials[mesh]
 		_selected_gizmo.set_selected(false)
 		_selected_gizmo = null
 	
@@ -282,10 +290,17 @@ func _update_hover(screen_pos: Vector2) -> void:
 	# ── 1. Body-part detection — show glow mesh on hover ─────────────────────
 	_hovered_body_part = _raycast_body_parts(ray_origin, ray_dir)
 	
-	# Show glow for currently hovered body part
+	# Glow the actual body mesh for currently hovered body part
 	if _hovered_body_part != "":
-		if _body_part_glows.has(_hovered_body_part):
-			_body_part_glows[_hovered_body_part].visible = true
+		if _body_part_meshes.has(_hovered_body_part):
+			var mesh: MeshInstance3D = _body_part_meshes[_hovered_body_part]
+			var glow_mat := StandardMaterial3D.new()
+			glow_mat.albedo_color = _GLOW_COLOR
+			glow_mat.emission_enabled = true
+			glow_mat.emission = _GLOW_COLOR
+			glow_mat.emission_energy_multiplier = 1.5
+			glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mesh.material_override = glow_mat
 		# Show tab label at body-part position
 		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(_hovered_body_part)
 		var gizmo_for_label: GizmoHandle = _selected_gizmo if _selected_gizmo else gizmo_for_body
@@ -299,17 +314,24 @@ func _update_hover(screen_pos: Vector2) -> void:
 			_tab_label.text = "[%s]" % gizmo_for_label.tab_name
 			_tab_label.visible = true
 	
-	# Clear glow for previously-hovered body part (if not selected)
+	# Clear glow for previously-hovered body part (restore original material)
 	if _hovered_body_part != _last_hovered_body_part:
 		if _last_hovered_body_part != "":
-			# Hide glow mesh
-			if _body_part_glows.has(_last_hovered_body_part):
-				_body_part_glows[_last_hovered_body_part].visible = false
+			# Restore original material on the body mesh
+			if _body_part_meshes.has(_last_hovered_body_part):
+				var prev_mesh: MeshInstance3D = _body_part_meshes[_last_hovered_body_part]
+				if _original_materials.has(prev_mesh):
+					prev_mesh.material_override = _original_materials[prev_mesh]
 			# Hide gizmo if it was revealed but not selected
 			var prev_gizmo: GizmoHandle = _find_gizmo_for_body_part(_last_hovered_body_part)
 			if prev_gizmo and prev_gizmo != _selected_gizmo:
 				prev_gizmo.visible = false
 		_last_hovered_body_part = _hovered_body_part
+		
+		# Auto-deselect previously selected body gizmo when hovering a different body part.
+		# This keeps only one body gizmo visible at a time (click-to-reveal per body part).
+		if _selected_gizmo and _selected_gizmo.body_part_name != "" and _hovered_body_part != _selected_gizmo.body_part_name:
+			_deselect_gizmo()
 	
 	# ── 2. Gizmo hover detection ─────────────────────────────────────────────
 	# Only check paddle gizmos (body gizmos are click-to-reveal only)
@@ -353,11 +375,12 @@ func _start_drag(gizmo: GizmoHandle, screen_pos: Vector2) -> void:
 	_drag_start_pos = gizmo.global_position
 	_drag_start_mouse = screen_pos
 	
-	# Create drag plane facing camera
+	# Create drag plane facing camera — used for ALL gizmo types (including body gizmos).
+	# For body gizmos the drag updates the posture definition offset, which the IK system
+	# uses to recompute the body-part position on subsequent frames.
 	var to_gizmo := (_drag_start_pos - _camera.global_position).normalized()
 	_drag_plane = Plane(to_gizmo, _drag_start_pos)
 	
-	_dragging = true
 	gizmo_drag_started.emit(gizmo)
 
 func _update_drag(screen_pos: Vector2) -> void:
@@ -374,6 +397,8 @@ func _update_drag(screen_pos: Vector2) -> void:
 	
 	var new_pos: Vector3 = intersection
 	
+	# Rotation gizmos: compute and emit rotation delta (independent of position override).
+	# This updates on every frame while dragging so rotation feels smooth.
 	if _selected_gizmo.gizmo_type == GizmoHandle.GizmoType.ROTATION:
 		var rotation_gizmo := _selected_gizmo as RotationGizmo
 		if rotation_gizmo:
@@ -382,6 +407,8 @@ func _update_drag(screen_pos: Vector2) -> void:
 			# Update drag start for relative movement next frame
 			_drag_plane = Plane((new_pos - _camera.global_position).normalized(), new_pos)
 			_drag_start_pos = new_pos
+	# Position gizmos (including body-part gizmos): update position and emit moved signal.
+	# For body gizmos this drives the posture-definition offset update via _on_gizmo_moved.
 	else:
 		_selected_gizmo.global_position = new_pos
 		_selection_highlight.global_position = new_pos
@@ -394,6 +421,7 @@ func _update_drag(screen_pos: Vector2) -> void:
 func _stop_drag() -> void:
 	if _dragging and _selected_gizmo:
 		gizmo_drag_ended.emit(_selected_gizmo)
+		_deselect_gizmo()
 	_dragging = false
 	_current_constraint = Constraint.NONE
 

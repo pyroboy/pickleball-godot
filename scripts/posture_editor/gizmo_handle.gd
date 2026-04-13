@@ -14,6 +14,7 @@ enum GizmoType { POSITION, ROTATION, SCALE }
 var _is_hovered: bool = false
 var _is_selected: bool = false
 var _base_material: StandardMaterial3D
+var _name_label: Label3D = null
 
 # Metadata for the editor
 var posture_id: int = -1
@@ -50,7 +51,26 @@ func _setup_visuals() -> void:
 	_base_material.albedo_color.a = 0.7
 	_base_material.no_depth_test = true
 	material_override = _base_material
+	
+	# Debug name label — always visible above the gizmo, shows field_name
+	_name_label = Label3D.new()
+	_name_label.name = "NameLabel"
+	_name_label.text = field_name if field_name != "" else name
+	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_name_label.font_size = 14
+	_name_label.modulate = Color(1.0, 0.85, 0.2, 0.95)  # warm yellow
+	_name_label.outline_modulate = Color(0.0, 0.0, 0.0, 0.9)
+	_name_label.pixel_size = 0.01  # mid: between too-big (0.02) and too-small (0.001)
+	_name_label.no_depth_test = true
+	_name_label.position = Vector3(0, 0.08, 0)  # offset above gizmo center
+	add_child(_name_label)
+	
 	_update_visual_state()
+
+func _process(_delta: float) -> void:
+	# Keep name label in sync — field_name may be set after _ready()
+	if _name_label and _name_label.text != field_name:
+		_name_label.text = field_name if field_name != "" else name
 
 func set_hovered(hovered: bool) -> void:
 	_is_hovered = hovered
@@ -74,14 +94,20 @@ func _update_visual_state() -> void:
 		_base_material.albedo_color = selected_color
 		_base_material.albedo_color.a = 0.9
 		scale = Vector3.ONE * 1.3
+		if _name_label:
+			_name_label.modulate = Color(1.0, 1.0, 0.3, 1.0)  # bright gold when selected
 	elif _is_hovered:
 		_base_material.albedo_color = hover_color
 		_base_material.albedo_color.a = 0.8
 		scale = Vector3.ONE * 1.1
+		if _name_label:
+			_name_label.modulate = Color(1.0, 1.0, 0.6, 0.95)  # yellow when hovered
 	else:
 		_base_material.albedo_color = gizmo_color
 		_base_material.albedo_color.a = 0.7
 		scale = Vector3.ONE
+		if _name_label:
+			_name_label.modulate = Color(1.0, 0.85, 0.2, 0.95)  # warm yellow at rest
 
 ## Ray intersection for selection
 ## Returns distance along ray if hit, -1 if miss
