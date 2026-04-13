@@ -481,7 +481,7 @@ func _test_mid_low_zone_bridges_normal_and_low(totals: Dictionary) -> void:
 		"y=0.35 is outside LOW_FOREHAND zone (miss=%.2f)" % lo_miss, totals)
 
 	# And outside normal FOREHAND (y_min=0.5)
-	var norm_zone: Dictionary = ALL_ZONES[FakePlayer.PaddlePosture.FOREHAND]
+	var norm_zone: Dictionary = ALL_ZONES[ZoneFakePlayer.PaddlePosture.FOREHAND]
 	var norm_miss := _zone_ht_miss(0.35, norm_zone)
 	_assert(norm_miss > 0.1,
 		"y=0.35 is outside FOREHAND zone (miss=%.2f)" % norm_miss, totals)
