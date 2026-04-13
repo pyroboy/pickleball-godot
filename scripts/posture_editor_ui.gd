@@ -1196,6 +1196,8 @@ func _update_active_gizmos() -> void:
 func _create_paddle_gizmos() -> void:
 	if _is_base_pose_mode() or _current_def == null:
 		return
+	if not _player or not _player.paddle_node: return
+	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
 	var def = _current_def
 	var pos = _calculate_paddle_world_position(def)
 	
@@ -1206,8 +1208,8 @@ func _create_paddle_gizmos() -> void:
 	gizmo.tab_name = "Paddle"
 	gizmo.gizmo_color = _color_for_family(def.family)
 	gizmo.gizmo_size = 0.08
-	gizmo.global_position = pos
 	_gizmo_controller.add_gizmo_handle(gizmo)
+	gizmo.global_position = pos
 
 func _create_torso_gizmos() -> void:
 	if not _player or not _player.skeleton: return
@@ -1224,8 +1226,8 @@ func _create_torso_gizmos() -> void:
 		gizmo.body_part_name = "hips"
 		gizmo.gizmo_color = Color(0, 1, 1)
 		gizmo.ring_radius = 0.3
-		gizmo.global_position = hip_pos
 		_gizmo_controller.add_gizmo_handle(gizmo)
+		gizmo.global_position = hip_pos
 	
 	# Torso/Chest Rotation
 	var chest_idx: int = _player.skeleton.find_bone("chest")
@@ -1239,8 +1241,8 @@ func _create_torso_gizmos() -> void:
 		gizmo.body_part_name = "chest"
 		gizmo.gizmo_color = Color(1, 0.5, 0)
 		gizmo.ring_radius = 0.25
-		gizmo.global_position = chest_pos
 		_gizmo_controller.add_gizmo_handle(gizmo)
+		gizmo.global_position = chest_pos
 
 func _create_head_gizmos() -> void:
 	if not _player or not _player.skeleton: return
@@ -1256,8 +1258,8 @@ func _create_head_gizmos() -> void:
 		gizmo.body_part_name = "head"
 		gizmo.gizmo_color = Color(1, 1, 1)
 		gizmo.ring_radius = 0.15
-		gizmo.global_position = head_pos
 		_gizmo_controller.add_gizmo_handle(gizmo)
+		gizmo.global_position = head_pos
 
 func _create_arm_gizmos() -> void:
 	if not _player or not _player.paddle_node: return
@@ -1276,8 +1278,8 @@ func _create_arm_gizmos() -> void:
 	r_gizmo.field_name = "right_hand_offset"
 	r_gizmo.tab_name = "Arms"
 	r_gizmo.gizmo_color = Color(1, 1, 0)
-	r_gizmo.global_position = r_pos
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
+	r_gizmo.global_position = r_pos
 	
 	# 2. Left hand target
 	var l_base: Vector3
@@ -1293,8 +1295,8 @@ func _create_arm_gizmos() -> void:
 	l_gizmo.field_name = "left_hand_offset"
 	l_gizmo.tab_name = "Arms"
 	l_gizmo.gizmo_color = Color(0, 1, 1)
-	l_gizmo.global_position = l_pos
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
+	l_gizmo.global_position = l_pos
 
 func _create_leg_gizmos() -> void:
 	if not _player: return
@@ -1314,8 +1316,8 @@ func _create_leg_gizmos() -> void:
 	r_gizmo.field_name = "right_foot_offset"
 	r_gizmo.tab_name = "Legs"
 	r_gizmo.gizmo_color = Color(0.9, 0.3, 0.9)
-	r_gizmo.global_position = r_pos
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
+	r_gizmo.global_position = r_pos
 	
 	# 2. Left Foot
 	var l_stance: Vector3 = forehand_axis * -0.5 * def.stance_width
@@ -1326,8 +1328,8 @@ func _create_leg_gizmos() -> void:
 	l_gizmo.field_name = "left_foot_offset"
 	l_gizmo.tab_name = "Legs"
 	l_gizmo.gizmo_color = Color(0.3, 0.3, 0.9)
-	l_gizmo.global_position = l_pos
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
+	l_gizmo.global_position = l_pos
 
 func _refresh_live_preview() -> void:
 	var preview_def = _build_preview_posture_for_editor()
