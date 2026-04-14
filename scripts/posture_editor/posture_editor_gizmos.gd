@@ -276,11 +276,7 @@ func _create_leg_gizmos() -> void:
 	l_knee_gizmo.global_position = l_knee_world
 
 func refresh_live_preview() -> void:
-	var preview_def = null
-	if _player and _player.posture:
-		preview_def = _player.posture._last_applied_posture_def
-	if preview_def == null:
-		preview_def = _player.posture._current_def if _player and _player.posture else null
+	var preview_def = _state.current_body_resource()
 	if preview_def == null:
 		return
 	if _player and _player.posture and Engine.time_scale < 0.001:

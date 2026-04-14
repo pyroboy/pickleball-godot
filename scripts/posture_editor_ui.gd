@@ -131,15 +131,13 @@ func _ready() -> void:
 
 # ── Module init helpers ────────────────────────────────────────────────────────
 
-func _init_state() -> void:
-	_state.init(_library, _base_pose_library, _posture_list, _save_button, _status_label, _transition_button, _trigger_pose_button)
-
 func _init_preview() -> void:
 	_preview.init(_player, _library, _base_pose_library, _state)
 
 func _init_transport() -> void:
 	_transport.set_play_callback(Callable(self, "_on_play_transition"))
 	_transport.set_save_callback(Callable(self, "_on_save"))
+	_transport.transport_play_pressed.connect(_on_play_transition)
 
 func _init_gizmos() -> void:
 	_gizmos.init(_player, _state, _tab_container, get_tree())
