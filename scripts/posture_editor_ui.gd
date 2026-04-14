@@ -992,6 +992,11 @@ func _process(delta: float) -> void:
 	if _gizmos != null and _gizmos.get_gizmo_controller() and _player and _player.is_inside_tree() and _player.skeleton:
 		_gizmos.process_frame(delta)
 
+func get_current_paddle_position() -> Vector3:
+	if _gizmos:
+		return _gizmos.get_current_paddle_position()
+	return Vector3.INF
+
 # ── Transition callbacks ───────────────────────────────────────────────────────
 
 func _on_transition_preview_started() -> void:
