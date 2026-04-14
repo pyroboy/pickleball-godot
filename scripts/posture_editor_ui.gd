@@ -29,17 +29,15 @@ enum LayoutPreset {
 signal editor_opened()
 signal editor_closed()
 
-var _library
-var _base_pose_library
-var _current_def = null
-var _current_base_def = null
-var _current_id: int = -1
-var _is_dirty: bool = false
-var _editor_restore_posture_id: int = -1
-var _workspace_mode: int = Workspace.STROKE_POSTURES
-var _layout_preset: int = LayoutPreset.HALF
+# ── Sub-modules ───────────────────────────────────────────────────────────────
 
-# UI elements
+var _state  # PostureEditorState (loaded via load())
+var _preview  # PostureEditorPreview (loaded via load())
+var _transport  # PostureEditorTransport (loaded via load())
+var _gizmos  # PostureEditorGizmos (loaded via load())
+
+# ── UI elements ────────────────────────────────────────────────────────────────
+
 var _posture_list: ItemList
 var _mode_label: Label
 var _status_label: Label
@@ -52,9 +50,8 @@ var _trigger_pose_button: Button
 var _transition_button: Button
 var _save_button: Button
 var _solo_mode_button: Button
-var _big_save_button: Button
 
-# Tab containers
+# Tab content (loaded from files)
 var _paddle_tab
 var _legs_tab
 var _arms_tab
@@ -63,29 +60,23 @@ var _torso_tab
 var _charge_tab
 var _follow_through_tab
 
-# Interactive 3D gizmos (Wave 1-2)
-var _gizmo_controller
-var _knee_mesh_nodes: Dictionary = {}  # Procedural knee meshes for glow-on-hover
-var _elbow_mesh_nodes: Dictionary = {}  # Procedural elbow meshes for glow-on-hover
+# ── Inline state (not extracted) ─────────────────────────────────────────────
+
+var _library
+var _base_pose_library
 var _player: Node3D = null
 
-# Pose trigger (Wave 3)
-var _pose_trigger = null
-
-# Transition player (Wave 4)
-var _transition_player = null
-
-# Transport bar (Wave 5)
-var _transport_bar: Control
-var _transport_play_btn: Button
-var _transport_save_btn: Button
-var _transport_phase_label: Label
-var _transport_time_label: Label
-var _transport_progress: ProgressBar
+# ── Init ──────────────────────────────────────────────────────────────────────
 
 func _init() -> void:
 	_library = load("res://scripts/posture_library.gd").new()
 	_base_pose_library = load("res://scripts/base_pose_library.gd").new()
+	_state = load("res://scripts/posture_editor/posture_editor_state.gd").new()
+	_preview = load("res://scripts/posture_editor/posture_editor_preview.gd").new()
+	_transport = load("res://scripts/posture_editor/posture_editor_transport.gd").new()
+	_gizmos = load("res://scripts/posture_editor/posture_editor_gizmos.gd").new()
+
+# ── Ready ─────────────────────────────────────────────────────────────────────
 
 func _ready() -> void:
 	# Right-side editor sheet so the player stays visible on the left.
@@ -97,6 +88,10 @@ func _ready() -> void:
 	offset_top = 0.0
 	offset_right = 0.0
 	offset_bottom = 0.0
+
+	_init_preview()
+	_init_transport()
+	_init_gizmos()
 
 	var panel := PanelContainer.new()
 	panel.anchor_right = 1.0
@@ -120,9 +115,43 @@ func _ready() -> void:
 	vbox.add_theme_constant_override("separation", 10)
 	margin.add_child(vbox)
 
+	var header := _make_header()
+	vbox.add_child(header)
+
+	var hsplit := _make_main_split()
+	vbox.add_child(hsplit)
+
+	var footer := _make_footer()
+	vbox.add_child(footer)
+
+	# State needs all UI elements created first
+	_state.init(_library, _base_pose_library, _posture_list, _save_button, _status_label, _transition_button, _trigger_pose_button)
+
+	_update_workspace_ui()
+
+# ── Module init helpers ────────────────────────────────────────────────────────
+
+func _init_state() -> void:
+	_state.init(_library, _base_pose_library, _posture_list, _save_button, _status_label, _transition_button, _trigger_pose_button)
+
+func _init_preview() -> void:
+	_preview.init(_player, _library, _base_pose_library, _state)
+
+func _init_transport() -> void:
+	_transport.set_play_callback(Callable(self, "_on_play_transition"))
+	_transport.set_save_callback(Callable(self, "_on_save"))
+
+func _init_gizmos() -> void:
+	_gizmos.init(_player, _state, _tab_container, get_tree())
+	_gizmos.gizmo_selected.connect(_on_gizmo_selected)
+	_gizmos.gizmo_moved.connect(_on_gizmo_moved)
+	_gizmos.gizmo_rotated.connect(_on_gizmo_rotated)
+
+# ── UI build helpers ──────────────────────────────────────────────────────────
+
+func _make_header() -> Control:
 	var header := PanelContainer.new()
 	header.add_theme_stylebox_override("panel", _make_panel_style(Color(0.16, 0.2, 0.28, 0.95), Color(0.28, 0.4, 0.56, 0.95), 14))
-	vbox.add_child(header)
 
 	var header_margin := MarginContainer.new()
 	header_margin.add_theme_constant_override("margin_left", 14)
@@ -135,7 +164,6 @@ func _ready() -> void:
 	header_vbox.add_theme_constant_override("separation", 6)
 	header_margin.add_child(header_vbox)
 
-	# Title
 	var title := Label.new()
 	title.text = "Posture Editor"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -156,7 +184,6 @@ func _ready() -> void:
 	_mode_label.modulate = Color(1.0, 0.92, 0.55)
 	header_vbox.add_child(_mode_label)
 
-	# Status label
 	_status_label = Label.new()
 	_status_label.text = "Select a posture to edit"
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -200,11 +227,13 @@ func _ready() -> void:
 	_preview_context_option.item_selected.connect(_on_preview_context_changed)
 	workspace_row.add_child(_preview_context_option)
 
+	return header
+
+func _make_main_split() -> HSplitContainer:
 	var hsplit := HSplitContainer.new()
 	hsplit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hsplit.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hsplit.split_offset = 300
-	vbox.add_child(hsplit)
 
 	var left_panel := PanelContainer.new()
 	left_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.13, 0.18, 0.24, 0.97), Color(0.24, 0.34, 0.48, 0.95), 12))
@@ -240,6 +269,7 @@ func _ready() -> void:
 	_posture_list.custom_minimum_size = Vector2(260, 200)
 	_posture_list.item_selected.connect(_on_posture_selected)
 	left_vbox.add_child(_posture_list)
+	_state.init(_library, _base_pose_library, _posture_list, _save_button, _status_label, _transition_button, _trigger_pose_button)
 	_populate_posture_list()
 
 	var right_panel := PanelContainer.new()
@@ -264,14 +294,12 @@ func _ready() -> void:
 	inspector_title.modulate = Color(0.97, 0.98, 1.0)
 	right_vbox.add_child(inspector_title)
 
-	# Right: tabbed properties
 	_tab_container = TabContainer.new()
 	_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_tab_container.tab_changed.connect(_on_tab_changed)
 	right_vbox.add_child(_tab_container)
 	
-	# Create tabs
 	_paddle_tab = load("res://scripts/posture_editor/tabs/paddle_tab.gd").new()
 	_paddle_tab.name = "Paddle"
 	_paddle_tab.field_changed.connect(_on_field_changed)
@@ -307,9 +335,11 @@ func _ready() -> void:
 	_follow_through_tab.field_changed.connect(_on_field_changed)
 	_add_scroll_tab("Follow-Through", _follow_through_tab)
 
+	return hsplit
+
+func _make_footer() -> Control:
 	var footer := PanelContainer.new()
 	footer.add_theme_stylebox_override("panel", _make_panel_style(Color(0.16, 0.2, 0.28, 0.97), Color(0.28, 0.4, 0.56, 0.95), 14))
-	vbox.add_child(footer)
 
 	var footer_margin := MarginContainer.new()
 	footer_margin.add_theme_constant_override("margin_left", 10)
@@ -318,7 +348,6 @@ func _ready() -> void:
 	footer_margin.add_theme_constant_override("margin_bottom", 10)
 	footer.add_child(footer_margin)
 
-	# Bottom buttons row (Preview Pose and Solo Mode only — Play/Save moved to transport bar)
 	var hbox := HBoxContainer.new()
 	hbox.add_theme_constant_override("separation", 8)
 	footer_margin.add_child(hbox)
@@ -336,202 +365,9 @@ func _ready() -> void:
 	_style_action_button(_solo_mode_button, Color(0.52, 0.43, 0.74))
 	hbox.add_child(_solo_mode_button)
 
-	_big_save_button = null
-	_update_save_button_state()
-	_update_workspace_ui()
-	# NOTE: right-side anchors (0.65-0.98) are set above in _ready().
-	# _apply_layout_preset() is NOT called here — it's only for the old
-	# bottom-docked HALF/WIDE presets triggered by the layout button.
-	# Transport bar is built by _build_transport_bar() and added to the
-	# canvas as a sibling of posture_editor_ui by game.gd.
+	return footer
 
-## Builds the transport bar Control and returns it.
-## Called by game.gd after posture_editor_ui is added to the canvas.
-## The bar spans the LEFT 65% of the FULL viewport, bottom-aligned.
-func build_transport_bar() -> Control:
-	_transport_bar = Control.new()
-	_transport_bar.name = "TransportBar"
-	_transport_bar.anchor_left = 0.0
-	_transport_bar.anchor_right = 1.0
-	_transport_bar.anchor_top = 0.0
-	_transport_bar.anchor_bottom = 1.0
-	_transport_bar.offset_left = 0
-	_transport_bar.offset_top = 0
-	_transport_bar.offset_right = 0
-	_transport_bar.offset_bottom = 0
-	_transport_bar.z_index = 10
-	_transport_bar.tree_entered.connect(_on_transport_bar_tree_entered)
-	return _transport_bar
-
-func _on_transport_bar_tree_entered() -> void:
-	# Build UI and set size once we have access to the parent viewport size.
-	await get_tree().process_frame
-	_build_transport_bar_ui()
-	_resize_transport_bar()
-
-func _build_transport_bar_ui() -> void:
-	if not _transport_bar:
-		return
-
-	var transport_panel := PanelContainer.new()
-	transport_panel.anchor_right = 1.0
-	transport_panel.anchor_bottom = 1.0
-	transport_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.10, 0.14, 0.20, 0.97), Color(0.28, 0.40, 0.56, 0.95), 12))
-	_transport_bar.add_child(transport_panel)
-
-	var transport_m := MarginContainer.new()
-	transport_m.anchor_right = 1.0
-	transport_m.anchor_bottom = 1.0
-	transport_m.add_theme_constant_override("margin_left", 16)
-	transport_m.add_theme_constant_override("margin_right", 16)
-	transport_m.add_theme_constant_override("margin_top", 10)
-	transport_m.add_theme_constant_override("margin_bottom", 10)
-	transport_panel.add_child(transport_m)
-
-	var transport_hbox := HBoxContainer.new()
-	transport_hbox.add_theme_constant_override("separation", 16)
-	transport_m.add_child(transport_hbox)
-
-	# Play / Stop button
-	_transport_play_btn = Button.new()
-	_transport_play_btn.custom_minimum_size = Vector2(80, 44)
-	_transport_play_btn.text = "▶ Play"
-	_transport_play_btn.pressed.connect(_on_transport_play)
-	_transport_play_btn.add_theme_font_size_override("font_size", 16)
-	_transport_play_btn.modulate = Color(0.31, 0.64, 0.62)
-	transport_hbox.add_child(_transport_play_btn)
-
-	# Save button
-	_transport_save_btn = Button.new()
-	_transport_save_btn.custom_minimum_size = Vector2(80, 44)
-	_transport_save_btn.text = "💾 Save"
-	_transport_save_btn.pressed.connect(_on_save)
-	_transport_save_btn.add_theme_font_size_override("font_size", 14)
-	_transport_save_btn.modulate = Color(0.86, 0.73, 0.25)
-	transport_hbox.add_child(_transport_save_btn)
-
-	# Phase separator
-	var sep := VSeparator.new()
-	sep.custom_minimum_size = Vector2(2, 30)
-	transport_hbox.add_child(sep)
-
-	# Phase + time labels
-	var phase_vbox := VBoxContainer.new()
-	phase_vbox.add_theme_constant_override("separation", 4)
-	transport_hbox.add_child(phase_vbox)
-
-	var phase_row := HBoxContainer.new()
-	phase_row.add_theme_constant_override("separation", 8)
-	phase_vbox.add_child(phase_row)
-
-	var phase_title := Label.new()
-	phase_title.text = "Phase:"
-	phase_title.modulate = Color(0.72, 0.80, 0.90)
-	phase_title.add_theme_font_size_override("font_size", 12)
-	phase_row.add_child(phase_title)
-
-	_transport_phase_label = Label.new()
-	_transport_phase_label.text = "READY"
-	_transport_phase_label.modulate = Color(0.97, 0.98, 1.0)
-	_transport_phase_label.add_theme_font_size_override("font_size", 13)
-	phase_row.add_child(_transport_phase_label)
-
-	var time_row := HBoxContainer.new()
-	time_row.add_theme_constant_override("separation", 8)
-	phase_vbox.add_child(time_row)
-
-	var time_title := Label.new()
-	time_title.text = "Time:"
-	time_title.modulate = Color(0.72, 0.80, 0.90)
-	time_title.add_theme_font_size_override("font_size", 12)
-	time_row.add_child(time_title)
-
-	_transport_time_label = Label.new()
-	_transport_time_label.text = "0.00s / 1.10s"
-	_transport_time_label.modulate = Color(0.85, 0.92, 1.0)
-	_transport_time_label.add_theme_font_size_override("font_size", 13)
-	time_row.add_child(_transport_time_label)
-
-	# Timeline progress bar
-	var timeline_sep := VSeparator.new()
-	timeline_sep.custom_minimum_size = Vector2(2, 30)
-	transport_hbox.add_child(timeline_sep)
-
-	_transport_progress = ProgressBar.new()
-	_transport_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_transport_progress.custom_minimum_size = Vector2(200, 20)
-	_transport_progress.step = 0.01
-	_transport_progress.show_percentage = false
-	_transport_progress.max_value = 1.0
-	_transport_progress.value = 0.0
-	var prog_style := StyleBoxFlat.new()
-	prog_style.bg_color = Color(0.18, 0.24, 0.32, 0.9)
-	prog_style.corner_radius_top_left = 4
-	prog_style.corner_radius_top_right = 4
-	prog_style.corner_radius_bottom_left = 4
-	prog_style.corner_radius_bottom_right = 4
-	_transport_progress.add_theme_stylebox_override("background", prog_style)
-	var fg_style := StyleBoxFlat.new()
-	fg_style.bg_color = Color(0.31, 0.64, 0.62, 0.9)
-	fg_style.corner_radius_top_left = 4
-	fg_style.corner_radius_top_right = 4
-	fg_style.corner_radius_bottom_left = 4
-	fg_style.corner_radius_bottom_right = 4
-	_transport_progress.add_theme_stylebox_override("fill", fg_style)
-	transport_hbox.add_child(_transport_progress)
-
-	_connect_transport_signals()
-
-## Positions the transport bar to span the LEFT 65% of the full viewport,
-## bottom-aligned (y: 0.90 → 1.0). Called after _build_transport_bar_ui().
-func _resize_transport_bar() -> void:
-	if not _transport_bar:
-		return
-	# Horizontal: span from viewport x=0 to x=0.65*W
-	_transport_bar.anchor_left = 0.0
-	_transport_bar.anchor_right = 0.65
-	_transport_bar.offset_left = 0
-	_transport_bar.offset_right = 0
-	# Vertical: bottom 10% of viewport
-	_transport_bar.anchor_top = 0.90
-	_transport_bar.anchor_bottom = 1.0
-	_transport_bar.offset_top = 0
-	_transport_bar.offset_bottom = 0
-	_transport_bar.z_index = 10
-
-func _connect_transport_signals() -> void:
-	if _transition_player:
-		_transition_player.playback_started.connect(_on_transport_playback_started)
-		_transition_player.playback_stopped.connect(_on_transport_playback_stopped)
-		_transition_player.playback_finished.connect(_on_transport_playback_finished)
-		_transition_player.phase_changed.connect(_on_transport_phase_changed)
-
-func _populate_posture_list() -> void:
-	_posture_list.clear()
-	if _is_base_pose_mode():
-		for def in _base_pose_library.all_definitions():
-			_posture_list.add_item(def.display_name)
-	else:
-		for def in _library.all_definitions():
-			_posture_list.add_item(def.display_name)
-
-func _add_scroll_tab(title: String, content: Control) -> void:
-	var scroll := ScrollContainer.new()
-	scroll.name = title
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-
-	var margin := MarginContainer.new()
-	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.add_theme_constant_override("margin_left", 6)
-	margin.add_theme_constant_override("margin_right", 6)
-	margin.add_theme_constant_override("margin_top", 8)
-	margin.add_theme_constant_override("margin_bottom", 8)
-	scroll.add_child(margin)
-
-	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.add_child(content)
-	_tab_container.add_child(scroll)
+# ── Style helpers ─────────────────────────────────────────────────────────────
 
 func _make_panel_style(bg: Color, border: Color, radius: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -581,26 +417,38 @@ func _style_action_button(button: Button, accent: Color, emphasize: bool = false
 	disabled.border_color = Color(0.28, 0.33, 0.42, 0.9)
 	button.add_theme_stylebox_override("disabled", disabled)
 
-func _set_dirty(dirty: bool) -> void:
-	_is_dirty = dirty
-	_update_save_button_state()
+# ── List & tabs ───────────────────────────────────────────────────────────────
 
-func _update_save_button_state() -> void:
-	if _save_button == null:
-		return
-	if _is_dirty:
-		_save_button.text = "Save Changes"
-		_save_button.add_theme_color_override("font_color", Color(1.0, 0.97, 0.8))
-	else:
-		_save_button.text = "Save to .tres"
-		_save_button.add_theme_color_override("font_color", Color(0.97, 0.98, 1.0))
+func _populate_posture_list() -> void:
+	_state.populate_posture_list()
+
+func _add_scroll_tab(title: String, content: Control) -> void:
+	var scroll := ScrollContainer.new()
+	scroll.name = title
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+
+	var margin := MarginContainer.new()
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_theme_constant_override("margin_left", 6)
+	margin.add_theme_constant_override("margin_right", 6)
+	margin.add_theme_constant_override("margin_top", 8)
+	margin.add_theme_constant_override("margin_bottom", 8)
+	scroll.add_child(margin)
+
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	margin.add_child(content)
+	_tab_container.add_child(scroll)
+
+# ── Layout ────────────────────────────────────────────────────────────────────
 
 func _on_toggle_layout_preset() -> void:
-	_layout_preset = LayoutPreset.WIDE if _layout_preset == LayoutPreset.HALF else LayoutPreset.HALF
+	var current = _state.get_layout_preset()
+	_state.set_layout_preset(LayoutPreset.WIDE if current == LayoutPreset.HALF else LayoutPreset.HALF)
 	_apply_layout_preset()
 
 func _apply_layout_preset() -> void:
-	match _layout_preset:
+	match _state.get_layout_preset():
 		LayoutPreset.WIDE:
 			anchor_left = 0.02
 			anchor_right = 0.98
@@ -616,86 +464,172 @@ func _apply_layout_preset() -> void:
 			if _layout_button:
 				_layout_button.text = "Panel: Compact"
 
-func _is_base_pose_mode() -> bool:
-	return _workspace_mode == Workspace.BASE_POSES
+# ── Posture selection ─────────────────────────────────────────────────────────
 
-func _current_body_resource():
-	return _current_base_def if _is_base_pose_mode() else _current_def
+func _on_posture_selected(index: int) -> void:
+	if _state.is_base_pose_mode():
+		if index < 0 or index >= _base_pose_library.definitions.size():
+			return
+		_state.set_current_base_def(_base_pose_library.definitions[index])
+		_state.set_current_def(null)
+		_state.set_current_id(_state.get_current_base_def().base_pose_id)
+	else:
+		if index < 0 or index >= _library.definitions.size():
+			return
+		_state.set_current_def(_library.definitions[index])
+		_state.set_current_base_def(null)
+		_state.set_current_id(_state.get_current_def().posture_id)
+	_status_label.text = "Selected: %s (ID: %d)" % [_state.current_display_name(), _state.get_current_id()]
+	_populate_properties()
+	_trigger_pose_button.disabled = false
+	if _transition_button:
+		_transition_button.disabled = _state.is_base_pose_mode()
+	if _save_button:
+		_save_button.disabled = false
+	
+	_refresh_live_preview()
+	_update_active_gizmos()
+	
+	var preview_def = _preview.build_preview_posture_for_editor() if _state.is_base_pose_mode() else _state.get_current_def()
+	if _player and _player.posture and preview_def:
+		_player.posture.force_posture_update(preview_def)
+		if not _state.is_base_pose_mode():
+			_player.posture._apply_full_body_posture(_state.get_current_def())
+		_state.set_editor_restore_posture_id(-1)
+	
+	if _player and not _state.is_base_pose_mode():
+		_preview.setup_transition_player()
+		if _preview.get_transition_player() and _preview.get_transition_player().is_playing():
+			_preview.get_transition_player().stop()
+	
+	var pose_trigger = _preview.get_pose_trigger()
+	if pose_trigger and pose_trigger.is_frozen():
+		var trigger_def = _preview.build_preview_posture_for_editor()
+		if trigger_def:
+			pose_trigger.trigger_pose(trigger_def)
+		
+	if _player and _player.posture and not _state.is_base_pose_mode():
+		_player.posture.selected_posture_id = _state.get_current_id()
+	_update_mode_ui()
 
-func _current_display_name() -> String:
-	var res = _current_body_resource()
-	return res.display_name if res != null else ""
+func _populate_properties() -> void:
+	var body_def = _state.current_body_resource()
+	if body_def == null:
+		return
+	
+	if not _state.is_base_pose_mode():
+		_paddle_tab.set_definition(_state.get_current_def())
+		_charge_tab.set_definition(_state.get_current_def())
+		_follow_through_tab.set_definition(_state.get_current_def())
+	_legs_tab.set_definition(body_def)
+	_arms_tab.set_definition(body_def)
+	_head_tab.set_definition(body_def)
+	_torso_tab.set_definition(body_def)
 
-func _preview_context_base_pose_id() -> int:
+# ── Field changes ─────────────────────────────────────────────────────────────
+
+func _on_field_changed(_field_name: String, _value: Variant) -> void:
+	if _state.current_body_resource() == null:
+		return
+	_status_label.text = "Modified: %s" % _state.current_display_name()
+	_state.set_dirty(true)
+	_refresh_live_preview()
+	_update_gizmo_positions()
+	if _state.get_current_def() and _player and _player.posture:
+		_player.posture.force_posture_update(_state.get_current_def())
+		_player.posture._apply_full_body_posture(_state.get_current_def())
+	if _state.is_base_pose_mode() and _state.get_current_base_def() and _player and _player.posture:
+		_player.posture._apply_full_body_posture(_state.get_current_base_def())
+	_update_mode_ui()
+
+# ── Trigger pose ─────────────────────────────────────────────────────────────
+
+func _on_trigger_pose() -> void:
 	if not _player:
-		return -1
-	var preview_idx: int = _preview_context_option.selected if _preview_context_option else 0
-	match preview_idx:
-		1: return _player.BasePoseState.ATHLETIC_READY
-		2: return _player.BasePoseState.SPLIT_STEP
-		3: return _player.BasePoseState.PUNCH_VOLLEY_READY
-		4: return _player.BasePoseState.GROUNDSTROKE_BASE
-		5:
-			if _current_def and _current_def.height_tier == 0:
-				return _player.BasePoseState.LOW_SCOOP_LUNGE
-			if _current_def and _current_def.family == 1:
-				return _player.BasePoseState.BACKHAND_LUNGE
-			return _player.BasePoseState.FOREHAND_LUNGE
-		6: return _player.BasePoseState.JUMP_TAKEOFF
-		7: return _player.BasePoseState.LANDING_RECOVERY
-		_: return -1
+		return
+	var preview_def = _preview.build_preview_posture_for_editor()
+	if preview_def == null:
+		return
+	
+	if not _preview.get_pose_trigger():
+		_preview.set_pose_trigger(load("res://scripts/posture_editor/pose_trigger.gd").new(_player))
+		add_child(_preview.get_pose_trigger())
+	
+	if _preview.get_transition_player() and _preview.get_transition_player().is_playing():
+		_preview.get_transition_player().stop()
+	
+	if _preview.get_pose_trigger().is_frozen():
+		_preview.get_pose_trigger().release_pose()
+		_preview.restore_live_posture_from_editor()
+		_status_label.text = "Returned to live gameplay"
+	else:
+		_preview.capture_live_restore_posture()
+		_preview.get_pose_trigger().trigger_pose(preview_def)
+		_status_label.text = "Previewing static pose for %s" % _state.current_display_name()
+	_update_mode_ui()
 
-func _preview_context_stroke_posture_id() -> int:
-	if not _player:
-		return READY_POSTURE_ID
-	var preview_idx: int = _preview_context_option.selected if _preview_context_option else 0
-	match preview_idx:
-		1: return READY_POSTURE_ID
-		2: return READY_POSTURE_ID
-		3: return _player.PaddlePosture.VOLLEY_READY
-		4: return _player.PaddlePosture.FORWARD
-		5:
-			if _current_def and _current_def.family == 1:
-				return _player.PaddlePosture.WIDE_BACKHAND
-			if _current_def and _current_def.height_tier == 0:
-				return _player.PaddlePosture.LOW_WIDE_FOREHAND
-			return _player.PaddlePosture.WIDE_FOREHAND
-		6: return _player.PaddlePosture.HIGH_OVERHEAD
-		7: return READY_POSTURE_ID
-		_: return _current_def.posture_id if _current_def else READY_POSTURE_ID
+# ── Play transition ───────────────────────────────────────────────────────────
 
-func _preview_context_base_pose_def():
-	if not _player:
-		return null
-	var base_pose_id := _preview_context_base_pose_id()
-	if base_pose_id < 0:
-		return null
-	return _base_pose_library.get_def(base_pose_id)
+func _on_play_transition() -> void:
+	_preview.on_play_transition()
+	if _preview.get_transition_player():
+		_transport.set_transition_player(_preview.get_transition_player())
+	_update_mode_ui()
 
-func _build_preview_posture_for_editor():
-	if not _player:
-		return null
-	if _is_base_pose_mode():
-		if _current_base_def == null or not _player.pose_controller:
-			return null
-		return _player.pose_controller.compose_preview_posture(_current_base_def, _preview_context_stroke_posture_id())
-	if _current_def == null:
-		return null
-	return _contextualize_posture_for_preview(_current_def)
+# ── Save ──────────────────────────────────────────────────────────────────────
 
-func _contextualize_posture_for_preview(def):
-	if def == null:
-		return null
-	var base_def = _preview_context_base_pose_def()
-	if base_def == null:
-		return def
-	return base_def.to_preview_posture(def)
+func _on_save() -> void:
+	var path: String = ""
+	var filename: String = ""
+	if _state.is_base_pose_mode():
+		if _state.get_current_base_def() == null:
+			return
+		filename = _state.filename_for_base_pose(_state.get_current_base_def())
+		path = BASE_POSE_DATA_DIR + filename
+	else:
+		if _state.get_current_def() == null:
+			return
+		filename = _state.filename_for(_state.get_current_def())
+		path = DATA_DIR + filename
+	var err := ResourceSaver.save(_state.current_body_resource(), path)
+	if err == OK:
+		_status_label.text = "Saved: %s" % filename
+		_state.set_dirty(false)
+		print("[POSTURE EDITOR] Saved ", path)
+	else:
+		_status_label.text = "Save failed: error %d" % err
+		push_error("PostureEditor: failed to save " + path)
+	_update_mode_ui()
+
+# ── Workspace ─────────────────────────────────────────────────────────────────
+
+func _on_toggle_workspace() -> void:
+	var new_mode = Workspace.BASE_POSES if not _state.is_base_pose_mode() else Workspace.STROKE_POSTURES
+	_state.set_workspace_mode(new_mode)
+	_state.set_current_def(null)
+	_state.set_current_base_def(null)
+	_state.set_current_id(-1)
+	if _gizmos.get_gizmo_controller():
+		_gizmos.get_gizmo_controller().clear_all_gizmos()
+	var pose_trigger = _preview.get_pose_trigger()
+	if pose_trigger and pose_trigger.is_frozen():
+		pose_trigger.release_pose()
+		_preview.restore_live_posture_from_editor()
+	_state.set_dirty(false)
+	_trigger_pose_button.disabled = true
+	if _transition_button:
+		_transition_button.disabled = true
+	if _save_button:
+		_save_button.disabled = true
+	_status_label.text = "Select a %s to edit" % ("base pose" if _state.is_base_pose_mode() else "stroke posture")
+	_update_active_gizmos()
+	_update_workspace_ui()
 
 func _update_workspace_ui() -> void:
 	if _workspace_button:
-		_workspace_button.text = "Workspace: Base Poses" if _is_base_pose_mode() else "Workspace: Stroke Postures"
+		_workspace_button.text = "Workspace: Base Poses" if _state.is_base_pose_mode() else "Workspace: Stroke Postures"
 		if _tab_container:
-			var hide_stroke_tabs: bool = _is_base_pose_mode()
+			var hide_stroke_tabs: bool = _state.is_base_pose_mode()
 			for control in [_paddle_tab, _charge_tab, _follow_through_tab]:
 				if control == null:
 					continue
@@ -712,282 +646,33 @@ func _update_workspace_ui() -> void:
 					_tab_container.current_tab = first_body_tab
 	_populate_posture_list()
 	if _transition_button:
-		_transition_button.disabled = _is_base_pose_mode() or _current_def == null
+		_transition_button.disabled = _state.is_base_pose_mode() or _state.get_current_def() == null
 	_update_mode_ui()
 
-func _on_posture_selected(index: int) -> void:
-	if _is_base_pose_mode():
-		if index < 0 or index >= _base_pose_library.definitions.size():
-			return
-		_current_base_def = _base_pose_library.definitions[index]
-		_current_def = null
-		_current_id = _current_base_def.base_pose_id
-	else:
-		if index < 0 or index >= _library.definitions.size():
-			return
-		_current_def = _library.definitions[index]
-		_current_base_def = null
-		_current_id = _current_def.posture_id
-	_status_label.text = "Selected: %s (ID: %d)" % [_current_display_name(), _current_id]
-	_populate_properties()
-	_trigger_pose_button.disabled = false
-	if _transition_button:
-		_transition_button.disabled = _is_base_pose_mode()
-	if _save_button:
-		_save_button.disabled = false
-	
-	# Ensure the player body is in the correct pose before rebuilding gizmos
-	_refresh_live_preview()
-	_update_active_gizmos()
-	
-	# Immediately apply the selected posture to the player body.
-	# This makes the player take the pose on selection, not just on "Preview".
-	var preview_def = _build_preview_posture_for_editor() if _is_base_pose_mode() else _current_def
-	if _player and _player.posture and preview_def:
-		_player.posture.force_posture_update(preview_def)
-		if not _is_base_pose_mode():
-			_player.posture._apply_full_body_posture(_current_def)
-		# Clear restore ID so the pose persists after the editor closes
-		_editor_restore_posture_id = -1
-	
-	# Setup transition player
-	if _player and not _is_base_pose_mode():
-		_setup_transition_player()
-		if _transition_player and _transition_player.is_playing():
-			_transition_player.stop()
-	if _pose_trigger and _pose_trigger.is_frozen():
-		var trigger_def = _build_preview_posture_for_editor()
-		if trigger_def:
-			_pose_trigger.trigger_pose(trigger_def)
-		
-	if _player and _player.posture and not _is_base_pose_mode():
-		_player.posture.selected_posture_id = _current_id
-	_update_mode_ui()
+# ── Preview context ───────────────────────────────────────────────────────────
 
-func _populate_properties() -> void:
-	var body_def = _current_body_resource()
-	if body_def == null:
-		return
-	
-	# Update all tabs
-	if not _is_base_pose_mode():
-		_paddle_tab.set_definition(_current_def)
-		_charge_tab.set_definition(_current_def)
-		_follow_through_tab.set_definition(_current_def)
-	_legs_tab.set_definition(body_def)
-	_arms_tab.set_definition(body_def)
-	_head_tab.set_definition(body_def)
-	_torso_tab.set_definition(body_def)
-
-func _on_field_changed(_field_name: String, _value: Variant) -> void:
-	if _current_body_resource() == null:
-		return
-	_status_label.text = "Modified: %s" % _current_display_name()
-	_set_dirty(true)
-	_refresh_live_preview()
-	_update_gizmo_positions()
-	# Apply slider changes directly to the live player body (not just preview).
-	# force_posture_update handles paddle/posture fields; _apply_full_body_posture
-	# handles body fields (feet, knees, stance). Both are needed in stroke mode.
-	if _current_def and _player and _player.posture:
-		_player.posture.force_posture_update(_current_def)
-		_player.posture._apply_full_body_posture(_current_def)
-	# For base pose edits: apply body fields via skeleton applier.
-	if _is_base_pose_mode() and _current_base_def and _player and _player.posture:
-		_player.posture._apply_full_body_posture(_current_base_def)
-	_update_mode_ui()
-
-func _on_trigger_pose() -> void:
-	if not _player:
-		return
-	var preview_def = _build_preview_posture_for_editor()
-	if preview_def == null:
-		return
-	
-	if not _pose_trigger:
-		_pose_trigger = load("res://scripts/posture_editor/pose_trigger.gd").new(_player)
-	
-	if _transition_player and _transition_player.is_playing():
-		_transition_player.stop()
-	
-	if _pose_trigger.is_frozen():
-		_pose_trigger.release_pose()
-		_restore_live_posture_from_editor()
-		_status_label.text = "Returned to live gameplay"
-	else:
-		_capture_live_restore_posture()
-		_pose_trigger.trigger_pose(preview_def)
-		_status_label.text = "Previewing static pose for %s" % _current_display_name()
-	_update_mode_ui()
-
-func _setup_transition_player() -> void:
-	if not _player or not _current_def or _is_base_pose_mode():
-		return
-	
-	if not _transition_player:
-		_transition_player = load("res://scripts/posture_editor/transition_player.gd").new()
-		add_child(_transition_player)
-		_transition_player.playback_started.connect(_on_transition_preview_started)
-		_transition_player.playback_stopped.connect(_on_transition_preview_ended)
-		_transition_player.playback_finished.connect(_on_transition_preview_ended)
-		_connect_transport_signals()
-	
-	var ready_def = _contextualize_posture_for_preview(_library.get_def(READY_POSTURE_ID))
-	var charge_def = _contextualize_posture_for_preview(_build_charge_preview_def(_current_def))
-	var contact_def = _contextualize_posture_for_preview(_current_def)
-	var ft_defs = _build_follow_through_preview_defs(_current_def)
-	var preview_ft_defs = []
-	for ft_def in ft_defs:
-		preview_ft_defs.append(_contextualize_posture_for_preview(ft_def))
-	_transition_player.setup(_player, ready_def, charge_def, contact_def, preview_ft_defs)
-
-func _on_play_transition() -> void:
-	if _is_base_pose_mode():
-		return
-	if not _transition_player:
-		_setup_transition_player()
-	elif _current_def:
-		_setup_transition_player()
-	
-	if not _transition_player:
-		return
-	
-	if _transition_player.is_playing():
-		_transition_player.pause()
-		_status_label.text = "Swing preview paused"
-	else:
-		if not _current_def:
-			return
-		_capture_live_restore_posture()
-		if _pose_trigger and _pose_trigger.is_frozen():
-			_pose_trigger.release_pose()
-		_transition_player.play()
-		_status_label.text = "Previewing swing for %s" % _current_display_name()
-	_update_mode_ui()
-
-# ── Transport bar callbacks (Wave 5) ──────────────────────────────────────────
-
-func _on_transport_play() -> void:
-	# Delegate to the existing swing preview logic
-	_on_play_transition()
-
-func _on_transport_playback_started() -> void:
-	if _transport_play_btn:
-		_transport_play_btn.text = "⏸ Pause"
-	_update_transport_ui()
-
-func _on_transport_playback_stopped() -> void:
-	if _transport_play_btn:
-		_transport_play_btn.text = "▶ Play"
-	_update_transport_ui()
-
-func _on_transport_playback_finished() -> void:
-	if _transport_play_btn:
-		_transport_play_btn.text = "▶ Play"
-	if _transport_phase_label:
-		_transport_phase_label.text = "READY"
-	if _transport_time_label:
-		_transport_time_label.text = "0.00s / %.2fs" % 1.1
-	if _transport_progress:
-		_transport_progress.value = 0.0
-
-func _on_transport_phase_changed(_new_phase: int) -> void:
-	_update_transport_ui()
-
-func _update_transport_ui() -> void:
-	if not _transition_player:
-		return
-	var tp: TransitionPlayer = _transition_player as TransitionPlayer
-	var phase: TransitionPlayer.Phase = tp.get_current_phase()
-	var phase_idx: int = phase as int
-	var phase_name := ""
-	match phase_idx:
-		0: phase_name = "CHARGE"
-		1: phase_name = "CONTACT"
-		2: phase_name = "FOLLOW_THROUGH"
-		3: phase_name = "SETTLE"
-		4: phase_name = "READY"
-		_: phase_name = "?"
-	if _transport_phase_label:
-		_transport_phase_label.text = phase_name
-	var total_dur: float = tp.get_total_duration()
-	var current_time: float = tp.get_total_progress() * total_dur
-	if _transport_time_label:
-		_transport_time_label.text = "%.2fs / %.2fs" % [current_time, total_dur]
-	if _transport_progress:
-		_transport_progress.value = tp.get_total_progress()
-
-func _on_save() -> void:
-	var path: String = ""
-	var filename: String = ""
-	if _is_base_pose_mode():
-		if _current_base_def == null:
-			return
-		filename = _filename_for_base_pose(_current_base_def)
-		path = BASE_POSE_DATA_DIR + filename
-	else:
-		if _current_def == null:
-			return
-		filename = _filename_for(_current_def)
-		path = DATA_DIR + filename
-	var err := ResourceSaver.save(_current_body_resource(), path)
-	if err == OK:
-		_status_label.text = "Saved: %s" % filename
-		_set_dirty(false)
-		print("[POSTURE EDITOR] Saved ", path)
-	else:
-		_status_label.text = "Save failed: error %d" % err
-		push_error("PostureEditor: failed to save " + path)
-	_update_mode_ui()
-
-func _filename_for_base_pose(def):
-	var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
-	return "%02d_%s.tres" % [def.base_pose_id, base]
-
-func _filename_for(def):
-	var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
-	return "%02d_%s.tres" % [def.posture_id, base]
-
-func _on_toggle_workspace() -> void:
-	_workspace_mode = Workspace.BASE_POSES if not _is_base_pose_mode() else Workspace.STROKE_POSTURES
-	_current_def = null
-	_current_base_def = null
-	_current_id = -1
-	if _gizmo_controller:
-		_gizmo_controller.clear_all_gizmos()
-	if _pose_trigger and _pose_trigger.is_frozen():
-		_pose_trigger.release_pose()
-		_restore_live_posture_from_editor()
-	_set_dirty(false)
-	_trigger_pose_button.disabled = true
-	if _transition_button:
-		_transition_button.disabled = true
-	if _save_button:
-		_save_button.disabled = true
-	_status_label.text = "Select a %s to edit" % ("base pose" if _is_base_pose_mode() else "stroke posture")
-	_update_active_gizmos()
-	_update_workspace_ui()
-
-func _on_preview_context_changed(_index: int) -> void:
-	if _pose_trigger and _pose_trigger.is_frozen():
-		var preview_def = _build_preview_posture_for_editor()
+func _on_preview_context_changed(index: int) -> void:
+	_preview.set_preview_context_option_idx(index)
+	var pose_trigger = _preview.get_pose_trigger()
+	if pose_trigger and pose_trigger.is_frozen():
+		var preview_def = _preview.build_preview_posture_for_editor()
 		if preview_def:
-			_pose_trigger.refresh_from_definition(preview_def)
-	elif _transition_player and _transition_player.is_playing():
-		_setup_transition_player()
+			pose_trigger.refresh_from_definition(preview_def)
+	elif _preview.get_transition_player() and _preview.get_transition_player().is_playing():
+		_preview.setup_transition_player()
 	_update_mode_ui()
+
+# ── Solo mode ─────────────────────────────────────────────────────────────────
 
 func _on_toggle_solo_mode() -> void:
 	if not _player or not _player.posture:
 		return
-	
 	_player.posture.solo_mode = not _player.posture.solo_mode
 	_update_solo_mode_ui()
 
 func _update_solo_mode_ui() -> void:
 	if not _player or not _player.posture:
 		return
-	
 	var enabled: bool = _player.posture.solo_mode
 	_solo_mode_button.text = "Solo Mode: ON" if enabled else "Solo Mode: OFF"
 	if enabled:
@@ -995,131 +680,58 @@ func _update_solo_mode_ui() -> void:
 	else:
 		_solo_mode_button.remove_theme_color_override("font_color")
 
-# ── Interactive 3D Gizmos (Wave 1-2) ────────────────────────────────────────
+# ── Tab changes ───────────────────────────────────────────────────────────────
 
-func set_player(player: Node3D) -> void:
-	_player = player
-	_update_solo_mode_ui()
-	_create_gizmo_controller()
+func _on_tab_changed(_tab_index: int) -> void:
+	_update_active_gizmos()
 
-func _create_gizmo_controller() -> void:
-	# Remove old gizmo system if exists
-	if _gizmo_controller:
-		_gizmo_controller.queue_free()
-	
-	_gizmo_controller = load("res://scripts/posture_editor/gizmo_controller.gd").new()
-	_gizmo_controller.name = "GizmoController"
-	
-	# Add to player's parent (world space)
-	if _player and _player.get_parent():
-		_player.get_parent().add_child(_gizmo_controller)
-	else:
-		get_tree().root.add_child(_gizmo_controller)
-	
-	# Connect signals
-	_gizmo_controller.gizmo_selected.connect(_on_gizmo_selected)
-	_gizmo_controller.gizmo_moved.connect(_on_gizmo_moved)
-	_gizmo_controller.gizmo_rotated.connect(_on_gizmo_rotated)
-	
-	# Set camera reference
-	var camera := get_viewport().get_camera_3d()
-	if camera:
-		_gizmo_controller.set_camera(camera)
-	
-	# Only create gizmos if player is ready (in tree AND has valid global transform)
-	var can_create_gizmos := false
-	if _player and _player.is_inside_tree():
-		# Also verify player has valid global position (not zero or very small means initialized)
-		if _player.global_position.length() > 0.01:
-			can_create_gizmos = true
-	
-	if can_create_gizmos:
-		_update_active_gizmos()
-	_update_gizmo_visibility()
-
-# Deprecated - replaced by _update_active_gizmos logic
-func _create_position_gizmos() -> void:
-	pass
-
-func get_current_paddle_position() -> Vector3:
-	if _current_def != null and not _is_base_pose_mode():
-		return _calculate_paddle_world_position(_current_def)
-	return Vector3.INF
-
-func _calculate_paddle_world_position(def):
-	if not _player or not _player.is_inside_tree():
-		return Vector3.ZERO
-	
-	var player_pos: Vector3 = _player.global_position
-	var forward_axis: Vector3 = _player._get_forward_axis()
-	var forehand_axis: Vector3 = _player._get_forehand_axis()
-	
-	# Guard against uninitialized axes (magnitude ~0 means not set up yet)
-	if forward_axis.length() < 0.01 or forehand_axis.length() < 0.01:
-		return Vector3.ZERO
-	
-	var offset: Vector3 = forehand_axis * def.paddle_forehand_mul + forward_axis * def.paddle_forward_mul + Vector3(0.0, def.paddle_y_offset, 0.0)
-	return player_pos + offset
-
-func _color_for_family(family: int) -> Color:
-	match family:
-		0: return Color(0.3, 0.9, 0.3)   # Forehand: green
-		1: return Color(0.9, 0.3, 0.3)   # Backhand: red
-		2: return Color(0.3, 0.3, 0.9)   # Center: blue
-		3: return Color(0.9, 0.9, 0.3)   # Overhead: yellow
-		_: return Color(0.7, 0.7, 0.7)   # Default: gray
+# ── Gizmo forwarding ───────────────────────────────────────────────────────────
 
 func _on_gizmo_selected(gizmo) -> void:
-	# Select corresponding posture in list — don't call _on_posture_selected
-	# since that triggers full gizmo recreation which can cause is_inside_tree() errors.
-	# Just sync _current_id, list selection, and properties panel.
 	if gizmo.posture_id < 0:
 		return
-	var defs = _base_pose_library.definitions if _is_base_pose_mode() else _library.definitions
+	var defs = _base_pose_library.definitions if _state.is_base_pose_mode() else _library.definitions
 	var found_index := -1
 	for i in range(defs.size()):
 		var def = defs[i]
-		var def_id: int = def.base_pose_id if _is_base_pose_mode() else def.posture_id
+		var def_id: int = def.base_pose_id if _state.is_base_pose_mode() else def.posture_id
 		if def_id == gizmo.posture_id:
 			found_index = i
 			break
 	if found_index < 0:
 		return
 	
-	# Sync _current_id without rebuilding gizmos
-	if _is_base_pose_mode():
-		_current_base_def = _base_pose_library.definitions[found_index]
-		_current_def = null
-		_current_id = _current_base_def.base_pose_id
+	if _state.is_base_pose_mode():
+		_state.set_current_base_def(_base_pose_library.definitions[found_index])
+		_state.set_current_def(null)
+		_state.set_current_id(_state.get_current_base_def().base_pose_id)
 	else:
-		_current_def = _library.definitions[found_index]
-		_current_base_def = null
-		_current_id = _current_def.posture_id
+		_state.set_current_def(_library.definitions[found_index])
+		_state.set_current_base_def(null)
+		_state.set_current_id(_state.get_current_def().posture_id)
 	
 	_posture_list.select(found_index)
 	_populate_properties()
-	_update_gizmo_visibility()  # Refresh visibility for new _current_id
-	_status_label.text = "Selected: %s (ID: %d)" % [_current_display_name(), _current_id]
+	_update_gizmo_visibility()
+	_status_label.text = "Selected: %s (ID: %d)" % [_state.current_display_name(), _state.get_current_id()]
 
 func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
-	var body_def = _current_body_resource()
-	if body_def == null or gizmo.posture_id != _current_id:
+	var body_def = _state.current_body_resource()
+	if body_def == null or gizmo.posture_id != _state.get_current_id():
 		return
 	
-	# Convert world position back to posture definition values
 	if _player:
 		var forward_axis: Vector3 = _player._get_forward_axis()
 		var forehand_axis: Vector3 = _player._get_forehand_axis()
 		var player_pos := _player.global_position
 		var offset: Vector3 = new_position - player_pos
 		
-		# Identify field type and apply
 		match gizmo.field_name:
 			"paddle_position":
-				if _current_def:
-					_current_def.paddle_forehand_mul = offset.dot(forehand_axis)
-					_current_def.paddle_forward_mul = offset.dot(forward_axis)
-					_current_def.paddle_y_offset = offset.y
+				if _state.get_current_def():
+					_state.get_current_def().paddle_forehand_mul = offset.dot(forehand_axis)
+					_state.get_current_def().paddle_forward_mul = offset.dot(forward_axis)
+					_state.get_current_def().paddle_y_offset = offset.y
 			"right_hand_offset":
 				var base_pos = _player.paddle_node.to_global(Vector3(0, 0.07, 0))
 				var local_delta = new_position - base_pos
@@ -1134,7 +746,7 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 					1: base_pos = _player.paddle_node.to_global(Vector3(0, 0.20, 0))
 					2: base_pos = _player.global_position + forehand_axis * -0.2 + forward_axis * 0.2 + Vector3(0, 0.45, 0)
 					3: base_pos = _player.global_position + Vector3(0, 1.05, 0) + forward_axis * 0.15
-					_: base_pos = _player.global_position # Fallback
+					_: base_pos = _player.global_position
 				var local_delta = new_position - base_pos
 				body_def.left_hand_offset = Vector3(
 					local_delta.dot(forehand_axis),
@@ -1142,7 +754,6 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 					local_delta.dot(forward_axis)
 				)
 			"right_elbow_pole":
-				# Elbow pole delta = new position minus current animated elbow position
 				var r_elbow_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
 				var r_animated_elbow: Vector3 = r_elbow_pivot.global_position if r_elbow_pivot else Vector3.ZERO
 				var pole_delta = new_position - r_animated_elbow
@@ -1161,7 +772,6 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 					pole_delta.dot(forward_axis)
 				)
 			"right_foot_offset":
-				# Use ground-projected base like leg IK
 				var gnd_y: float = 0.0
 				var base: Vector3 = Vector3(_player.global_position.x, gnd_y, _player.global_position.z)
 				var half_excess: float = (body_def.stance_width - 0.35) * 0.5
@@ -1196,7 +806,6 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 					local_delta.dot(forward_axis)
 				)
 			"right_knee_pole":
-				# Knee pole delta = new position minus current animated knee position
 				var r_knee_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 				var r_animated_knee: Vector3 = r_knee_pivot.global_position if r_knee_pivot else Vector3.ZERO
 				var pole_delta = new_position - r_animated_knee
@@ -1215,25 +824,22 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 					pole_delta.dot(forward_axis)
 				)
 
-		_set_dirty(true)
-		_populate_properties()
-		_status_label.text = "Updated: %s position" % _current_display_name()
-		_refresh_live_preview()
-		# Apply the updated posture to the live player body immediately after drag.
-		# _refresh_live_preview() only applies when time_scale < 0.001 (frozen mode),
-		# so we call the update functions directly for live gameplay.
-		if _current_def and _player and _player.posture:
-			_player.posture.force_posture_update(_current_def)
-			_player.posture._apply_full_body_posture(_current_def)
-		if _is_base_pose_mode() and _current_base_def and _player and _player.posture:
-			_player.posture._apply_full_body_posture(_current_base_def)
+	_state.set_dirty(true)
+	_populate_properties()
+	_status_label.text = "Updated: %s position" % _state.current_display_name()
+	_refresh_live_preview()
+	if _state.get_current_def() and _player and _player.posture:
+		_player.posture.force_posture_update(_state.get_current_def())
+		_player.posture._apply_full_body_posture(_state.get_current_def())
+	if _state.is_base_pose_mode() and _state.get_current_base_def() and _player and _player.posture:
+		_player.posture._apply_full_body_posture(_state.get_current_base_def())
 
 func _on_gizmo_rotated(gizmo, euler_delta: Vector3) -> void:
-	var body_def = _current_body_resource()
-	if body_def == null or gizmo.posture_id != _current_id:
+	var body_def = _state.current_body_resource()
+	if body_def == null or gizmo.posture_id != _state.get_current_id():
 		return
 	
-	_set_dirty(true)
+	_state.set_dirty(true)
 	
 	match gizmo.field_name:
 		"hip_rotation":
@@ -1252,487 +858,112 @@ func _on_gizmo_rotated(gizmo, euler_delta: Vector3) -> void:
 	
 	_populate_properties()
 	_refresh_live_preview()
-	# Apply rotation gizmo changes to the live player body immediately.
-	# Rotation gizmos modify body fields (hip_yaw, torso_*, head_*, body_pivot_*).
-	if _current_def and _player and _player.posture:
-		_player.posture.force_posture_update(_current_def)
-		_player.posture._apply_full_body_posture(_current_def)
-	if _is_base_pose_mode() and _current_base_def and _player and _player.posture:
-		_player.posture._apply_full_body_posture(_current_base_def)
-	# Also update gizmo positions so the rotation gizmo reflects the new body state immediately
+	if _state.get_current_def() and _player and _player.posture:
+		_player.posture.force_posture_update(_state.get_current_def())
+		_player.posture._apply_full_body_posture(_state.get_current_def())
+	if _state.is_base_pose_mode() and _state.get_current_base_def() and _player and _player.posture:
+		_player.posture._apply_full_body_posture(_state.get_current_base_def())
 	_update_gizmo_positions()
 
-func _on_tab_changed(_tab_index: int) -> void:
-	_update_active_gizmos()
+# ── Gizmo management ──────────────────────────────────────────────────────────
+
+func set_player(player: Node3D) -> void:
+	_player = player
+	_update_solo_mode_ui()
+	_preview.init(_player, _library, _base_pose_library, _state)
+	_gizmos.set_player(_player)
+	_gizmos.create_gizmo_controller()
 
 func _update_active_gizmos() -> void:
-	var body_def = _current_body_resource()
-	if not _gizmo_controller or body_def == null:
-		return
-	
-	_gizmo_controller.clear_all_gizmos()
-
-	if not _is_base_pose_mode():
-		_create_paddle_gizmos()
-	_create_torso_gizmos()
-	_create_head_gizmos()
-	_create_arm_gizmos()
-	_create_leg_gizmos()
-	
-	_update_gizmo_visibility()
-
-func _create_paddle_gizmos() -> void:
-	if _is_base_pose_mode() or _current_def == null:
-		return
-	if not _player or not _player.paddle_node: return
-	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
-	var def = _current_def
-	var pos = _calculate_paddle_world_position(def)
-	
-	var gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	gizmo.name = "PositionGizmo_Paddle"
-	gizmo.posture_id = def.posture_id
-	gizmo.field_name = "paddle_position"
-	gizmo.tab_name = "Paddle"
-	gizmo.gizmo_color = _color_for_family(def.family)
-	gizmo.gizmo_size = 0.08
-	_gizmo_controller.add_gizmo_handle(gizmo)
-	gizmo.global_position = pos
-
-func _create_torso_gizmos() -> void:
-	if not _player or not _player.skeleton: return
-	
-	# Hips Rotation
-	var hip_idx: int = _player.skeleton.find_bone("hips")
-	if hip_idx >= 0:
-		var hip_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(hip_idx).origin)
-		var gizmo = load("res://scripts/posture_editor/rotation_gizmo.gd").new()
-		gizmo.name = "RotationGizmo_Hips"
-		gizmo.posture_id = _current_id
-		gizmo.field_name = "hip_rotation"
-		gizmo.tab_name = "Torso"
-		gizmo.body_part_name = "hips"
-		gizmo.gizmo_color = Color(0, 1, 1)
-		gizmo.ring_radius = 0.3
-		_gizmo_controller.add_gizmo_handle(gizmo)
-		gizmo.global_position = hip_pos
-	
-	# Torso/Chest Rotation
-	var chest_idx: int = _player.skeleton.find_bone("chest")
-	if chest_idx >= 0:
-		var chest_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(chest_idx).origin)
-		var gizmo = load("res://scripts/posture_editor/rotation_gizmo.gd").new()
-		gizmo.name = "RotationGizmo_Torso"
-		gizmo.posture_id = _current_id
-		gizmo.field_name = "torso_rotation"
-		gizmo.tab_name = "Torso"
-		gizmo.body_part_name = "chest"
-		gizmo.gizmo_color = Color(1, 0.5, 0)
-		gizmo.ring_radius = 0.25
-		_gizmo_controller.add_gizmo_handle(gizmo)
-		gizmo.global_position = chest_pos
-
-func _create_head_gizmos() -> void:
-	if not _player or not _player.skeleton: return
-	
-	var head_idx: int = _player.skeleton.find_bone("head")
-	if head_idx >= 0:
-		var head_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(head_idx).origin)
-		var gizmo = load("res://scripts/posture_editor/rotation_gizmo.gd").new()
-		gizmo.name = "RotationGizmo_Head"
-		gizmo.posture_id = _current_id
-		gizmo.field_name = "head_rotation"
-		gizmo.tab_name = "Head"
-		gizmo.body_part_name = "head"
-		gizmo.gizmo_color = Color(1, 1, 1)
-		gizmo.ring_radius = 0.15
-		_gizmo_controller.add_gizmo_handle(gizmo)
-		gizmo.global_position = head_pos
-
-func _create_arm_gizmos() -> void:
-	if not _player or not _player.paddle_node: return
-	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
-	
-	# 1. Right hand — at actual animated hand position from arm IK node
-	var r_hand_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
-	var r_hand_world: Vector3 = r_hand_pivot.global_position if r_hand_pivot else _player.paddle_node.to_global(Vector3(0, 0.07, 0))
-	var r_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	r_gizmo.name = "PositionGizmo_RightHand"
-	r_gizmo.posture_id = _current_id
-	r_gizmo.field_name = "right_hand_offset"
-	r_gizmo.tab_name = "Arms"
-	r_gizmo.body_part_name = "right_hand"
-	r_gizmo.gizmo_color = Color(1, 1, 0)
-	_gizmo_controller.add_gizmo_handle(r_gizmo)
-	r_gizmo.global_position = r_hand_world
-	
-	# 2. Left hand — at actual animated hand position from arm IK node
-	var l_hand_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
-	var l_hand_world: Vector3 = l_hand_pivot.global_position if l_hand_pivot else Vector3.ZERO
-	var l_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	l_gizmo.name = "PositionGizmo_LeftHand"
-	l_gizmo.posture_id = _current_id
-	l_gizmo.field_name = "left_hand_offset"
-	l_gizmo.tab_name = "Arms"
-	l_gizmo.body_part_name = "left_hand"
-	l_gizmo.gizmo_color = Color(0, 1, 1)
-	_gizmo_controller.add_gizmo_handle(l_gizmo)
-	l_gizmo.global_position = l_hand_world
-	
-	# 3. Right elbow — at actual animated elbow position from arm IK node
-	var r_elbow_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-	var r_elbow_world: Vector3 = r_elbow_pivot.global_position if r_elbow_pivot else _player.global_position + _player._get_forehand_axis() * 0.5 + Vector3(0, -1.0, 0) + _player._get_forward_axis() * -0.5
-	var r_elbow_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	r_elbow_gizmo.name = "PositionGizmo_RightElbow"
-	r_elbow_gizmo.posture_id = _current_id
-	r_elbow_gizmo.field_name = "right_elbow_pole"
-	r_elbow_gizmo.tab_name = "Arms"
-	r_elbow_gizmo.body_part_name = "right_elbow"
-	r_elbow_gizmo.gizmo_color = Color(1, 0.5, 0)
-	_gizmo_controller.add_gizmo_handle(r_elbow_gizmo)
-	r_elbow_gizmo.global_position = r_elbow_world
-	
-	# 4. Left elbow — at actual animated elbow position from arm IK node
-	var l_elbow_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-	var l_elbow_world: Vector3 = l_elbow_pivot.global_position if l_elbow_pivot else _player.global_position + _player._get_forehand_axis() * -0.5 + Vector3(0, -1.0, 0) + _player._get_forward_axis() * -0.5
-	var l_elbow_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	l_elbow_gizmo.name = "PositionGizmo_LeftElbow"
-	l_elbow_gizmo.posture_id = _current_id
-	l_elbow_gizmo.field_name = "left_elbow_pole"
-	l_elbow_gizmo.tab_name = "Arms"
-	l_elbow_gizmo.body_part_name = "left_elbow"
-	l_elbow_gizmo.gizmo_color = Color(0.5, 0.5, 1)
-	_gizmo_controller.add_gizmo_handle(l_elbow_gizmo)
-	l_elbow_gizmo.global_position = l_elbow_world
-
-func _create_leg_gizmos() -> void:
-	if not _player: return
-	if not _player.is_inside_tree(): return
-	
-	# 1. Right Foot — at actual animated foot position from leg IK node
-	var r_foot_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
-	var r_foot_world: Vector3 = r_foot_pivot.global_position if r_foot_pivot else Vector3.ZERO
-	var r_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	r_gizmo.name = "PositionGizmo_RightFoot"
-	r_gizmo.posture_id = _current_id
-	r_gizmo.field_name = "right_foot_offset"
-	r_gizmo.tab_name = "Legs"
-	r_gizmo.body_part_name = "right_foot"
-	r_gizmo.gizmo_color = Color(0.9, 0.3, 0.9)
-	_gizmo_controller.add_gizmo_handle(r_gizmo)
-	r_gizmo.global_position = r_foot_world
-	
-	# 2. Left Foot — at actual animated foot position from leg IK node
-	var l_foot_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
-	var l_foot_world: Vector3 = l_foot_pivot.global_position if l_foot_pivot else Vector3.ZERO
-	var l_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	l_gizmo.name = "PositionGizmo_LeftFoot"
-	l_gizmo.posture_id = _current_id
-	l_gizmo.field_name = "left_foot_offset"
-	l_gizmo.tab_name = "Legs"
-	l_gizmo.body_part_name = "left_foot"
-	l_gizmo.gizmo_color = Color(0.3, 0.3, 0.9)
-	_gizmo_controller.add_gizmo_handle(l_gizmo)
-	l_gizmo.global_position = l_foot_world
-	
-	# 3. Right Knee — at actual animated knee position (ShinPivot = knee joint)
-	var r_knee_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-	var r_knee_world: Vector3 = r_knee_pivot.global_position if r_knee_pivot else r_foot_world + Vector3(0, 0.5, 0)
-	var r_knee_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	r_knee_gizmo.name = "PositionGizmo_RightKnee"
-	r_knee_gizmo.posture_id = _current_id
-	r_knee_gizmo.field_name = "right_knee_pole"
-	r_knee_gizmo.tab_name = "Legs"
-	r_knee_gizmo.body_part_name = "right_knee"
-	r_knee_gizmo.gizmo_color = Color(1, 0.3, 0.3)
-	_gizmo_controller.add_gizmo_handle(r_knee_gizmo)
-	r_knee_gizmo.global_position = r_knee_world
-	
-	# 4. Left Knee — at actual animated knee position (ShinPivot = knee joint)
-	var l_knee_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-	var l_knee_world: Vector3 = l_knee_pivot.global_position if l_knee_pivot else l_foot_world + Vector3(0, 0.5, 0)
-	var l_knee_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
-	l_knee_gizmo.name = "PositionGizmo_LeftKnee"
-	l_knee_gizmo.posture_id = _current_id
-	l_knee_gizmo.field_name = "left_knee_pole"
-	l_knee_gizmo.tab_name = "Legs"
-	l_knee_gizmo.body_part_name = "left_knee"
-	l_knee_gizmo.gizmo_color = Color(0.3, 0.9, 0.3)
-	_gizmo_controller.add_gizmo_handle(l_knee_gizmo)
-	l_knee_gizmo.global_position = l_knee_world
-
-func _refresh_live_preview() -> void:
-	var preview_def = _build_preview_posture_for_editor()
-	if preview_def == null or _player == null or not _player.posture:
-		return
-	if _pose_trigger and _pose_trigger.is_frozen():
-		_pose_trigger.refresh_from_definition(preview_def)
-	else:
-		# Avoid hijacking live gameplay when the editor is open but pose is released.
-		if Engine.time_scale < 0.001:
-			_player.posture.force_posture_update(preview_def)
+	_gizmos.update_active_gizmos()
 
 func _update_gizmo_positions() -> void:
-	var body_def = _current_body_resource()
-	if not _gizmo_controller or not _player or body_def == null:
-		return
-	if not _player.skeleton: return
-	
-	var forehand_axis: Vector3 = _player._get_forehand_axis()
-	var forward_axis: Vector3 = _player._get_forward_axis()
-	
-	for gizmo in _gizmo_controller.get_children():
-		if not gizmo.has_method("get_posture_id"): continue
-		if _gizmo_controller.get_selected_gizmo() == gizmo: continue
-		
-		match gizmo.field_name:
-			"paddle_position":
-				if _current_def:
-					gizmo.global_position = _calculate_paddle_world_position(_current_def)
-			"hip_rotation":
-				var idx: int = _player.skeleton.find_bone("hips")
-				if idx >= 0: gizmo.global_position = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(idx).origin)
-			"torso_rotation":
-				var idx: int = _player.skeleton.find_bone("chest")
-				if idx >= 0: gizmo.global_position = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(idx).origin)
-			"head_rotation":
-				var idx: int = _player.skeleton.find_bone("head")
-				if idx >= 0: gizmo.global_position = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(idx).origin)
-			"right_hand_offset":
-				var r_hand_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
-				if r_hand_pivot: gizmo.global_position = r_hand_pivot.global_position
-			"left_hand_offset":
-				var l_hand_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
-				if l_hand_pivot: gizmo.global_position = l_hand_pivot.global_position
-			"right_elbow_pole":
-				var r_elbow_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-				if r_elbow_pivot: gizmo.global_position = r_elbow_pivot.global_position
-			"left_elbow_pole":
-				var l_elbow_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-				if l_elbow_pivot: gizmo.global_position = l_elbow_pivot.global_position
-			"right_foot_offset":
-				var r_foot_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
-				if r_foot_pivot: gizmo.global_position = r_foot_pivot.global_position
-			"left_foot_offset":
-				var l_foot_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
-				if l_foot_pivot: gizmo.global_position = l_foot_pivot.global_position
-			"right_knee_pole":
-				var r_knee_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-				if r_knee_pivot: gizmo.global_position = r_knee_pivot.global_position
-			"left_knee_pole":
-				var l_knee_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-				if l_knee_pivot: gizmo.global_position = l_knee_pivot.global_position
+	_gizmos.update_gizmo_positions()
 
 func _update_gizmo_visibility() -> void:
-	if _gizmo_controller:
-		_gizmo_controller.visible = visible
-		if visible:
-			# Get current tab name to filter gizmos
-			var current_tab_name := ""
-			if _tab_container:
-				var current_tab_control = _tab_container.get_child(_tab_container.current_tab)
-				if current_tab_control:
-					current_tab_name = current_tab_control.name
-			
-			for gizmo in _gizmo_controller.get_children():
-				if not gizmo.has_method("get_posture_id"): continue
-				var gh: GizmoHandle = gizmo as GizmoHandle
-				# Body-part gizmos (chest, head, hands, feet) are ONLY shown by hover.
-				# They stay hidden here regardless of posture/tab match.
-				if gh.body_part_name in ["chest", "head", "hips", "right_hand", "left_hand", "right_foot", "left_foot", "right_elbow", "left_elbow", "right_knee", "left_knee"]:
-					gizmo.visible = false
-					continue
-				# Paddle gizmos: visible if posture and tab match
-				var posture_match: bool = (_current_id < 0) or (gh.posture_id == _current_id)
-				var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
-				gizmo.visible = posture_match and tab_match
+	_gizmos.update_gizmo_visibility()
+
+func _refresh_live_preview() -> void:
+	_gizmos.refresh_live_preview()
+
+# ── Transport bar ─────────────────────────────────────────────────────────────
+
+func build_transport_bar() -> Control:
+	return _transport.build_transport_bar()
+
+# ── Mode UI ───────────────────────────────────────────────────────────────────
+
+func _update_mode_ui() -> void:
+	var mode := "Live"
+	if _preview != null and _preview.get_transition_player() and _preview.get_transition_player().is_playing():
+		mode = "Preview Swing"
+	elif _preview != null and _preview.get_pose_trigger() and _preview.get_pose_trigger().is_frozen():
+		mode = "Preview Pose"
+	var item_word := "base pose" if _state != null and _state.is_base_pose_mode() else "posture"
+
+	if _mode_label:
+		_mode_label.text = "Mode: %s" % mode
+	if _trigger_pose_button:
+		var trigger_frozen = _preview != null and _preview.get_pose_trigger() and _preview.get_pose_trigger().is_frozen()
+		_trigger_pose_button.text = "Resume Live" if trigger_frozen else "Preview %s" % ("Base Pose" if _state != null and _state.is_base_pose_mode() else "Pose")
+	if _transition_button:
+		var playing = _preview != null and _preview.get_transition_player() and _preview.get_transition_player().is_playing()
+		_transition_button.text = "Pause Swing" if playing else "Preview Swing"
+		_transition_button.disabled = _state != null and (_state.is_base_pose_mode() or _state.get_current_def() == null)
+	if _help_label:
+		match mode:
+			"Preview Pose":
+				_help_label.text = "Static preview is active. Drag handles to adjust the selected %s, or Resume Live to return to gameplay." % item_word
+			"Preview Swing":
+				_help_label.text = "Swing preview is active. Use Space to pause, P to switch back to a static pose, and G to toggle ghost clutter."
+			_:
+				if _state != null and _state.is_base_pose_mode():
+					_help_label.text = "Select a base pose, choose a preview state, then use Preview Base Pose. Drag handles in the viewport to shape stance, arms, torso, and head."
+				else:
+					_help_label.text = "Select a posture, then use Preview Pose or Preview Swing. Preview State lets you see the stroke against different base-pose contexts."
+
+# ── Teardown ─────────────────────────────────────────────────────────────────
+
+func _teardown_preview_state() -> void:
+	if _preview:
+		if _preview.get_transition_player():
+			_preview.get_transition_player().stop()
+		if _preview.get_pose_trigger() and _preview.get_pose_trigger().is_frozen():
+			_preview.get_pose_trigger().release_pose()
+		_preview.restore_live_posture_from_editor()
+	if _state:
+		_state.set_editor_restore_posture_id(-1)
+	if _gizmos:
+		_gizmos.teardown_mesh_nodes()
+	_update_mode_ui()
+
+# ── Notification ───────────────────────────────────────────────────────────────
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
-		# Auto-select first posture if none selected yet (gizmos need _current_def to be valid)
-		if visible and _current_def == null and _posture_list.get_item_count() > 0:
+		if visible and _state != null and _state.get_current_def() == null and _posture_list.get_item_count() > 0:
 			_on_posture_selected(0)
 		
-		# Create gizmos if needed when editor becomes visible
 		if visible and _player and _player.is_inside_tree():
 			if _player.global_position.length() > 0.01:
-				# Ensure the player body is in the correct pose BEFORE gizmos are created
 				_refresh_live_preview()
-				if _gizmo_controller and _gizmo_controller.get_child_count() == 0:
+				if _gizmos != null and _gizmos.get_gizmo_controller() and _gizmos.get_gizmo_controller().get_child_count() == 0:
 					_update_active_gizmos()
 		
-		_update_gizmo_visibility()
+		if _gizmos != null:
+			_update_gizmo_visibility()
 		if visible and _player:
 			_update_gizmo_positions()
 			_update_mode_ui()
 		elif not visible:
 			_teardown_preview_state()
 		
-		# Emit signals for game.gd to handle camera and UI
 		if visible:
 			editor_opened.emit()
 		else:
 			editor_closed.emit()
 
-func _process(_delta: float) -> void:
-	if _pose_trigger:
-		_pose_trigger.update()
-		
-	# Update gizmo positions when editor is visible (except selected gizmo)
-	if visible and _player:
-		_update_gizmo_positions()
-	
-	# Push body-part world positions and mesh references for hover detection + glow
-	if _gizmo_controller and _player and _player.is_inside_tree() and _player.skeleton:
-		var positions: Dictionary = {}
-		var skel = _player.skeleton
-		for bone_name in ["chest", "head", "hips"]:
-			var idx: int = skel.find_bone(bone_name)
-			if idx >= 0:
-				positions[bone_name] = skel.to_global(skel.get_bone_global_pose(idx).origin)
-		
-		# Body mesh references for glow-on-hover
-		var meshes: Dictionary = {}
-		if _player.body_pivot:
-			var chest_mesh: MeshInstance3D = _player.body_pivot.get_node_or_null("chest_inst")
-			var hips_mesh: MeshInstance3D = _player.body_pivot.get_node_or_null("hips_inst")
-			var head_mesh: MeshInstance3D
-			if chest_mesh:
-				head_mesh = chest_mesh.get_node_or_null("head_inst")
-			if chest_mesh: meshes["chest"] = chest_mesh
-			if head_mesh: meshes["head"] = head_mesh
-			if hips_mesh: meshes["hips"] = hips_mesh
-			# Arm meshes
-			if _player.right_arm_node:
-				var r_hand_mesh: MeshInstance3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot/HandMesh")
-				if r_hand_mesh: meshes["right_hand"] = r_hand_mesh
-			if _player.left_arm_node:
-				var l_hand_mesh: MeshInstance3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot/HandMesh")
-				if l_hand_mesh: meshes["left_hand"] = l_hand_mesh
-			# Leg meshes
-			if _player.right_leg_node:
-				var r_foot_mesh: MeshInstance3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot/FootMesh")
-				if r_foot_mesh: meshes["right_foot"] = r_foot_mesh
-			if _player.left_leg_node:
-				var l_foot_mesh: MeshInstance3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot/FootMesh")
-				if l_foot_mesh: meshes["left_foot"] = l_foot_mesh
-			
-			# Knee meshes — create procedural sphere meshes at ShinPivot (knee joint) for glow-on-hover
-			if _player.right_leg_node:
-				var r_shin: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-				if r_shin:
-					if not _knee_mesh_nodes.has("right_knee"):
-						var k_mesh := MeshInstance3D.new()
-						k_mesh.name = "KneeMesh_Right"
-						var sphere := SphereMesh.new()
-						sphere.radius = 0.06
-						sphere.height = 0.12
-						k_mesh.mesh = sphere
-						var mat := StandardMaterial3D.new()
-						mat.albedo_color = Color(1, 0.3, 0.3, 0.7)  # red tint like right knee gizmo
-						k_mesh.material_override = mat
-						r_shin.add_child(k_mesh)
-						_knee_mesh_nodes["right_knee"] = k_mesh
-					meshes["right_knee"] = _knee_mesh_nodes["right_knee"]
-			if _player.left_leg_node:
-				var l_shin: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
-				if l_shin:
-					if not _knee_mesh_nodes.has("left_knee"):
-						var k_mesh := MeshInstance3D.new()
-						k_mesh.name = "KneeMesh_Left"
-						var sphere := SphereMesh.new()
-						sphere.radius = 0.06
-						sphere.height = 0.12
-						k_mesh.mesh = sphere
-						var mat := StandardMaterial3D.new()
-						mat.albedo_color = Color(0.3, 0.9, 0.3, 0.7)  # green tint like left knee gizmo
-						k_mesh.material_override = mat
-						l_shin.add_child(k_mesh)
-						_knee_mesh_nodes["left_knee"] = k_mesh
-					meshes["left_knee"] = _knee_mesh_nodes["left_knee"]
-			
-			# Elbow meshes — create procedural sphere meshes at ForearmPivot (elbow joint) for glow-on-hover
-			if _player.right_arm_node:
-				var r_forearm: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-				if r_forearm:
-					if not _elbow_mesh_nodes.has("right_elbow"):
-						var e_mesh := MeshInstance3D.new()
-						e_mesh.name = "ElbowMesh_Right"
-						var sphere := SphereMesh.new()
-						sphere.radius = 0.05
-						sphere.height = 0.10
-						e_mesh.mesh = sphere
-						var mat := StandardMaterial3D.new()
-						mat.albedo_color = Color(1, 0.5, 0, 0.7)  # orange tint matching right elbow gizmo
-						e_mesh.material_override = mat
-						r_forearm.add_child(e_mesh)
-						_elbow_mesh_nodes["right_elbow"] = e_mesh
-					meshes["right_elbow"] = _elbow_mesh_nodes["right_elbow"]
-			if _player.left_arm_node:
-				var l_forearm: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
-				if l_forearm:
-					if not _elbow_mesh_nodes.has("left_elbow"):
-						var e_mesh := MeshInstance3D.new()
-						e_mesh.name = "ElbowMesh_Left"
-						var sphere := SphereMesh.new()
-						sphere.radius = 0.05
-						sphere.height = 0.10
-						e_mesh.mesh = sphere
-						var mat := StandardMaterial3D.new()
-						mat.albedo_color = Color(0.5, 0.5, 1, 0.7)  # blue tint matching left elbow gizmo
-						e_mesh.material_override = mat
-						l_forearm.add_child(e_mesh)
-						_elbow_mesh_nodes["left_elbow"] = e_mesh
-					meshes["left_elbow"] = _elbow_mesh_nodes["left_elbow"]
-		_gizmo_controller.set_body_part_meshes(meshes)
-		
-		# Hand and foot positions from current posture definition
-		var def = _current_body_resource()
-		if def:
-			var forehand_axis: Vector3 = _player._get_forehand_axis()
-			var forward_axis: Vector3 = _player._get_forward_axis()
-			# Right hand
-			if _player.paddle_node and _player.paddle_node.is_inside_tree():
-				var r_base = _player.paddle_node.to_global(Vector3(0, 0.07, 0))
-				positions["right_hand"] = r_base + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_hand_offset, forehand_axis, forward_axis)
-				var l_base: Vector3
-				match def.left_hand_mode:
-					1: l_base = _player.paddle_node.to_global(Vector3(0, 0.20, 0))
-					2: l_base = _player.global_position + forehand_axis * -0.2 + forward_axis * 0.2 + Vector3(0, 0.45, 0)
-					3: l_base = _player.global_position + Vector3(0, 1.05, 0) + forward_axis * 0.15
-					_: l_base = _player.global_position
-				positions["left_hand"] = l_base + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_hand_offset, forehand_axis, forward_axis)
-			# Foot positions — use ground-projected base like leg IK
-			var gnd_y: float = 0.0
-			var base: Vector3 = Vector3(_player.global_position.x, gnd_y, _player.global_position.z)
-			var half_excess: float = (def.stance_width - 0.35) * 0.5
-			var r_lateral: Vector3 = forehand_axis * (0.14 + half_excess)
-			var l_lateral: Vector3 = forehand_axis * -(0.14 + half_excess)
-			var r_fwd: float = -0.06
-			var l_fwd: float = 0.06
-			if def.lead_foot == 0:
-				r_fwd += def.front_foot_forward
-				l_fwd += def.back_foot_back
-			else:
-				l_fwd += def.front_foot_forward
-				r_fwd += def.back_foot_back
-			var r_foot_world: Vector3 = base + r_lateral + forward_axis * r_fwd + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_foot_offset, forehand_axis, forward_axis)
-			var l_foot_world: Vector3 = base + l_lateral + forward_axis * l_fwd + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_foot_offset, forehand_axis, forward_axis)
-			positions["right_foot"] = r_foot_world
-			positions["left_foot"] = l_foot_world
-			# Knee pole positions (for raycasting — knees don't have meshes)
-			positions["right_knee"] = r_foot_world + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_knee_pole, forehand_axis, forward_axis)
-			positions["left_knee"] = l_foot_world + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_knee_pole, forehand_axis, forward_axis)
-			# Elbow pole positions (for raycasting — elbows don't have meshes)
-			var r_elbow_world: Vector3 = _player.global_position + forehand_axis * 0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
-			if def.right_elbow_pole.length_squared() > 1e-10:
-				r_elbow_world = r_elbow_world + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_elbow_pole, forehand_axis, forward_axis)
-			var l_elbow_world: Vector3 = _player.global_position + forehand_axis * -0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
-			if def.left_elbow_pole.length_squared() > 1e-10:
-				l_elbow_world = l_elbow_world + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.left_elbow_pole, forehand_axis, forward_axis)
-			positions["right_elbow"] = r_elbow_world
-			positions["left_elbow"] = l_elbow_world
-		_gizmo_controller.update_body_part_positions(positions)
+# ── Input ─────────────────────────────────────────────────────────────────────
 
 func _input(event: InputEvent) -> void:
 	if not visible:
@@ -1749,118 +980,26 @@ func _input(event: InputEvent) -> void:
 			_on_play_transition()
 			get_viewport().set_input_as_handled()
 
-func _build_charge_preview_def(def):
-	if def == null:
-		return null
-	if def.family == 0:
-		var fh_charge = _library.get_def(CHARGE_FOREHAND_POSTURE_ID)
-		if fh_charge != null:
-			return fh_charge
-	elif def.family == 1:
-		var bh_charge = _library.get_def(CHARGE_BACKHAND_POSTURE_ID)
-		if bh_charge != null:
-			return bh_charge
+# ── Process ───────────────────────────────────────────────────────────────────
 
-	var preview = _copy_definition(def)
-	if preview == null:
-		return null
-	preview.display_name = "%s Charge Preview" % def.display_name
-	preview.paddle_forehand_mul += def.charge_paddle_offset.x
-	preview.paddle_y_offset += def.charge_paddle_offset.y
-	preview.paddle_forward_mul += def.charge_paddle_offset.z
-	preview.paddle_pitch_base_deg += def.charge_paddle_rotation_deg.x
-	preview.paddle_yaw_base_deg += def.charge_paddle_rotation_deg.y
-	preview.paddle_roll_base_deg += def.charge_paddle_rotation_deg.z
-	preview.body_yaw_deg += def.charge_body_rotation_deg
-	preview.hip_yaw_deg += def.charge_hip_coil_deg
-	return preview
+func _process(delta: float) -> void:
+	if _preview != null:
+		var pose_trigger = _preview.get_pose_trigger()
+		if pose_trigger:
+			pose_trigger.update()
+	
+	if visible and _player:
+		_update_gizmo_positions()
+	
+	if _gizmos != null and _gizmos.get_gizmo_controller() and _player and _player.is_inside_tree() and _player.skeleton:
+		_gizmos.process_frame(delta)
 
-func _build_follow_through_preview_defs(def):
-	var results = []
-	if def == null:
-		return results
-
-	var follow = _copy_definition(def)
-	if follow == null:
-		return results
-
-	follow.display_name = "%s Follow-Through" % def.display_name
-	follow.paddle_forehand_mul += def.ft_paddle_offset.x
-	follow.paddle_y_offset += def.ft_paddle_offset.y
-	follow.paddle_forward_mul += def.ft_paddle_offset.z
-	follow.paddle_pitch_base_deg += def.ft_paddle_rotation_deg.x
-	follow.paddle_yaw_base_deg += def.ft_paddle_rotation_deg.y
-	follow.paddle_roll_base_deg += def.ft_paddle_rotation_deg.z
-	follow.hip_yaw_deg += def.ft_hip_uncoil_deg
-	results.append(follow)
-	return results
-
-func _copy_definition(def):
-	if def == null:
-		return null
-	return def.lerp_with(def, 0.0)
-
-func _update_mode_ui() -> void:
-	var mode := "Live"
-	if _transition_player and _transition_player.is_playing():
-		mode = "Preview Swing"
-	elif _pose_trigger and _pose_trigger.is_frozen():
-		mode = "Preview Pose"
-	var item_word := "base pose" if _is_base_pose_mode() else "posture"
-
-	if _mode_label:
-		_mode_label.text = "Mode: %s" % mode
-	if _trigger_pose_button:
-		_trigger_pose_button.text = "Resume Live" if _pose_trigger and _pose_trigger.is_frozen() else "Preview %s" % ("Base Pose" if _is_base_pose_mode() else "Pose")
-	if _transition_button:
-		_transition_button.text = "Pause Swing" if _transition_player and _transition_player.is_playing() else "Preview Swing"
-		_transition_button.disabled = _is_base_pose_mode() or _current_def == null
-	if _help_label:
-		match mode:
-			"Preview Pose":
-				_help_label.text = "Static preview is active. Drag handles to adjust the selected %s, or Resume Live to return to gameplay." % item_word
-			"Preview Swing":
-				_help_label.text = "Swing preview is active. Use Space to pause, P to switch back to a static pose, and G to toggle ghost clutter."
-			_:
-				if _is_base_pose_mode():
-					_help_label.text = "Select a base pose, choose a preview state, then use Preview Base Pose. Drag handles in the viewport to shape stance, arms, torso, and head."
-				else:
-					_help_label.text = "Select a posture, then use Preview Pose or Preview Swing. Preview State lets you see the stroke against different base-pose contexts."
-
-func _teardown_preview_state() -> void:
-	if _transition_player:
-		_transition_player.stop()
-	if _pose_trigger and _pose_trigger.is_frozen():
-		_pose_trigger.release_pose()
-	_restore_live_posture_from_editor()
-	_editor_restore_posture_id = -1
-	_update_mode_ui()
-	# Remove procedural knee meshes
-	for k_name in _knee_mesh_nodes.keys():
-		var k_mesh: MeshInstance3D = _knee_mesh_nodes[k_name]
-		k_mesh.queue_free()
-	_knee_mesh_nodes.clear()
-	# Remove procedural elbow meshes
-	for e_name in _elbow_mesh_nodes.keys():
-		var e_mesh: MeshInstance3D = _elbow_mesh_nodes[e_name]
-		e_mesh.queue_free()
-	_elbow_mesh_nodes.clear()
-
-func _capture_live_restore_posture() -> void:
-	if _editor_restore_posture_id >= 0:
-		return
-	if _player and _player.posture:
-		_editor_restore_posture_id = _player.posture.paddle_posture
-
-func _restore_live_posture_from_editor() -> void:
-	if _editor_restore_posture_id < 0 or not _player:
-		return
-	_player.paddle_posture = _editor_restore_posture_id
+# ── Transition callbacks ───────────────────────────────────────────────────────
 
 func _on_transition_preview_started() -> void:
 	_update_mode_ui()
 
 func _on_transition_preview_ended() -> void:
-	if not (_pose_trigger and _pose_trigger.is_frozen()):
-		_restore_live_posture_from_editor()
+	if _preview != null and not (_preview.get_pose_trigger() and _preview.get_pose_trigger().is_frozen()):
+		_preview.restore_live_posture_from_editor()
 	_update_mode_ui()

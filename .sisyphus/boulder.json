@@ -1,7 +1,10 @@
 {
   "active_plan": "/Users/arjomagno/Documents/github-repos/pickleball-godot/.sisyphus/plans/memforge-pillar-port.md",
   "started_at": "2026-04-13T12:00:00Z",
-  "session_ids": ["ses_27da2edadffeua7dgHsFgs8MMx"],
+  "session_ids": [
+    "ses_27da2edadffeua7dgHsFgs8MMx",
+    "ses_2786ca710ffeTkPyp4AIc1FUVQ"
+  ],
   "plan_name": "memforge-pillar-port",
   "task_sessions": {}
 }

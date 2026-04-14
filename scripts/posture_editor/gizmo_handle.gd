@@ -55,7 +55,7 @@ func _setup_visuals() -> void:
 	# Debug name label — always visible above the gizmo, shows field_name
 	_name_label = Label3D.new()
 	_name_label.name = "NameLabel"
-	_name_label.text = field_name if field_name != "" else name
+	_name_label.text = field_name if field_name != "" else str(name)
 	_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_name_label.font_size = 14
 	_name_label.modulate = Color(1.0, 0.85, 0.2, 0.95)  # warm yellow
@@ -70,7 +70,7 @@ func _setup_visuals() -> void:
 func _process(_delta: float) -> void:
 	# Keep name label in sync — field_name may be set after _ready()
 	if _name_label and _name_label.text != field_name:
-		_name_label.text = field_name if field_name != "" else name
+		_name_label.text = field_name if field_name != "" else str(name)
 
 func set_hovered(hovered: bool) -> void:
 	_is_hovered = hovered
