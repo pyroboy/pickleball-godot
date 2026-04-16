@@ -38,8 +38,8 @@ const OVERHEAD_RELEASE_RADIUS: float = 2.0
 # lerp between MIN_SERVE_SPEED and MAX_SERVE_SPEED. ball.gd keeps its own local
 # copy for the direct serve_from() path (currently unused but public API).
 const SERVE_HEIGHT: float = 1.5
-const MIN_SERVE_SPEED: float = 8.0
-const MAX_SERVE_SPEED: float = 16.5
+const MIN_SERVE_SPEED: float = 5.5
+const MAX_SERVE_SPEED: float = 12.0
 const MAX_SERVE_CHARGE_TIME: float = 0.45
 const HIT_REACH_DISTANCE: float = 1.15  # Updated for WIDE_FOREHAND/BACKHAND arm extension
 

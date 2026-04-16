@@ -2,6 +2,7 @@
 
 var _pose_trigger = null
 var _transition_player = null
+var _preview_context_option_idx: int = 0
 
 ## Injected
 var _player: Node3D
@@ -85,9 +86,8 @@ func _contextualize_posture_for_preview(def):
 func _preview_context_base_pose_id() -> int:
 	if not _player:
 		return -1
-	var preview_idx: int = 0
 	# preview context option is managed by shell
-	match preview_idx:
+	match _preview_context_option_idx:
 		1: return _player.BasePoseState.ATHLETIC_READY
 		2: return _player.BasePoseState.SPLIT_STEP
 		3: return _player.BasePoseState.PUNCH_VOLLEY_READY
@@ -106,8 +106,7 @@ func _preview_context_base_pose_id() -> int:
 func _preview_context_stroke_posture_id() -> int:
 	if not _player:
 		return READY_POSTURE_ID
-	var preview_idx: int = 0  # managed by shell
-	match preview_idx:
+	match _preview_context_option_idx:
 		1: return READY_POSTURE_ID
 		2: return READY_POSTURE_ID
 		3: return _player.PaddlePosture.VOLLEY_READY
@@ -196,10 +195,5 @@ func restore_live_posture_from_editor() -> void:
 func get_pose_trigger():
 	return _pose_trigger
 
-func set_preview_context_option_idx(_idx: int) -> void:
-	# Stored in shell but needed here for context computation
-	pass
-
-func refresh_pose_trigger(preview_def) -> void:
-	if _pose_trigger and _pose_trigger.is_frozen():
-		_pose_trigger.refresh_from_definition(preview_def)
+func set_preview_context_option_idx(idx: int) -> void:
+	_preview_context_option_idx = idx

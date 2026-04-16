@@ -125,6 +125,11 @@ func handle_input(event: InputEvent) -> void:
 		orbit_angle -= event.relative.x * ORBIT_DRAG_SENSITIVITY
 		orbit_pitch = clampf(orbit_pitch - event.relative.y * ORBIT_DRAG_SENSITIVITY, 0.05, 1.3)
 
+## Cancel any in-progress orbit drag. Call when another system
+## (e.g. gizmo_controller) steals left-drag input.
+func cancel_orbit_drag() -> void:
+	_orbit_dragging = false
+
 func update(delta: float) -> void:
 	_update_follow(delta)
 	if _shake != null:
@@ -169,7 +174,7 @@ func _update_third_person(delta: float) -> void:
 		_orbit_idle_timer = 0.0
 	else:
 		_orbit_idle_timer += delta
-	if orbit_auto and not _orbit_dragging and _orbit_idle_timer > 5.0 and orbit_mode != 3:
+	if orbit_auto and not _orbit_dragging and _orbit_idle_timer > 5.0:
 		orbit_angle += ORBIT_SPEED * delta
 
 	var player_pos: Vector3 = target_player.global_position

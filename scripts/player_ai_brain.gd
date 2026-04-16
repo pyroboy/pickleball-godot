@@ -654,20 +654,20 @@ func _try_ai_hit_ball() -> void:
 		# Shot power varies by difficulty
 		match ai_difficulty:
 			0:  # EASY — mostly dinks, rare medium shots
-				if randf() < 0.80:
-					ai_swing_threshold = randf_range(0.08, 0.25)
+				if randf() < 0.60:
+					ai_swing_threshold = randf_range(0.35, 0.55)
 				else:
-					ai_swing_threshold = randf_range(0.25, 0.40)
+					ai_swing_threshold = randf_range(0.55, 0.75)
 			1:  # MEDIUM — mixed soft and firm
-				if randf() < 0.55:
-					ai_swing_threshold = randf_range(0.12, 0.35)
-				else:
+				if randf() < 0.40:
 					ai_swing_threshold = randf_range(0.40, 0.60)
+				else:
+					ai_swing_threshold = randf_range(0.60, 0.80)
 			2:  # HARD — aggressive, frequent drives
 				if randf() < 0.35:
-					ai_swing_threshold = randf_range(0.15, 0.40)
+					ai_swing_threshold = randf_range(0.50, 0.70)
 				else:
-					ai_swing_threshold = randf_range(0.50, 0.85)
+					ai_swing_threshold = randf_range(0.70, 0.90)
 		# Switch to charge posture based on INTENDED contact posture (ai_desired_posture),
 		# not the current visual posture — this way low/mid-low hits stay low.
 		if _player.ai_desired_posture in _player.BACKHAND_POSTURES:

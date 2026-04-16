@@ -9,17 +9,15 @@ var _gizmo_controller
 var _knee_mesh_nodes: Dictionary = {}
 var _elbow_mesh_nodes: Dictionary = {}
 var _player: Node3D = null
-var _tree: SceneTree
 
 ## Injected
 var _state  # PostureEditorState
 var _tab_container: TabContainer
 
-func init(player: Node3D, state, tab_container: TabContainer, tree: SceneTree) -> void:
+func init(player: Node3D, state, tab_container: TabContainer) -> void:
 	_player = player
 	_state = state
 	_tab_container = tab_container
-	_tree = tree
 
 func create_gizmo_controller() -> void:
 	if _gizmo_controller:
@@ -30,8 +28,7 @@ func create_gizmo_controller() -> void:
 	
 	if _player and _player.get_parent():
 		_player.get_parent().add_child(_gizmo_controller)
-	else:
-		_tree.root.add_child(_gizmo_controller)
+	# else: gizmo_controller leaks — editor requires valid player in tree anyway
 	
 	_gizmo_controller.gizmo_selected.connect(_on_gizmo_selected)
 	_gizmo_controller.gizmo_moved.connect(_on_gizmo_moved)
@@ -40,6 +37,10 @@ func create_gizmo_controller() -> void:
 	var camera := _player.get_viewport().get_camera_3d() if _player else null
 	if camera:
 		_gizmo_controller.set_camera(camera)
+	# Set camera rig reference so gizmo dragging can cancel orbit camera drag.
+	var camera_rig := _player.get_parent().get_node_or_null("CameraRig") as CameraRig
+	if camera_rig:
+		_gizmo_controller.set_camera_rig(camera_rig)
 	
 	var can_create_gizmos := false
 	if _player and _player.is_inside_tree():

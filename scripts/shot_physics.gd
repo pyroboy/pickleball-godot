@@ -38,11 +38,11 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		var d_max_far: float = 6.0
 		match ai_difficulty:
 			0:  # EASY
-				ai_speed_scale = 0.45
+				ai_speed_scale = 0.70
 				d_min_near = 1.2; d_max_near = 2.5
 				d_min_far = 2.0; d_max_far = 3.5
 			1:  # MEDIUM
-				ai_speed_scale = 0.70
+				ai_speed_scale = 0.85
 				d_min_near = 2.5; d_max_near = 3.8
 				d_min_far = 3.5; d_max_far = 5.0
 			_:  # HARD

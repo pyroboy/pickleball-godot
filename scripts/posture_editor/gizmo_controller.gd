@@ -14,6 +14,7 @@ signal gizmo_moved(gizmo: GizmoHandle, new_position: Vector3)
 signal gizmo_rotated(gizmo: GizmoHandle, euler_delta: Vector3)
 
 var _camera: Camera3D
+var _camera_rig: CameraRig  # Reference to camera rig to cancel orbit drag when dragging gizmos
 var _selected_gizmo = null
 var _hovered_gizmo = null
 var _dragging: bool = false
@@ -280,18 +281,36 @@ func _deselect_gizmo() -> void:
 	gizmo_deselected.emit()
 
 func _update_hover(screen_pos: Vector2) -> void:
-	# Skip body-part hover check while dragging a body gizmo (prevents flicker)
-	if _dragging and _selected_gizmo and _selected_gizmo.body_part_name != "":
-		return
-	
 	var ray_origin := _camera.project_ray_origin(screen_pos)
 	var ray_dir := _camera.project_ray_normal(screen_pos)
 	
-	# ── 1. Body-part detection — show glow mesh on hover ─────────────────────
+	# ── 0. Body-part hover detection (always runs, even during body gizmo drag)
+	# This must happen BEFORE the early return so we can detect hover-deselect.
 	_hovered_body_part = _raycast_body_parts(ray_origin, ray_dir)
 	
-	# Glow the actual body mesh for currently hovered body part
+	# If hovering a different body part than selected, deselect and stop drag.
+	# This allows orbiting camera while hovering body parts without being stuck in drag.
+	if _dragging and _selected_gizmo and _selected_gizmo.body_part_name != "":
+		if _hovered_body_part != "" and _hovered_body_part != _selected_gizmo.body_part_name:
+			_deselect_gizmo()
+			if _dragging:
+				_stop_drag()
+			# Don't return — continue to normal hover detection
+	
+	# Skip rest of body-part hover check while dragging a body gizmo (prevents flicker)
+	if _dragging and _selected_gizmo and _selected_gizmo.body_part_name != "":
+		return
+	
+	# ── 1. Body-part detection — show glow mesh on hover ─────────────────────
+	# Reveal gizmo on hover (body part glow already applied below).
+	# This lets users see the gizmo before deciding to click and drag.
+	var gizmo_for_body: GizmoHandle
 	if _hovered_body_part != "":
+		gizmo_for_body = _find_gizmo_for_body_part(_hovered_body_part)
+		if gizmo_for_body and not gizmo_for_body.visible:
+			gizmo_for_body.visible = true
+		
+		# Glow the actual body mesh for currently hovered body part
 		if _body_part_meshes.has(_hovered_body_part):
 			var mesh: MeshInstance3D = _body_part_meshes[_hovered_body_part]
 			var glow_mat := StandardMaterial3D.new()
@@ -301,8 +320,8 @@ func _update_hover(screen_pos: Vector2) -> void:
 			glow_mat.emission_energy_multiplier = 1.5
 			glow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			mesh.material_override = glow_mat
+		
 		# Show tab label at body-part position
-		var gizmo_for_body: GizmoHandle = _find_gizmo_for_body_part(_hovered_body_part)
 		var gizmo_for_label: GizmoHandle = _selected_gizmo if _selected_gizmo else gizmo_for_body
 		if gizmo_for_label:
 			var label_pos: Vector3
@@ -330,6 +349,7 @@ func _update_hover(screen_pos: Vector2) -> void:
 		
 		# Auto-deselect previously selected body gizmo when hovering a different body part.
 		# This keeps only one body gizmo visible at a time (click-to-reveal per body part).
+		# Note: For active drag, the hover-deselect above handles stopping the drag first.
 		if _selected_gizmo and _selected_gizmo.body_part_name != "" and _hovered_body_part != _selected_gizmo.body_part_name:
 			_deselect_gizmo()
 	
@@ -372,6 +392,9 @@ func _find_gizmo_for_body_part(body_part_name: String) -> GizmoHandle:
 
 func _start_drag(gizmo: GizmoHandle, screen_pos: Vector2) -> void:
 	_dragging = true
+	# Cancel any in-progress orbit drag so camera doesn't fight with gizmo dragging.
+	if _camera_rig:
+		_camera_rig.cancel_orbit_drag()
 	_drag_start_pos = gizmo.global_position
 	_drag_start_mouse = screen_pos
 	
@@ -438,6 +461,9 @@ func set_constraint(constraint: Constraint) -> void:
 
 func set_camera(camera: Camera3D) -> void:
 	_camera = camera
+
+func set_camera_rig(rig: CameraRig) -> void:
+	_camera_rig = rig
 
 func add_gizmo_handle(gizmo: GizmoHandle) -> void:
 	add_child(gizmo)

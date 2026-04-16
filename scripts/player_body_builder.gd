@@ -73,7 +73,11 @@ func build(paddle_color: Color) -> void:
 	if top_curve: top_curve.material_override = paddle_mat
 	if bottom_curve: bottom_curve.material_override = paddle_mat
 
-	_player.paddle_hitbox = paddle.get_node("PaddleHitbox")
+	var hitbox_node = paddle.get_node_or_null("PaddleHitbox")
+	if not hitbox_node:
+		push_error("PlayerBodyBuilder: PaddleHitbox not found in paddle scene — AI hit detection will fail")
+		return
+	_player.paddle_hitbox = hitbox_node
 	# Wire hitbox to ai_brain (deferred — ai_brain created after build())
 	_player.call_deferred("_wire_hitbox")
 

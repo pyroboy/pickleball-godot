@@ -35,6 +35,8 @@ func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: Char
 	_player_left = p_left
 	_player_right = p_right
 	_ball_physics_probe = probe
+	if OS.has_environment("GODOT_TEST_AUTO_LAUNCH"):
+		launch_ball()
 
 func _process(delta: float) -> void:
 	if not loop_enabled or not _ball:

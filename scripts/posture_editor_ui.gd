@@ -135,12 +135,11 @@ func _init_preview() -> void:
 	_preview.init(_player, _library, _base_pose_library, _state)
 
 func _init_transport() -> void:
-	_transport.set_play_callback(Callable(self, "_on_play_transition"))
 	_transport.set_save_callback(Callable(self, "_on_save"))
 	_transport.transport_play_pressed.connect(_on_play_transition)
 
 func _init_gizmos() -> void:
-	_gizmos.init(_player, _state, _tab_container, get_tree())
+	_gizmos.init(_player, _state, _tab_container)
 	_gizmos.gizmo_selected.connect(_on_gizmo_selected)
 	_gizmos.gizmo_moved.connect(_on_gizmo_moved)
 	_gizmos.gizmo_rotated.connect(_on_gizmo_rotated)
@@ -267,8 +266,7 @@ func _make_main_split() -> HSplitContainer:
 	_posture_list.custom_minimum_size = Vector2(260, 200)
 	_posture_list.item_selected.connect(_on_posture_selected)
 	left_vbox.add_child(_posture_list)
-	_state.init(_library, _base_pose_library, _posture_list, _save_button, _status_label, _transition_button, _trigger_pose_button)
-	_populate_posture_list()
+	# _populate_posture_list() called by _update_workspace_ui() after _state.init()
 
 	var right_panel := PanelContainer.new()
 	right_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.13, 0.18, 0.24, 0.97), Color(0.24, 0.34, 0.48, 0.95), 12))
@@ -357,8 +355,22 @@ func _make_footer() -> Control:
 	_style_action_button(_trigger_pose_button, Color(0.33, 0.54, 0.76))
 	hbox.add_child(_trigger_pose_button)
 
+	_transition_button = Button.new()
+	_transition_button.text = "Preview Swing"
+	_transition_button.pressed.connect(_on_play_transition)
+	_transition_button.disabled = true
+	_style_action_button(_transition_button, Color(0.31, 0.64, 0.62))
+	hbox.add_child(_transition_button)
+
+	_save_button = Button.new()
+	_save_button.text = "Save to .tres"
+	_save_button.pressed.connect(_on_save)
+	_save_button.disabled = true
+	_style_action_button(_save_button, Color(0.86, 0.73, 0.25))
+	hbox.add_child(_save_button)
+
 	_solo_mode_button = Button.new()
-	_solo_mode_button.text = "Solo Mode: ON"
+	_solo_mode_button.text = "Solo Mode: OFF"
 	_solo_mode_button.pressed.connect(_on_toggle_solo_mode)
 	_style_action_button(_solo_mode_button, Color(0.52, 0.43, 0.74))
 	hbox.add_child(_solo_mode_button)
@@ -497,7 +509,10 @@ func _on_posture_selected(index: int) -> void:
 	
 	if _player and not _state.is_base_pose_mode():
 		_preview.setup_transition_player()
-		if _preview.get_transition_player() and _preview.get_transition_player().is_playing():
+		if _preview.get_transition_player():
+			_transport.set_transition_player(_preview.get_transition_player())
+			_transport.set_playback_finished_callback(_on_transition_preview_ended)
+		if _preview.get_transition_player().is_playing():
 			_preview.get_transition_player().stop()
 	
 	var pose_trigger = _preview.get_pose_trigger()
@@ -519,6 +534,9 @@ func _populate_properties() -> void:
 		_paddle_tab.set_definition(_state.get_current_def())
 		_charge_tab.set_definition(_state.get_current_def())
 		_follow_through_tab.set_definition(_state.get_current_def())
+	else:
+		_charge_tab.set_definition(null)
+		_follow_through_tab.set_definition(null)
 	_legs_tab.set_definition(body_def)
 	_arms_tab.set_definition(body_def)
 	_head_tab.set_definition(body_def)
@@ -572,6 +590,7 @@ func _on_play_transition() -> void:
 	_preview.on_play_transition()
 	if _preview.get_transition_player():
 		_transport.set_transition_player(_preview.get_transition_player())
+		_transport.set_playback_finished_callback(_on_transition_preview_ended)
 	_update_mode_ui()
 
 # ── Save ──────────────────────────────────────────────────────────────────────
@@ -596,7 +615,7 @@ func _on_save() -> void:
 		print("[POSTURE EDITOR] Saved ", path)
 	else:
 		_status_label.text = "Save failed: error %d" % err
-		push_error("PostureEditor: failed to save " + path)
+		push_warning("PostureEditor: failed to save " + path)
 	_update_mode_ui()
 
 # ── Workspace ─────────────────────────────────────────────────────────────────
@@ -682,6 +701,7 @@ func _update_solo_mode_ui() -> void:
 
 func _on_tab_changed(_tab_index: int) -> void:
 	_update_active_gizmos()
+	_update_gizmo_positions()
 
 # ── Gizmo forwarding ───────────────────────────────────────────────────────────
 
@@ -712,6 +732,15 @@ func _on_gizmo_selected(gizmo) -> void:
 	_populate_properties()
 	_update_gizmo_visibility()
 	_status_label.text = "Selected: %s (ID: %d)" % [_state.current_display_name(), _state.get_current_id()]
+	# Trigger pose application when selecting a gizmo so the body part moves.
+	# Without this, the pose only updates when dragging (via _on_gizmo_moved).
+	# Note: force_posture_update() already calls _apply_full_body_posture() internally,
+	# so no need to call it again here.
+	_refresh_live_preview()
+	if _state.get_current_def() and _player and _player.posture:
+		_player.posture.force_posture_update(_state.get_current_def())
+	if _state.is_base_pose_mode() and _state.get_current_base_def() and _player and _player.posture:
+		_player.posture._apply_full_body_posture(_state.get_current_base_def())
 
 func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 	var body_def = _state.current_body_resource()
@@ -721,6 +750,18 @@ func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
 	if _player:
 		var forward_axis: Vector3 = _player._get_forward_axis()
 		var forehand_axis: Vector3 = _player._get_forehand_axis()
+		
+		# Guard: if axes are zero/invalid (NaN, Infinity, or near-zero), we cannot
+		# compute meaningful offsets. This prevents garbage values from corrupting the
+		# posture definition. Note: NaN.length() returns NaN, and NaN < 0.01 is false,
+		# so we must check is_zero_approx() explicitly.
+		if is_zero_approx(forward_axis.length()) or is_zero_approx(forehand_axis.length()):
+			push_warning("PostureEditorUI: Player axes too small (near-zero length), cannot compute gizmo offset")
+			return
+		if not is_finite(forward_axis.length()) or not is_finite(forehand_axis.length()):
+			push_warning("PostureEditorUI: Player axes invalid (NaN/Infinity), cannot compute gizmo offset")
+			return
+		
 		var player_pos := _player.global_position
 		var offset: Vector3 = new_position - player_pos
 		

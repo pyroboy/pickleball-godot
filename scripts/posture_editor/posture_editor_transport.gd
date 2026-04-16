@@ -15,6 +15,7 @@ var _transport_progress: ProgressBar
 var _transition_player  # TransitionPlayer reference
 var _play_callback: Callable
 var _save_callback: Callable
+var _playback_finished_callback: Callable
 
 func set_transition_player(player) -> void:
 	_transition_player = player
@@ -25,6 +26,9 @@ func set_play_callback(cb: Callable) -> void:
 
 func set_save_callback(cb: Callable) -> void:
 	_save_callback = cb
+
+func set_playback_finished_callback(cb: Callable) -> void:
+	_playback_finished_callback = cb
 
 func build_transport_bar() -> Control:
 	_transport_bar = Control.new()
@@ -200,6 +204,8 @@ func _on_transport_playback_finished() -> void:
 		_transport_time_label.text = "0.00s / %.2fs" % 1.1
 	if _transport_progress:
 		_transport_progress.value = 0.0
+	if _playback_finished_callback.is_valid():
+		_playback_finished_callback.call()
 
 func _on_transport_phase_changed(_new_phase: int) -> void:
 	_update_transport_ui()

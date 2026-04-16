@@ -41,7 +41,7 @@ func _run() -> void:
 			print("  wrote %s  (id=%d, %s)" % [filename, d.posture_id, d.display_name])
 			written += 1
 		else:
-			push_error("  FAILED to save %s — error %d" % [path, err])
+			push_warning("  FAILED to save %s — error %d" % [path, err])
 
 	print("[extract_postures] done. %d files written to %s" % [written, OUTPUT_DIR])
 

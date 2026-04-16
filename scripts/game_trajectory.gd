@@ -29,7 +29,7 @@ const TRAJECTORY_STEP_TIME: float = 0.08
 const TRAJECTORY_STEPS: int = 14
 const TRAJECTORY_SUBSTEPS: int = 3
 const MIN_SERVE_SPEED: float = 5.5
-const MAX_SERVE_SPEED: float = 13.5
+const MAX_SERVE_SPEED: float = 12.0
 const MAX_SERVE_CHARGE_TIME: float = 1.5
 
 

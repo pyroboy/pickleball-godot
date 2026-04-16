@@ -15,10 +15,17 @@ var _pause_forced: bool = false
 var _hitstop_active: bool = false
 var _hitstop_timer: float = 0.0
 var _hitstop_scale: float = 1.0
+var _test_fast_forward: float = 0.0  # 0=off, >1 = speed multiplier for E2E tests
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process(true)
+	# GODOT_TEST_FAST=10.0 python3 test sets 10x speed for ultra-fast E2E tests
+	if OS.has_environment("GODOT_TEST_FAST"):
+		var scale = OS.get_environment("GODOT_TEST_FAST").to_float()
+		if scale > 1.0:
+			set_test_fast_forward(scale)
+			print("[TimeScale] test fast-forward %.0fx" % scale)
 
 func _process(delta: float) -> void:
 	if _hitstop_active:
@@ -68,6 +75,9 @@ func _apply() -> void:
 	if _pause_forced:
 		Engine.time_scale = 1.0
 		return
+	if _test_fast_forward > 1.0:
+		Engine.time_scale = _test_fast_forward
+		return
 	if not _slowmo_sources.is_empty():
 		var lowest: float = 1.0
 		for v in _slowmo_sources.values():
@@ -78,6 +88,10 @@ func _apply() -> void:
 		Engine.time_scale = _hitstop_scale
 		return
 	Engine.time_scale = 1.0
+
+func set_test_fast_forward(scale: float) -> void:
+	_test_fast_forward = clampf(scale, 0.0, 20.0)
+	_apply()
 
 func is_slowmo_active() -> bool:
 	return not _slowmo_sources.is_empty()
