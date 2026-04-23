@@ -630,7 +630,7 @@ func _perform_player_swing(charge_ratio: float) -> void:
 	if ball == null:
 		return
 
-	var paddle_pos: Vector3 = player_left.get_paddle_position()
+	var paddle_pos: Vector3 = player_left.global_position + player_left._get_posture_offset_for(player_left.paddle_posture)
 	var reach := HIT_REACH_DISTANCE
 	var player_to_ball: float = player_left.global_position.distance_to(ball.global_position)
 	if player_to_ball < 1.80:
@@ -650,11 +650,11 @@ func _perform_player_swing(charge_ratio: float) -> void:
 	if absf(paddle_vel_in_shot_dir) > 0.5:
 		_vel += shot_dir * paddle_vel_in_shot_dir * vel_transfer
 	# GAP-15: sweet-spot speed reduction — off-center hits lose up to 40% speed
-	var speed_factor := compute_sweet_spot_speed(ball.global_position, player_left.get_paddle_position(), _vel)
+	var speed_factor := compute_sweet_spot_speed(ball.global_position, paddle_pos, _vel)
 	_vel = _vel * speed_factor
 	ball.linear_velocity = _vel
 	var _shot_spin: Vector3 = compute_shot_spin(_pending_shot_type, _vel, charge_ratio, 0, player_left.paddle_posture)
-	var _sweet_spin: Vector3 = compute_sweet_spot_spin(ball.global_position, player_left.get_paddle_position(), _vel)
+	var _sweet_spin: Vector3 = compute_sweet_spot_spin(ball.global_position, paddle_pos, _vel)
 	ball.angular_velocity = _shot_spin + _sweet_spin
 	ball.hit_by_player(0)
 	scoreboard_ui.show_speed(ball.linear_velocity.length())

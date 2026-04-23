@@ -38,9 +38,9 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		var d_max_far: float = 6.0
 		match ai_difficulty:
 			0:  # EASY
-				ai_speed_scale = 0.70
-				d_min_near = 1.2; d_max_near = 2.5
-				d_min_far = 2.0; d_max_far = 3.5
+				ai_speed_scale = 0.80
+				d_min_near = 1.5; d_max_near = 3.0
+				d_min_far = 2.5; d_max_far = 4.5
 			1:  # MEDIUM
 				ai_speed_scale = 0.85
 				d_min_near = 2.5; d_max_near = 3.8
@@ -113,7 +113,7 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var solve_omega: Vector3 = compute_shot_spin(shot_type, drag_free_vel, charge_ratio, player_num, -1)
 	var target_pos_3d: Vector3 = Vector3(target_x, 0.08, target_z)
 	var is_soft_shot: bool = shot_type == "DROP" or shot_type == "DINK"
-	var needs_net_check: bool = (target_z * net_sign) < 0.0
+	var needs_net_check: bool = (target_z * net_sign) > 0.0
 
 	var best_vel: Vector3 = drag_free_vel
 	var best_err: float = INF

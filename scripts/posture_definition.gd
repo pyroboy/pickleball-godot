@@ -63,6 +63,7 @@ class_name PostureDefinition extends Resource
 @export var zone_x_max: float = 0.0
 @export var zone_y_min: float = 0.0
 @export var zone_y_max: float = 0.0
+@export var zone_forward_offset: float = 0.5
 
 # ── Right arm IK (paddle hand) — Phase 3 wiring ─────────────────────
 @export_group("Right Arm IK")

@@ -39,10 +39,9 @@ func _init() -> void:
 func load_or_default() -> void:
 	definitions.clear()
 	_by_id.clear()
+	_build_defaults()  # Always start with full defaults
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(DATA_DIR)):
-		_load_from_disk()
-	if definitions.is_empty():
-		_build_defaults()
+		_load_from_disk()  # Overlay saved files on top
 	for d in definitions:
 		_by_id[d.posture_id] = d
 
@@ -69,7 +68,15 @@ func _load_from_disk() -> void:
 		if not dir.current_is_dir() and f.ends_with(".tres"):
 			var res: Resource = load(DATA_DIR + f)
 			if res != null:
-				definitions.append(res)
+				# Replace existing default if present, otherwise append
+				var replaced := false
+				for i in range(definitions.size()):
+					if definitions[i].posture_id == res.posture_id:
+						definitions[i] = res
+						replaced = true
+						break
+				if not replaced:
+					definitions.append(res)
 		f = dir.get_next()
 	dir.list_dir_end()
 
@@ -474,6 +481,8 @@ func _make(pid: int, name: String, family_: int, tier_: int, p: Dictionary):
 	d.charge_body_rotation_deg = float(p.get("charge_body_deg", p.get("charge_body_rot_deg", 0.0)))
 	d.charge_hip_coil_deg = float(p.get("charge_hip_deg", 0.0))
 	d.charge_back_foot_load = float(p.get("charge_load", 0.7))
+
+	d.zone_forward_offset = float(p.get("zone_fwd", 0.5))
 
 	# Follow-through fields
 	d.ft_paddle_offset = _vec3_from_dict(p, "ft_offset", Vector3.ZERO)

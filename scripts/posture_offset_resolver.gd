@@ -133,7 +133,6 @@ func _get_sign_value(src: int, swing_sign: float, fwd_sign: float) -> float:
 func _get_posture_offset_hardcoded(posture: int) -> Vector3:
 	if _player == null:
 		return Vector3.ZERO
-	push_warning("PostureOffsetResolver: using hardcoded fallback for posture ", posture)
 
 	var forward_axis: Vector3 = _player._get_forward_axis()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
@@ -194,6 +193,7 @@ func _get_posture_offset_hardcoded(posture: int) -> Vector3:
 	if posture == _player.PaddlePosture.CHARGE_BACKHAND:
 		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * -_PC.PADDLE_CHARGE_BACKHAND_BEHIND + Vector3(0.0, _PC.PADDLE_CHARGE_BACKHAND_HEIGHT, 0.0)
 
+	push_warning("PostureOffsetResolver: using hardcoded fallback for posture ", posture)
 	return forward_axis * _PC.PADDLE_CENTER_OFFSET
 
 
@@ -201,7 +201,6 @@ func _get_posture_offset_hardcoded(posture: int) -> Vector3:
 func _get_posture_rotation_hardcoded(posture: int) -> Vector3:
 	if _player == null:
 		return Vector3.ZERO
-	push_warning("PostureOffsetResolver: using hardcoded rotation fallback for posture ", posture)
 
 	var swing_sign: float = _player._get_swing_sign()
 	var fwd_sign: float = _player._get_forward_axis().z
@@ -247,6 +246,8 @@ func _get_posture_rotation_hardcoded(posture: int) -> Vector3:
 		return Vector3(-18.0 * fwd_sign, 12.0 * swing_sign, 180.0 + 8.0 * swing_sign)
 	if posture == _player.PaddlePosture.LOW_WIDE_BACKHAND:
 		return Vector3(-18.0 * fwd_sign, -10.0 * swing_sign, 180.0 - 8.0 * swing_sign)
+
+	push_warning("PostureOffsetResolver: using hardcoded rotation fallback for posture ", posture)
 	return Vector3.ZERO
 
 

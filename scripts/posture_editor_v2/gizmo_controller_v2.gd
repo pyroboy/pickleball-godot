@@ -197,10 +197,11 @@ func _start_drag(gizmo, _screen_pos: Vector2, ray_origin: Vector3, ray_dir: Vect
 		gizmo.start_drag(gizmo._selected_axis, ray_origin, ray_dir)
 
 func _update_drag(screen_pos: Vector2) -> void:
+	var ray_origin := _camera.project_ray_origin(screen_pos)
+	var ray_dir := _camera.project_ray_normal(screen_pos)
+
 	# Paddle drag
 	if _dragging_paddle and _player and _player.paddle_node:
-		var ray_origin := _camera.project_ray_origin(screen_pos)
-		var ray_dir := _camera.project_ray_normal(screen_pos)
 		var intersection: Variant = _drag_plane.intersects_ray(ray_origin, ray_dir)
 		if intersection != null:
 			var paddle_head: Vector3 = intersection + _player.paddle_node.global_transform.basis.y * 0.4
@@ -213,8 +214,6 @@ func _update_drag(screen_pos: Vector2) -> void:
 
 	# Ghost drag takes priority
 	if _dragging_ghost != null:
-		var ray_origin := _camera.project_ray_origin(screen_pos)
-		var ray_dir := _camera.project_ray_normal(screen_pos)
 		var intersection: Variant = _drag_plane.intersects_ray(ray_origin, ray_dir)
 		if intersection != null:
 			_dragging_ghost.global_position = intersection
@@ -223,8 +222,6 @@ func _update_drag(screen_pos: Vector2) -> void:
 
 	if not _selected_gizmo:
 		return
-	var ray_origin := _camera.project_ray_origin(screen_pos)
-	var ray_dir := _camera.project_ray_normal(screen_pos)
 	if _selected_gizmo is PositionGizmoV2:
 		var intersection: Variant = _drag_plane.intersects_ray(ray_origin, ray_dir)
 		if intersection == null:

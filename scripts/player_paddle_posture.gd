@@ -727,18 +727,19 @@ func create_posture_ghosts(paddle_color: Color) -> void:
 	_create_posture_zone_bounds()
 
 func _create_posture_zone_bounds() -> void:
-	if _player == null:
+	if _player == null or _posture_lib == null:
 		return
 	_posture_zone_bounds.clear()
-	for posture in POSTURE_ZONES.keys():
-		var zone: Dictionary = POSTURE_ZONES[posture]
-		var w: float = zone.x_max - zone.x_min
-		var h: float = zone.y_max - zone.y_min
+	for def in _posture_lib.all_definitions():
+		if not def.has_zone:
+			continue
+		var w: float = def.zone_x_max - def.zone_x_min
+		var h: float = def.zone_y_max - def.zone_y_min
 		var bounds_mesh := BoxMesh.new()
 		bounds_mesh.size = Vector3(w, h, 0.15)
 		var mi := MeshInstance3D.new()
 		mi.mesh = bounds_mesh
-		mi.name = "ZoneBounds_" + str(posture)
+		mi.name = "ZoneBounds_" + str(def.posture_id)
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color(0.6, 0.1, 1.0, 0.15)
 		mat.emission = Color(0.5, 0.05, 0.95, 1.0)
@@ -749,7 +750,7 @@ func _create_posture_zone_bounds() -> void:
 		mi.material_override = mat
 		mi.visible = false
 		_player.add_child(mi)
-		_posture_zone_bounds[posture] = mi
+		_posture_zone_bounds[def.posture_id] = mi
 
 func _create_follow_through_ghosts() -> void:
 	if posture_ghost_root == null or not _player.hitting:
@@ -989,19 +990,20 @@ func update_posture_ghosts() -> void:
 					# _ghost_frozen_at is handle-bottom world pos; to_local → handle-bottom local
 					target_pos = _player.to_local(_ghost_frozen_at)
 				elif contact_local != Vector3.ZERO:
-					var zone: Dictionary = POSTURE_ZONES.get(posture, {})
-					if not zone.is_empty():
+					var zone_def = _posture_lib.get_def(posture) if _posture_lib else null
+					if zone_def != null and zone_def.has_zone:
 						var fh_axis: Vector3 = _player._get_forehand_axis()
 						var fwd_axis: Vector3 = _player._get_forward_axis()
 						var contact_lat: float = contact_local.dot(fh_axis)
 						var contact_ht_rel: float = contact_local.y
 						# Zone height bounds are local_ht (world_y - COURT_FLOOR_Y).
 						# Convert to player-relative Y for clamping.
-						var zone_y_min_rel: float = _player.COURT_FLOOR_Y + zone.y_min - _player.global_position.y
-						var zone_y_max_rel: float = _player.COURT_FLOOR_Y + zone.y_max - _player.global_position.y
-						var clamped_lat: float = clampf(contact_lat, zone.x_min, zone.x_max)
+						var zone_y_min_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_min - _player.global_position.y
+						var zone_y_max_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_max - _player.global_position.y
+						var clamped_lat: float = clampf(contact_lat, zone_def.zone_x_min, zone_def.zone_x_max)
 						var clamped_ht: float = clampf(contact_ht_rel, zone_y_min_rel, zone_y_max_rel)
-						var clamped_head_pos: Vector3 = fh_axis * clamped_lat + Vector3.UP * clamped_ht + fwd_axis * GHOST_FORWARD_PLANE
+						var zone_fwd: float = zone_def.zone_forward_offset if zone_def != null else GHOST_FORWARD_PLANE
+						var clamped_head_pos: Vector3 = fh_axis * clamped_lat + Vector3.UP * clamped_ht + fwd_axis * zone_fwd
 						target_pos = clamped_head_pos - head_offset
 					else:
 						target_pos = contact_local - head_offset
@@ -1200,7 +1202,9 @@ func update_posture_ghosts() -> void:
 	var player_y: float = _player.global_position.y
 	for posture in _posture_zone_bounds.keys():
 		var mi: MeshInstance3D = _posture_zone_bounds[posture]
-		var zone: Dictionary = POSTURE_ZONES[posture]
+		var zone_def = _posture_lib.get_def(posture) if _posture_lib else null
+		if zone_def == null or not zone_def.has_zone:
+			continue
 		var ghost: Node3D = posture_ghosts.get(posture)
 		# Ghost position is handle-bottom (same coord space as player children).
 		# Use ghost lateral/forward; zone height is local_ht → player-relative.
@@ -1209,11 +1213,11 @@ func update_posture_ghosts() -> void:
 		var ghost_z: float = ghost_pos.dot(fwd)
 		# Zone y values are world-height-above-floor (local_ht).
 		# Convert to player-relative Y so the box sits at the right world height.
-		var zone_y_min_rel: float = _player.COURT_FLOOR_Y + zone.y_min - player_y
-		var zone_y_max_rel: float = _player.COURT_FLOOR_Y + zone.y_max - player_y
-		var zone_cx: float = (zone.x_min + zone.x_max) * 0.5
+		var zone_y_min_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_min - player_y
+		var zone_y_max_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_max - player_y
+		var zone_cx: float = (zone_def.zone_x_min + zone_def.zone_x_max) * 0.5
 		var zone_cy: float = (zone_y_min_rel + zone_y_max_rel) * 0.5
-		var zone_cz: float = GHOST_FORWARD_PLANE
+		var zone_cz: float = zone_def.zone_forward_offset
 		# Center the box on the zone (lateral/forward snap to ghost for crisp alignment)
 		var cx: float = zone_cx if absf(zone_cx - ghost_x) < 0.3 else ghost_x
 		var cy: float = zone_cy
@@ -1221,7 +1225,7 @@ func update_posture_ghosts() -> void:
 		mi.position = fh * cx + Vector3.UP * cy + fwd * cz
 		var mesh: BoxMesh = mi.mesh as BoxMesh
 		if mesh:
-			mesh.size = Vector3(zone.x_max - zone.x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
+			mesh.size = Vector3(zone_def.zone_x_max - zone_def.zone_x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
 		mi.look_at(mi.global_position + fwd, Vector3.UP, true)
 		var mat: StandardMaterial3D = mi.material_override as StandardMaterial3D
 		# Editor mode: show all zone bounds; selected is bright, others dim

@@ -279,21 +279,26 @@ func _process(_delta: float) -> void:
 			var half_size: Vector3 = zone_mesh.size / 2.0
 			var basis: Basis = zone_mi.global_transform.basis
 			var center: Vector3 = zone_mi.global_position
-			var offsets := [
+			var corner_offsets := [
 				Vector3(-half_size.x, -half_size.y, -half_size.z),
 				Vector3( half_size.x, -half_size.y, -half_size.z),
 				Vector3(-half_size.x,  half_size.y, -half_size.z),
 				Vector3( half_size.x,  half_size.y, -half_size.z),
-				Vector3(-half_size.x, -half_size.y,  half_size.z),
-				Vector3( half_size.x, -half_size.y,  half_size.z),
-				Vector3(-half_size.x,  half_size.y,  half_size.z),
-				Vector3( half_size.x,  half_size.y,  half_size.z),
 			]
-			var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF","zone_BLB","zone_BRB","zone_TLB","zone_TRB"]
-			for i in range(8):
+			var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF"]
+			for i in range(4):
 				var gizmo = _gizmo_controller.get_node_or_null(corner_names[i])
 				if gizmo:
-					gizmo.global_position = center + basis * offsets[i]
+					gizmo.global_position = center + basis * corner_offsets[i]
+			var face_offsets := [
+				Vector3(0.0, 0.0, -half_size.z),
+				Vector3(0.0, 0.0,  half_size.z),
+			]
+			var face_names := ["zone_front","zone_back"]
+			for i in range(2):
+				var gizmo = _gizmo_controller.get_node_or_null(face_names[i])
+				if gizmo:
+					gizmo.global_position = center + basis * face_offsets[i]
 	# After transition finishes, snap paddle to match ghost so all three align
 	if _pose_transition_tween == null and _current_def and _player and _player.posture and _player.paddle_node:
 		var ghost = _player.posture.posture_ghosts.get(_current_def.posture_id)
@@ -604,7 +609,7 @@ func _build_tabs(tc: TabContainer) -> void:
 			"paddle_pitch_signed_deg", "paddle_yaw_signed_deg", "paddle_roll_signed_deg",
 			"paddle_pitch_sign_source", "paddle_yaw_sign_source", "paddle_roll_sign_source",
 			"paddle_floor_clearance",
-			"has_zone", "zone_x_min", "zone_x_max", "zone_y_min", "zone_y_max",
+			"has_zone", "zone_x_min", "zone_x_max", "zone_y_min", "zone_y_max", "zone_forward_offset",
 		],
 		{
 			"paddle_forehand_mul": {"label": "Forehand Mul", "type": "float", "min": - 2.0, "max": 2.0, "step": 0.01},
@@ -625,6 +630,7 @@ func _build_tabs(tc: TabContainer) -> void:
 			"zone_x_max": {"label": "Zone X Max", "type": "float", "min": - 2.0, "max": 2.0, "step": 0.01},
 			"zone_y_min": {"label": "Zone Y Min", "type": "float", "min": - 1.0, "max": 2.0, "step": 0.01},
 			"zone_y_max": {"label": "Zone Y Max", "type": "float", "min": - 1.0, "max": 2.5, "step": 0.01},
+			"zone_forward_offset": {"label": "Zone Forward", "type": "float", "min": - 1.0, "max": 3.0, "step": 0.01},
 		}
 	)
 	_paddle_tab.field_changed.connect(_on_field_changed)
@@ -741,7 +747,7 @@ func _refresh_gizmos() -> void:
 		paddle_pos = _player.global_position + offset
 	_gizmo_controller.add_position_gizmo("paddle_position", paddle_pos, Color(0.3, 0.9, 0.3), 0.08)
 
-	# Zone bounds corner handles — read directly from the purple box transform
+	# Zone bounds corner handles — 4 front corners + 2 face centers
 	if def.has_zone:
 		var zone_mi = _player.posture._posture_zone_bounds.get(def.posture_id)
 		if zone_mi:
@@ -754,17 +760,21 @@ func _refresh_gizmos() -> void:
 				center + basis * Vector3( half_size.x, -half_size.y, -half_size.z),  # BRF
 				center + basis * Vector3(-half_size.x,  half_size.y, -half_size.z),  # TLF
 				center + basis * Vector3( half_size.x,  half_size.y, -half_size.z),  # TRF
-				center + basis * Vector3(-half_size.x, -half_size.y,  half_size.z),  # BLB
-				center + basis * Vector3( half_size.x, -half_size.y,  half_size.z),  # BRB
-				center + basis * Vector3(-half_size.x,  half_size.y,  half_size.z),  # TLB
-				center + basis * Vector3( half_size.x,  half_size.y,  half_size.z),  # TRB
 			]
-			var names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF","zone_BLB","zone_BRB","zone_TLB","zone_TRB"]
-			var colors := [Color(1.0,0.3,0.3),Color(1.0,0.3,0.3),Color(0.3,0.3,1.0),Color(0.3,0.3,1.0),
-						   Color(0.8,0.25,0.25),Color(0.8,0.25,0.25),Color(0.25,0.25,0.8),Color(0.25,0.25,0.8)]
-			var sizes := [0.05,0.05,0.05,0.05,0.04,0.04,0.04,0.04]
-			for i in range(8):
-				_gizmo_controller.add_zone_handle(names[i], corners[i], colors[i], sizes[i])
+			var faces := [
+				center + basis * Vector3(0.0, 0.0, -half_size.z),  # front face center
+				center + basis * Vector3(0.0, 0.0,  half_size.z),  # back face center
+			]
+			var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF"]
+			var corner_colors := [Color(1.0,0.3,0.3),Color(1.0,0.3,0.3),Color(0.3,0.3,1.0),Color(0.3,0.3,1.0)]
+			var corner_sizes := [0.05,0.05,0.05,0.05]
+			for i in range(4):
+				_gizmo_controller.add_zone_handle(corner_names[i], corners[i], corner_colors[i], corner_sizes[i])
+			var face_names := ["zone_front","zone_back"]
+			var face_colors := [Color(0.9,0.5,0.2),Color(0.7,0.4,0.15)]
+			var face_sizes := [0.06,0.06]
+			for i in range(2):
+				_gizmo_controller.add_zone_handle(face_names[i], faces[i], face_colors[i], face_sizes[i])
 
 func _get_basis_from_rotation(rot_deg: Vector3) -> Basis:
 	var b := Basis()
@@ -846,22 +856,36 @@ func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 					# Directly move paddle to match gizmo
 					_player.paddle_node.global_position = new_position - _player.paddle_node.global_transform.basis.y * 0.4
 				_status_label.text = "Updated: %s position" % def.display_name
-			"zone_BLF", "zone_BLB":
+			"zone_BLF":
 				def.zone_x_min = offset.dot(forehand_axis)
 				def.zone_y_min = offset.y
 				_status_label.text = "Updated: %s zone (x_min, y_min)" % def.display_name
-			"zone_BRF", "zone_BRB":
+			"zone_BRF":
 				def.zone_x_max = offset.dot(forehand_axis)
 				def.zone_y_min = offset.y
 				_status_label.text = "Updated: %s zone (x_max, y_min)" % def.display_name
-			"zone_TLF", "zone_TLB":
+			"zone_TLF":
 				def.zone_x_min = offset.dot(forehand_axis)
 				def.zone_y_max = offset.y
 				_status_label.text = "Updated: %s zone (x_min, y_max)" % def.display_name
-			"zone_TRF", "zone_TRB":
+			"zone_TRF":
 				def.zone_x_max = offset.dot(forehand_axis)
 				def.zone_y_max = offset.y
 				_status_label.text = "Updated: %s zone (x_max, y_max)" % def.display_name
+			"zone_front", "zone_back":
+				var zone_mi = _player.posture._posture_zone_bounds.get(def.posture_id)
+				var half_z = 0.075
+				if zone_mi and zone_mi.mesh:
+					var zm = zone_mi.mesh as BoxMesh
+					if zm:
+						half_z = zm.size.z / 2.0
+				if field_name == "zone_front":
+					# Front face is at center + fwd * half_z
+					def.zone_forward_offset = offset.dot(forward_axis) - half_z
+				else:
+					# Back face is at center - fwd * half_z
+					def.zone_forward_offset = offset.dot(forward_axis) + half_z
+				_status_label.text = "Updated: %s zone_forward_offset" % def.display_name
 		_paddle_tab.set_definition(def)
 		if _pose_trigger and _pose_trigger.is_frozen():
 			_pose_trigger.refresh_from_definition(def)
