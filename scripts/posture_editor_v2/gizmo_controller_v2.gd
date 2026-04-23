@@ -256,6 +256,7 @@ func clear_all_gizmos() -> void:
 
 func add_position_gizmo(field_name: String, pos: Vector3, color: Color, size: float = 0.08) -> PositionGizmoV2:
 	var gizmo := PositionGizmoV2.new()
+	gizmo.name = field_name
 	gizmo.field_name = field_name
 	gizmo.gizmo_color = color
 	gizmo.gizmo_size = size

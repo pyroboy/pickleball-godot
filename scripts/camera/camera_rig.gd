@@ -119,16 +119,35 @@ func toggle_auto_orbit() -> void:
 func handle_input(event: InputEvent) -> void:
 	if orbit_mode == 0:
 		return
+	
+	# Block camera input when mouse is over the posture editor UI.
+	# The gizmo controller uses the same callback to avoid fighting with orbit.
+	if event is InputEventMouse and is_mouse_over_editor_ui_cb.is_valid():
+		if is_mouse_over_editor_ui_cb.call(event.position):
+			# Cancel any in-progress orbit drag so releasing over the UI
+			# doesn't leave the camera stuck in drag mode.
+			if _orbit_dragging and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+				_orbit_dragging = false
+			return
+	
+	var handled := false
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			_orbit_dragging = event.pressed
+			handled = true
 		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			orbit_pitch = clampf(orbit_pitch - 0.08, 0.05, 1.3)
+			handled = true
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			orbit_pitch = clampf(orbit_pitch + 0.08, 0.05, 1.3)
+			handled = true
 	elif event is InputEventMouseMotion and _orbit_dragging:
 		orbit_angle -= event.relative.x * ORBIT_DRAG_SENSITIVITY
 		orbit_pitch = clampf(orbit_pitch - event.relative.y * ORBIT_DRAG_SENSITIVITY, 0.05, 1.3)
+		handled = true
+	
+	if handled:
+		get_viewport().set_input_as_handled()
 
 ## Cancel any in-progress orbit drag. Call when another system
 ## (e.g. gizmo_controller) steals left-drag input.

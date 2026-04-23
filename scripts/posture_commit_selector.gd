@@ -50,6 +50,13 @@ func set_trajectory_points(points: Array[Vector3]) -> void:
 
 ## Returns true if the given posture is in the green pool (near trajectory).
 ## CHARGE postures are always excluded — they are manually activated.
+func _get_ghost_head_world(ghost: Node3D) -> Vector3:
+	if ghost == null:
+		return Vector3.ZERO
+	# Ghost origin is handle-bottom; head center is +0.4 m along local Y basis.
+	return ghost.global_position + ghost.global_transform.basis.y * 0.4
+
+
 func is_ghost_near_trajectory(posture: int, posture_ghosts: Dictionary,
 		forehand_charge: int, backhand_charge: int) -> bool:
 	if _trajectory_points.is_empty():
@@ -57,13 +64,11 @@ func is_ghost_near_trajectory(posture: int, posture_ghosts: Dictionary,
 	if posture == forehand_charge or posture == backhand_charge:
 		return false
 	var ghost: Node3D = posture_ghosts.get(posture)
-	var ghost_world: Vector3
-	if ghost:
-		ghost_world = ghost.global_position
-	else:
+	if ghost == null:
 		return false  # no ghost node — can't be green
+	var ghost_head: Vector3 = _get_ghost_head_world(ghost)
 	for pt in _trajectory_points:
-		if ghost_world.distance_to(pt) < POSTURE_GHOST_NEAR_RADIUS:
+		if ghost_head.distance_to(pt) < POSTURE_GHOST_NEAR_RADIUS:
 			return true
 	return false
 
@@ -156,10 +161,16 @@ func find_best_green_posture(ref_pos: Vector3, posture_ghosts: Dictionary,
 			elif local_ht > zone.y_max:
 				ht_miss = local_ht - zone.y_max
 			var score: float = ht_miss * 2.5 + lat_miss
+			# Volumetric grid concentration bonus — strong grid activation wins even
+			# before the contact point exits the current zone.
+			if awareness_grid:
+				var posture_scores: Dictionary = awareness_grid.get_posture_zone_scores()
+				var grid_score: float = posture_scores.get(posture, 0.0)
+				score -= grid_score * 0.12
 			# 3D ghost proximity tiebreaker at zero score.
 			var ghost: Node3D = posture_ghosts.get(posture)
 			if ghost:
-				score += 0.05 * ghost.global_position.distance_to(ref_pos)
+				score += 0.05 * _get_ghost_head_world(ghost).distance_to(ref_pos)
 			if score < best_score:
 				best_score = score
 				best = posture

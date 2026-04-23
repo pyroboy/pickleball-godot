@@ -106,6 +106,8 @@ var posture_editor_v2
 var _transport_bar: Control
 var reaction_button
 var _in_slow_mo: bool = false
+var _ball_frozen: bool = false
+var _frozen_trajectory_points: Array[Vector3] = []
 
 # ── Missing variable declarations ────────────────────────────────────────────
 var _service_fault_triggered: bool = false
@@ -141,6 +143,8 @@ func get_trajectory_arc_offset() -> float:
 
 # ── Lifecycle ───────────────────────────────────────────────────────────────
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		print("[GAME] _unhandled_input: mouse button ", event.button_index)
 	if camera_rig != null:
 		camera_rig.handle_input(event)
 
@@ -416,14 +420,20 @@ func _create_ui() -> void:
 	posture_editor_ui.editor_opened.connect(_on_editor_opened)
 	posture_editor_ui.editor_closed.connect(_on_editor_closed)
 	canvas.add_child(posture_editor_ui)
-	if player_left:
-		posture_editor_ui.set_player(player_left)
-	if camera_rig != null:
-		camera_rig.is_mouse_over_editor_ui_cb = Callable(posture_editor_ui, "contains_screen_point")
+	# V1 archived — do not init player/gizmos so they don't steal input.
+	# if player_left:
+	# 	posture_editor_ui.set_player(player_left)
 
-	# Posture Editor v2 — clean-slate rewrite, triggered by Q.
+	# Posture Editor v2 — clean-slate rewrite, triggered by Q / E.
 	posture_editor_v2 = _PostureEditorV2.new()
+	posture_editor_v2.name = "PostureEditorV2"
+	posture_editor_v2.editor_opened.connect(_on_editor_v2_opened)
+	posture_editor_v2.editor_closed.connect(_on_editor_v2_closed)
 	canvas.add_child(posture_editor_v2)
+	if player_left:
+		posture_editor_v2.set_player(player_left)
+	if camera_rig != null:
+		camera_rig.is_mouse_over_editor_ui_cb = Callable(posture_editor_v2, "contains_screen_point")
 
 	# Transport bar — sibling of posture_editor_ui on canvas (spans viewport 0.0-0.65)
 	# Hidden by default; shown only when posture editor is open.
@@ -495,7 +505,9 @@ func _physics_process(delta: float) -> void:
 
 	# Camera update
 	if camera_rig != null:
-		if posture_editor_ui and posture_editor_ui.visible:
+		if posture_editor_v2 and posture_editor_v2.visible and player_left:
+			camera_rig.editor_focus_point = player_left.global_position
+		elif posture_editor_ui and posture_editor_ui.visible:
 			camera_rig.editor_focus_point = posture_editor_ui.get_current_paddle_position()
 		else:
 			camera_rig.editor_focus_point = Vector3.INF
@@ -715,6 +727,10 @@ func _reset_ball() -> void:
 	game_shots.cleanup()
 	game_trajectory.clear()
 	_reset_player_positions()
+	if player_left and player_left.posture:
+		player_left.posture.reset_incoming_highlight()
+	if player_right and player_right.posture:
+		player_right.posture.reset_incoming_highlight()
 	player_right.set_ai_movement_enabled(false)
 	_update_held_ball_position()
 	scoreboard_ui.hide_out()
@@ -806,6 +822,39 @@ func _start_drop_test() -> void:
 	if game_drop_test and game_drop_test.has_method("start"):
 		game_drop_test.start()
 
+func is_ball_frozen() -> bool:
+	return _ball_frozen
+
+func _toggle_ball_freeze() -> void:
+	_ball_frozen = not _ball_frozen
+	if _ball_frozen:
+		print("[FREEZE] Ball frozen")
+		if ball:
+			ball.set_frozen_state(ball.global_position, ball.linear_velocity, ball.angular_velocity)
+			ball.set_time_frozen(true)
+		if player_left and player_left.debug_visual:
+			player_left.debug_visual.set_trajectory_visible(true)
+			if player_left.debug_visual.incoming_traj_instance:
+				player_left.debug_visual.incoming_traj_instance.visible = true
+			_frozen_trajectory_points = player_left.debug_visual._last_trajectory_points.duplicate()
+		_feed_frozen_trajectory()
+		if hud and hud.get("freeze_indicator"):
+			hud.freeze_indicator.visible = true
+	else:
+		print("[FREEZE] Ball unfrozen")
+		if ball:
+			ball.set_time_frozen(false)
+		_frozen_trajectory_points.clear()
+		if hud and hud.get("freeze_indicator"):
+			hud.freeze_indicator.visible = false
+
+func _feed_frozen_trajectory() -> void:
+	for p in [player_left, player_right]:
+		if p and p.posture:
+			p.posture.set_trajectory_points(_frozen_trajectory_points.duplicate())
+		if p and p.awareness_grid:
+			p.awareness_grid.set_trajectory_points(_frozen_trajectory_points.duplicate())
+
 func _refresh_sound_tune_panel() -> void:
 	# Delegates to game_sound_tune which owns the sound panel
 	if game_sound_tune and game_sound_tune.has_method("_refresh_sound_tune_panel"):
@@ -830,6 +879,43 @@ func _toggle_posture_editor() -> void:
 	else:
 		_on_editor_closed()
 		print("[POSTURE EDITOR] OFF")
+
+func _toggle_posture_editor_v2() -> void:
+	if posture_editor_v2 == null:
+		push_warning("[POSTURE EDITOR V2] posture_editor_v2 is null — editor not initialized")
+		return
+	posture_editor_v2.toggle()
+	if posture_editor_v2.visible:
+		print("[POSTURE EDITOR V2] ON")
+	else:
+		print("[POSTURE EDITOR V2] OFF")
+
+func _on_editor_v2_opened() -> void:
+	# CP2 — editor camera: orbit around player from a fixed angle.
+	if camera_rig != null and camera_rig.camera != null:
+		_editor_previous_camera_mode = camera_rig.orbit_mode
+		_editor_previous_camera_pos = camera_rig.camera.position
+		_editor_previous_camera_rot = camera_rig.camera.rotation_degrees
+		camera_rig.orbit_mode = 3
+		camera_rig.orbit_pitch = 0.24
+		camera_rig.orbit_angle = PI
+		camera_rig.orbit_auto = false
+		print("[EDITOR V2] Camera switched to editor orbit")
+	# Show posture ghosts for editor
+	if player_left and player_left.posture:
+		player_left.posture.set_ghosts_visible(true)
+
+func _on_editor_v2_closed() -> void:
+	# CP2 — restore previous camera.
+	if camera_rig != null and camera_rig.camera != null:
+		camera_rig.orbit_mode = _editor_previous_camera_mode
+		if _editor_previous_camera_mode == 0:
+			camera_rig.camera.position = _editor_previous_camera_pos
+			camera_rig.camera.rotation_degrees = _editor_previous_camera_rot
+		print("[EDITOR V2] Camera restored")
+	# Restore ghost visibility to match debug state
+	if player_left and player_left.posture:
+		player_left.posture.set_ghosts_visible(debug_visuals_visible)
 
 var _editor_previous_camera_mode: int = 0
 var _editor_previous_camera_pos: Vector3 = Vector3.ZERO

@@ -180,7 +180,8 @@ func _input(event: InputEvent) -> void:
 	# Block gizmo input when mouse is over the posture editor UI panel.
 	# Do NOT consume here — Controls' gui_input runs AFTER _input, so marking
 	# the event handled would block button/slider clicks in the panel.
-	if event is InputEventMouse and _is_mouse_over_ui(event.position):
+	var mouse_over_ui := _is_mouse_over_ui(event.position) if event is InputEventMouse else false
+	if event is InputEventMouse and mouse_over_ui:
 		return
 	
 	if event is InputEventMouseButton:

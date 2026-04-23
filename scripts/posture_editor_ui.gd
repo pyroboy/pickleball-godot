@@ -65,6 +65,7 @@ var _follow_through_tab
 var _library
 var _base_pose_library
 var _player: Node3D = null
+var _mouse_was_on_panel := false
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ func _ready() -> void:
 	offset_top = 0.0
 	offset_right = 0.0
 	offset_bottom = 0.0
+	custom_minimum_size = Vector2(400, 0)
 
 	var panel := PanelContainer.new()
 	panel.anchor_right = 1.0
@@ -236,7 +238,7 @@ func _make_main_split() -> HSplitContainer:
 	hsplit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hsplit.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	hsplit.split_offset = 300
-	hsplit.mouse_filter = Control.MOUSE_FILTER_PASS
+	hsplit.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var left_panel := PanelContainer.new()
 	left_panel.add_theme_stylebox_override("panel", _make_panel_style(Color(0.13, 0.18, 0.24, 0.97), Color(0.24, 0.34, 0.48, 0.95), 12))
@@ -270,7 +272,7 @@ func _make_main_split() -> HSplitContainer:
 	_posture_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_posture_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_posture_list.custom_minimum_size = Vector2(260, 200)
-	_posture_list.mouse_filter = Control.MOUSE_FILTER_PASS
+	_posture_list.mouse_filter = Control.MOUSE_FILTER_STOP
 	_posture_list.item_selected.connect(_on_posture_selected)
 	left_vbox.add_child(_posture_list)
 	# _populate_posture_list() called by _update_workspace_ui() after _state.init()
@@ -300,7 +302,7 @@ func _make_main_split() -> HSplitContainer:
 	_tab_container = TabContainer.new()
 	_tab_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_tab_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	_tab_container.mouse_filter = Control.MOUSE_FILTER_STOP
 	_tab_container.tab_changed.connect(_on_tab_changed)
 	right_vbox.add_child(_tab_container)
 	
@@ -1010,19 +1012,26 @@ func _notification(what: int) -> void:
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		print("[GUI INPUT] click on: ", self.name)
+
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
-		
+	
 	if event is InputEventKey and event.pressed:
+		var handled := false
 		if event.keycode == KEY_G:
 			_on_toggle_solo_mode()
-			get_viewport().set_input_as_handled()
+			handled = true
 		elif event.keycode == KEY_P:
 			_on_trigger_pose()
-			get_viewport().set_input_as_handled()
+			handled = true
 		elif event.keycode == KEY_SPACE:
 			_on_play_transition()
+			handled = true
+		if handled:
 			get_viewport().set_input_as_handled()
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -1035,6 +1044,15 @@ func _process(delta: float) -> void:
 	
 	if visible and _player:
 		_update_gizmo_positions()
+	
+	var mouse_pos := get_viewport().get_mouse_position()
+	var my_rect := get_global_rect()
+	var mouse_on_panel := visible and my_rect.has_point(mouse_pos)
+	if visible and Engine.get_physics_frames() % 60 == 0:
+		print("[DEBUG] rect=", my_rect, " mouse=", mouse_pos, " on_panel=", mouse_on_panel)
+	if mouse_on_panel and not _mouse_was_on_panel:
+		print("[POSTURE EDITOR] Mouse entered panel")
+	_mouse_was_on_panel = mouse_on_panel
 	
 	if _gizmos != null and _gizmos.get_gizmo_controller() and _player and _player.is_inside_tree() and _player.skeleton:
 		_gizmos.process_frame(delta)
@@ -1080,3 +1098,19 @@ func contains_screen_point(pos: Vector2) -> bool:
 	if not visible:
 		return false
 	return get_global_rect().has_point(pos)
+
+func get_control_under_mouse() -> Control:
+	var mouse_pos := get_viewport().get_mouse_position()
+	var result: Control = null
+	var stack := [self as Control]
+	while not stack.is_empty():
+		var c: Control = stack.pop_back()
+		if not c or not c.is_inside_tree() or not c.visible:
+			continue
+		var rect := c.get_global_rect()
+		if rect.has_point(mouse_pos):
+			result = c
+			for child in c.get_children():
+				if child is Control:
+					stack.append(child)
+	return result

@@ -18,6 +18,12 @@ var _intent_hidden: bool = false  # N key toggles — independent of Z. Shows
 								   # DROP / GROUNDSTROKE / LOB RETURN intent
 								   # markers on where the human can intercept.
 
+# V2: per-phase layer visibility
+var _trajectory_visible: bool = false
+var _intercept_visible: bool = false
+var _ai_indicators_visible: bool = false
+var _step_markers_visible: bool = false
+
 # AI indicator nodes
 var ai_target_indicator: MeshInstance3D = null
 var ai_bounce_indicator: MeshInstance3D = null
@@ -65,7 +71,12 @@ func _ready() -> void:
 
 
 func set_debug_visible(v: bool) -> void:
+	## Backward-compatible bulk toggle — sets all V2 layers.
 	_debug_hidden = not v
+	_trajectory_visible = v
+	_intercept_visible = v
+	_ai_indicators_visible = v
+	_step_markers_visible = v
 	for node in [ai_target_indicator, ai_bounce_indicator, ai_contact_indicator,
 		human_intercept_indicator, human_target_indicator,
 		_debug_right_target_marker, _debug_left_target_marker,
@@ -79,9 +90,41 @@ func set_debug_visible(v: bool) -> void:
 		for lbl in arr:
 			if lbl: lbl.visible = false
 
+
+func set_trajectory_visible(v: bool) -> void:
+	_trajectory_visible = v
+	if incoming_traj_instance and not v:
+		incoming_traj_instance.visible = false
+
+
+func set_intercept_visible(v: bool) -> void:
+	_intercept_visible = v
+	if not v:
+		for arr in [human_prebounce_indicators, human_postbounce_indicators, human_prebounce_dashlines]:
+			for node in arr:
+				if node: node.visible = false
+		for arr in [human_prebounce_labels, human_postbounce_labels]:
+			for lbl in arr:
+				if lbl: lbl.visible = false
+
+
+func set_ai_indicators_visible(v: bool) -> void:
+	_ai_indicators_visible = v
+	if not v:
+		for node in [ai_target_indicator, ai_bounce_indicator, ai_contact_indicator]:
+			if node: node.visible = false
+
+
+func set_step_markers_visible(v: bool) -> void:
+	_step_markers_visible = v
+	if not v:
+		for node in [_debug_right_target_marker, _debug_left_target_marker,
+					_debug_right_origin_marker, _debug_left_origin_marker]:
+			if node: node.visible = false
+
 # N key toggles — independent of Z debug. Only affects shot-intent indicators
 # (SMASH / SEMI-SMASH / VOLLEY / DINK / DROP / GROUNDSTROKE / LOB RETURN).
-# Other Z-gated debug visuals continue to honor _debug_hidden.
+# V2: per-layer visibility is controlled by the phase system in GameDebugUI.
 func set_intent_indicators_visible(v: bool) -> void:
 	_intent_hidden = not v
 	if _intent_hidden:
@@ -93,7 +136,7 @@ func set_intent_indicators_visible(v: bool) -> void:
 				if lbl: lbl.visible = false
 
 func draw_step_debug(r_target: Vector3, l_target: Vector3, r_origin: Vector3, l_origin: Vector3, r_swing: bool, l_swing: bool) -> void:
-	if not DEBUG_STEP_PLANNER or _debug_hidden:
+	if not DEBUG_STEP_PLANNER or not _step_markers_visible:
 		return
 
 	# Create markers on first call
@@ -361,7 +404,7 @@ func create_human_indicators() -> void:
 
 
 func update_ai_indicators() -> void:
-	if _debug_hidden:
+	if not _ai_indicators_visible:
 		return
 	if not _player.is_ai or ai_target_indicator == null or ai_bounce_indicator == null or ai_contact_indicator == null:
 		return
@@ -484,7 +527,7 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 	var drawing: bool = true
 	var prev_pos: Vector3 = pos
 
-	var should_draw: bool = not _debug_hidden
+	var should_draw: bool = _trajectory_visible
 
 	if should_draw:
 		incoming_traj_mesh.surface_begin(Mesh.PRIMITIVE_LINES, incoming_traj_material)
@@ -577,7 +620,7 @@ func clear_incoming_trajectory() -> void:
 func update_human_intercept_pools(ball: RigidBody3D) -> void:
 	# Always compute trajectory (posture system needs it even when visuals are off)
 	_last_trajectory_points = draw_incoming_trajectory(ball)
-	if _debug_hidden:
+	if not _trajectory_visible:
 		# Hide the visual mesh but keep the points
 		if incoming_traj_instance:
 			incoming_traj_instance.visible = false
@@ -676,7 +719,7 @@ func update_human_intercept_pools(ball: RigidBody3D) -> void:
 	# indicators for the entire rally. Velocity + direction are sufficient.
 	# 1.5 m/s threshold catches toss jitter and residual post-point rolling.
 	var ball_incoming: bool = toward_us and ball.linear_velocity.length() > 1.5
-	if _intent_hidden or not ball_incoming:
+	if _intent_hidden or not ball_incoming or not _intercept_visible:
 		for node in human_prebounce_indicators:
 			if node: node.visible = false
 		for dl in human_prebounce_dashlines:

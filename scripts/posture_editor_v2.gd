@@ -266,12 +266,34 @@ func _process(_delta: float) -> void:
 		_pose_trigger.update()
 	# Keep paddle gizmo synced with GHOST head center (ghost is source of truth in editor)
 	if _gizmo_controller and _current_def and _player and _player.posture:
-		var paddle_gizmo = _gizmo_controller.get_node_or_null("PositionGizmo_paddle_position")
+		var paddle_gizmo = _gizmo_controller.get_node_or_null("paddle_position")
 		if paddle_gizmo:
 			var ghost = _player.posture.posture_ghosts.get(_current_def.posture_id)
 			if ghost:
 				var ghost_head_pos: Vector3 = ghost.global_position + ghost.global_transform.basis.y * 0.4
 				paddle_gizmo.global_position = ghost_head_pos
+		# Keep zone corner handles glued to the purple box (updates during drag)
+		var zone_mi = _player.posture._posture_zone_bounds.get(_current_def.posture_id)
+		if zone_mi:
+			var zone_mesh: BoxMesh = zone_mi.mesh as BoxMesh
+			var half_size: Vector3 = zone_mesh.size / 2.0
+			var basis: Basis = zone_mi.global_transform.basis
+			var center: Vector3 = zone_mi.global_position
+			var offsets := [
+				Vector3(-half_size.x, -half_size.y, -half_size.z),
+				Vector3( half_size.x, -half_size.y, -half_size.z),
+				Vector3(-half_size.x,  half_size.y, -half_size.z),
+				Vector3( half_size.x,  half_size.y, -half_size.z),
+				Vector3(-half_size.x, -half_size.y,  half_size.z),
+				Vector3( half_size.x, -half_size.y,  half_size.z),
+				Vector3(-half_size.x,  half_size.y,  half_size.z),
+				Vector3( half_size.x,  half_size.y,  half_size.z),
+			]
+			var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF","zone_BLB","zone_BRB","zone_TLB","zone_TRB"]
+			for i in range(8):
+				var gizmo = _gizmo_controller.get_node_or_null(corner_names[i])
+				if gizmo:
+					gizmo.global_position = center + basis * offsets[i]
 	# After transition finishes, snap paddle to match ghost so all three align
 	if _pose_transition_tween == null and _current_def and _player and _player.posture and _player.paddle_node:
 		var ghost = _player.posture.posture_ghosts.get(_current_def.posture_id)
@@ -719,36 +741,30 @@ func _refresh_gizmos() -> void:
 		paddle_pos = _player.global_position + offset
 	_gizmo_controller.add_position_gizmo("paddle_position", paddle_pos, Color(0.3, 0.9, 0.3), 0.08)
 
-	# Zone bounds corner handles (only for postures that have zones)
+	# Zone bounds corner handles — read directly from the purple box transform
 	if def.has_zone:
-		var zx_min: float = def.zone_x_min
-		var zx_max: float = def.zone_x_max
-		var zy_min: float = def.zone_y_min
-		var zy_max: float = def.zone_y_max
-		# Use the zone box z-thickness (same as BoxMesh size z = 0.15)
-		var rest: Vector3 = forehand_axis * def.paddle_forehand_mul + forward_axis * def.paddle_forward_mul + Vector3(0.0, def.paddle_y_offset, 0.0)
-		var rest_z: float = rest.dot(forward_axis)
-		var bz_min: float = minf(rest_z, _player.posture.GHOST_FORWARD_PLANE)
-		var bz_max: float = maxf(rest_z, _player.posture.GHOST_FORWARD_PLANE)
-		var pp: Vector3 = _player.global_position
-		# Front-face corners (full color)
-		var blf: Vector3 = pp + forehand_axis * zx_min + Vector3.UP * zy_min + forward_axis * bz_min
-		var brf: Vector3 = pp + forehand_axis * zx_max + Vector3.UP * zy_min + forward_axis * bz_min
-		var tlf: Vector3 = pp + forehand_axis * zx_min + Vector3.UP * zy_max + forward_axis * bz_min
-		var trf: Vector3 = pp + forehand_axis * zx_max + Vector3.UP * zy_max + forward_axis * bz_min
-		# Back-face corners (slightly dimmer)
-		var blb: Vector3 = pp + forehand_axis * zx_min + Vector3.UP * zy_min + forward_axis * bz_max
-		var brb: Vector3 = pp + forehand_axis * zx_max + Vector3.UP * zy_min + forward_axis * bz_max
-		var tlb: Vector3 = pp + forehand_axis * zx_min + Vector3.UP * zy_max + forward_axis * bz_max
-		var trb: Vector3 = pp + forehand_axis * zx_max + Vector3.UP * zy_max + forward_axis * bz_max
-		_gizmo_controller.add_zone_handle("zone_BLF", blf, Color(1.0, 0.3, 0.3), 0.05)
-		_gizmo_controller.add_zone_handle("zone_BRF", brf, Color(1.0, 0.3, 0.3), 0.05)
-		_gizmo_controller.add_zone_handle("zone_TLF", tlf, Color(0.3, 0.3, 1.0), 0.05)
-		_gizmo_controller.add_zone_handle("zone_TRF", trf, Color(0.3, 0.3, 1.0), 0.05)
-		_gizmo_controller.add_zone_handle("zone_BLB", blb, Color(0.8, 0.25, 0.25), 0.04)
-		_gizmo_controller.add_zone_handle("zone_BRB", brb, Color(0.8, 0.25, 0.25), 0.04)
-		_gizmo_controller.add_zone_handle("zone_TLB", tlb, Color(0.25, 0.25, 0.8), 0.04)
-		_gizmo_controller.add_zone_handle("zone_TRB", trb, Color(0.25, 0.25, 0.8), 0.04)
+		var zone_mi = _player.posture._posture_zone_bounds.get(def.posture_id)
+		if zone_mi:
+			var zone_mesh: BoxMesh = zone_mi.mesh as BoxMesh
+			var half_size: Vector3 = zone_mesh.size / 2.0
+			var basis: Basis = zone_mi.global_transform.basis
+			var center: Vector3 = zone_mi.global_position
+			var corners := [
+				center + basis * Vector3(-half_size.x, -half_size.y, -half_size.z),  # BLF
+				center + basis * Vector3( half_size.x, -half_size.y, -half_size.z),  # BRF
+				center + basis * Vector3(-half_size.x,  half_size.y, -half_size.z),  # TLF
+				center + basis * Vector3( half_size.x,  half_size.y, -half_size.z),  # TRF
+				center + basis * Vector3(-half_size.x, -half_size.y,  half_size.z),  # BLB
+				center + basis * Vector3( half_size.x, -half_size.y,  half_size.z),  # BRB
+				center + basis * Vector3(-half_size.x,  half_size.y,  half_size.z),  # TLB
+				center + basis * Vector3( half_size.x,  half_size.y,  half_size.z),  # TRB
+			]
+			var names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF","zone_BLB","zone_BRB","zone_TLB","zone_TRB"]
+			var colors := [Color(1.0,0.3,0.3),Color(1.0,0.3,0.3),Color(0.3,0.3,1.0),Color(0.3,0.3,1.0),
+						   Color(0.8,0.25,0.25),Color(0.8,0.25,0.25),Color(0.25,0.25,0.8),Color(0.25,0.25,0.8)]
+			var sizes := [0.05,0.05,0.05,0.05,0.04,0.04,0.04,0.04]
+			for i in range(8):
+				_gizmo_controller.add_zone_handle(names[i], corners[i], colors[i], sizes[i])
 
 func _get_basis_from_rotation(rot_deg: Vector3) -> Basis:
 	var b := Basis()

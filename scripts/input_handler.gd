@@ -63,8 +63,8 @@ func _handle_debug_toggles() -> void:
 		if _game.has_method("_cycle_debug_visuals"): _game._cycle_debug_visuals()
 		
 	if _just_pressed(KEY_E):
-		if _game.has_method("_toggle_posture_editor"):
-			_game._toggle_posture_editor()
+		if _game.has_method("_toggle_posture_editor_v2"):
+			_game._toggle_posture_editor_v2()
 
 	if _just_pressed(KEY_Q):
 		if _game.has_method("_toggle_posture_editor_v2"):
@@ -80,6 +80,9 @@ func _handle_debug_toggles() -> void:
 		
 	if _just_pressed(KEY_N):
 		if _game.has_method("_toggle_intent_indicators"): _game._toggle_intent_indicators()
+
+	if _just_pressed(KEY_5):
+		if _game.has_method("_toggle_ball_freeze"): _game._toggle_ball_freeze()
 
 func _handle_camera_and_movement_controls() -> void:
 	# O key toggles auto-orbit even in editor mode (camera still orbits in editor)

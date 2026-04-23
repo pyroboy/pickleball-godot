@@ -4,7 +4,15 @@ extends Node
 ## Fully extracted from game.gd.
 
 # ── State ──────────────────────────────────────────────────────────────────────
-var _debug_z_cycle: int = 0  # 0=all off, 1=all on, 2=on but zones hidden
+enum DebugPhase {
+	OFF = 0,
+	PADDLE_GEOMETRY = 1,   # posture ghosts + charge positions
+	SWING_AND_SPACE = 2,   # follow-through ghosts + volumetric grid
+	BALL_PREDICTION = 3,   # trajectory arc + intercept indicators
+	AGENT_REASONING = 4,   # AI indicators + step markers
+	FULL_HUD = 5,          # zone overlay + debug text panel
+}
+var _current_phase: int = DebugPhase.OFF
 var _intent_indicators_visible: bool = true
 
 # ── Injected references ───────────────────────────────────────────────────────
@@ -51,22 +59,50 @@ func cycle_difficulty() -> void:
 
 
 func cycle_debug_visuals() -> void:
-	_debug_z_cycle = (_debug_z_cycle + 1) % 3
-	if _debug_z_cycle == 0:
-		_set_debug_visuals_visible(false)
-		_set_debug_zones_visible(false)
-		if _scoreboard_ui:
-			_scoreboard_ui.set_debug_visuals_active(false)
-	elif _debug_z_cycle == 1:
-		_set_debug_visuals_visible(true)
-		_set_debug_zones_visible(true)
-		if _scoreboard_ui:
-			_scoreboard_ui.set_debug_visuals_active(true)
-	elif _debug_z_cycle == 2:
-		_set_debug_visuals_visible(true)
-		_set_debug_zones_visible(false)
-		if _scoreboard_ui:
-			_scoreboard_ui.set_debug_visuals_active(true)
+	_current_phase = (_current_phase + 1) % 6
+	_apply_phase(_current_phase)
+
+
+func _phase_name(phase: int) -> String:
+	match phase:
+		DebugPhase.OFF: return "OFF"
+		DebugPhase.PADDLE_GEOMETRY: return "Paddle Geometry"
+		DebugPhase.SWING_AND_SPACE: return "Swing & Space"
+		DebugPhase.BALL_PREDICTION: return "Ball Prediction"
+		DebugPhase.AGENT_REASONING: return "Agent Reasoning"
+		DebugPhase.FULL_HUD: return "Full HUD"
+		_: return "?"
+
+
+func _apply_phase(phase: int) -> void:
+	var p1 := phase >= DebugPhase.PADDLE_GEOMETRY
+	var p2 := phase >= DebugPhase.SWING_AND_SPACE
+	var p3 := phase >= DebugPhase.BALL_PREDICTION
+	var p4 := phase >= DebugPhase.AGENT_REASONING
+	var p5 := phase >= DebugPhase.FULL_HUD
+
+	# Phase 1: Paddle Geometry
+	_set_posture_ghosts_visible(p1)
+	_set_charge_ghosts_visible(p1)
+	_set_charge_highlight(phase == DebugPhase.PADDLE_GEOMETRY)
+
+	# Phase 2: Swing & Space
+	_set_follow_through_visible(p2)
+	_set_grid_visible(p2)
+
+	# Phase 3: Ball Prediction
+	_set_trajectory_visible(p3)
+	_set_intercept_visible(p3)
+
+	# Phase 4: Agent Reasoning
+	_set_ai_indicators_visible(p4)
+	_set_step_markers_visible(p4)
+
+	# Phase 5: Full HUD
+	_set_zones_visible(p5)
+	_set_debug_text_panel(p5)
+
+	print("[DEBUG PHASE] ", _phase_name(phase), " (", phase, ")")
 
 
 func toggle_intent_indicators() -> void:
@@ -240,40 +276,91 @@ func _update_debug_label(
 	_scoreboard_ui.update_debug_content(debug_content)
 
 
-# ── Visibility setters (forwarded to game.gd internals) ───────────────────────
+# ── Granular visibility setters (per phase layer) ─────────────────────────────
 
-func set_debug_visible(v: bool) -> void:
-	# Posture ghosts — Blue only (Red/AI ghosts always hidden)
+func _set_posture_ghosts_visible(v: bool) -> void:
 	if _player_left and _player_left.posture != null:
 		var posture = _player_left.posture
-		if posture.has_method("set_ghosts_visible"):
-			posture.set_ghosts_visible(v)
+		if posture.has_method("set_posture_ghosts_visible"):
+			posture.set_posture_ghosts_visible(v)
 	if _player_right and _player_right.posture != null:
 		var posture = _player_right.posture
-		if posture and posture.has_method("set_ghosts_visible"):
-			posture.set_ghosts_visible(false)
-	# Awareness grid — Blue only
-	if _player_left and _player_left.has_node("awareness_grid"):
-		var grid = _player_left.get_node_or_null("awareness_grid")
+		if posture and posture.has_method("set_posture_ghosts_visible"):
+			posture.set_posture_ghosts_visible(false)
+
+
+func _set_charge_ghosts_visible(v: bool) -> void:
+	if _player_left and _player_left.posture != null:
+		var posture = _player_left.posture
+		if posture.has_method("set_charge_ghosts_visible"):
+			posture.set_charge_ghosts_visible(v)
+	if _player_right and _player_right.posture != null:
+		var posture = _player_right.posture
+		if posture and posture.has_method("set_charge_ghosts_visible"):
+			posture.set_charge_ghosts_visible(false)
+
+
+func _set_charge_highlight(v: bool) -> void:
+	if _player_left and _player_left.posture != null:
+		var posture = _player_left.posture
+		if posture.has_method("set_charge_highlight_active"):
+			posture.set_charge_highlight_active(v)
+	if _player_right and _player_right.posture != null:
+		var posture = _player_right.posture
+		if posture and posture.has_method("set_charge_highlight_active"):
+			posture.set_charge_highlight_active(false)
+
+
+func _set_follow_through_visible(v: bool) -> void:
+	if _player_left and _player_left.posture != null:
+		var posture = _player_left.posture
+		if posture.has_method("set_follow_through_visible"):
+			posture.set_follow_through_visible(v)
+	if _player_right and _player_right.posture != null:
+		var posture = _player_right.posture
+		if posture and posture.has_method("set_follow_through_visible"):
+			posture.set_follow_through_visible(false)
+
+
+func _set_grid_visible(v: bool) -> void:
+	if _player_left and _player_left.has_node("AwarenessGrid"):
+		var grid = _player_left.get_node_or_null("AwarenessGrid")
 		if grid and grid.has_method("set_visible"):
 			grid.set_visible(v)
-	if _player_right and _player_right.has_node("awareness_grid"):
-		var grid = _player_right.get_node_or_null("awareness_grid")
+	if _player_right and _player_right.has_node("AwarenessGrid"):
+		var grid = _player_right.get_node_or_null("AwarenessGrid")
 		if grid and grid.has_method("set_visible"):
 			grid.set_visible(false)
-	# Both players' debug visuals (indicators, step markers)
-	if _player_left and _player_left.has_node("debug_visual"):
-		var dv = _player_left.get_node_or_null("debug_visual")
-		if dv and dv.has_method("set_debug_visible"):
-			dv.set_debug_visible(v)
-	if _player_right and _player_right.has_node("debug_visual"):
-		var dv = _player_right.get_node_or_null("debug_visual")
-		if dv and dv.has_method("set_debug_visible"):
-			dv.set_debug_visible(v)
 
 
-func set_debug_zones_visible(v: bool) -> void:
-	# DebugZones is a child of game.gd; traverse up from canvas to find it
+func _set_trajectory_visible(v: bool) -> void:
+	_for_both_debug_visuals("set_trajectory_visible", v)
+
+
+func _set_intercept_visible(v: bool) -> void:
+	_for_both_debug_visuals("set_intercept_visible", v)
+
+
+func _set_ai_indicators_visible(v: bool) -> void:
+	_for_both_debug_visuals("set_ai_indicators_visible", v)
+
+
+func _set_step_markers_visible(v: bool) -> void:
+	_for_both_debug_visuals("set_step_markers_visible", v)
+
+
+func _for_both_debug_visuals(method: String, v: bool) -> void:
+	if _player_left and _player_left.has_node("DebugVisual"):
+		var dv = _player_left.get_node_or_null("DebugVisual")
+		if dv and dv.has_method(method):
+			dv.call(method, v)
+	if _player_right and _player_right.has_node("DebugVisual"):
+		var dv = _player_right.get_node_or_null("DebugVisual")
+		if dv and dv.has_method(method):
+			dv.call(method, v)
+
+
+func _set_zones_visible(v: bool) -> void:
 	var dz_node: Node = null
 	var parent = get_parent()
 	while parent:
@@ -285,12 +372,31 @@ func set_debug_zones_visible(v: bool) -> void:
 		dz_node.visible = v
 
 
+func _set_debug_text_panel(v: bool) -> void:
+	if _scoreboard_ui:
+		_scoreboard_ui.set_debug_visuals_active(v)
+
+
+# ── Backward-compatible "all on/off" setter ───────────────────────────────────
+
+func set_debug_visible(v: bool) -> void:
+	## Backward-compatible bulk toggle. Used by game.gd legacy calls.
+	if v:
+		_apply_phase(DebugPhase.FULL_HUD)
+	else:
+		_apply_phase(DebugPhase.OFF)
+
+
+func set_debug_zones_visible(v: bool) -> void:
+	_set_zones_visible(v)
+
+
 func _set_debug_visuals_visible(v: bool) -> void:
 	set_debug_visible(v)
 
 
 func _set_debug_zones_visible(v: bool) -> void:
-	set_debug_zones_visible(v)
+	_set_zones_visible(v)
 
 
 # ── Update refs from game.gd (called each frame via update()) ─────────────────

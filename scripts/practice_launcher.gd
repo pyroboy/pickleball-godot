@@ -41,7 +41,9 @@ func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: Char
 func _process(delta: float) -> void:
 	if not loop_enabled or not _ball:
 		return
-		
+	if _ball.is_time_frozen():
+		return
+	
 	_loop_timer += delta
 	if _loop_timer >= PRACTICE_LOOP_INTERVAL:
 		_loop_timer = 0.0

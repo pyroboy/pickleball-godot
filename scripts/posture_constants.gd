@@ -6,17 +6,17 @@ extends RefCounted
 ## Wiring in Phase 1c replaces the inline constants with imports from this file.
 
 # ── Paddle posture position / height ─────────────────────────────────────────
-const PADDLE_SIDE_OFFSET                := 0.5
-const PADDLE_FORWARD_OFFSET             := 0.4
-const PADDLE_CENTER_OFFSET              := 0.42
-const PADDLE_BACKHAND_OFFSET            := 0.42
+const PADDLE_SIDE_OFFSET                := 0.55
+const PADDLE_FORWARD_OFFSET             := 0.5
+const PADDLE_CENTER_OFFSET              := 0.5
+const PADDLE_BACKHAND_OFFSET            := 0.55
 const PADDLE_MEDIUM_OVERHEAD_HEIGHT     := 0.6
-const PADDLE_MEDIUM_OVERHEAD_FORWARD    := 0.7
+const PADDLE_MEDIUM_OVERHEAD_FORWARD    := 0.6
 const PADDLE_HIGH_OVERHEAD_HEIGHT       := 1.1
-const PADDLE_HIGH_OVERHEAD_FORWARD      := 0.8
-const PADDLE_OVERHEAD_SIDE_OFFSET       := 0.5
+const PADDLE_HIGH_OVERHEAD_FORWARD      := 0.6
+const PADDLE_OVERHEAD_SIDE_OFFSET       := 0.0
 const PADDLE_LOW_HEIGHT                 := -0.62
-const PADDLE_LOW_FORWARD_OFFSET        := 0.55
+const PADDLE_LOW_FORWARD_OFFSET        := 0.5
 const PADDLE_BACKSWING_DEGREES          := 65.0
 const PADDLE_FOLLOW_THROUGH_DEGREES    := 18.0
 const PADDLE_CHARGE_PULLBACK           := 0.24
@@ -27,7 +27,7 @@ const PADDLE_CHARGE_FOREHAND_HEIGHT     := 0.35
 const PADDLE_CHARGE_BACKHAND_BEHIND     := 0.65
 const PADDLE_CHARGE_BACKHAND_HEIGHT     := 0.35
 const PADDLE_POSTURE_SWITCH_DEADZONE    := 0.22
-const PADDLE_WIDE_LATERAL_THRESHOLD     := 0.65
+const PADDLE_WIDE_LATERAL_THRESHOLD     := 0.75
 
 # ── Ghost stretch / intercept clamp limits ───────────────────────────────────
 const GHOST_STRETCH_LATERAL_MAX        := 1.4
@@ -36,6 +36,12 @@ const GHOST_STRETCH_HEIGHT_MAX         := 1.3
 const GHOST_FORWARD_PLANE              := 0.5
 const GHOST_CONTACT_MAX_DIST           := 3.0
 const ZONE_EXIT_MARGIN                 := 0.3
+
+# ── Purple paddle bounds (committed ghost hard cage) ──────────────────────────
+const PURPLE_BOUNDS_LATERAL            := 0.45
+const PURPLE_BOUNDS_HEIGHT_MIN         := 0.25
+const PURPLE_BOUNDS_HEIGHT_MAX         := 1.1
+const PURPLE_BOUNDS_FORWARD            := 0.5
 
 # ── Overhead trigger thresholds (forwarded from PickleballConstants) ──────────
 ## These aliases keep posture logic self-contained; values live in PickleballConstants.

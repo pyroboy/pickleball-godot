@@ -142,48 +142,58 @@ func _get_posture_offset_hardcoded(posture: int) -> Vector3:
 	if _is_ft_key(posture):
 		return Vector3.ZERO
 
+	# ── Normal tier (grid Z=0.5) ───────────────────────────────────────────────
 	if posture == _player.PaddlePosture.FOREHAND:
 		return forehand_axis * _PC.PADDLE_SIDE_OFFSET + forward_axis * _PC.PADDLE_FORWARD_OFFSET
 	if posture == _player.PaddlePosture.BACKHAND:
-		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * (_PC.PADDLE_FORWARD_OFFSET * 0.9)
+		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * _PC.PADDLE_FORWARD_OFFSET
+	if posture == _player.PaddlePosture.WIDE_FOREHAND:
+		return forehand_axis * 0.95 + forward_axis * _PC.PADDLE_FORWARD_OFFSET
+	if posture == _player.PaddlePosture.WIDE_BACKHAND:
+		return forehand_axis * -0.95 + forward_axis * _PC.PADDLE_FORWARD_OFFSET
+	if posture == _player.PaddlePosture.FORWARD:
+		return forward_axis * _PC.PADDLE_FORWARD_OFFSET
+	if posture == _player.PaddlePosture.VOLLEY_READY:
+		return forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, 0.12, 0.0)
+	if posture == _player.PaddlePosture.READY:
+		return forward_axis * 0.55 + Vector3(0.0, -0.28, 0.0)
+
+	# ── Overhead tier ──────────────────────────────────────────────────────────
 	if posture == _player.PaddlePosture.MEDIUM_OVERHEAD:
-		return forehand_axis * _PC.PADDLE_OVERHEAD_SIDE_OFFSET + forward_axis * _PC.PADDLE_MEDIUM_OVERHEAD_FORWARD + Vector3(0.0, _PC.PADDLE_MEDIUM_OVERHEAD_HEIGHT, 0.0)
+		return forward_axis * _PC.PADDLE_MEDIUM_OVERHEAD_FORWARD + Vector3(0.0, _PC.PADDLE_MEDIUM_OVERHEAD_HEIGHT, 0.0)
 	if posture == _player.PaddlePosture.HIGH_OVERHEAD:
-		return forehand_axis * _PC.PADDLE_OVERHEAD_SIDE_OFFSET + forward_axis * _PC.PADDLE_HIGH_OVERHEAD_FORWARD + Vector3(0.0, _PC.PADDLE_HIGH_OVERHEAD_HEIGHT, 0.0)
+		return forward_axis * _PC.PADDLE_HIGH_OVERHEAD_FORWARD + Vector3(0.0, _PC.PADDLE_HIGH_OVERHEAD_HEIGHT, 0.0)
+
+	# ── Mid-low tier (grid Z=0.5) ──────────────────────────────────────────────
+	if posture == _player.PaddlePosture.MID_LOW_FOREHAND:
+		return forehand_axis * _PC.PADDLE_SIDE_OFFSET + forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, -0.20, 0.0)
+	if posture == _player.PaddlePosture.MID_LOW_BACKHAND:
+		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, -0.20, 0.0)
+	if posture == _player.PaddlePosture.MID_LOW_FORWARD:
+		return forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, -0.20, 0.0)
+	if posture == _player.PaddlePosture.MID_LOW_WIDE_FOREHAND:
+		return forehand_axis * 0.95 + forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, -0.20, 0.0)
+	if posture == _player.PaddlePosture.MID_LOW_WIDE_BACKHAND:
+		return forehand_axis * -0.95 + forward_axis * _PC.PADDLE_FORWARD_OFFSET + Vector3(0.0, -0.20, 0.0)
+
+	# ── Low tier (grid Z=0.5, inverted paddle) ─────────────────────────────────
 	if posture == _player.PaddlePosture.LOW_FOREHAND:
 		return forehand_axis * _PC.PADDLE_SIDE_OFFSET + forward_axis * _PC.PADDLE_LOW_FORWARD_OFFSET + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
 	if posture == _player.PaddlePosture.LOW_BACKHAND:
 		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * _PC.PADDLE_LOW_FORWARD_OFFSET + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
 	if posture == _player.PaddlePosture.LOW_FORWARD:
 		return forward_axis * _PC.PADDLE_LOW_FORWARD_OFFSET + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
+	if posture == _player.PaddlePosture.LOW_WIDE_FOREHAND:
+		return forehand_axis * 0.95 + forward_axis * _PC.PADDLE_LOW_FORWARD_OFFSET + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
+	if posture == _player.PaddlePosture.LOW_WIDE_BACKHAND:
+		return forehand_axis * -0.95 + forward_axis * _PC.PADDLE_LOW_FORWARD_OFFSET + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
+
+	# ── Charge tier (behind player) ────────────────────────────────────────────
 	if posture == _player.PaddlePosture.CHARGE_FOREHAND:
 		return forehand_axis * _PC.PADDLE_SIDE_OFFSET + forward_axis * -_PC.PADDLE_CHARGE_FOREHAND_BEHIND + Vector3(0.0, _PC.PADDLE_CHARGE_FOREHAND_HEIGHT, 0.0)
 	if posture == _player.PaddlePosture.CHARGE_BACKHAND:
 		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * -_PC.PADDLE_CHARGE_BACKHAND_BEHIND + Vector3(0.0, _PC.PADDLE_CHARGE_BACKHAND_HEIGHT, 0.0)
-	if posture == _player.PaddlePosture.WIDE_FOREHAND:
-		return forehand_axis * 0.85 + forward_axis * 0.55
-	if posture == _player.PaddlePosture.WIDE_BACKHAND:
-		return forehand_axis * -0.72 + forward_axis * 0.52
-	if posture == _player.PaddlePosture.VOLLEY_READY:
-		return forward_axis * 0.50 + Vector3(0.0, 0.12, 0.0)
-	if posture == _player.PaddlePosture.READY:
-		return forward_axis * 0.55 + Vector3(0.0, -0.28, 0.0)
-	# Mid-low tier
-	if posture == _player.PaddlePosture.MID_LOW_FOREHAND:
-		return forehand_axis * _PC.PADDLE_SIDE_OFFSET + forward_axis * 0.50 + Vector3(0.0, -0.18, 0.0)
-	if posture == _player.PaddlePosture.MID_LOW_BACKHAND:
-		return forehand_axis * -_PC.PADDLE_BACKHAND_OFFSET + forward_axis * 0.48 + Vector3(0.0, -0.18, 0.0)
-	if posture == _player.PaddlePosture.MID_LOW_FORWARD:
-		return forward_axis * 0.52 + Vector3(0.0, -0.18, 0.0)
-	if posture == _player.PaddlePosture.MID_LOW_WIDE_FOREHAND:
-		return forehand_axis * 0.88 + forward_axis * 0.58 + Vector3(0.0, -0.20, 0.0)
-	if posture == _player.PaddlePosture.MID_LOW_WIDE_BACKHAND:
-		return forehand_axis * -0.74 + forward_axis * 0.54 + Vector3(0.0, -0.20, 0.0)
-	# Low-wide tier
-	if posture == _player.PaddlePosture.LOW_WIDE_FOREHAND:
-		return forehand_axis * 0.90 + forward_axis * 0.60 + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
-	if posture == _player.PaddlePosture.LOW_WIDE_BACKHAND:
-		return forehand_axis * -0.78 + forward_axis * 0.56 + Vector3(0.0, _PC.PADDLE_LOW_HEIGHT, 0.0)
+
 	return forward_axis * _PC.PADDLE_CENTER_OFFSET
 
 
@@ -197,38 +207,46 @@ func _get_posture_rotation_hardcoded(posture: int) -> Vector3:
 	var fwd_sign: float = _player._get_forward_axis().z
 
 	if posture == _player.PaddlePosture.FOREHAND:
-		return Vector3(0.0, 0.0, 45.0 * swing_sign)
+		return Vector3(-30.0 * fwd_sign, 0.0, 45.0 * swing_sign)
+	if posture == _player.PaddlePosture.BACKHAND:
+		return Vector3(-30.0 * fwd_sign, 0.0, -45.0 * swing_sign)
+	if posture == _player.PaddlePosture.FORWARD:
+		return Vector3(-25.0 * fwd_sign, 0.0, 0.0)
+	if posture == _player.PaddlePosture.MEDIUM_OVERHEAD:
+		return Vector3(-35.0 * fwd_sign, 0.0, 0.0)
+	if posture == _player.PaddlePosture.HIGH_OVERHEAD:
+		return Vector3(-40.0 * fwd_sign, 0.0, 0.0)
 	if posture == _player.PaddlePosture.WIDE_FOREHAND:
-		return Vector3(0.0, 12.0 * swing_sign, 35.0 * swing_sign)
+		return Vector3(-28.0 * fwd_sign, 12.0 * swing_sign, 35.0 * swing_sign)
 	if posture == _player.PaddlePosture.WIDE_BACKHAND:
-		return Vector3(0.0, -10.0 * swing_sign, -30.0 * swing_sign)
+		return Vector3(-28.0 * fwd_sign, -10.0 * swing_sign, -30.0 * swing_sign)
 	if posture == _player.PaddlePosture.VOLLEY_READY:
-		return Vector3(-15.0 * fwd_sign, 0.0, 0.0)
+		return Vector3(-20.0 * fwd_sign, 0.0, 0.0)
 	if posture == _player.PaddlePosture.READY:
 		return Vector3(-55.0 * fwd_sign, -15.0 * swing_sign, 0.0)
 	# Mid-low
 	if posture == _player.PaddlePosture.MID_LOW_FOREHAND:
-		return Vector3(20.0 * fwd_sign, 0.0, 38.0 * swing_sign)
+		return Vector3(-22.0 * fwd_sign, 0.0, 38.0 * swing_sign)
 	if posture == _player.PaddlePosture.MID_LOW_BACKHAND:
-		return Vector3(20.0 * fwd_sign, 0.0, -32.0 * swing_sign)
+		return Vector3(-22.0 * fwd_sign, 0.0, -32.0 * swing_sign)
 	if posture == _player.PaddlePosture.MID_LOW_FORWARD:
-		return Vector3(25.0 * fwd_sign, 0.0, 0.0)
+		return Vector3(-25.0 * fwd_sign, 0.0, 0.0)
 	if posture == _player.PaddlePosture.MID_LOW_WIDE_FOREHAND:
-		return Vector3(18.0 * fwd_sign, 10.0 * swing_sign, 30.0 * swing_sign)
+		return Vector3(-20.0 * fwd_sign, 10.0 * swing_sign, 30.0 * swing_sign)
 	if posture == _player.PaddlePosture.MID_LOW_WIDE_BACKHAND:
-		return Vector3(18.0 * fwd_sign, -8.0 * swing_sign, -28.0 * swing_sign)
+		return Vector3(-20.0 * fwd_sign, -8.0 * swing_sign, -28.0 * swing_sign)
 	# Low: inverted
 	if posture == _player.PaddlePosture.LOW_FOREHAND:
-		return Vector3(0.0, 0.0, 180.0 + 10.0 * swing_sign)
+		return Vector3(-20.0 * fwd_sign, 0.0, 180.0 + 10.0 * swing_sign)
 	if posture == _player.PaddlePosture.LOW_BACKHAND:
-		return Vector3(0.0, 0.0, 180.0 - 10.0 * swing_sign)
+		return Vector3(-20.0 * fwd_sign, 0.0, 180.0 - 10.0 * swing_sign)
 	if posture == _player.PaddlePosture.LOW_FORWARD:
-		return Vector3(0.0, 0.0, 180.0)
+		return Vector3(-20.0 * fwd_sign, 0.0, 180.0)
 	# Low-wide
 	if posture == _player.PaddlePosture.LOW_WIDE_FOREHAND:
-		return Vector3(0.0, 12.0 * swing_sign, 180.0 + 8.0 * swing_sign)
+		return Vector3(-18.0 * fwd_sign, 12.0 * swing_sign, 180.0 + 8.0 * swing_sign)
 	if posture == _player.PaddlePosture.LOW_WIDE_BACKHAND:
-		return Vector3(0.0, -10.0 * swing_sign, 180.0 - 8.0 * swing_sign)
+		return Vector3(-18.0 * fwd_sign, -10.0 * swing_sign, 180.0 - 8.0 * swing_sign)
 	return Vector3.ZERO
 
 

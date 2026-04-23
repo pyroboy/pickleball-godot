@@ -116,6 +116,8 @@ func _physics_process(delta: float) -> void:
 func tick(delta: float) -> void:
 	if not _active or _ball == null:
 		return
+	if _ball.is_time_frozen():
+		return
 	_t += delta
 
 	var pos: Vector3 = _ball.global_position

@@ -262,9 +262,35 @@ func _on_body_entered(body: Node) -> void:
 	if body is CharacterBody3D and body.has_method("get_player_num"):
 		hit_player_body.emit(body.get_player_num())
 
+var _time_frozen: bool = false
+var _frozen_position: Vector3 = Vector3.ZERO
+var _frozen_velocity: Vector3 = Vector3.ZERO
+var _frozen_omega: Vector3 = Vector3.ZERO
+var _frozen_basis: Basis = Basis.IDENTITY
+
+func set_time_frozen(frozen: bool) -> void:
+	_time_frozen = frozen
+
+func set_frozen_state(pos: Vector3, vel: Vector3, omega: Vector3) -> void:
+	_frozen_position = pos
+	_frozen_velocity = vel
+	_frozen_omega = omega
+	_frozen_basis = transform.basis
+
+func is_time_frozen() -> bool:
+	return _time_frozen
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if _time_frozen:
+		state.transform = Transform3D(_frozen_basis, _frozen_position)
+		state.linear_velocity = _frozen_velocity
+		state.angular_velocity = _frozen_omega
+
 # ── Physics ──────────────────────────────────────────────────────────────────
 
 func _physics_process(_delta: float) -> void:
+	if _time_frozen:
+		return
 	if audio_synth:
 		audio_synth.update_cooldown(_delta)
 	if SHOW_SPIN_DEBUG:

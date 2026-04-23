@@ -116,9 +116,10 @@ func _build_defaults() -> void:
 
 	# ── Normal tier ──────────────────────────────────────────────
 	definitions.append(_make(FOREHAND, "Forehand", 0, 2, {
-		"pf": 0.5, "pfw": 0.4, "py": 0.0,
+		"pf": 0.55, "pfw": 0.5, "py": 0.0,
+		"pitch_signed": -30.0, "pitch_src": 2,
 		"roll_signed": 45.0, "roll_src": 1,
-		"zone": [0.2, 0.55, 0.5, 1.0],
+		"zone": [0.30, 0.80, 0.30, 0.80],
 		"charge_offset": Vector3(0.05, 0.20, -0.30),
 		"charge_rot": Vector3(-30.0, 35.0, -15.0),
 		"charge_body_deg": 30.0,
@@ -130,8 +131,10 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(BACKHAND, "Backhand", 1, 2, {
-		"pf": -0.42, "pfw": 0.36, "py": 0.0,  # 0.4 * 0.9 = 0.36
-		"zone": [-0.55, -0.2, 0.5, 1.0],
+		"pf": -0.55, "pfw": 0.5, "py": 0.0,
+		"pitch_signed": -30.0, "pitch_src": 2,
+		"roll_signed": -45.0, "roll_src": 1,
+		"zone": [-0.80, -0.30, 0.30, 0.80],
 		"charge_offset": Vector3(-0.05, 0.20, -0.28),
 		"charge_rot": Vector3(-30.0, -35.0, 15.0),
 		"charge_body_deg": 30.0,
@@ -143,10 +146,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(WIDE_FOREHAND, "Wide Forehand", 0, 2, {
-		"pf": 0.85, "pfw": 0.55, "py": 0.0,
+		"pf": 0.95, "pfw": 0.5, "py": 0.0,
+		"pitch_signed": -28.0, "pitch_src": 2,
 		"yaw_signed": 12.0, "yaw_src": 1,
 		"roll_signed": 35.0, "roll_src": 1,
-		"zone": [0.5, 1.1, 0.48, 1.0],
+		"zone": [0.70, 1.20, 0.30, 0.80],
 		"charge_offset": Vector3(0.08, 0.22, -0.32),
 		"charge_rot": Vector3(-32.0, 40.0, -18.0),
 		"charge_body_deg": 32.0,
@@ -158,10 +162,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(WIDE_BACKHAND, "Wide Backhand", 1, 2, {
-		"pf": -0.72, "pfw": 0.52, "py": 0.0,
+		"pf": -0.95, "pfw": 0.5, "py": 0.0,
+		"pitch_signed": -28.0, "pitch_src": 2,
 		"yaw_signed": -10.0, "yaw_src": 1,
 		"roll_signed": -30.0, "roll_src": 1,
-		"zone": [-1.1, -0.5, 0.48, 1.0],
+		"zone": [-1.20, -0.70, 0.30, 0.80],
 		"charge_offset": Vector3(-0.08, 0.22, -0.30),
 		"charge_rot": Vector3(-32.0, -40.0, 18.0),
 		"charge_body_deg": 32.0,
@@ -173,9 +178,9 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(FORWARD, "Forward", 2, 2, {
-		# FORWARD falls through get_posture_offset_for default: forward * 0.42
-		"pf": 0.0, "pfw": 0.42, "py": 0.0,
-		"zone": [-0.15, 0.15, 0.5, 1.0],
+		"pf": 0.0, "pfw": 0.5, "py": 0.0,
+		"pitch_signed": -25.0, "pitch_src": 2,
+		"zone": [-0.30, 0.30, 0.30, 0.80],
 		"charge_offset": Vector3(0.0, 0.12, -0.18),
 		"charge_rot": Vector3(-20.0, 0.0, 0.0),
 		"charge_body_deg": 15.0,
@@ -187,9 +192,9 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(VOLLEY_READY, "Volley Ready", 2, 2, {
-		"pf": 0.0, "pfw": 0.50, "py": 0.12,
-		"pitch_signed": -15.0, "pitch_src": 2,
-		"zone": [-0.2, 0.2, 0.55, 0.9],
+		"pf": 0.0, "pfw": 0.5, "py": 0.12,
+		"pitch_signed": -20.0, "pitch_src": 2,
+		"zone": [-0.30, 0.30, 0.45, 0.90],
 		"charge_offset": Vector3(0.0, 0.15, -0.15),
 		"charge_rot": Vector3(-18.0, 0.0, 0.0),
 		"charge_body_deg": 12.0,
@@ -217,8 +222,9 @@ func _build_defaults() -> void:
 
 	# ── Overhead tier ────────────────────────────────────────────
 	definitions.append(_make(MEDIUM_OVERHEAD, "Medium Overhead", 3, 3, {
-		"pf": 0.5, "pfw": 0.7, "py": 0.6,
-		"zone": [-0.35, 0.35, 0.8, 1.3],
+		"pf": 0.0, "pfw": 0.6, "py": 0.6,
+		"pitch_signed": -35.0, "pitch_src": 2,
+		"zone": [-0.40, 0.40, 1.20, 1.80],
 		"charge_offset": Vector3(0.0, 0.38, -0.20),
 		"charge_rot": Vector3(-46.0, 0.0, -8.0),
 		"charge_body_deg": 20.0,
@@ -230,8 +236,9 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(HIGH_OVERHEAD, "High Overhead", 3, 3, {
-		"pf": 0.5, "pfw": 0.8, "py": 1.1,
-		"zone": [-0.35, 0.35, 1.1, 1.8],
+		"pf": 0.0, "pfw": 0.6, "py": 1.1,
+		"pitch_signed": -40.0, "pitch_src": 2,
+		"zone": [-0.40, 0.40, 1.70, 2.30],
 		"charge_offset": Vector3(0.0, 0.45, -0.18),
 		"charge_rot": Vector3(-62.0, 0.0, -8.0),
 		"charge_body_deg": 25.0,
@@ -244,10 +251,10 @@ func _build_defaults() -> void:
 
 	# ── Mid-low tier ─────────────────────────────────────────────
 	definitions.append(_make(MID_LOW_FOREHAND, "Mid-Low Forehand", 0, 1, {
-		"pf": 0.5, "pfw": 0.50, "py": -0.18,
-		"pitch_signed": 20.0, "pitch_src": 2,
+		"pf": 0.55, "pfw": 0.5, "py": -0.20,
+		"pitch_signed": -22.0, "pitch_src": 2,
 		"roll_signed": 38.0, "roll_src": 1,
-		"zone": [0.2, 0.55, 0.15, 0.52],
+		"zone": [0.30, 0.80, 0.10, 0.55],
 		"charge_offset": Vector3(0.05, 0.16, -0.28),
 		"charge_rot": Vector3(-28.0, 35.0, -16.0),
 		"charge_body_deg": 28.0,
@@ -259,10 +266,10 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(MID_LOW_BACKHAND, "Mid-Low Backhand", 1, 1, {
-		"pf": -0.42, "pfw": 0.48, "py": -0.18,
-		"pitch_signed": 20.0, "pitch_src": 2,
+		"pf": -0.55, "pfw": 0.5, "py": -0.20,
+		"pitch_signed": -22.0, "pitch_src": 2,
 		"roll_signed": -32.0, "roll_src": 1,
-		"zone": [-0.55, -0.2, 0.15, 0.52],
+		"zone": [-0.80, -0.30, 0.10, 0.55],
 		"charge_offset": Vector3(-0.05, 0.16, -0.26),
 		"charge_rot": Vector3(-28.0, -35.0, 16.0),
 		"charge_body_deg": 28.0,
@@ -274,9 +281,9 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(MID_LOW_FORWARD, "Mid-Low Forward", 2, 1, {
-		"pf": 0.0, "pfw": 0.52, "py": -0.18,
-		"pitch_signed": 25.0, "pitch_src": 2,
-		"zone": [-0.15, 0.15, 0.15, 0.52],
+		"pf": 0.0, "pfw": 0.5, "py": -0.20,
+		"pitch_signed": -25.0, "pitch_src": 2,
+		"zone": [-0.30, 0.30, 0.10, 0.55],
 		"charge_offset": Vector3(0.0, 0.10, -0.16),
 		"charge_rot": Vector3(-18.0, 0.0, 0.0),
 		"charge_body_deg": 14.0,
@@ -288,11 +295,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(MID_LOW_WIDE_FH, "Mid-Low Wide Forehand", 0, 1, {
-		"pf": 0.88, "pfw": 0.58, "py": -0.20,
-		"pitch_signed": 18.0, "pitch_src": 2,
+		"pf": 0.95, "pfw": 0.5, "py": -0.20,
+		"pitch_signed": -20.0, "pitch_src": 2,
 		"yaw_signed": 10.0, "yaw_src": 1,
 		"roll_signed": 30.0, "roll_src": 1,
-		"zone": [0.5, 1.1, 0.1, 0.50],
+		"zone": [0.70, 1.20, 0.10, 0.55],
 		"charge_offset": Vector3(0.10, 0.18, -0.30),
 		"charge_rot": Vector3(-30.0, 42.0, -18.0),
 		"charge_body_deg": 30.0,
@@ -304,11 +311,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(MID_LOW_WIDE_BH, "Mid-Low Wide Backhand", 1, 1, {
-		"pf": -0.74, "pfw": 0.54, "py": -0.20,
-		"pitch_signed": 18.0, "pitch_src": 2,
+		"pf": -0.95, "pfw": 0.5, "py": -0.20,
+		"pitch_signed": -20.0, "pitch_src": 2,
 		"yaw_signed": -8.0, "yaw_src": 1,
 		"roll_signed": -28.0, "roll_src": 1,
-		"zone": [-1.1, -0.5, 0.1, 0.50],
+		"zone": [-1.20, -0.70, 0.10, 0.55],
 		"charge_offset": Vector3(-0.10, 0.18, -0.28),
 		"charge_rot": Vector3(-30.0, -42.0, 18.0),
 		"charge_body_deg": 30.0,
@@ -321,10 +328,11 @@ func _build_defaults() -> void:
 
 	# ── Low tier (inverted paddle, roll 180) ─────────────────────
 	definitions.append(_make(LOW_FOREHAND, "Low Forehand", 0, 0, {
-		"pf": 0.5, "pfw": 0.55, "py": -0.62,
+		"pf": 0.55, "pfw": 0.5, "py": -0.62,
+		"pitch_signed": -20.0, "pitch_src": 2,
 		"roll_base": 180.0, "roll_signed": 10.0, "roll_src": 1,
 		"clearance": 0.45,
-		"zone": [0.2, 0.55, -0.2, 0.2],
+		"zone": [0.30, 0.80, -0.30, 0.20],
 		"charge_offset": Vector3(0.05, 0.18, -0.28),
 		"charge_rot": Vector3(-25.0, 35.0, -15.0),
 		"charge_body_deg": 25.0,
@@ -336,10 +344,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(LOW_BACKHAND, "Low Backhand", 1, 0, {
-		"pf": -0.42, "pfw": 0.55, "py": -0.62,
+		"pf": -0.55, "pfw": 0.5, "py": -0.62,
+		"pitch_signed": -20.0, "pitch_src": 2,
 		"roll_base": 180.0, "roll_signed": -10.0, "roll_src": 1,
 		"clearance": 0.45,
-		"zone": [-0.55, -0.2, -0.2, 0.2],
+		"zone": [-0.80, -0.30, -0.30, 0.20],
 		"charge_offset": Vector3(-0.05, 0.18, -0.26),
 		"charge_rot": Vector3(-25.0, -35.0, 15.0),
 		"charge_body_deg": 25.0,
@@ -351,10 +360,11 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(LOW_FORWARD, "Low Forward", 2, 0, {
-		"pf": 0.0, "pfw": 0.55, "py": -0.62,
+		"pf": 0.0, "pfw": 0.5, "py": -0.62,
+		"pitch_signed": -20.0, "pitch_src": 2,
 		"roll_base": 180.0,
 		"clearance": 0.45,
-		"zone": [-0.15, 0.15, -0.2, 0.2],
+		"zone": [-0.30, 0.30, -0.30, 0.20],
 		"charge_offset": Vector3(0.0, 0.10, -0.16),
 		"charge_rot": Vector3(-15.0, 0.0, 0.0),
 		"charge_body_deg": 12.0,
@@ -366,11 +376,12 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(LOW_WIDE_FOREHAND, "Low Wide Forehand", 0, 0, {
-		"pf": 0.90, "pfw": 0.60, "py": -0.62,
+		"pf": 0.95, "pfw": 0.5, "py": -0.62,
+		"pitch_signed": -18.0, "pitch_src": 2,
 		"yaw_signed": 12.0, "yaw_src": 1,
 		"roll_base": 180.0, "roll_signed": 8.0, "roll_src": 1,
 		"clearance": 0.45,
-		"zone": [0.5, 1.1, -0.2, 0.15],
+		"zone": [0.70, 1.20, -0.30, 0.20],
 		"charge_offset": Vector3(0.08, 0.15, -0.28),
 		"charge_rot": Vector3(-26.0, 42.0, -16.0),
 		"charge_body_deg": 26.0,
@@ -382,11 +393,12 @@ func _build_defaults() -> void:
 	}))
 
 	definitions.append(_make(LOW_WIDE_BACKHAND, "Low Wide Backhand", 1, 0, {
-		"pf": -0.78, "pfw": 0.56, "py": -0.62,
+		"pf": -0.95, "pfw": 0.5, "py": -0.62,
+		"pitch_signed": -18.0, "pitch_src": 2,
 		"yaw_signed": -10.0, "yaw_src": 1,
 		"roll_base": 180.0, "roll_signed": -8.0, "roll_src": 1,
 		"clearance": 0.45,
-		"zone": [-1.1, -0.5, -0.2, 0.15],
+		"zone": [-1.20, -0.70, -0.30, 0.20],
 		"charge_offset": Vector3(-0.08, 0.15, -0.26),
 		"charge_rot": Vector3(-26.0, -42.0, 16.0),
 		"charge_body_deg": 26.0,
@@ -399,19 +411,19 @@ func _build_defaults() -> void:
 
 	# ── Charge tier (behind player) ──────────────────────────────
 	# From player_paddle_posture.gd:1336-1340
-	# forehand * PADDLE_SIDE_OFFSET(0.5) + forward * -PADDLE_CHARGE_FOREHAND_BEHIND(0.65) + (0, 0.35, 0)
+	# forehand * PADDLE_SIDE_OFFSET(0.55) + forward * -PADDLE_CHARGE_FOREHAND_BEHIND(0.65) + (0, 0.35, 0)
 	definitions.append(_make(CHARGE_FOREHAND, "Charge Forehand", 0, 2, {
-		"pf": 0.5, "pfw": -0.65, "py": 0.35,
-		# charge_offset = charged_position - contact_position = (fh*0.5 + fwd*-0.65 + up*0.35) - (fh*0.5 + fwd*0.4 + up*0.0) = fwd*(-1.05) + up*0.35
-		"charge_offset": Vector3(0.0, 0.35, -1.05),
+		"pf": 0.55, "pfw": -0.65, "py": 0.35,
+		# charge_offset = charged_position - contact_position = (fh*0.55 + fwd*-0.65 + up*0.35) - (fh*0.55 + fwd*0.5 + up*0.0) = fwd*(-1.15) + up*0.35
+		"charge_offset": Vector3(0.0, 0.35, -1.15),
 		"charge_rot": Vector3(-45.0, 35.0, -20.0),
 		"charge_body_deg": 35.0,
 	}))
 
 	definitions.append(_make(CHARGE_BACKHAND, "Charge Backhand", 1, 2, {
-		"pf": -0.42, "pfw": -0.65, "py": 0.35,
-		# mirrored: fh*-0.42 + fwd*-0.65 + up*0.35 - (fh*-0.42 + fwd*0.36 + up*0.0) = fwd*(-1.01) + up*0.35
-		"charge_offset": Vector3(0.0, 0.35, -1.01),
+		"pf": -0.55, "pfw": -0.65, "py": 0.35,
+		# mirrored: fh*-0.55 + fwd*-0.65 + up*0.35 - (fh*-0.55 + fwd*0.5 + up*0.0) = fwd*(-1.15) + up*0.35
+		"charge_offset": Vector3(0.0, 0.35, -1.15),
 		"charge_rot": Vector3(-45.0, -35.0, 20.0),
 		"charge_body_deg": 110.0,
 	}))

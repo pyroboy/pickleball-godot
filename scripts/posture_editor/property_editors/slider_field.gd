@@ -55,8 +55,12 @@ func _on_spin_changed(val: float) -> void:
 	value_changed.emit(val)
 
 func set_value(val: float) -> void:
+	_slider.value_changed.disconnect(_on_slider_changed)
+	_spin.value_changed.disconnect(_on_spin_changed)
 	_slider.value = val
 	_spin.value = val
+	_slider.value_changed.connect(_on_slider_changed)
+	_spin.value_changed.connect(_on_spin_changed)
 
 func get_value() -> float:
 	return _slider.value

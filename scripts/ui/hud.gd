@@ -41,6 +41,7 @@ var zone: Label
 var speed: Label
 var shot_type: Label
 var posture_debug: Label
+var freeze_indicator: Label
 
 # Panels
 var _score_panel: Panel
@@ -326,6 +327,25 @@ func _build_labels() -> void:
 	posture_debug.offset_bottom = 360
 	_apply_font(posture_debug, _font_regular)
 	add_child(posture_debug)
+
+	freeze_indicator = Label.new()
+	freeze_indicator.name = "FreezeIndicator"
+	freeze_indicator.text = "⏸  BALL FROZEN"
+	freeze_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	freeze_indicator.add_theme_font_size_override("font_size", 24)
+	freeze_indicator.add_theme_color_override("font_color", Color(0.35, 0.85, 1.0, 1.0))
+	freeze_indicator.add_theme_color_override("font_shadow_color", COL_SHADOW)
+	freeze_indicator.add_theme_constant_override("shadow_offset_x", 2)
+	freeze_indicator.add_theme_constant_override("shadow_offset_y", 2)
+	freeze_indicator.anchor_left = 0.55
+	freeze_indicator.anchor_right = 1.0
+	freeze_indicator.anchor_top = 0.0
+	freeze_indicator.offset_top = 72
+	freeze_indicator.offset_right = -26
+	freeze_indicator.offset_bottom = 110
+	freeze_indicator.visible = false
+	_apply_font(freeze_indicator, _font_bold)
+	add_child(freeze_indicator)
 
 func set_gameplay_elements_visible(p_visible: bool) -> void:
 	score.visible = p_visible
