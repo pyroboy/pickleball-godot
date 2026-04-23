@@ -50,6 +50,7 @@ const _GameDropTest = preload("res://scripts/game_drop_test.gd")
 const _GameDebugUI = preload("res://scripts/game_debug_ui.gd")
 const _GameSoundTune = preload("res://scripts/game_sound_tune.gd")
 const _PostureEditorUI = preload("res://scripts/posture_editor_ui.gd")
+const _PostureEditorV2 = preload("res://scripts/posture_editor_v2.gd")
 const _ReactionHitButton = preload("res://scripts/reaction_hit_button.gd")
 const _SwingE2EProbe = preload("res://scripts/swing_e2e_probe.gd")
 
@@ -101,6 +102,7 @@ var trajectory_arc_offset: float = 0.0
 
 # ── Reaction button ──────────────────────────────────────────────────────────
 var posture_editor_ui
+var posture_editor_v2
 var _transport_bar: Control
 var reaction_button
 var _in_slow_mo: bool = false
@@ -416,6 +418,12 @@ func _create_ui() -> void:
 	canvas.add_child(posture_editor_ui)
 	if player_left:
 		posture_editor_ui.set_player(player_left)
+	if camera_rig != null:
+		camera_rig.is_mouse_over_editor_ui_cb = Callable(posture_editor_ui, "contains_screen_point")
+
+	# Posture Editor v2 — clean-slate rewrite, triggered by Q.
+	posture_editor_v2 = _PostureEditorV2.new()
+	canvas.add_child(posture_editor_v2)
 
 	# Transport bar — sibling of posture_editor_ui on canvas (spans viewport 0.0-0.65)
 	# Hidden by default; shown only when posture editor is open.
@@ -872,7 +880,7 @@ func _on_editor_opened() -> void:
 		camera_rig.orbit_mode = 3
 		camera_rig.orbit_pitch = 0.24
 		camera_rig.orbit_angle = PI
-		camera_rig.orbit_auto = true
+		camera_rig.orbit_auto = false
 		print("[EDITOR] Camera adjusted for editing")
 
 func _on_editor_closed() -> void:

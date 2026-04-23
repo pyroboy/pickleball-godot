@@ -444,3 +444,8 @@ func _get_time_color(time: float) -> Color:
 func set_visible(v: bool) -> void:
 	if _grid_root:
 		_grid_root.visible = v
+	# When debug mode activates (Z key), unlock so trajectory updates flow through.
+	# The grid showing stale data at the wrong posture is fine — what matters is
+	# seeing the volumetric colors update in real-time as you move and the ball comes in.
+	if v:
+		_is_locked = false

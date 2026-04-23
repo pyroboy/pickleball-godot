@@ -43,6 +43,11 @@ var _cam_look_target: Vector3 = Vector3.ZERO
 var editor_focus_point: Vector3 = Vector3.INF
 var _base_fov: float = 60.0
 
+## Optional callback: func(pos: Vector2) -> bool
+## When valid and returns true for a mouse position, handle_input ignores
+## button/wheel events at that position so the posture editor UI isn't stolen.
+var is_mouse_over_editor_ui_cb: Callable = Callable()
+
 func _ready() -> void:
 	name = "CameraRig"
 

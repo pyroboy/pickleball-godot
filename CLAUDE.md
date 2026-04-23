@@ -342,3 +342,14 @@ This will:
 cd /Users/arjomagno/Documents/github-repos/pickleball-godot
 godot --headless --path . --quit-after 30 2>&1 | grep -i error
 ```
+
+## Graph-First Navigation
+
+A knowledge graph of this codebase lives at `graphify-out/GRAPH_REPORT.md`.
+
+**Before answering any architecture, module-dependency, or "where does X live" question**, read `graphify-out/GRAPH_REPORT.md` first. It contains:
+- God nodes (highest betweenness centrality — files that bridge the most modules)
+- Community clusters (which scripts are tightly coupled)
+- Hub scores and cross-cluster edges
+
+Use the graph to navigate to the right file(s) instead of grepping through every script. Only fall back to raw Glob/Grep when the graph doesn't name the exact function or line you need.

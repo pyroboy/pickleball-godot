@@ -9,6 +9,7 @@ var _gizmo_controller
 var _knee_mesh_nodes: Dictionary = {}
 var _elbow_mesh_nodes: Dictionary = {}
 var _player: Node3D = null
+var _posture_editor_ui: Control = null
 
 ## Injected
 var _state  # PostureEditorState
@@ -26,13 +27,26 @@ func create_gizmo_controller() -> void:
 	_gizmo_controller = load("res://scripts/posture_editor/gizmo_controller.gd").new()
 	_gizmo_controller.name = "GizmoController"
 	
-	if _player and _player.get_parent():
+	if _player == null:
+		_gizmo_controller.queue_free()
+		_gizmo_controller = null
+		push_warning("PostureEditorGizmos: create_gizmo_controller skipped — _player is null")
+		return
+	if _player.get_parent():
 		_player.get_parent().add_child(_gizmo_controller)
-	# else: gizmo_controller leaks — editor requires valid player in tree anyway
+	else:
+		_gizmo_controller.queue_free()
+		_gizmo_controller = null
+		push_warning("PostureEditorGizmos: create_gizmo_controller skipped — _player has no parent")
+		return
 	
 	_gizmo_controller.gizmo_selected.connect(_on_gizmo_selected)
 	_gizmo_controller.gizmo_moved.connect(_on_gizmo_moved)
 	_gizmo_controller.gizmo_rotated.connect(_on_gizmo_rotated)
+	
+	# Wire UI reference so gizmo controller blocks input when mouse is over the panel.
+	if _posture_editor_ui:
+		_gizmo_controller.set_posture_editor_ui(_posture_editor_ui)
 	
 	var camera := _player.get_viewport().get_camera_3d() if _player else null
 	if camera:
@@ -53,6 +67,11 @@ func create_gizmo_controller() -> void:
 
 func set_player(player: Node3D) -> void:
 	_player = player
+
+func set_posture_editor_ui(ui: Control) -> void:
+	_posture_editor_ui = ui
+	if _gizmo_controller:
+		_gizmo_controller.set_posture_editor_ui(ui)
 
 func get_current_paddle_position() -> Vector3:
 	if _state.get_current_def() != null and not _state.is_base_pose_mode():
@@ -279,9 +298,16 @@ func _create_leg_gizmos() -> void:
 func refresh_live_preview() -> void:
 	var preview_def = _state.current_body_resource()
 	if preview_def == null:
+		push_warning("PostureEditorGizmos: refresh_live_preview called but no body resource selected")
 		return
-	if _player and _player.posture and Engine.time_scale < 0.001:
-		_player.posture.force_posture_update(preview_def)
+	if not _player:
+		push_warning("PostureEditorGizmos: refresh_live_preview called but _player is null")
+		return
+	if not _player.posture:
+		push_warning("PostureEditorGizmos: refresh_live_preview called but _player.posture is null")
+		return
+	_player.posture.force_posture_update(preview_def)
+	_player.posture._apply_full_body_posture(preview_def)
 
 func update_gizmo_positions() -> void:
 	var body_def = _state.current_body_resource()
@@ -343,11 +369,16 @@ func update_gizmo_visibility() -> void:
 		for gizmo in _gizmo_controller.get_children():
 			if not gizmo.has_method("get_posture_id"): continue
 			var gh: GizmoHandle = gizmo as GizmoHandle
-			if gh.body_part_name in ["chest", "head", "hips", "right_hand", "left_hand", "right_foot", "left_foot", "right_elbow", "left_elbow", "right_knee", "left_knee"]:
-				gizmo.visible = false
-				continue
 			var posture_match: bool = (_state.get_current_id() < 0) or (gh.posture_id == _state.get_current_id())
 			var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
+			
+			# Body-part gizmos: show when their tab is active and posture matches,
+			# OR when they are currently selected (so drag interaction stays visible).
+			if gh.body_part_name != "":
+				var is_selected: bool = (_gizmo_controller.get_selected_gizmo() == gh)
+				gizmo.visible = (posture_match and tab_match) or is_selected
+				continue
+			
 			gizmo.visible = posture_match and tab_match
 
 func process_frame(_delta: float) -> void:

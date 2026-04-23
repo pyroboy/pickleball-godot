@@ -31,6 +31,19 @@ var _selection_highlight: MeshInstance3D
 var _axis_lines: Node3D
 var _tab_label: Label3D
 
+## Reference to PostureEditorUI — used to block gizmo input when mouse is over UI.
+var _posture_editor_ui: Control = null
+
+func set_posture_editor_ui(ui: Control) -> void:
+	_posture_editor_ui = ui
+
+## Returns true if the mouse is currently over the posture editor UI panel.
+func _is_mouse_over_ui(mouse_pos: Vector2) -> bool:
+	if _posture_editor_ui == null or not _posture_editor_ui.visible:
+		return false
+	var rect: Rect2 = _posture_editor_ui.get_global_rect()
+	return rect.has_point(mouse_pos)
+
 # Body-part colliders for hover detection (invisible spheres at body part positions)
 # Maps body_part_name → StaticBody3D
 var _body_part_colliders: Dictionary = {}
@@ -162,6 +175,12 @@ func _raycast_body_parts(ray_origin: Vector3, ray_dir: Vector3) -> String:
 
 func _input(event: InputEvent) -> void:
 	if not _camera:
+		return
+	
+	# Block gizmo input when mouse is over the posture editor UI panel.
+	# Do NOT consume here — Controls' gui_input runs AFTER _input, so marking
+	# the event handled would block button/slider clicks in the panel.
+	if event is InputEventMouse and _is_mouse_over_ui(event.position):
 		return
 	
 	if event is InputEventMouseButton:

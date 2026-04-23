@@ -65,24 +65,33 @@ func _handle_debug_toggles() -> void:
 	if _just_pressed(KEY_E):
 		if _game.has_method("_toggle_posture_editor"):
 			_game._toggle_posture_editor()
-		
+
+	if _just_pressed(KEY_Q):
+		if _game.has_method("_toggle_posture_editor_v2"):
+			_game._toggle_posture_editor_v2()
+
 	if _just_pressed(KEY_ESCAPE):
 		if _posture_editor and _posture_editor.visible:
 			if _game.has_method("_toggle_posture_editor"):
 				_game._toggle_posture_editor()
+		if _game.get("posture_editor_v2") and _game.posture_editor_v2.visible:
+			if _game.has_method("_toggle_posture_editor_v2"):
+				_game._toggle_posture_editor_v2()
 		
 	if _just_pressed(KEY_N):
 		if _game.has_method("_toggle_intent_indicators"): _game._toggle_intent_indicators()
 
 func _handle_camera_and_movement_controls() -> void:
+	# O key toggles auto-orbit even in editor mode (camera still orbits in editor)
+	if _just_pressed(KEY_O) and _camera_rig:
+		if _camera_rig.has_method("toggle_auto_orbit"): _camera_rig.toggle_auto_orbit()
+	
+	# P and C are gameplay-only; skip when posture editor is open
 	if _posture_editor and _posture_editor.visible:
 		return
 
 	if _just_pressed(KEY_P) and _camera_rig:
 		if _camera_rig.has_method("cycle_third_person"): _camera_rig.cycle_third_person()
-		
-	if _just_pressed(KEY_O) and _camera_rig:
-		if _camera_rig.has_method("toggle_auto_orbit"): _camera_rig.toggle_auto_orbit()
 		
 	if _just_pressed(KEY_C) and _player_left:
 		_player_left.manual_crouch = not _player_left.manual_crouch

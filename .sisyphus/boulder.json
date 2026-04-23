@@ -1,13 +1,23 @@
 {
-  "active_plan": "/Users/arjomagno/Documents/github-repos/pickleball-godot/.sisyphus/plans/memforge-pillar-port.md",
-  "started_at": "2026-04-13T12:00:00Z",
+  "active_plan": "/Users/arjomagno/Documents/github-repos/pickleball-godot/.sisyphus/plans/fix-graphify-keyerror.md",
+  "started_at": "2026-04-23T02:09:09.624Z",
   "session_ids": [
-    "ses_27da2edadffeua7dgHsFgs8MMx",
-    "ses_2786ca710ffeTkPyp4AIc1FUVQ",
-    "ses_27612c2beffeAi033s7BBt14YR",
-    "ses_27605c240ffeGgkY04CuXHEG7S",
-    "ses_275ca2dbcffe9eTSuIoGS6E4iq"
+    "ses_247ec27adffeZLWFMhgT0Wvpc9"
   ],
-  "plan_name": "memforge-pillar-port",
-  "task_sessions": {}
+  "session_origins": {
+    "ses_247ec27adffeZLWFMhgT0Wvpc9": "direct"
+  },
+  "plan_name": "fix-graphify-keyerror",
+  "agent": "atlas",
+  "task_sessions": {
+    "todo:1": {
+      "task_key": "todo:1",
+      "task_label": "1",
+      "task_title": "Add edge normalization in extract.py",
+      "session_id": "ses_247e65798ffePfWbqCD6AqMDsg",
+      "agent": "Sisyphus-Junior",
+      "category": "quick",
+      "updated_at": "2026-04-23T02:10:09.765Z"
+    }
+  }
 }

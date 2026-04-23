@@ -25,8 +25,10 @@ func _init(player) -> void:
 ## Apply full-body posture fields to the skeleton.
 func apply(def) -> void:
 	if not _player.skeleton:
+		push_warning("PostureSkeletonApplier: _player.skeleton is null — cannot apply posture")
 		return
 	if _player.skeleton_bones.is_empty():
+		push_warning("PostureSkeletonApplier: skeleton_bones is empty — cannot apply posture")
 		return
 
 	_apply_head(def)
