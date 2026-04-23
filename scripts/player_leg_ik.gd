@@ -86,7 +86,7 @@ var _player
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 
-func update_leg_ik(delta: float) -> void:
+func update_leg_ik(delta: float, def_override = null) -> void:
 	if not _player.right_leg_node or not _player.left_leg_node:
 		return
 
@@ -183,7 +183,7 @@ func update_leg_ik(delta: float) -> void:
 	var right_rest: Vector3 = base + stance_fh * right_lateral_half + stance_fwd * (-0.06 + right_back_offset) + step_ahead + swing_bias
 	var left_rest: Vector3 = base + stance_fh * -left_lateral_half + stance_fwd * (0.06 + left_back_offset) + step_ahead - swing_bias
 
-	var pdef_feet = _player.get_runtime_posture_def()
+	var pdef_feet = def_override if def_override != null else _player.get_runtime_posture_def()
 	if pdef_feet:
 		var dr := Vector3.ZERO
 		var dl := Vector3.ZERO
@@ -428,7 +428,7 @@ func update_leg_ik(delta: float) -> void:
 	else:
 		gait_arc_length = 0.0
 		var idle_shift_target: float = 0.0
-		var pdef_shift = _player.get_runtime_posture_def()
+		var pdef_shift = def_override if def_override != null else _player.get_runtime_posture_def()
 		if pdef_shift:
 			idle_shift_target = pdef_shift.weight_shift * 0.12
 		hip_shift = _player._damp(hip_shift, idle_shift_target, HIP_SHIFT_HALFLIFE, delta)
@@ -464,7 +464,7 @@ func update_leg_ik(delta: float) -> void:
 	# Pole vectors: knees bend forward (posture overrides when non-zero)
 	var right_pole: Vector3 = right_foot + stance_fwd * 1.0 + Vector3(0, 0.5, 0)
 	var left_pole: Vector3 = left_foot + stance_fwd * 1.0 + Vector3(0, 0.5, 0)
-	var pdef_pole = _player.get_runtime_posture_def()
+	var pdef_pole = def_override if def_override != null else _player.get_runtime_posture_def()
 	if pdef_pole:
 		if pdef_pole.right_knee_pole.length_squared() > 1e-10:
 			right_pole = right_foot + _PostureSkeletonApplier.stance_offset(pdef_pole.right_knee_pole, stance_fh, stance_fwd)

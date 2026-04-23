@@ -381,9 +381,11 @@ func _process(delta: float) -> void:
 	if posture:
 		posture.force_paddle_head_to_ghost()
 	if arm_ik:
-		arm_ik.update_arm_ik(delta)
+		var arm_def = posture.transition_pose_blend if posture and posture.editor_preview_mode else null
+		arm_ik.update_arm_ik(delta, arm_def)
 	if leg_ik:
-		leg_ik.update_leg_ik(delta)
+		var leg_def = posture.transition_pose_blend if posture and posture.editor_preview_mode else null
+		leg_ik.update_leg_ik(delta, leg_def)
 
 # --- Utility functions (shared with child nodes) ---
 

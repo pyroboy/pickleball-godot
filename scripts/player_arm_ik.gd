@@ -6,18 +6,19 @@ var _player
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 
-func update_arm_ik(delta: float) -> void:
+func update_arm_ik(delta: float, def_override = null) -> void:
 	var b = _player._get_ball_ref()
-	var def = _player.get_runtime_posture_def()
+	var def = def_override if def_override != null else _player.get_runtime_posture_def()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
 	var forward_axis: Vector3 = _player._get_forward_axis()
+	var use_simple_arms: bool = _player.posture.editor_preview_mode if _player.posture else false
 
 	if _player.right_arm_node and _player.paddle_node:
 		var target_global: Vector3 = _player.paddle_node.to_global(Vector3(0, 0.07, 0))
-		if def and def.right_hand_offset.length_squared() > 1e-10:
+		if not use_simple_arms and def and def.right_hand_offset.length_squared() > 1e-10:
 			target_global = _player.paddle_node.to_global(Vector3(0, 0.07, 0) + def.right_hand_offset)
 		var pole_global: Vector3 = _player.global_position + forehand_axis * 0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
-		if def and def.right_elbow_pole.length_squared() > 1e-10:
+		if not use_simple_arms and def and def.right_elbow_pole.length_squared() > 1e-10:
 			pole_global = _player.global_position + _PostureSkeletonApplier.stance_offset(def.right_elbow_pole, forehand_axis, forward_axis)
 		if _player.right_arm_node.has_method("solve_ik"):
 			_player.right_arm_node.solve_ik(target_global, pole_global, _player.paddle_node.global_transform)
@@ -66,17 +67,20 @@ func update_arm_ik(delta: float) -> void:
 							var point_target = Vector3(intercept.x, chest_pos.y, intercept.z)
 							desired_rest = default_rest.lerp(point_target, blend)
 
-				if _player.left_hand_rest_pos == Vector3.ZERO:
+				if def_override != null or use_simple_arms:
 					_player.left_hand_rest_pos = desired_rest
 				else:
-					_player.left_hand_rest_pos = _player.left_hand_rest_pos.lerp(desired_rest, 8.0 * delta)
+					if _player.left_hand_rest_pos == Vector3.ZERO:
+						_player.left_hand_rest_pos = desired_rest
+					else:
+						_player.left_hand_rest_pos = _player.left_hand_rest_pos.lerp(desired_rest, 8.0 * delta)
 				target_global_left = _player.left_hand_rest_pos
 
-		if def and def.left_hand_offset.length_squared() > 1e-10:
+		if not use_simple_arms and def and def.left_hand_offset.length_squared() > 1e-10:
 			target_global_left += _PostureSkeletonApplier.stance_offset(def.left_hand_offset, forehand_axis, forward_axis)
 
 		var pole_global_left: Vector3 = _player.global_position + forehand_axis * -0.5 + Vector3(0, -1.0, 0) + forward_axis * -0.5
-		if def and def.left_elbow_pole.length_squared() > 1e-10:
+		if not use_simple_arms and def and def.left_elbow_pole.length_squared() > 1e-10:
 			pole_global_left = _player.global_position + _PostureSkeletonApplier.stance_offset(def.left_elbow_pole, forehand_axis, forward_axis)
 		if _player.left_arm_node.has_method("solve_ik"):
 			_player.left_arm_node.solve_ik(target_global_left, pole_global_left, pass_transform)
