@@ -19,12 +19,16 @@ var _base_pose_library: BasePoseLibrary
 var _current_def = null
 var _is_base_pose_mode: bool = false
 
+## posture_id → definition for postures that have been modified but not yet saved.
+var _dirty_defs: Dictionary = {}
+
 # Player / Preview / Gizmos / Transport
 var _player = null
 var _pose_trigger = null
 var _preview_button: Button
 var _swing_button: Button
 var _save_button: Button
+var _save_all_button: Button
 var _gizmo_controller: GizmoControllerV2 = null
 var _transition_player: TransitionPlayer = null
 var _pose_transition_tween: Tween = null
@@ -149,6 +153,13 @@ func _ready() -> void:
 	_save_button.pressed.connect(_on_save)
 	left_vbox.add_child(_save_button)
 
+	# Save All button
+	_save_all_button = Button.new()
+	_save_all_button.text = "Save All"
+	_save_all_button.disabled = true
+	_save_all_button.pressed.connect(_on_save_all)
+	left_vbox.add_child(_save_all_button)
+
 	# Status label (under list)
 	_status_label = Label.new()
 	_status_label.text = "Select a posture to edit"
@@ -199,6 +210,16 @@ func open() -> void:
 func close() -> void:
 	if not visible:
 		return
+	# Auto-save any dirty postures before closing
+	if not _dirty_defs.is_empty():
+		var saved_names: Array[String] = []
+		for def in _dirty_defs.values():
+			if _save_definition(def):
+				saved_names.append(def.display_name)
+		_library.load_or_default()
+		print("[EDITOR V2 SAVE] Auto-saved on close: %s" % ", ".join(saved_names))
+		_dirty_defs.clear()
+		_update_save_all_button()
 	# Kill any running pose transition
 	if _pose_transition_tween and _pose_transition_tween.is_valid():
 		_pose_transition_tween.kill()
@@ -336,6 +357,9 @@ func _on_toggle_workspace() -> void:
 	_ft_tab.set_definition(null)
 	if _gizmo_controller:
 		_gizmo_controller.clear_all_gizmos()
+	# Clear dirty state when switching workspace
+	_dirty_defs.clear()
+	_update_save_all_button()
 
 func _set_tab_hidden(tab_name: String, is_hidden: bool) -> void:
 	if _tab_container == null:
@@ -354,6 +378,15 @@ func _populate_list() -> void:
 		_posture_list.add_item(def.display_name)
 
 func _on_posture_selected(index: int) -> void:
+	# Auto-save previous posture if dirty before switching
+	if _current_def != null:
+		var prev_id: int = _current_def.base_pose_id if _is_base_pose_mode else _current_def.posture_id
+		if _dirty_defs.has(prev_id):
+			var fname: String = _def_to_filename(_current_def)
+			if _save_definition(_current_def):
+				print("[EDITOR V2 SAVE] Auto-saved %s before switching" % fname)
+				_dirty_defs.erase(prev_id)
+				_update_save_all_button()
 	var defs: Array = _base_pose_library.all_definitions() if _is_base_pose_mode else _library.all_definitions()
 	if index < 0 or index >= defs.size():
 		return
@@ -380,6 +413,7 @@ func _on_posture_selected(index: int) -> void:
 		_swing_button.text = "Preview Swing"
 	if _save_button:
 		_save_button.disabled = false
+	_update_save_all_button()
 	# Auto-preview pose for stroke postures
 	_trigger_pose_preview()
 	# Update gizmos
@@ -526,65 +560,69 @@ func _on_preview_swing() -> void:
 		_swing_button.text = "Pause Swing"
 		_status_label.text = "Playing swing preview"
 
-func _on_save() -> void:
+func _mark_dirty() -> void:
 	if _current_def == null:
-		_status_label.text = "Save: nothing selected"
 		return
+	var id: int = _current_def.base_pose_id if _is_base_pose_mode else _current_def.posture_id
+	_dirty_defs[id] = _current_def
+	_update_save_all_button()
+
+func _update_save_all_button() -> void:
+	if _save_all_button:
+		_save_all_button.text = "Save All (%d)" % _dirty_defs.size()
+		_save_all_button.disabled = _dirty_defs.is_empty()
+
+## Save a single definition to disk. Returns true on success.
+func _save_definition(def) -> bool:
 	var path: String = ""
 	var filename: String = ""
 	if _is_base_pose_mode:
-		var base: String = _current_def.display_name.to_lower().replace(" ", "_").replace("-", "_")
-		filename = "%02d_%s.tres" % [_current_def.base_pose_id, base]
+		var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
+		filename = "%02d_%s.tres" % [def.base_pose_id, base]
 		path = "res://data/base_poses/" + filename
 	else:
-		var base: String = _current_def.display_name.to_lower().replace(" ", "_").replace("-", "_")
-		filename = "%02d_%s.tres" % [_current_def.posture_id, base]
+		var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
+		filename = "%02d_%s.tres" % [def.posture_id, base]
 		path = "res://data/postures/" + filename
 	print("[EDITOR V2 SAVE] saving ", path)
 
-	# Ensure directory exists ( defensive — Godot won't create it automatically )
+	# Ensure directory exists
 	var dir_path := ProjectSettings.globalize_path(path.get_base_dir()).rstrip("/")
 	if not DirAccess.dir_exists_absolute(dir_path):
 		var err_mkdir := DirAccess.make_dir_recursive_absolute(dir_path)
 		if err_mkdir != OK:
-			_status_label.text = "Failed to create directory: %s (err %d)" % [dir_path, err_mkdir]
 			push_warning("PostureEditorV2: failed to create directory %s (error %d)" % [dir_path, err_mkdir])
-			return
+			return false
 
-	# Attempt 1: save to res://
-	var err := ResourceSaver.save(_current_def, path, ResourceSaver.FLAG_CHANGE_PATH)
+	var err := ResourceSaver.save(def, path, ResourceSaver.FLAG_CHANGE_PATH)
 	if err == OK:
-		_current_def.resource_path = path
-		_status_label.text = "Saved: %s" % filename
+		def.resource_path = path
 		print("[EDITOR V2 SAVE] SUCCESS: ", path)
-		# ── VERIFIED SAVE: reload from disk and compare key values ──
-		var disk_res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE)
-		if disk_res != null and disk_res is PostureDefinition:
-			var disk: PostureDefinition = disk_res
-			var ok := true
-			if not is_equal_approx(disk.paddle_forehand_mul, _current_def.paddle_forehand_mul):
-				print("[VERIFIED SAVE] MISMATCH paddle_forehand_mul: memory=%.6f disk=%.6f" % [_current_def.paddle_forehand_mul, disk.paddle_forehand_mul]); ok = false
-			if not is_equal_approx(disk.paddle_forward_mul, _current_def.paddle_forward_mul):
-				print("[VERIFIED SAVE] MISMATCH paddle_forward_mul: memory=%.6f disk=%.6f" % [_current_def.paddle_forward_mul, disk.paddle_forward_mul]); ok = false
-			if not is_equal_approx(disk.paddle_y_offset, _current_def.paddle_y_offset):
-				print("[VERIFIED SAVE] MISMATCH paddle_y_offset: memory=%.6f disk=%.6f" % [_current_def.paddle_y_offset, disk.paddle_y_offset]); ok = false
-			if not is_equal_approx(disk.zone_x_min, _current_def.zone_x_min):
-				print("[VERIFIED SAVE] MISMATCH zone_x_min: memory=%.6f disk=%.6f" % [_current_def.zone_x_min, disk.zone_x_min]); ok = false
-			if not is_equal_approx(disk.zone_x_max, _current_def.zone_x_max):
-				print("[VERIFIED SAVE] MISMATCH zone_x_max: memory=%.6f disk=%.6f" % [_current_def.zone_x_max, disk.zone_x_max]); ok = false
-			if not is_equal_approx(disk.zone_y_min, _current_def.zone_y_min):
-				print("[VERIFIED SAVE] MISMATCH zone_y_min: memory=%.6f disk=%.6f" % [_current_def.zone_y_min, disk.zone_y_min]); ok = false
-			if not is_equal_approx(disk.zone_y_max, _current_def.zone_y_max):
-				print("[VERIFIED SAVE] MISMATCH zone_y_max: memory=%.6f disk=%.6f" % [_current_def.zone_y_max, disk.zone_y_max]); ok = false
-			if not is_equal_approx(disk.zone_forward_offset, _current_def.zone_forward_offset):
-				print("[VERIFIED SAVE] MISMATCH zone_forward_offset: memory=%.6f disk=%.6f" % [_current_def.zone_forward_offset, disk.zone_forward_offset]); ok = false
-			if ok:
-				print("[VERIFIED SAVE] %s — all key fields match disk" % filename)
-		else:
-			print("[VERIFIED SAVE] WARNING: could not reload disk copy for verification")
-		# Auto-reload library so editor sees saved values immediately without restart
+		return true
+
+	# Fallback to user://
+	var fallback_path := "user://posture_editor_fallback/" + filename
+	print("[EDITOR V2 SAVE] res:// failed (err ", err, "). Trying fallback: ", fallback_path)
+	var fb_dir := ProjectSettings.globalize_path(fallback_path.get_base_dir()).rstrip("/")
+	if not DirAccess.dir_exists_absolute(fb_dir):
+		DirAccess.make_dir_recursive_absolute(fb_dir)
+	var err2 := ResourceSaver.save(def, fallback_path, ResourceSaver.FLAG_CHANGE_PATH)
+	if err2 == OK:
+		def.resource_path = fallback_path
+		print("[EDITOR V2 SAVE] FALLBACK SUCCESS: ", fallback_path)
+		return true
+	push_warning("PostureEditorV2: failed to save %s (error %d) and fallback %s (error %d)" % [path, err, fallback_path, err2])
+	return false
+
+func _on_save() -> void:
+	if _current_def == null:
+		_status_label.text = "Save: nothing selected"
+		return
+	var filename: String = _def_to_filename(_current_def)
+	if _save_definition(_current_def):
+		_status_label.text = "Saved: %s" % filename
+		_verify_save(_current_def, filename)
 		_library.load_or_default()
-		# Re-select current posture so UI reflects freshly loaded definition
 		var reselected_def = _library.get_def(_current_def.posture_id) if not _is_base_pose_mode else _base_pose_library.get_def(_current_def.base_pose_id)
 		if reselected_def != null:
 			_current_def = reselected_def
@@ -592,24 +630,79 @@ func _on_save() -> void:
 			_paddle_tab.set_definition(_current_def)
 			_charge_tab.set_definition(_current_def)
 			_ft_tab.set_definition(_current_def)
-		return
-
-	# Attempt 2: fallback to user:// so the user at least has the file
-	var fallback_path := "user://posture_editor_fallback/" + filename
-	print("[EDITOR V2 SAVE] res:// failed (err ", err, "). Trying fallback: ", fallback_path)
-	var fb_dir := ProjectSettings.globalize_path(fallback_path.get_base_dir()).rstrip("/")
-	if not DirAccess.dir_exists_absolute(fb_dir):
-		DirAccess.make_dir_recursive_absolute(fb_dir)
-	var err2 := ResourceSaver.save(_current_def, fallback_path, ResourceSaver.FLAG_CHANGE_PATH)
-	if err2 == OK:
-		_current_def.resource_path = fallback_path
-		_status_label.text = "Saved to fallback: %s" % fallback_path
-		print("[EDITOR V2 SAVE] FALLBACK SUCCESS: ", fallback_path)
-		push_warning("PostureEditorV2: saved to fallback %s because res:// failed (error %d)" % [fallback_path, err])
-		_library.load_or_default()
+		var id: int = _current_def.base_pose_id if _is_base_pose_mode else _current_def.posture_id
+		_dirty_defs.erase(id)
+		_update_save_all_button()
 	else:
-		_status_label.text = "Save failed: error %d — %s" % [err, error_string(err)]
-		push_warning("PostureEditorV2: failed to save %s (error %d) and fallback %s (error %d)" % [path, err, fallback_path, err2])
+		_status_label.text = "Save failed for %s" % filename
+
+func _def_to_filename(def) -> String:
+	if _is_base_pose_mode:
+		var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
+		return "%02d_%s.tres" % [def.base_pose_id, base]
+	else:
+		var base: String = def.display_name.to_lower().replace(" ", "_").replace("-", "_")
+		return "%02d_%s.tres" % [def.posture_id, base]
+
+func _verify_save(def, filename: String) -> void:
+	var path: String = def.resource_path
+	if path == "" or not path.ends_with(".tres"):
+		return
+	var disk_res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE)
+	if disk_res != null and disk_res is PostureDefinition:
+		var disk: PostureDefinition = disk_res
+		var ok := true
+		if not is_equal_approx(disk.paddle_forehand_mul, def.paddle_forehand_mul):
+			print("[VERIFIED SAVE] MISMATCH paddle_forehand_mul: memory=%.6f disk=%.6f" % [def.paddle_forehand_mul, disk.paddle_forehand_mul]); ok = false
+		if not is_equal_approx(disk.paddle_forward_mul, def.paddle_forward_mul):
+			print("[VERIFIED SAVE] MISMATCH paddle_forward_mul: memory=%.6f disk=%.6f" % [def.paddle_forward_mul, disk.paddle_forward_mul]); ok = false
+		if not is_equal_approx(disk.paddle_y_offset, def.paddle_y_offset):
+			print("[VERIFIED SAVE] MISMATCH paddle_y_offset: memory=%.6f disk=%.6f" % [def.paddle_y_offset, disk.paddle_y_offset]); ok = false
+		if not is_equal_approx(disk.zone_x_min, def.zone_x_min):
+			print("[VERIFIED SAVE] MISMATCH zone_x_min: memory=%.6f disk=%.6f" % [def.zone_x_min, disk.zone_x_min]); ok = false
+		if not is_equal_approx(disk.zone_x_max, def.zone_x_max):
+			print("[VERIFIED SAVE] MISMATCH zone_x_max: memory=%.6f disk=%.6f" % [def.zone_x_max, disk.zone_x_max]); ok = false
+		if not is_equal_approx(disk.zone_y_min, def.zone_y_min):
+			print("[VERIFIED SAVE] MISMATCH zone_y_min: memory=%.6f disk=%.6f" % [def.zone_y_min, disk.zone_y_min]); ok = false
+		if not is_equal_approx(disk.zone_y_max, def.zone_y_max):
+			print("[VERIFIED SAVE] MISMATCH zone_y_max: memory=%.6f disk=%.6f" % [def.zone_y_max, disk.zone_y_max]); ok = false
+		if not is_equal_approx(disk.zone_forward_offset, def.zone_forward_offset):
+			print("[VERIFIED SAVE] MISMATCH zone_forward_offset: memory=%.6f disk=%.6f" % [def.zone_forward_offset, disk.zone_forward_offset]); ok = false
+		if ok:
+			print("[VERIFIED SAVE] %s — all key fields match disk" % filename)
+	else:
+		print("[VERIFIED SAVE] WARNING: could not reload disk copy for verification")
+
+func _on_save_all() -> void:
+	if _dirty_defs.is_empty():
+		_status_label.text = "Nothing to save"
+		return
+	var saved_names: Array[String] = []
+	var failed_names: Array[String] = []
+	for def in _dirty_defs.values():
+		var fname: String = _def_to_filename(def)
+		if _save_definition(def):
+			saved_names.append(def.display_name)
+		else:
+			failed_names.append(def.display_name)
+	_library.load_or_default()
+	# Re-select current posture so UI reflects freshly loaded definition
+	if _current_def != null:
+		var reselected_def = _library.get_def(_current_def.posture_id) if not _is_base_pose_mode else _base_pose_library.get_def(_current_def.base_pose_id)
+		if reselected_def != null:
+			_current_def = reselected_def
+			_body_tab.set_definition(_current_def)
+			_paddle_tab.set_definition(_current_def)
+			_charge_tab.set_definition(_current_def)
+			_ft_tab.set_definition(_current_def)
+	_dirty_defs.clear()
+	_update_save_all_button()
+	if failed_names.is_empty():
+		_status_label.text = "Saved %d postures: %s" % [saved_names.size(), ", ".join(saved_names)]
+		print("[EDITOR V2 SAVE] Saved %d postures: %s" % [saved_names.size(), ", ".join(saved_names)])
+	else:
+		_status_label.text = "Saved %d, failed %d" % [saved_names.size(), failed_names.size()]
+		print("[EDITOR V2 SAVE] Saved %d postures, failed %d: %s" % [saved_names.size(), failed_names.size(), ", ".join(failed_names)])
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
@@ -774,6 +867,7 @@ func _on_tab_changed(_tab_index: int) -> void:
 func _on_field_changed(_field: String, _value: Variant) -> void:
 	if _current_def:
 		_status_label.text = "Modified: %s" % _current_def.display_name
+		_mark_dirty()
 	_refresh_gizmos()
 
 func _refresh_gizmos() -> void:
@@ -894,6 +988,7 @@ func _on_ghost_moved(posture_id: int, new_position: Vector3) -> void:
 		def.paddle_y_offset = offset.y
 
 	_status_label.text = "Updated: %s ghost position" % def.display_name
+	_mark_dirty()
 	_paddle_tab.set_definition(def)
 	if _pose_trigger and _pose_trigger.is_frozen():
 		_pose_trigger.refresh_from_definition(def)
@@ -986,6 +1081,7 @@ func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 		# Immediately update zone mesh so handles don't snap back before next physics frame
 		if field_name.begins_with("zone_"):
 			_update_zone_mesh_from_def(def)
+		_mark_dirty()
 		_paddle_tab.set_definition(def)
 		if _pose_trigger and _pose_trigger.is_frozen():
 			_pose_trigger.refresh_from_definition(def)
@@ -1005,6 +1101,7 @@ func _on_gizmo_rotated(field_name: String, euler_delta: Vector3) -> void:
 			body_def.head_pitch_deg += euler_delta.x
 			body_def.head_yaw_deg += euler_delta.y
 	_status_label.text = "Updated: %s rotation" % body_def.display_name
+	_mark_dirty()
 	_body_tab.set_definition(body_def)
 	if _pose_trigger and _pose_trigger.is_frozen():
 		_pose_trigger.refresh_from_definition(_current_def)
