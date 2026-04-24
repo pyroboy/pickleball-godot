@@ -38,15 +38,15 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		var d_max_far: float = 6.0
 		match ai_difficulty:
 			0:  # EASY
-				ai_speed_scale = 0.80
-				d_min_near = 1.5; d_max_near = 3.0
-				d_min_far = 2.5; d_max_far = 4.5
+				ai_speed_scale = 0.95
+				d_min_near = 2.5; d_max_near = 4.0
+				d_min_far = 3.5; d_max_far = 5.5
 			1:  # MEDIUM
-				ai_speed_scale = 0.85
-				d_min_near = 2.5; d_max_near = 3.8
-				d_min_far = 3.5; d_max_far = 5.0
+				ai_speed_scale = 0.98
+				d_min_near = 3.0; d_max_near = 4.5
+				d_min_far = 4.5; d_max_far = 6.0
 			_:  # HARD
-				ai_speed_scale = 1.0
+				ai_speed_scale = 1.05
 		target_speed *= ai_speed_scale
 		var d_min: float = lerp(d_min_near, d_min_far, speed_curve)
 		var d_max: float = lerp(d_max_near, d_max_far, speed_curve)
@@ -101,7 +101,7 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var dz: float = target_z - ball_pos.z
 	var dx: float = target_x - ball_pos.x
 	var hdist: float = sqrt(dz * dz + dx * dx)
-	var ftime: float = clamp(hdist / target_speed * 1.05, 0.3, 1.8)
+	var ftime: float = clamp(hdist / target_speed * 1.12, 0.3, 1.8)
 	var vx: float = dx / ftime
 	var vz: float = dz / ftime
 	var vy: float = (0.08 - ball_pos.y + 0.5 * grav * ftime * ftime) / ftime + vy_boost

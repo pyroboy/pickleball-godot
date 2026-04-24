@@ -755,6 +755,13 @@ func _apply_ai_hit(body: Node3D, charge_ratio: float = 0.55) -> void:
 	var paddle_pos: Vector3 = _player.global_position + _player._get_posture_offset_for(_player.ai_desired_posture)
 	var speed_factor: float = _game_node.compute_sweet_spot_speed(body.global_position, paddle_pos, shot_velocity)
 	shot_velocity = shot_velocity * speed_factor
+	# Compensate for drag losses the solver doesn't fully recover in 6 iterations
+	var ai_power_boost: float = 1.0
+	match ai_difficulty:
+		0: ai_power_boost = 1.12
+		1: ai_power_boost = 1.08
+		2: ai_power_boost = 1.04
+	shot_velocity *= ai_power_boost
 	body.linear_velocity = shot_velocity
 	# Step 2 spin coupling — AI inherits the same shot_type → ω model as human.
 	var _ai_shot_spin: Vector3 = _game_node.compute_shot_spin("", shot_velocity, charge, 1, _player.paddle_posture)

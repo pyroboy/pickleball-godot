@@ -40,10 +40,12 @@ func load_or_default() -> void:
 	definitions.clear()
 	_by_id.clear()
 	_build_defaults()  # Always start with full defaults
+	var disk_count := 0
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(DATA_DIR)):
-		_load_from_disk()  # Overlay saved files on top
+		disk_count = _load_from_disk()  # Overlay saved files on top
 	for d in definitions:
 		_by_id[d.posture_id] = d
+	print("[POSTURE_LIBRARY] loaded %d from disk, %d from defaults" % [disk_count, definitions.size() - disk_count])
 
 
 func get_def(posture_id: int):
@@ -58,27 +60,39 @@ func all_definitions():
 	return definitions
 
 
-func _load_from_disk() -> void:
+func _load_from_disk() -> int:
+	var loaded_count := 0
 	var dir := DirAccess.open(DATA_DIR)
 	if dir == null:
-		return
+		print("[POSTURE_LIBRARY] _load_from_disk: DirAccess.open failed for ", DATA_DIR)
+		return loaded_count
 	dir.list_dir_begin()
 	var f: String = dir.get_next()
 	while f != "":
 		if not dir.current_is_dir() and f.ends_with(".tres"):
-			var res: Resource = load(DATA_DIR + f)
+			var full_path := DATA_DIR + f
+			# Force reload from disk to bypass Godot's shared editor/game cache
+			var res: Resource = ResourceLoader.load(full_path, "", ResourceLoader.CACHE_MODE_REPLACE)
 			if res != null:
+				var pid: int = -1
+				if res.has_method("get"):
+					pid = res.get("posture_id")
+				print("[POSTURE_LIBRARY] loaded from disk: ", full_path, " posture_id=", pid)
 				# Replace existing default if present, otherwise append
 				var replaced := false
 				for i in range(definitions.size()):
-					if definitions[i].posture_id == res.posture_id:
+					if definitions[i].posture_id == pid:
 						definitions[i] = res
 						replaced = true
 						break
 				if not replaced:
 					definitions.append(res)
+				loaded_count += 1
+			else:
+				push_warning("PostureLibrary: failed to load " + full_path)
 		f = dir.get_next()
 	dir.list_dir_end()
+	return loaded_count
 
 
 ## Source-of-truth extraction of every hardcoded posture value.

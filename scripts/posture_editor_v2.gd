@@ -563,6 +563,22 @@ func _on_save() -> void:
 		_current_def.resource_path = path
 		_status_label.text = "Saved: %s" % filename
 		print("[EDITOR V2 SAVE] SUCCESS: ", path)
+		# Clear Godot's resource cache so the next load reads from disk, not stale memory
+		if ResourceLoader.has_cached(path):
+			ResourceLoader.remove_resource(path)
+			print("[EDITOR V2 SAVE] cleared cache for ", path)
+		# Auto-reload library so editor sees saved values immediately without restart
+		print("[EDITOR V2 SAVE] reloading library from disk...")
+		_library.load_or_default()
+		# Re-select current posture so UI reflects freshly loaded definition
+		var reselected_def = _library.get_def(_current_def.posture_id) if not _is_base_pose_mode else _base_pose_library.get_def(_current_def.base_pose_id)
+		if reselected_def != null:
+			_current_def = reselected_def
+			_body_tab.set_definition(_current_def)
+			_paddle_tab.set_definition(_current_def)
+			_charge_tab.set_definition(_current_def)
+			_ft_tab.set_definition(_current_def)
+			print("[EDITOR V2 SAVE] re-selected definition after reload")
 		return
 
 	# Attempt 2: fallback to user:// so the user at least has the file
@@ -578,6 +594,9 @@ func _on_save() -> void:
 		_status_label.text = "Saved to fallback: %s" % fallback_path
 		print("[EDITOR V2 SAVE] FALLBACK SUCCESS: ", fallback_path)
 		push_warning("PostureEditorV2: saved to fallback %s because res:// failed (error %d)" % [fallback_path, err])
+		if ResourceLoader.has_cached(fallback_path):
+			ResourceLoader.remove_resource(fallback_path)
+		_library.load_or_default()
 	else:
 		_status_label.text = "Save failed: error %d — %s" % [err, error_string(err)]
 		push_warning("PostureEditorV2: failed to save %s (error %d) and fallback %s (error %d)" % [path, err, fallback_path, err2])

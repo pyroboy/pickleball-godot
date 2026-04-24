@@ -5,6 +5,7 @@ extends Node
 ## cleanly when the menu closes.
 ##
 ## Also throttles FPS + auto-pauses when the game window loses focus to save CPU.
+## Shows the same pause menu overlay on focus loss as when Escape is pressed.
 
 const PauseMenuScript = preload("res://scripts/ui/pause_menu.gd")
 
@@ -25,17 +26,39 @@ func _set_pause_state() -> void:
 	if tree != null:
 		tree.paused = _manual_paused or _focus_paused
 
+func _show_pause_menu() -> void:
+	if _menu != null and is_instance_valid(_menu):
+		return
+	var tree: SceneTree = get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	_menu = PauseMenuScript.new()
+	_menu.set_meta("controller", self)
+	tree.current_scene.add_child(_menu)
+	if TimeScale != null and TimeScale.has_method("force_normal"):
+		TimeScale.force_normal()
+
+func _hide_pause_menu() -> void:
+	if _menu != null and is_instance_valid(_menu):
+		_menu.queue_free()
+	_menu = null
+	if TimeScale != null and TimeScale.has_method("release_forced_normal"):
+		TimeScale.release_forced_normal()
+
 func _on_window_focus_exited() -> void:
 	_previous_max_fps = Engine.max_fps
 	Engine.max_fps = 5
 	_focus_paused = true
 	_set_pause_state()
+	_show_pause_menu()
 	print("[PauseController] window focus lost — throttling to 5 FPS")
 
 func _on_window_focus_entered() -> void:
 	Engine.max_fps = _previous_max_fps
 	_focus_paused = false
 	_set_pause_state()
+	if not _manual_paused:
+		_hide_pause_menu()
 	print("[PauseController] window focus regained — restoring FPS")
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -51,29 +74,15 @@ func toggle() -> void:
 		open()
 
 func open() -> void:
-	if _menu != null and is_instance_valid(_menu):
-		return
-	var tree: SceneTree = get_tree()
-	if tree == null or tree.current_scene == null:
-		return
-
-	_menu = PauseMenuScript.new()
-	_menu.set_meta("controller", self)
-	tree.current_scene.add_child(_menu)
-
-	if TimeScale != null and TimeScale.has_method("force_normal"):
-		TimeScale.force_normal()
 	_manual_paused = true
 	_set_pause_state()
+	_show_pause_menu()
 	print("[PauseController] opened")
 
 func close() -> void:
-	if _menu != null and is_instance_valid(_menu):
-		_menu.queue_free()
-	_menu = null
-
 	_manual_paused = false
 	_set_pause_state()
-	if TimeScale != null and TimeScale.has_method("release_forced_normal"):
-		TimeScale.release_forced_normal()
+	_hide_pause_menu()
+	if _focus_paused:
+		_show_pause_menu()
 	print("[PauseController] closed")
