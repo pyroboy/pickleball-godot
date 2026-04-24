@@ -1019,24 +1019,17 @@ func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 	if def != null:
 		match field_name:
 			"paddle_position":
-				if _player.paddle_node == null:
-					def.paddle_forehand_mul = offset.dot(forehand_axis)
-					def.paddle_forward_mul = offset.dot(forward_axis)
-					def.paddle_y_offset = offset.y
-				else:
-					var actual_basis_y: Vector3 = _player.paddle_node.global_transform.basis.y
-					var posture_rot: Vector3 = def.resolve_paddle_rotation_deg(_player._get_swing_sign(), forward_axis.z)
-					var posture_basis: Basis = _get_basis_from_rotation(posture_rot)
-					var desired_head_offset: Vector3 = offset
-					var corrected_offset: Vector3 = desired_head_offset - actual_basis_y * 0.4 + posture_basis.y * 0.4
-					def.paddle_forehand_mul = corrected_offset.dot(forehand_axis)
-					def.paddle_forward_mul = corrected_offset.dot(forward_axis)
-					def.paddle_y_offset = corrected_offset.y
-					# Directly move ghost to match gizmo (ghost is source of truth)
-					var ghost = _player.posture.posture_ghosts.get(def.posture_id)
-					if ghost:
-						ghost.position = desired_head_offset - ghost.basis.y * 0.4
-					# Directly move paddle to match gizmo
+				# Store the raw head offset directly — paddle_* fields represent HEAD position,
+				# not handle position. Gameplay subtracts b.y * 0.4 later to get the handle.
+				def.paddle_forehand_mul = offset.dot(forehand_axis)
+				def.paddle_forward_mul = offset.dot(forward_axis)
+				def.paddle_y_offset = offset.y
+				# Directly move ghost to match gizmo (ghost is source of truth)
+				var ghost = _player.posture.posture_ghosts.get(def.posture_id)
+				if ghost:
+					ghost.position = offset - ghost.basis.y * 0.4
+				# Directly move paddle to match gizmo
+				if _player.paddle_node:
 					_player.paddle_node.global_position = new_position - _player.paddle_node.global_transform.basis.y * 0.4
 				_status_label.text = "Updated: %s position" % def.display_name
 			"zone_BLF":
