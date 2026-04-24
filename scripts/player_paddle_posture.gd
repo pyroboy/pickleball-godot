@@ -195,7 +195,6 @@ var _player
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 	_posture_lib = PostureLibrary.instance()
-	print("[PLAYER_POSTURE] PostureLibrary singleton instance_id=", _posture_lib.get_instance_id())
 	_skeleton_applier = load("res://scripts/posture_skeleton_applier.gd").new(_player)
 	_offset_resolver = load("res://scripts/posture_offset_resolver.gd").new(_player)
 	_commit_selector = load("res://scripts/posture_commit_selector.gd").new()

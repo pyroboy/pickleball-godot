@@ -40,12 +40,10 @@ func load_or_default() -> void:
 	definitions.clear()
 	_by_id.clear()
 	_build_defaults()  # Always start with full defaults
-	var disk_count := 0
 	if DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(DATA_DIR)):
-		disk_count = _load_from_disk()  # Overlay saved files on top
+		_load_from_disk()  # Overlay saved files on top
 	for d in definitions:
 		_by_id[d.posture_id] = d
-	print("[POSTURE_LIBRARY] loaded %d from disk, %d from defaults" % [disk_count, definitions.size() - disk_count])
 
 
 func get_def(posture_id: int):
@@ -60,12 +58,10 @@ func all_definitions():
 	return definitions
 
 
-func _load_from_disk() -> int:
-	var loaded_count := 0
+func _load_from_disk() -> void:
 	var dir := DirAccess.open(DATA_DIR)
 	if dir == null:
-		print("[POSTURE_LIBRARY] _load_from_disk: DirAccess.open failed for ", DATA_DIR)
-		return loaded_count
+		return
 	dir.list_dir_begin()
 	var f: String = dir.get_next()
 	while f != "":
@@ -77,7 +73,6 @@ func _load_from_disk() -> int:
 				var pid: int = -1
 				if res.has_method("get"):
 					pid = res.get("posture_id")
-				print("[POSTURE_LIBRARY] loaded from disk: ", full_path, " posture_id=", pid)
 				# Replace existing default if present, otherwise append
 				var replaced := false
 				for i in range(definitions.size()):
@@ -87,12 +82,10 @@ func _load_from_disk() -> int:
 						break
 				if not replaced:
 					definitions.append(res)
-				loaded_count += 1
 			else:
 				push_warning("PostureLibrary: failed to load " + full_path)
 		f = dir.get_next()
 	dir.list_dir_end()
-	return loaded_count
 
 
 ## Source-of-truth extraction of every hardcoded posture value.
