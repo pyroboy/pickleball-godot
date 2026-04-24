@@ -1027,10 +1027,9 @@ func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 				# Directly move ghost to match gizmo (ghost is source of truth)
 				var ghost = _player.posture.posture_ghosts.get(def.posture_id)
 				if ghost:
-					ghost.position = offset - ghost.basis.y * 0.4
-				# Directly move paddle to match gizmo
-				if _player.paddle_node:
-					_player.paddle_node.global_position = new_position - _player.paddle_node.global_transform.basis.y * 0.4
+					# Use POSTURE_GHOST_SCALE so editor placement matches gameplay exactly
+					var ghost_scale_y: float = _player.posture.POSTURE_GHOST_SCALE.y
+					ghost.position = offset - ghost.basis.y * 0.4 * ghost_scale_y
 				_status_label.text = "Updated: %s position" % def.display_name
 			"zone_BLF":
 				def.zone_x_min = offset.dot(forehand_axis)
