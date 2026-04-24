@@ -273,32 +273,35 @@ func _process(_delta: float) -> void:
 				var ghost_head_pos: Vector3 = ghost.global_position + ghost.global_transform.basis.y * 0.4
 				paddle_gizmo.global_position = ghost_head_pos
 		# Keep zone corner handles glued to the purple box (updates during drag)
-		var zone_mi = _player.posture._posture_zone_bounds.get(_current_def.posture_id)
-		if zone_mi:
-			var zone_mesh: BoxMesh = zone_mi.mesh as BoxMesh
-			var half_size: Vector3 = zone_mesh.size / 2.0
-			var basis: Basis = zone_mi.global_transform.basis
-			var center: Vector3 = zone_mi.global_position
-			var corner_offsets := [
-				Vector3(-half_size.x, -half_size.y, -half_size.z),
-				Vector3( half_size.x, -half_size.y, -half_size.z),
-				Vector3(-half_size.x,  half_size.y, -half_size.z),
-				Vector3( half_size.x,  half_size.y, -half_size.z),
-			]
-			var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF"]
-			for i in range(4):
-				var gizmo = _gizmo_controller.get_node_or_null(corner_names[i])
-				if gizmo:
-					gizmo.global_position = center + basis * corner_offsets[i]
-			var face_offsets := [
-				Vector3(0.0, 0.0, -half_size.z),
-				Vector3(0.0, 0.0,  half_size.z),
-			]
-			var face_names := ["zone_front","zone_back"]
-			for i in range(2):
-				var gizmo = _gizmo_controller.get_node_or_null(face_names[i])
-				if gizmo:
-					gizmo.global_position = center + basis * face_offsets[i]
+		# Skip while dragging a zone handle so the handle doesn't snap back before
+		# _physics_process() has a chance to update the mesh.
+		if not _gizmo_controller.is_dragging_zone_handle():
+			var zone_mi = _player.posture._posture_zone_bounds.get(_current_def.posture_id)
+			if zone_mi:
+				var zone_mesh: BoxMesh = zone_mi.mesh as BoxMesh
+				var half_size: Vector3 = zone_mesh.size / 2.0
+				var basis: Basis = zone_mi.global_transform.basis
+				var center: Vector3 = zone_mi.global_position
+				var corner_offsets := [
+					Vector3(-half_size.x, -half_size.y, -half_size.z),
+					Vector3( half_size.x, -half_size.y, -half_size.z),
+					Vector3(-half_size.x,  half_size.y, -half_size.z),
+					Vector3( half_size.x,  half_size.y, -half_size.z),
+				]
+				var corner_names := ["zone_BLF","zone_BRF","zone_TLF","zone_TRF"]
+				for i in range(4):
+					var gizmo = _gizmo_controller.get_node_or_null(corner_names[i])
+					if gizmo:
+						gizmo.global_position = center + basis * corner_offsets[i]
+				var face_offsets := [
+					Vector3(0.0, 0.0, -half_size.z),
+					Vector3(0.0, 0.0,  half_size.z),
+				]
+				var face_names := ["zone_front","zone_back"]
+				for i in range(2):
+					var gizmo = _gizmo_controller.get_node_or_null(face_names[i])
+					if gizmo:
+						gizmo.global_position = center + basis * face_offsets[i]
 	# After transition finishes, snap paddle to match ghost so all three align
 	if _pose_transition_tween == null and _current_def and _player and _player.posture and _player.paddle_node:
 		var ghost = _player.posture.posture_ghosts.get(_current_def.posture_id)
@@ -529,13 +532,22 @@ func _on_save() -> void:
 		var base: String = _current_def.display_name.to_lower().replace(" ", "_").replace("-", "_")
 		filename = "%02d_%s.tres" % [_current_def.posture_id, base]
 		path = "res://data/postures/" + filename
-	var err := ResourceSaver.save(_current_def, path)
+	# Ensure directory exists ( defensive — Godot won't create it automatically )
+	var dir_path := ProjectSettings.globalize_path(path.get_base_dir())
+	if not DirAccess.dir_exists_absolute(dir_path):
+		var err_mkdir := DirAccess.make_dir_recursive_absolute(dir_path)
+		if err_mkdir != OK:
+			_status_label.text = "Failed to create directory: %s (err %d)" % [dir_path, err_mkdir]
+			push_warning("PostureEditorV2: failed to create directory %s (error %d)" % [dir_path, err_mkdir])
+			return
+	var err := ResourceSaver.save(_current_def, path, ResourceSaver.FLAG_CHANGE_PATH)
 	if err == OK:
+		_current_def.resource_path = path
 		_status_label.text = "Saved: %s" % filename
 		print("[EDITOR V2] Saved ", path)
 	else:
-		_status_label.text = "Save failed: error %d" % err
-		push_warning("PostureEditorV2: failed to save " + path)
+		_status_label.text = "Save failed: error %d — %s" % [err, error_string(err)]
+		push_warning("PostureEditorV2: failed to save %s (error %d)" % [path, err])
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 
@@ -824,6 +836,29 @@ func _on_ghost_moved(posture_id: int, new_position: Vector3) -> void:
 	if _pose_trigger and _pose_trigger.is_frozen():
 		_pose_trigger.refresh_from_definition(def)
 
+## Immediately updates the purple zone mesh for the given posture definition.
+## Called from _on_gizmo_moved so the box resizes in real time without waiting
+## for the next _physics_process().
+func _update_zone_mesh_from_def(def: PostureDefinition) -> void:
+	if _player == null:
+		return
+	var zone_mi = _player.posture._posture_zone_bounds.get(def.posture_id)
+	if zone_mi == null:
+		return
+	var mesh: BoxMesh = zone_mi.mesh as BoxMesh
+	if mesh == null:
+		return
+	var fh_axis: Vector3 = _player._get_forehand_axis()
+	var fwd_axis: Vector3 = _player._get_forward_axis()
+	var zone_y_min_rel: float = _player.COURT_FLOOR_Y + def.zone_y_min - _player.global_position.y
+	var zone_y_max_rel: float = _player.COURT_FLOOR_Y + def.zone_y_max - _player.global_position.y
+	var zone_cx: float = (def.zone_x_min + def.zone_x_max) * 0.5
+	var zone_cy: float = (zone_y_min_rel + zone_y_max_rel) * 0.5
+	var zone_cz: float = def.zone_forward_offset
+	zone_mi.position = fh_axis * zone_cx + Vector3.UP * zone_cy + fwd_axis * zone_cz
+	mesh.size = Vector3(def.zone_x_max - def.zone_x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
+	zone_mi.look_at(zone_mi.global_position + fwd_axis, Vector3.UP, true)
+
 func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 	if _player == null or _current_def == null:
 		return
@@ -886,6 +921,9 @@ func _on_gizmo_moved(field_name: String, new_position: Vector3) -> void:
 					# Back face is at center - fwd * half_z
 					def.zone_forward_offset = offset.dot(forward_axis) + half_z
 				_status_label.text = "Updated: %s zone_forward_offset" % def.display_name
+		# Immediately update zone mesh so handles don't snap back before next physics frame
+		if field_name.begins_with("zone_"):
+			_update_zone_mesh_from_def(def)
 		_paddle_tab.set_definition(def)
 		if _pose_trigger and _pose_trigger.is_frozen():
 			_pose_trigger.refresh_from_definition(def)

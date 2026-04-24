@@ -251,6 +251,9 @@ func clear_all_gizmos() -> void:
 	_dragging_ghost_id = -1
 	_dragging_paddle = false
 
+func is_dragging_zone_handle() -> bool:
+	return _dragging and _selected_gizmo is PositionGizmoV2 and _selected_gizmo.name.begins_with("zone_")
+
 func add_position_gizmo(field_name: String, pos: Vector3, color: Color, size: float = 0.08) -> PositionGizmoV2:
 	var gizmo := PositionGizmoV2.new()
 	gizmo.name = field_name

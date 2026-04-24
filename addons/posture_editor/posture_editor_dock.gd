@@ -188,6 +188,13 @@ func _on_save() -> void:
 	if path == "":
 		var safe_name: String = _selected_def.display_name.replace(" ", "_").replace("/", "_")
 		path = "res://data/postures/%s.tres" % safe_name
+	# Ensure directory exists
+	var dir_path := path.get_base_dir()
+	if not DirAccess.dir_exists_absolute(dir_path):
+		var err_mkdir := DirAccess.make_dir_recursive_absolute(dir_path)
+		if err_mkdir != OK:
+			_status_label.text = "Failed to create directory: %s" % dir_path
+			return
 	var err := ResourceSaver.save(_selected_def, path)
 	if err == OK:
 		_selected_def.resource_path = path

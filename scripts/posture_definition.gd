@@ -185,6 +185,7 @@ func lerp_with(other, w: float):
 	o.zone_x_max = lerpf(zone_x_max, other.zone_x_max, t)
 	o.zone_y_min = lerpf(zone_y_min, other.zone_y_min, t)
 	o.zone_y_max = lerpf(zone_y_max, other.zone_y_max, t)
+	o.zone_forward_offset = lerpf(zone_forward_offset, other.zone_forward_offset, t)
 	o.right_hand_offset = right_hand_offset.lerp(other.right_hand_offset, t)
 	o.right_elbow_pole = right_elbow_pole.lerp(other.right_elbow_pole, t)
 	o.right_shoulder_rotation_deg = right_shoulder_rotation_deg.lerp(other.right_shoulder_rotation_deg, t)
