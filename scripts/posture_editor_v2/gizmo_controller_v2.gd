@@ -64,18 +64,7 @@ func _try_select_gizmo(screen_pos: Vector2) -> void:
 	var ray_origin := _camera.project_ray_origin(screen_pos)
 	var ray_dir := _camera.project_ray_normal(screen_pos)
 
-	# ── Ghost click takes priority over gizmos ──
-	if _player and _player.posture:
-		var ghost_result := _raycast_ghosts(ray_origin, ray_dir)
-		if ghost_result.posture_id >= 0 and ghost_result.ghost != null:
-			ghost_selected.emit(ghost_result.posture_id)
-			_dragging_ghost = ghost_result.ghost
-			_dragging_ghost_id = ghost_result.posture_id
-			_dragging = true
-			var to_ghost: Vector3 = (_dragging_ghost.global_position - _camera.global_position).normalized()
-			_drag_plane = Plane(to_ghost, _dragging_ghost.global_position)
-			return
-
+	# ── Check gizmos FIRST (precise click on small handle/sphere) ──
 	var closest_gizmo = null
 	var closest_dist := INF
 	# Check position gizmos
@@ -100,23 +89,37 @@ func _try_select_gizmo(screen_pos: Vector2) -> void:
 	if closest_gizmo:
 		_select_gizmo(closest_gizmo)
 		_start_drag(closest_gizmo, screen_pos, ray_origin, ray_dir)
-	else:
-		# ── Paddle click fallback (only in editor preview mode) ──
-		if _player and _player.paddle_node and _player.posture and _player.posture.editor_preview_mode:
-			var space_state := get_world_3d().direct_space_state
-			var query := PhysicsRayQueryParameters3D.new()
-			query.from = ray_origin
-			query.to = ray_origin + ray_dir * 100.0
-			query.collision_mask = 4  # Paddle is on collision_layer 4
-			query.collide_with_bodies = true
-			var result := space_state.intersect_ray(query)
-			if result.has("position"):
-				_dragging_paddle = true
-				_dragging = true
-				var to_paddle: Vector3 = (_player.paddle_node.global_position - _camera.global_position).normalized()
-				_drag_plane = Plane(to_paddle, _player.paddle_node.global_position)
-				return
-		_deselect_gizmo()
+		return
+
+	# ── No gizmo hit: fall back to ghost click ──
+	if _player and _player.posture:
+		var ghost_result := _raycast_ghosts(ray_origin, ray_dir)
+		if ghost_result.posture_id >= 0 and ghost_result.ghost != null:
+			ghost_selected.emit(ghost_result.posture_id)
+			_dragging_ghost = ghost_result.ghost
+			_dragging_ghost_id = ghost_result.posture_id
+			_dragging = true
+			var to_ghost: Vector3 = (_dragging_ghost.global_position - _camera.global_position).normalized()
+			_drag_plane = Plane(to_ghost, _dragging_ghost.global_position)
+			return
+
+	# ── Paddle click fallback (only in editor preview mode) ──
+	if _player and _player.paddle_node and _player.posture and _player.posture.editor_preview_mode:
+		var space_state := get_world_3d().direct_space_state
+		var query := PhysicsRayQueryParameters3D.new()
+		query.from = ray_origin
+		query.to = ray_origin + ray_dir * 100.0
+		query.collision_mask = 4  # Paddle is on collision_layer 4
+		query.collide_with_bodies = true
+		var result := space_state.intersect_ray(query)
+		if result.has("position"):
+			_dragging_paddle = true
+			_dragging = true
+			var to_paddle: Vector3 = (_player.paddle_node.global_position - _camera.global_position).normalized()
+			_drag_plane = Plane(to_paddle, _player.paddle_node.global_position)
+			return
+
+	_deselect_gizmo()
 
 ## Raycast against posture ghosts. Returns {posture_id, ghost}.
 ## Checks both handle base and head center positions.

@@ -8,7 +8,7 @@ const _Ball = preload("res://scripts/ball.gd")
 
 const MIN_SWING_SPEED_MS := 7.0
 const MAX_SWING_SPEED_MS := 22.35
-const NET_CLEAR_MIN := 1.30
+const NET_CLEAR_MIN := 1.0
 
 # Static dependencies (passed in)
 var _player_left: Node

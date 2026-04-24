@@ -459,6 +459,7 @@ func _set_game_state(new_state: GameState) -> void:
 			var total_score: int = score_left + score_right
 			var from_right: bool = (total_score % 2) == 0
 			rally_scorer.start_rally(serving_team, from_right)
+			player_right.set_ai_movement_enabled(true)
 		elif new_state != GameState.PLAYING and new_state != GameState.SERVING:
 			rally_scorer.end_rally()
 

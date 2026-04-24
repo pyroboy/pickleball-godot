@@ -752,13 +752,14 @@ func _apply_ai_hit(body: Node3D, charge_ratio: float = 0.55) -> void:
 	if absf(ai_paddle_comp) > 0.5:
 		shot_velocity += ai_shot_dir * ai_paddle_comp * ai_vel_transfer
 	# GAP-15: sweet-spot speed reduction — off-center hits lose up to 40% speed
-	var speed_factor: float = _game_node.compute_sweet_spot_speed(body.global_position, _player.get_paddle_position(), shot_velocity)
+	var paddle_pos: Vector3 = _player.global_position + _player._get_posture_offset_for(_player.ai_desired_posture)
+	var speed_factor: float = _game_node.compute_sweet_spot_speed(body.global_position, paddle_pos, shot_velocity)
 	shot_velocity = shot_velocity * speed_factor
 	body.linear_velocity = shot_velocity
 	# Step 2 spin coupling — AI inherits the same shot_type → ω model as human.
 	var _ai_shot_spin: Vector3 = _game_node.compute_shot_spin("", shot_velocity, charge, 1, _player.paddle_posture)
 	# Step 3 sweet-spot injection — off-center contact adds rim-strike torque.
-	var _ai_sweet_spin: Vector3 = _game_node.compute_sweet_spot_spin(body.global_position, _player.get_paddle_position(), shot_velocity)
+	var _ai_sweet_spin: Vector3 = _game_node.compute_sweet_spot_spin(body.global_position, paddle_pos, shot_velocity)
 	body.angular_velocity = _ai_shot_spin + _ai_sweet_spin
 	var shot_impulse: Vector3 = shot_velocity.normalized()
 	if body.has_method("hit_by_player"):

@@ -4,17 +4,39 @@ extends Node
 ## Coordinates with TimeScale autoload so slowmo/hitstop state is restored
 ## cleanly when the menu closes.
 ##
-## Pause menu is instantiated lazily via scripts/ui/pause_menu.gd and
-## parented to the current scene. The menu script owns its own visuals;
-## this autoload just manages lifecycle.
+## Also throttles FPS + auto-pauses when the game window loses focus to save CPU.
 
 const PauseMenuScript = preload("res://scripts/ui/pause_menu.gd")
 
 var _menu: Node = null
-var _was_paused: bool = false
+var _manual_paused: bool = false
+var _focus_paused: bool = false
+var _previous_max_fps: int = 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var window := get_window()
+	if window:
+		window.focus_entered.connect(_on_window_focus_entered)
+		window.focus_exited.connect(_on_window_focus_exited)
+
+func _set_pause_state() -> void:
+	var tree: SceneTree = get_tree()
+	if tree != null:
+		tree.paused = _manual_paused or _focus_paused
+
+func _on_window_focus_exited() -> void:
+	_previous_max_fps = Engine.max_fps
+	Engine.max_fps = 5
+	_focus_paused = true
+	_set_pause_state()
+	print("[PauseController] window focus lost — throttling to 5 FPS")
+
+func _on_window_focus_entered() -> void:
+	Engine.max_fps = _previous_max_fps
+	_focus_paused = false
+	_set_pause_state()
+	print("[PauseController] window focus regained — restoring FPS")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -35,14 +57,14 @@ func open() -> void:
 	if tree == null or tree.current_scene == null:
 		return
 
-	_was_paused = tree.paused
 	_menu = PauseMenuScript.new()
 	_menu.set_meta("controller", self)
 	tree.current_scene.add_child(_menu)
 
 	if TimeScale != null and TimeScale.has_method("force_normal"):
 		TimeScale.force_normal()
-	tree.paused = true
+	_manual_paused = true
+	_set_pause_state()
 	print("[PauseController] opened")
 
 func close() -> void:
@@ -50,9 +72,8 @@ func close() -> void:
 		_menu.queue_free()
 	_menu = null
 
-	var tree: SceneTree = get_tree()
-	if tree != null:
-		tree.paused = _was_paused
+	_manual_paused = false
+	_set_pause_state()
 	if TimeScale != null and TimeScale.has_method("release_forced_normal"):
 		TimeScale.release_forced_normal()
 	print("[PauseController] closed")

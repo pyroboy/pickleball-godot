@@ -7,6 +7,8 @@ func run_all(totals: Dictionary) -> void:
 	_test_posture_library_singleton_mutation_visible(totals)
 	_test_save_load_round_trip(totals)
 	_test_save_creates_file(totals)
+	_test_save_to_res_path(totals)
+	_test_dir_access_trailing_slash(totals)
 
 
 ## Verify PostureLibrary.instance() returns the same object repeatedly.
@@ -89,6 +91,32 @@ func _test_save_creates_file(totals: Dictionary) -> void:
 	var dir := DirAccess.open("user://")
 	if dir:
 		dir.remove(tmp_path)
+
+
+## Verify ResourceSaver can write to res://data/postures/ (editor-only test).
+func _test_save_to_res_path(totals: Dictionary) -> void:
+	var lib = load("res://scripts/posture_library.gd").new()
+	var def = lib.get_def(0)
+	_assert(def != null, "library has FOREHAND for res:// save test", totals)
+	var test_path := "res://data/postures/_test_save_verify.tres"
+	var err := ResourceSaver.save(def, test_path, ResourceSaver.FLAG_CHANGE_PATH)
+	_assert(err == OK, "save to res://data/postures/ returns OK (err=%d)" % err, totals)
+	var exists := FileAccess.file_exists(test_path)
+	_assert(exists, "file exists at res://data/postures/_test_save_verify.tres", totals)
+	var dir := DirAccess.open("res://data/postures/")
+	if dir:
+		dir.remove("_test_save_verify.tres")
+
+
+## Verify DirAccess.dir_exists_absolute handles trailing slashes correctly.
+func _test_dir_access_trailing_slash(totals: Dictionary) -> void:
+	var raw := ProjectSettings.globalize_path("res://data/postures/")
+	var stripped := raw.rstrip("/")
+	var with_slash_exists := DirAccess.dir_exists_absolute(raw)
+	var without_slash_exists := DirAccess.dir_exists_absolute(stripped)
+	_assert(without_slash_exists, "dir_exists_absolute without trailing slash works", totals)
+	# On macOS/Linux the slash variant may also work; we just ensure at least one works
+	_assert(with_slash_exists or without_slash_exists, "dir_exists_absolute works either way", totals)
 
 
 func _assert(condition: bool, label: String, totals: Dictionary) -> void:

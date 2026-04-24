@@ -184,6 +184,7 @@ func _ready() -> void:
 
 	# Load libraries
 	_library = PostureLibrary.instance()
+	print("[EDITOR V2] PostureLibrary singleton instance_id=", _library.get_instance_id())
 	_base_pose_library = BasePoseLibrary.instance()
 	_populate_list()
 
@@ -520,7 +521,10 @@ func _on_preview_swing() -> void:
 		_status_label.text = "Playing swing preview"
 
 func _on_save() -> void:
+	print("[EDITOR V2 SAVE] _on_save() called")
 	if _current_def == null:
+		print("[EDITOR V2 SAVE] ABORT: _current_def is null")
+		_status_label.text = "Save: nothing selected"
 		return
 	var path: String = ""
 	var filename: String = ""
@@ -532,22 +536,51 @@ func _on_save() -> void:
 		var base: String = _current_def.display_name.to_lower().replace(" ", "_").replace("-", "_")
 		filename = "%02d_%s.tres" % [_current_def.posture_id, base]
 		path = "res://data/postures/" + filename
+	print("[EDITOR V2 SAVE] target path: ", path)
+	print("[EDITOR V2 SAVE] def type: ", _current_def.get_class(), " script: ", _current_def.get_script())
+
 	# Ensure directory exists ( defensive — Godot won't create it automatically )
-	var dir_path := ProjectSettings.globalize_path(path.get_base_dir())
-	if not DirAccess.dir_exists_absolute(dir_path):
+	var raw_dir := path.get_base_dir()
+	# Strip trailing slash for DirAccess APIs (macOS can be sensitive)
+	var dir_path := ProjectSettings.globalize_path(raw_dir).rstrip("/")
+	print("[EDITOR V2 SAVE] dir_path (globalized): ", dir_path)
+	var dir_exists := DirAccess.dir_exists_absolute(dir_path)
+	print("[EDITOR V2 SAVE] dir_exists: ", dir_exists)
+	if not dir_exists:
+		print("[EDITOR V2 SAVE] creating directory...")
 		var err_mkdir := DirAccess.make_dir_recursive_absolute(dir_path)
+		print("[EDITOR V2 SAVE] mkdir result: ", err_mkdir)
 		if err_mkdir != OK:
 			_status_label.text = "Failed to create directory: %s (err %d)" % [dir_path, err_mkdir]
 			push_warning("PostureEditorV2: failed to create directory %s (error %d)" % [dir_path, err_mkdir])
 			return
+
+	# Attempt 1: save to res://
+	print("[EDITOR V2 SAVE] calling ResourceSaver.save(", path, ")")
 	var err := ResourceSaver.save(_current_def, path, ResourceSaver.FLAG_CHANGE_PATH)
+	print("[EDITOR V2 SAVE] ResourceSaver.save result: ", err)
 	if err == OK:
 		_current_def.resource_path = path
 		_status_label.text = "Saved: %s" % filename
-		print("[EDITOR V2] Saved ", path)
+		print("[EDITOR V2 SAVE] SUCCESS: ", path)
+		return
+
+	# Attempt 2: fallback to user:// so the user at least has the file
+	var fallback_path := "user://posture_editor_fallback/" + filename
+	print("[EDITOR V2 SAVE] res:// failed (err ", err, "). Trying fallback: ", fallback_path)
+	var fb_dir := ProjectSettings.globalize_path(fallback_path.get_base_dir()).rstrip("/")
+	if not DirAccess.dir_exists_absolute(fb_dir):
+		DirAccess.make_dir_recursive_absolute(fb_dir)
+	var err2 := ResourceSaver.save(_current_def, fallback_path, ResourceSaver.FLAG_CHANGE_PATH)
+	print("[EDITOR V2 SAVE] fallback result: ", err2)
+	if err2 == OK:
+		_current_def.resource_path = fallback_path
+		_status_label.text = "Saved to fallback: %s" % fallback_path
+		print("[EDITOR V2 SAVE] FALLBACK SUCCESS: ", fallback_path)
+		push_warning("PostureEditorV2: saved to fallback %s because res:// failed (error %d)" % [fallback_path, err])
 	else:
 		_status_label.text = "Save failed: error %d — %s" % [err, error_string(err)]
-		push_warning("PostureEditorV2: failed to save %s (error %d)" % [path, err])
+		push_warning("PostureEditorV2: failed to save %s (error %d) and fallback %s (error %d)" % [path, err, fallback_path, err2])
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
 

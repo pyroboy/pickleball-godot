@@ -195,6 +195,7 @@ var _player
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 	_posture_lib = PostureLibrary.instance()
+	print("[PLAYER_POSTURE] PostureLibrary singleton instance_id=", _posture_lib.get_instance_id())
 	_skeleton_applier = load("res://scripts/posture_skeleton_applier.gd").new(_player)
 	_offset_resolver = load("res://scripts/posture_offset_resolver.gd").new(_player)
 	_commit_selector = load("res://scripts/posture_commit_selector.gd").new()
@@ -1218,15 +1219,18 @@ func update_posture_ghosts() -> void:
 		var zone_cx: float = (zone_def.zone_x_min + zone_def.zone_x_max) * 0.5
 		var zone_cy: float = (zone_y_min_rel + zone_y_max_rel) * 0.5
 		var zone_cz: float = zone_def.zone_forward_offset
-		# Center the box on the zone (lateral/forward snap to ghost for crisp alignment)
-		var cx: float = zone_cx if absf(zone_cx - ghost_x) < 0.3 else ghost_x
-		var cy: float = zone_cy
-		var cz: float = zone_cz if absf(zone_cz - ghost_z) < 0.3 else ghost_z
-		mi.position = fh * cx + Vector3.UP * cy + fwd * cz
-		var mesh: BoxMesh = mi.mesh as BoxMesh
-		if mesh:
-			mesh.size = Vector3(zone_def.zone_x_max - zone_def.zone_x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
-		mi.look_at(mi.global_position + fwd, Vector3.UP, true)
+		# In editor preview mode the editor controls position/size directly;
+		# physics should not overwrite it (avoids snap-back while dragging handles).
+		if not editor_preview_mode:
+			# Center the box on the zone (lateral/forward snap to ghost for crisp alignment)
+			var cx: float = zone_cx if absf(zone_cx - ghost_x) < 0.3 else ghost_x
+			var cy: float = zone_cy
+			var cz: float = zone_cz if absf(zone_cz - ghost_z) < 0.3 else ghost_z
+			mi.position = fh * cx + Vector3.UP * cy + fwd * cz
+			var mesh: BoxMesh = mi.mesh as BoxMesh
+			if mesh:
+				mesh.size = Vector3(zone_def.zone_x_max - zone_def.zone_x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
+			mi.look_at(mi.global_position + fwd, Vector3.UP, true)
 		var mat: StandardMaterial3D = mi.material_override as StandardMaterial3D
 		# Editor mode: show all zone bounds; selected is bright, others dim
 		if _editor_solo_posture_id >= 0:
@@ -1328,6 +1332,9 @@ func get_posture_charge_sign() -> float:
 	return _player._get_swing_sign()
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+func get_posture_offset_for(p: int) -> Vector3:
+	return _offset_resolver.get_posture_offset_for(p)
 
 func _get_posture_offset() -> Vector3:
 	# Always return head-height offset from the resolver so callers can consistently
