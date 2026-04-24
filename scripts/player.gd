@@ -463,7 +463,7 @@ func get_runtime_posture_def(def_override = null):
 		var composed = pose_controller.compose_runtime_posture(def_override)
 		if composed != null:
 			return composed
-	return load("res://scripts/posture_library.gd").new().get_def(paddle_posture)
+	return PostureLibrary.instance().get_def(paddle_posture)
 
 func _get_human_input() -> Vector3:
 	var input_2d: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")

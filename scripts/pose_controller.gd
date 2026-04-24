@@ -13,6 +13,7 @@ const DECEL_TRIGGER_SPEED_DELTA = 2.2
 
 var _player
 var _library
+var _posture_lib
 
 var base_pose_state: int = 0
 var pose_intent: int = 0
@@ -39,6 +40,7 @@ var _cache_override_ref
 func _ready() -> void:
 	_player = get_parent()
 	_library = load("res://scripts/base_pose_library.gd").new()
+	_posture_lib = PostureLibrary.instance()
 
 
 func invalidate_cache() -> void:
@@ -81,7 +83,7 @@ func compose_runtime_posture(def_override = null):
 
 	var stroke_def = def_override
 	if stroke_def == null:
-		stroke_def = load("res://scripts/posture_library.gd").new().get_def(_player.paddle_posture)
+		stroke_def = _posture_lib.get_def(_player.paddle_posture)
 	if stroke_def == null:
 		return def_override
 
@@ -105,9 +107,9 @@ func compose_runtime_posture(def_override = null):
 
 
 func compose_preview_posture(base_def, stroke_posture_id: int):
-	var stroke_def = load("res://scripts/posture_library.gd").new().get_def(stroke_posture_id)
+	var stroke_def = _posture_lib.get_def(stroke_posture_id)
 	if stroke_def == null:
-		stroke_def = load("res://scripts/posture_library.gd").new().get_def(_player.PaddlePosture.READY)
+		stroke_def = _posture_lib.get_def(_player.PaddlePosture.READY)
 	if stroke_def == null or base_def == null:
 		return stroke_def
 	return base_def.to_preview_posture(stroke_def)

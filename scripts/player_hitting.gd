@@ -44,7 +44,7 @@ func _ready() -> void:
 
 
 func _get_posture_def(posture_id: int):
-	return load("res://scripts/posture_library.gd").new().get_def(posture_id)
+	return PostureLibrary.instance().get_def(posture_id)
 
 
 func _has_authored_follow_through(def) -> bool:
@@ -183,8 +183,7 @@ func set_serve_charge_visual(charge_ratio: float) -> void:
 	var charge_pull_sign: float = _player._get_posture_charge_sign()
 	var forward_axis: Vector3 = _player._get_forward_axis()
 	var swing_sign: float = _player._get_swing_sign()
-	var posture_lib = load("res://scripts/posture_library.gd").new()
-	var current_def = posture_lib.get_def(_player.paddle_posture)
+	var current_def = PostureLibrary.instance().get_def(_player.paddle_posture)
 
 	# ── Per-posture authored charge data (new path) ────────────────────
 	if current_def != null and current_def.charge_paddle_offset.length_squared() > 0.0001:

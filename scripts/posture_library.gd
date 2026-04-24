@@ -25,6 +25,9 @@ var definitions: Array = []
 ## Singleton: lazily initialized on first access.
 static var _singleton: PostureLibrary = null
 
+## Guard to prevent console spam from repeated _load_from_disk() calls.
+static var _load_printed: bool = false
+
 
 static func instance() -> PostureLibrary:
 	if _singleton == null:
@@ -82,8 +85,8 @@ func _load_from_disk() -> void:
 						break
 				if not replaced:
 					definitions.append(res)
-				# VERIFIED LOAD print
-				if res is _PostureDefinition:
+				# VERIFIED LOAD print (once per session to avoid spam)
+				if not _load_printed and res is _PostureDefinition:
 					var def: _PostureDefinition = res
 					print("[VERIFIED LOAD] %s | fh=%.4f fwd=%.4f y=%.4f zone=[%.3f..%.3f] y=[%.3f..%.3f] z=%.3f  (from %s)" % [
 						def.display_name,
@@ -95,6 +98,7 @@ func _load_from_disk() -> void:
 				push_warning("PostureLibrary: failed to load " + full_path)
 		f = dir.get_next()
 	dir.list_dir_end()
+	_load_printed = true
 
 
 ## Source-of-truth extraction of every hardcoded posture value.
