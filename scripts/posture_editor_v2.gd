@@ -378,15 +378,6 @@ func _populate_list() -> void:
 		_posture_list.add_item(def.display_name)
 
 func _on_posture_selected(index: int) -> void:
-	# Auto-save previous posture if dirty before switching
-	if _current_def != null:
-		var prev_id: int = _current_def.base_pose_id if _is_base_pose_mode else _current_def.posture_id
-		if _dirty_defs.has(prev_id):
-			var fname: String = _def_to_filename(_current_def)
-			if _save_definition(_current_def):
-				print("[EDITOR V2 SAVE] Auto-saved %s before switching" % fname)
-				_dirty_defs.erase(prev_id)
-				_update_save_all_button()
 	var defs: Array = _base_pose_library.all_definitions() if _is_base_pose_mode else _library.all_definitions()
 	if index < 0 or index >= defs.size():
 		return
@@ -1110,6 +1101,15 @@ func _on_drag_ended() -> void:
 	if _current_def == null:
 		return
 	print(_format_verified_drag(_current_def))
+	# Auto-save on drag release so the user never has to remember to click Save
+	if not _is_base_pose_mode:
+		var fname: String = _def_to_filename(_current_def)
+		if _save_definition(_current_def):
+			print("[EDITOR V2 SAVE] Auto-saved on drag release: %s" % fname)
+			_verify_save(_current_def, fname)
+			var id: int = _current_def.posture_id
+			_dirty_defs.erase(id)
+			_update_save_all_button()
 
 func _format_verified_drag(def) -> String:
 	var s := "[VERIFIED DRAG] %s" % def.display_name
