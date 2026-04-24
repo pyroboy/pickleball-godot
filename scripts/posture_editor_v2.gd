@@ -260,6 +260,7 @@ func set_player(player) -> void:
 		_gizmo_controller.gizmo_rotated.connect(_on_gizmo_rotated)
 		_gizmo_controller.ghost_selected.connect(_on_ghost_selected)
 		_gizmo_controller.ghost_moved.connect(_on_ghost_moved)
+		_gizmo_controller.drag_ended.connect(_on_drag_ended)
 
 func _process(_delta: float) -> void:
 	if _pose_trigger:
@@ -360,6 +361,12 @@ func _on_posture_selected(index: int) -> void:
 	_status_label.text = "Selected: %s" % _current_def.display_name
 	posture_selected.emit(_current_def)
 	print("[EDITOR V2] Selected ", _current_def.display_name)
+	if _current_def is PostureDefinition:
+		print("[VERIFIED LOAD] %s | fh=%.4f fwd=%.4f y=%.4f zone=[%.3f..%.3f] y=[%.3f..%.3f] z=%.3f" % [
+			_current_def.display_name,
+			_current_def.paddle_forehand_mul, _current_def.paddle_forward_mul, _current_def.paddle_y_offset,
+			_current_def.zone_x_min, _current_def.zone_x_max, _current_def.zone_y_min, _current_def.zone_y_max, _current_def.zone_forward_offset
+		])
 	# Populate inspectors
 	_body_tab.set_definition(_current_def)
 	_paddle_tab.set_definition(_current_def)
@@ -550,6 +557,31 @@ func _on_save() -> void:
 		_current_def.resource_path = path
 		_status_label.text = "Saved: %s" % filename
 		print("[EDITOR V2 SAVE] SUCCESS: ", path)
+		# ── VERIFIED SAVE: reload from disk and compare key values ──
+		var disk_res := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		if disk_res != null and disk_res is PostureDefinition:
+			var disk: PostureDefinition = disk_res
+			var ok := true
+			if not is_equal_approx(disk.paddle_forehand_mul, _current_def.paddle_forehand_mul):
+				print("[VERIFIED SAVE] MISMATCH paddle_forehand_mul: memory=%.6f disk=%.6f" % [_current_def.paddle_forehand_mul, disk.paddle_forehand_mul]); ok = false
+			if not is_equal_approx(disk.paddle_forward_mul, _current_def.paddle_forward_mul):
+				print("[VERIFIED SAVE] MISMATCH paddle_forward_mul: memory=%.6f disk=%.6f" % [_current_def.paddle_forward_mul, disk.paddle_forward_mul]); ok = false
+			if not is_equal_approx(disk.paddle_y_offset, _current_def.paddle_y_offset):
+				print("[VERIFIED SAVE] MISMATCH paddle_y_offset: memory=%.6f disk=%.6f" % [_current_def.paddle_y_offset, disk.paddle_y_offset]); ok = false
+			if not is_equal_approx(disk.zone_x_min, _current_def.zone_x_min):
+				print("[VERIFIED SAVE] MISMATCH zone_x_min: memory=%.6f disk=%.6f" % [_current_def.zone_x_min, disk.zone_x_min]); ok = false
+			if not is_equal_approx(disk.zone_x_max, _current_def.zone_x_max):
+				print("[VERIFIED SAVE] MISMATCH zone_x_max: memory=%.6f disk=%.6f" % [_current_def.zone_x_max, disk.zone_x_max]); ok = false
+			if not is_equal_approx(disk.zone_y_min, _current_def.zone_y_min):
+				print("[VERIFIED SAVE] MISMATCH zone_y_min: memory=%.6f disk=%.6f" % [_current_def.zone_y_min, disk.zone_y_min]); ok = false
+			if not is_equal_approx(disk.zone_y_max, _current_def.zone_y_max):
+				print("[VERIFIED SAVE] MISMATCH zone_y_max: memory=%.6f disk=%.6f" % [_current_def.zone_y_max, disk.zone_y_max]); ok = false
+			if not is_equal_approx(disk.zone_forward_offset, _current_def.zone_forward_offset):
+				print("[VERIFIED SAVE] MISMATCH zone_forward_offset: memory=%.6f disk=%.6f" % [_current_def.zone_forward_offset, disk.zone_forward_offset]); ok = false
+			if ok:
+				print("[VERIFIED SAVE] %s — all key fields match disk" % filename)
+		else:
+			print("[VERIFIED SAVE] WARNING: could not reload disk copy for verification")
 		# Auto-reload library so editor sees saved values immediately without restart
 		_library.load_or_default()
 		# Re-select current posture so UI reflects freshly loaded definition
@@ -976,3 +1008,19 @@ func _on_gizmo_rotated(field_name: String, euler_delta: Vector3) -> void:
 	_body_tab.set_definition(body_def)
 	if _pose_trigger and _pose_trigger.is_frozen():
 		_pose_trigger.refresh_from_definition(_current_def)
+
+func _on_drag_ended() -> void:
+	if _current_def == null:
+		return
+	print(_format_verified_drag(_current_def))
+
+func _format_verified_drag(def) -> String:
+	var s := "[VERIFIED DRAG] %s" % def.display_name
+	if def is PostureDefinition:
+		s += " | fh=%.4f fwd=%.4f y=%.4f" % [def.paddle_forehand_mul, def.paddle_forward_mul, def.paddle_y_offset]
+		if def.has_zone:
+			s += " | zone=[%.3f..%.3f] y=[%.3f..%.3f] z=%.3f" % [def.zone_x_min, def.zone_x_max, def.zone_y_min, def.zone_y_max, def.zone_forward_offset]
+		s += " | pitch=%.1f yaw=%.1f roll=%.1f" % [def.paddle_pitch_base_deg, def.paddle_yaw_base_deg, def.paddle_roll_base_deg]
+	elif def is BasePoseDefinition:
+		s += " | pitch=%.1f yaw=%.1f roll=%.1f" % [def.pitch_deg, def.yaw_deg, def.roll_deg]
+	return s

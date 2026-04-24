@@ -82,6 +82,15 @@ func _load_from_disk() -> void:
 						break
 				if not replaced:
 					definitions.append(res)
+				# VERIFIED LOAD print
+				if res is _PostureDefinition:
+					var def: _PostureDefinition = res
+					print("[VERIFIED LOAD] %s | fh=%.4f fwd=%.4f y=%.4f zone=[%.3f..%.3f] y=[%.3f..%.3f] z=%.3f  (from %s)" % [
+						def.display_name,
+						def.paddle_forehand_mul, def.paddle_forward_mul, def.paddle_y_offset,
+						def.zone_x_min, def.zone_x_max, def.zone_y_min, def.zone_y_max, def.zone_forward_offset,
+						f
+					])
 			else:
 				push_warning("PostureLibrary: failed to load " + full_path)
 		f = dir.get_next()

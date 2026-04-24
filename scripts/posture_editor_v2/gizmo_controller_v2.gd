@@ -8,6 +8,7 @@ signal gizmo_moved(field_name: String, new_position: Vector3)
 signal gizmo_rotated(field_name: String, euler_delta: Vector3)
 signal ghost_selected(posture_id: int)
 signal ghost_moved(posture_id: int, new_position: Vector3)
+signal drag_ended()
 
 var _camera: Camera3D
 var _ui: Control
@@ -237,6 +238,7 @@ func _update_drag(screen_pos: Vector2) -> void:
 			gizmo_rotated.emit(_selected_gizmo.field_name, delta)
 
 func _stop_drag() -> void:
+	var was_dragging := _dragging
 	_dragging = false
 	_dragging_ghost = null
 	_dragging_ghost_id = -1
@@ -244,6 +246,8 @@ func _stop_drag() -> void:
 	if _selected_gizmo is RotationGizmoV2:
 		_selected_gizmo.end_drag()
 	_deselect_gizmo()
+	if was_dragging:
+		drag_ended.emit()
 
 func clear_all_gizmos() -> void:
 	for child in get_children():
