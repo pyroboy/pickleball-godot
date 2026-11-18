@@ -20,6 +20,8 @@ const SEARCH_BISECTIONS := 5
 # carried-cup case each check costs ~1 ms, and uncapped searches hit ~100 checks
 # (100+ ms frames). If nothing fits within the cap the body keeps the base offset.
 const MAX_BUDGET_CHECKS := 16
+# Between points (cut-scene) each check also tests the carried cup (~0.5 ms); cap lower.
+const MAX_BUDGET_CHECKS_BETWEEN := 4
 
 static func enabled(player, pose) -> bool:
 	if pose == null: return false
@@ -110,16 +112,17 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 			# a leg. Search is bounded by the existing body-translation cap.
 			var found := false
 			var checks := 0
+			var max_checks: int = MAX_BUDGET_CHECKS_BETWEEN if between != null else MAX_BUDGET_CHECKS
 			var best := Vector3.INF
 			var directions: Array[Vector3] = [Vector3.DOWN, (Vector3.DOWN - player._get_forward_axis()).normalized(), (Vector3.DOWN + player._get_forward_axis()).normalized(),
 				(Vector3.DOWN + player._get_forehand_axis()).normalized(), (Vector3.DOWN - player._get_forehand_axis()).normalized()]
 			for direction in directions:
-				if checks >= MAX_BUDGET_CHECKS: break
+				if checks >= max_checks: break
 				for index in range(1, SEARCH_STEPS + 1):
 					var trial: Vector3 = offset + direction * float(index) * SEARCH_STEP_M
 					if trial.length() > MAX_BODY_SHIFT_M or (found and trial.length() >= best.length()): break
 					if not release.is_empty(): report.candidate_checks += 1
-					if checks >= MAX_BUDGET_CHECKS: break
+					if checks >= max_checks: break
 					checks += 1
 					if not _targets_fit(player, pose, trial, centers, radii, not release.is_empty()) or not _wrist_budgets_fit(player, pose, paddle, trial): continue
 					var low := float(index - 1) * SEARCH_STEP_M; var high := float(index) * SEARCH_STEP_M
