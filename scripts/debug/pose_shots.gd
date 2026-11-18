@@ -18,6 +18,7 @@ const SETTLE_FRAMES := 45
 var out_dir := ""
 var before_dir := ""
 var only: PackedStringArray = []
+var from_rest := false  # --pose-from-rest: trace serves from the held pose, not just the strike
 var strip := false  # --pose-strip: save a frame every 4 swing-trace steps
 
 func _ready() -> void:
@@ -25,6 +26,7 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--pose-before="): before_dir = a.trim_prefix("--pose-before=")
 		if a == "--pose-strip": strip = true
+		if a == "--pose-from-rest": from_rest = true
 	_run.call_deferred()
 
 func _frames(n: int) -> void:
@@ -108,13 +110,15 @@ func _swing_trace(ed) -> Dictionary:
 	var fields: Array = []
 	var clear := INF
 	var inward := 0
+	var up_steps: Array = []
+	var elbow_up: Array = []  # per step: [elbow height above shoulder m, upward share of the elbow bulge]
 	# Serves spend most of the first half waiting for the ball; trace only the real swing
 	# (strike + follow-through) so per-step changes are comparable to strokes.
 	var from := 0.0
 	if ed._serve:
 		var style: int = ServeStore.style_id(ed._current)
 		var ct: float = float(RuntimePreview.serve_plan(style).contact_time)
-		if ct > 0.0: from = clampf(0.5 * (1.0 - Styles.stroke_duration(style) / ct), 0.0, 0.5)
+		if ct > 0.0 and not from_rest: from = clampf(0.5 * (1.0 - Styles.stroke_duration(style) / ct), 0.0, 0.5)
 	for k in TRACE_STEPS + 1:
 		ed._progress = lerpf(from, 1.0, float(k) / TRACE_STEPS)
 		ed._refresh_preview()
@@ -139,6 +143,10 @@ func _swing_trace(ed) -> Dictionary:
 		var mid: Vector3 = (sh + w) * 0.5
 		var to_torso: Vector3 = Vector3(torso.x - mid.x, 0, torso.z - mid.z).normalized()
 		if (e - mid).dot(to_torso) > 0.04: inward += 1
+		# Elbow pointing up: the elbow bulges upward from the shoulder-wrist line, or sits above the shoulder.
+		var bulge: Vector3 = e - mid
+		elbow_up.append([_r(e.y - sh.y), _r(bulge.normalized().y if bulge.length() > 0.001 else 0.0)])
+		if (bulge.length() > 0.03 and bulge.normalized().y > 0.6) or e.y > sh.y + 0.03: up_steps.append(k)
 		# Forearm roll: the hand's x axis around the forearm, measured from the elbow-plane normal.
 		var fore: Vector3 = (w - e).normalized()
 		var plane_n: Vector3 = (sh - e).cross(w - e)
@@ -175,7 +183,7 @@ func _swing_trace(ed) -> Dictionary:
 		"max_elbow_bend_step_deg": _r(snap), "snap_at": snap_at, "max_elbow_jump_m": _r(jump),
 		"min_elbow_torso_clearance_m": _r(clear), "elbow_inward_steps": inward,
 		"forearm_roll_range_deg": [_r(roll_min), _r(roll_max)], "max_forearm_roll_step_deg": _r(roll_step),
-		"traced_from": _r(from), "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v)), "grip_inhand_pitch_yaw_roll": fields}
+		"traced_from": _r(from), "elbow_up_steps": up_steps, "elbow_up": elbow_up, "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v)), "grip_inhand_pitch_yaw_roll": fields}
 
 # Player-local frame: x = forehand side, y = height above the court floor, z = toward the net.
 # Metres and degrees.

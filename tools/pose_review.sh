@@ -7,9 +7,9 @@
 #         and a metrics table printed here (also logs/pose_review/report.txt).
 set -uo pipefail
 cd "$(dirname "$0")/.."
-BASE=HEAD; IDS=()
+BASE=HEAD; IDS=(); EXTRA=()
 while [ $# -gt 0 ]; do
-  case "$1" in --base) BASE=$2; shift 2;; *) IDS+=("$1"); shift;; esac
+  case "$1" in --base) BASE=$2; shift 2;; --from-rest) EXTRA+=(--pose-from-rest); shift;; --strip) EXTRA+=(--pose-strip); shift;; *) IDS+=("$1"); shift;; esac
 done
 [ ${#IDS[@]} -gt 0 ] || { echo "usage: tools/pose_review.sh s00 [b11 ...] [--base REF|none]"; exit 1; }
 if [ -z "${GODOT:-}" ]; then
@@ -31,7 +31,7 @@ if [ "$BASE" != none ]; then
     fi
   done
 fi
-"$GODOT" --path . --resolution 780x1400 res://scenes/game.tscn -- --pose-shots="$OUT/raw" $ONLY $BEFORE \
+"$GODOT" --path . --resolution 780x1400 res://scenes/game.tscn -- --pose-shots="$OUT/raw" $ONLY $BEFORE ${EXTRA[@]+"${EXTRA[@]}"} \
   > "$OUT/godot.log" 2>&1
 grep -hE 'SCRIPT ERROR|Parse Error' "$OUT/godot.log" | sort | uniq -c | head -5
 python3 tools/pose_review.py "$OUT" | tee "$OUT/report.txt"

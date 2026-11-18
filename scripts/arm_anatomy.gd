@@ -89,6 +89,9 @@ static func stabilized_pole(shoulder: Vector3, wrist: Vector3, authored: Vector3
 	return shoulder + preferred.rotated(axis, angle - weight * sin(angle))
 
 
+## How far above the shoulder the wrist conditioning may lift the elbow (metres).
+const ELBOW_ABOVE_SHOULDER_M := 0.02
+
 static func conditioned_pole(shoulder: Vector3, wrist: Vector3, authored: Vector3, hand_distal: Vector3, upper_length: float, fore_length: float) -> Vector3:
 	var span: Vector3 = wrist - shoulder
 	var distance: float = span.length()
@@ -115,4 +118,17 @@ static func conditioned_pole(shoulder: Vector3, wrist: Vector3, authored: Vector
 
 
 	var correction: float = clampf(angle, - deg_to_rad(135.0), deg_to_rad(135.0)) * blend
-	return shoulder + original.rotated(axis, correction)
+	var conditioned: Vector3 = original.rotated(axis, correction)
+	# Never let the wrist-derived plane lift the elbow above the shoulder: it may turn the authored
+	# direction, but only while the elbow stays at or below max(shoulder + ELBOW_ABOVE_SHOULDER_M,
+	# the authored elbow height). Arms that already keep the elbow low are left untouched.
+	var limit: float = maxf(shoulder.y + ELBOW_ABOVE_SHOULDER_M, (center + original * radius).y)
+	if (center + conditioned * radius).y > limit:
+		var keep := 0.0
+		var drop := 1.0
+		for i in 10:
+			var mid: float = (keep + drop) * 0.5
+			if (center + original.rotated(axis, correction * mid) * radius).y > limit: drop = mid
+			else: keep = mid
+		conditioned = original.rotated(axis, correction * keep)
+	return shoulder + conditioned

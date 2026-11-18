@@ -87,7 +87,8 @@ def main():
                 print(f"swing [{t}]: sharpest corner {sw['sharpest_corner_deg']:.0f} deg at t={sw['corner_at']:.2f}, "
                       f"elbow snap {sw['max_elbow_bend_step_deg']:.0f} deg/step at t={sw['snap_at']:.2f}, "
                       f"elbow jump {sw['max_elbow_jump_m']:.2f} m, elbow-torso clearance {sw['min_elbow_torso_clearance_m']:.2f} m, "
-                      f"elbow inward {sw.get('elbow_inward_steps', 0)}/41 steps, forearm roll step {sw.get('max_forearm_roll_step_deg', 0):.0f} deg")
+                      f"elbow inward {sw.get('elbow_inward_steps', 0)}/41 steps, forearm roll step {sw.get('max_forearm_roll_step_deg', 0):.0f} deg, "
+                      f"elbow UP at steps {sw.get('elbow_up_steps', [])} (traced from t={sw.get('traced_from', 0)})")
             path = by_tag[t].get("path")
             if path:
                 print(f"paddle path [{t}]: drop below contact {path['drop_below_contact']:.2f} m "

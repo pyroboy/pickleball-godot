@@ -141,3 +141,12 @@ Serves are built in code (`drive_serve_motion.gd`); packaged tuning now lives in
   wind-up like the other styles (`code_windup` in serve_tuning.json), keeping its approved contact
   and finish; forearm roll step 58° -> 21°, weight 0.38 -> 0.74 -> 0.72.
 - Open: drop serves keep a ~14° elbow re-bend at contact.
+
+### Elbow never above the shoulder (all arms) — 2026-11-18
+`ArmAnatomy.conditioned_pole` turns the authored elbow toward the plane implied by the wrist/grip
+(up to 135°); on backhands that lifted the elbow up to 0.25 m above the shoulder. It now stops
+turning once the elbow would rise above max(shoulder + 0.02 m, authored elbow height). Backhand
+0.13 -> 0.02 m, Wide Backhand 0.25 -> 0.02 m; forehands and serves unchanged (already low).
+`pose_review.sh --from-rest` traces serves from the held pose and flags "elbow UP" steps.
+- Next: Wide Backhand needs a whole-pose rework: its wind-up paddle/wrist angle demands an elbow-up
+  arm, so the forearm flips (80° without the guard, 125° with it) at the start of the wind-up.
