@@ -6,6 +6,9 @@ extends Node
 ## - Any frame slower than SPIKE_MS writes a "spike" line naming what was slow.
 ## - F3 toggles an on-screen frame-time graph.
 ##
+## --frame-log=path: one line per frame (state, player positions, every scope's
+## ms and calls) to see what runs when nothing should; off by default.
+##
 ## Output: logs/perf.jsonl when run from source on Mac, user://perf.jsonl in an
 ## exported build (iPhone). Summarise with: python3 tools/perf_report.py
 
@@ -38,6 +41,7 @@ var _frames := 0
 var _graph: Control
 var _graph_layer: CanvasLayer
 var _pose_path := ""
+var _frame_file: FileAccess
 var _pose_file: FileAccess
 var _pose_nodes: Dictionary = {}   # player instance id -> Array[Node3D]
 
@@ -51,6 +55,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
+		if arg.begins_with("--frame-log="): _frame_file = FileAccess.open(arg.trim_prefix("--frame-log="), FileAccess.WRITE)
 		if arg.begins_with("--spike-ms="): _spike_ms = float(arg.trim_prefix("--spike-ms="))
 		# Dev screenshots: --capture-at=20,30,40 --capture-out=/dir (seconds since start)
 		if arg.begins_with("--capture-at="):
@@ -91,6 +96,7 @@ func _process(_delta: float) -> void:
 		s[2] += c[0]
 		_sec_costs[label] = s
 
+	if _frame_file != null: _write_frame(now, frame_ms, costs)
 	_sec_frames.append(frame_ms)
 	_history.append(frame_ms)
 	if _history.size() > GRAPH_SAMPLES: _history.remove_at(0)
@@ -109,6 +115,17 @@ func _process(_delta: float) -> void:
 		_flush_second(now)
 
 	if _graph_layer.visible: _graph.queue_redraw()
+
+func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
+	var scopes := {}
+	for label in costs:
+		var c: Array = costs[label]
+		scopes[label] = [snappedf(c[1] / 1000.0, 0.001), c[0]]
+	var row := {"f": _frames, "t": _t(now), "ms": snappedf(frame_ms, 0.01), "state": _state(), "scopes": scopes}
+	var scene := get_tree().current_scene
+	if scene != null and scene.has_method("get_players"):
+		for p in scene.get_players(): row["p%d" % p.actor_id] = _v(p.global_position)
+	_frame_file.store_line(JSON.stringify(row, "", false))
 
 # ---- pose trace (--pose-trace=path): joint positions per physics tick, for before/after diffs ----
 

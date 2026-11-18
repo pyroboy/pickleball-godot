@@ -77,7 +77,7 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 			var basis: Basis = _next_carried_cup_basis(player, pose)
 			mount = Transform3D(basis, center - basis * support.articulated_hand.cup_ball_center)
 		support_wrist = mount * support.articulated_hand.wrist_socket
-	var release: Dictionary = player.arm_ik._hands.preview_serve_release(pose)
+	var release: Dictionary = _serve_release(player, pose)
 	if not release.is_empty(): support_wrist = release.wrist
 	var centers: Array[Vector3] = [Reach.wrist_world(paddle, pose) - main.upper_pivot.global_position,
 		support_wrist - support.upper_pivot.global_position]
@@ -98,7 +98,7 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 		# The free hand frame depends on the translated shoulder. Re-evaluate
 		# that exact dependency, with a fixed four-projection bound.
 		for unused in range(4):
-			var next: Dictionary = player.arm_ik._hands.preview_serve_release(pose, solved.offset)
+			var next: Dictionary = _serve_release(player, pose, solved.offset)
 			centers[1] = next.wrist - support.upper_pivot.global_position
 			if ReachProjection._fits(solved.offset, centers, radii): break
 			solved = ReachProjection.minimum_translation(centers, radii)
@@ -168,7 +168,7 @@ static func _perf_wrist_budgets_fit(player, pose, paddle: Transform3D, offset: V
 		var wrist: Vector3 = grip + basis * Reach.socket(left)
 		if not preload("res://scripts/arm_budget_acceptance.gd").accepts(arm.upper_pivot.global_position + offset, wrist, arm.forearm_pivot.global_position + offset,
 			basis * arm.articulated_hand.anatomical_basis, arm.upper_arm_length, arm.forearm_length, left, .98): return false
-	var release: Dictionary = player.arm_ik._hands.preview_serve_release(pose, offset)
+	var release: Dictionary = _serve_release(player, pose, offset)
 	if not release.is_empty():
 		var arm = player.right_arm_node if int(release.side) == 0 else player.left_arm_node
 		if not preload("res://scripts/arm_budget_acceptance.gd").accepts(arm.upper_pivot.global_position + offset, release.wrist, arm.forearm_pivot.global_position + offset,
@@ -227,9 +227,14 @@ static func _targets_fit(player, pose, offset: Vector3, centers: Array[Vector3],
 
 static func _perf_targets_fit(player, pose, offset: Vector3, centers: Array[Vector3], radii: Array[float], release: bool) -> bool:
 	if not release: return ReachProjection._fits(offset, centers, radii)
-	var frame: Dictionary = player.arm_ik._hands.preview_serve_release(pose, offset)
+	var frame: Dictionary = _serve_release(player, pose, offset)
 	if frame.is_empty(): return false
 	var support = player.right_arm_node if int(frame.side) == 0 else player.left_arm_node
 	var actual: Array[Vector3] = centers.duplicate()
 	actual[1] = frame.wrist - support.upper_pivot.global_position
 	return ReachProjection._fits(offset, actual, radii)
+
+# Startup frames can run before arm IK has built its hands; treat that as "no release".
+static func _serve_release(player, pose, offset := Vector3.ZERO) -> Dictionary:
+	if not "arm_ik" in player or player.arm_ik == null or player.arm_ik._hands == null: return {}
+	return player.arm_ik._hands.preview_serve_release(pose, offset)

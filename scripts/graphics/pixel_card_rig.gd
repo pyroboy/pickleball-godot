@@ -28,6 +28,7 @@ var _player  # player.gd instance (untyped: uses its script members)
 var _cards: Array = []
 var _cells: Dictionary = {}
 var _hide_timer: float = 0.0
+var _culled_cam: Camera3D = null
 
 static func enabled() -> bool:
 	# PICKLEBALL_CLASSIC_BODIES=1 forces classic bodies (benchmarks / A-B checks) without touching saved settings.
@@ -81,6 +82,7 @@ func _ready() -> void:
 			_add("shin", leg.shin_pivot, leg.foot_pivot, side[1], tex, meta, "body")
 			_add("shoe", leg.foot_pivot, null, side[1], tex, meta, "body")
 	_hide_classic()
+	get_tree().node_added.connect(_on_node_added)
 
 func _add(part: String, a: Node3D, b: Node3D, mirror: bool, tex: Texture2D, meta: Dictionary, facing: String, prev: Node3D = null) -> void:
 	if a == null or not meta.parts.has(part): return
@@ -118,10 +120,14 @@ func _process(delta: float) -> void:
 	var head_pos: Vector3 = _player.body_pivot.global_position + Vector3.UP * 1.5
 	visible = _player.is_visible_in_tree() and cam.global_position.distance_to(head_pos) > 0.6
 	if not visible: return
-	cam.set_cull_mask_value(CLASSIC_LAYER, false)
+	if cam != _culled_cam:
+		cam.set_cull_mask_value(CLASSIC_LAYER, false)
+		_culled_cam = cam
+	# New body meshes are hidden as they enter the tree (_on_node_added); this slow
+	# sweep only catches layer changes made by other code.
 	_hide_timer -= delta
 	if _hide_timer <= 0.0:
-		_hide_timer = 0.25
+		_hide_timer = 2.0
 		_hide_classic()
 	var meta: = _meta
 	var s: float = float(meta.meters_per_texel)
@@ -181,6 +187,11 @@ func _cell_for(key: String, node: Node3D, cam_pos: Vector3) -> int:
 	cur = posmod(roundi(rel / CELL_DEG), 16)
 	_cells[key] = cur
 	return cur
+
+func _on_node_added(node: Node) -> void:
+	if node is GeometryInstance3D and is_instance_valid(_player) and is_instance_valid(_player.body_pivot) \
+			and _player.body_pivot.is_ancestor_of(node):
+		_hide_timer = minf(_hide_timer, 0.0)  # sweep on the next frame
 
 func _hide_classic() -> void:
 	var paddle: Node = _player.get("paddle_node")
