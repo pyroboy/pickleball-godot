@@ -92,5 +92,61 @@
     14
    ]
   }
+ },
+ "profiles": {
+  "ace": {
+   "name": "Ace",
+   "sex": "female",
+   "paddle": "raw_carbon",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/ace_blue.png",
+    "red": "res://assets/pixel_cards/profiles/ace_red.png"
+   }
+  },
+  "bruiser": {
+   "name": "Bruiser",
+   "sex": "male",
+   "paddle": "ember_edge",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/bruiser_blue.png",
+    "red": "res://assets/pixel_cards/profiles/bruiser_red.png"
+   }
+  },
+  "power": {
+   "name": "Power",
+   "sex": "female",
+   "paddle": "graphite_red",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/power_blue.png",
+    "red": "res://assets/pixel_cards/profiles/power_red.png"
+   }
+  },
+  "rookie": {
+   "name": "Rookie",
+   "sex": "female",
+   "paddle": "lilac_print",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/rookie_blue.png",
+    "red": "res://assets/pixel_cards/profiles/rookie_red.png"
+   }
+  },
+  "speedster": {
+   "name": "Speedster",
+   "sex": "male",
+   "paddle": "sunset_fade",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/speedster_blue.png",
+    "red": "res://assets/pixel_cards/profiles/speedster_red.png"
+   }
+  },
+  "veteran": {
+   "name": "Veteran",
+   "sex": "male",
+   "paddle": "walnut",
+   "textures": {
+    "blue": "res://assets/pixel_cards/profiles/veteran_blue.png",
+    "red": "res://assets/pixel_cards/profiles/veteran_red.png"
+   }
+  }
  }
 }

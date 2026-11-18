@@ -1,0 +1,51 @@
+{
+ "name": "Bruiser",
+ "sex": "male",
+ "paddle": "ember_edge",
+ "skin": "#c68a5e",
+ "head": {
+  "hair": "buzz",
+  "hair_color": "#2a1c14",
+  "beard": true
+ },
+ "torso": {
+  "shoulders": 1.25,
+  "waist": 1.05,
+  "chest": 1.0,
+  "hips": 1.1
+ },
+ "top": {
+  "type": "muscle_tank",
+  "color": "T"
+ },
+ "bottom": {
+  "type": "shorts",
+  "color": "#3a3a3e",
+  "stripe": "T",
+  "thigh_cover": 1.08
+ },
+ "arms": {
+  "upper": 1.45,
+  "fore": 1.3,
+  "hand": 1.2,
+  "tattoo": "#2a2a3a",
+  "forearm": {
+   "type": "wristband",
+   "color": "T"
+  }
+ },
+ "legs": {
+  "thigh": 1.3,
+  "shin": 1.2,
+  "socks": {
+   "height": 0.1,
+   "color": "#f1efe8"
+  },
+  "calf_sleeve": "#2c2c30"
+ },
+ "shoes": {
+  "color": "#18181a",
+  "sole": "#b98a52",
+  "width": 1.15
+ }
+}

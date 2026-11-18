@@ -1,0 +1,64 @@
+{
+ "name": "Veteran",
+ "sex": "male",
+ "paddle": "walnut",
+ "skin": "#e2b48c",
+ "head": {
+  "hair": "crew",
+  "hair_color": "#a9a9a4",
+  "sunglasses": true,
+  "headwear": "bucket_hat",
+  "headwear_color": "T"
+ },
+ "torso": {
+  "shoulders": 1.0,
+  "waist": 1.12,
+  "chest": 0.2,
+  "belly": 0.8,
+  "hips": 1.05
+ },
+ "top": {
+  "type": "polo",
+  "color": "#ece8dc",
+  "stripe": "T",
+  "collar": "#ece8dc",
+  "sleeve": "#ece8dc",
+  "sleeve_length": 0.45
+ },
+ "bottom": {
+  "type": "shorts",
+  "color": "#8f7d58",
+  "thigh_cover": 0.95
+ },
+ "arms": {
+  "upper": 1.0,
+  "fore": 1.0,
+  "hand": 1.0,
+  "glove": "#f1efe8",
+  "forearm_skin": "#d4a074"
+ },
+ "legs": {
+  "thigh": 1.0,
+  "shin": 1.0,
+  "socks": {
+   "height": 0.45,
+   "color": "#f4f4f2",
+   "stripes": [
+    [
+     0.58,
+     0.62,
+     "T"
+    ],
+    [
+     0.65,
+     0.69,
+     "T"
+    ]
+   ]
+  }
+ },
+ "shoes": {
+  "color": "#f4f4f2",
+  "sole": "#d3d1c7"
+ }
+}

@@ -23,6 +23,9 @@ const TEXTURES: = ["res://assets/pixel_cards/cards_blue.png", "res://assets/pixe
 const CARD_SHADER: = preload("res://shaders/pixel_card.gdshader")
 
 static var _meta: Dictionary = {}
+const PROFILE_KEY: = "video.player_profile"
+
+var profile_id: = ""  # sprite profile in use ("" = the original team atlas)
 
 var _player  # player.gd instance (untyped: uses its script members)
 var _cards: Array = []
@@ -64,6 +67,14 @@ func _ready() -> void:
 	if meta.is_empty(): return
 	var team: int = clampi(int(_player.get("team_id")) if _player.get("team_id") != null else _player.player_num, 0, 1)
 	var tex: Texture2D = load(TEXTURES[team])
+	# Player look (tools/bake_pixel_cards.py, data/sprite_profiles/): one atlas per team.
+	profile_id = _pick_profile(meta)
+	if profile_id != "":
+		var path: String = str(meta.profiles[profile_id].textures.get(["blue", "red"][team], ""))
+		if ResourceLoader.exists(path): tex = load(path)
+		else: profile_id = ""
+	set_meta("sprite_profile", profile_id)
+	set_meta("paddle", str(meta.profiles[profile_id].get("paddle", "")) if profile_id != "" else "")
 	var torso: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var head: Node3D = torso.get_node_or_null("HeadMesh") if torso else null
 	var hips: Node3D = _player.body_pivot.get_node_or_null("HipsMesh")
@@ -83,6 +94,24 @@ func _ready() -> void:
 			_add("shoe", leg.foot_pivot, null, side[1], tex, meta, "body")
 	_hide_classic()
 	get_tree().node_added.connect(_on_node_added)
+
+## Human: saved choice (video.player_profile). AI (or nothing saved): a profile nobody
+## else on court has, picked with its own RNG so the bench-seeded global RNG is untouched.
+func _pick_profile(meta: Dictionary) -> String:
+	var all: Dictionary = meta.get("profiles", {})
+	if all.is_empty(): return ""
+	var saved: = str(Settings.get_value(PROFILE_KEY, ""))
+	if not bool(_player.get("is_ai")) and all.has(saved): return saved
+	var used: Array = [saved]
+	if get_parent() != null:
+		for child in get_parent().get_children():
+			if child != self and child.has_meta("sprite_profile") and not child.is_queued_for_deletion():
+				used.append(child.get_meta("sprite_profile"))
+	var free: Array = all.keys().filter(func(k): return not used.has(k))
+	if free.is_empty(): free = all.keys()
+	var rng: = RandomNumberGenerator.new()
+	rng.randomize()
+	return str(free[rng.randi_range(0, free.size() - 1)])
 
 func _add(part: String, a: Node3D, b: Node3D, mirror: bool, tex: Texture2D, meta: Dictionary, facing: String, prev: Node3D = null) -> void:
 	if a == null or not meta.parts.has(part): return

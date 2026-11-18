@@ -1,0 +1,55 @@
+{
+ "name": "Ace",
+ "sex": "female",
+ "paddle": "raw_carbon",
+ "skin": "#e8b98f",
+ "head": {
+  "hair": "ponytail",
+  "hair_color": "#3b2416",
+  "headwear": "visor",
+  "headwear_color": "#f4f4f2"
+ },
+ "torso": {
+  "shoulders": 0.95,
+  "waist": 0.85,
+  "chest": 0.8,
+  "hips": 1.05
+ },
+ "top": {
+  "type": "racerback",
+  "color": "T",
+  "sides": "#f4f4f2"
+ },
+ "bottom": {
+  "type": "skirt_pleated",
+  "color": "T",
+  "length": 0.17,
+  "flare": 0.05,
+  "hem": "#f4f4f2",
+  "thigh_cover": 0.32,
+  "pleat": "T_dark",
+  "waistband": "T_dark"
+ },
+ "arms": {
+  "upper": 0.95,
+  "fore": 0.95,
+  "hand": 1.0,
+  "forearm": {
+   "type": "wristband",
+   "color": "T"
+  }
+ },
+ "legs": {
+  "thigh": 1.0,
+  "shin": 0.95,
+  "socks": {
+   "height": 0.06,
+   "color": "#f4f4f2"
+  }
+ },
+ "shoes": {
+  "color": "#f4f4f2",
+  "sole": "#d3d1c7",
+  "accent": "T"
+ }
+}

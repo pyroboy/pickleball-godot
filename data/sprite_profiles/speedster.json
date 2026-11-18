@@ -1,0 +1,56 @@
+{
+ "name": "Speedster",
+ "sex": "male",
+ "paddle": "sunset_fade",
+ "skin": "#5c3a26",
+ "head": {
+  "hair": "curly",
+  "hair_color": "#0f0b09",
+  "headwear": "headband",
+  "headwear_color": "#f4f4f2",
+  "headband_width": 0.015
+ },
+ "torso": {
+  "shoulders": 1.02,
+  "waist": 0.9,
+  "chest": 0.3,
+  "hips": 0.95
+ },
+ "top": {
+  "type": "compression",
+  "color": "T",
+  "shoulders": "#141416",
+  "sleeve": "T",
+  "sleeve_length": 0.5
+ },
+ "bottom": {
+  "type": "shorts",
+  "color": "#141416",
+  "hem": "T",
+  "thigh_cover": 0.2
+ },
+ "arms": {
+  "upper": 1.05,
+  "fore": 1.0,
+  "hand": 1.0,
+  "forearm": {
+   "type": "compression_sleeve",
+   "color": "#141416"
+  }
+ },
+ "legs": {
+  "thigh": 1.0,
+  "shin": 0.95,
+  "socks": {
+   "height": 0.08,
+   "color": "#141416"
+  },
+  "ankle_tape": "#f1efe8"
+ },
+ "shoes": {
+  "color": "#f4f4f2",
+  "sole": "#e6e6e6",
+  "accent": "T",
+  "heel": "T"
+ }
+}

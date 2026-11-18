@@ -309,6 +309,8 @@ func setup(player_id: int, bounds: Dictionary, paddle_color: Color, start_pos: V
 	body_builder.build(paddle_color)
 	# 2.5D pixel cards on the posture joints (visual only; classic meshes kept for gameplay reads).
 	PixelCardRig.attach.call_deferred(self)
+	# Realistic paddle look (visual only, data/paddles.json); the gameplay paddle stays.
+	Callable(load("res://scripts/graphics/paddle_skin.gd"), "attach").call_deferred(self)
 
 
 	ai_brain = load("res://scripts/player_ai_brain.gd").new()

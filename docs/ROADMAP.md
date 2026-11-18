@@ -60,6 +60,7 @@ Status: done, in progress, next, later.
 ### Phase 3: Art pass (later)
 - [ ] Final hand-painted cards over the generated ones (5 drawn views + mirrors)
 - [ ] Team palette-swap shader for skins and cosmetics
+- [ ] Six player sprite profiles (3 female, 3 male): `docs/CHARACTER_VARIANTS_PLAN.md`
 - [ ] Court / arena textures in pixel style, baked lighting
 
 ### Phase 4: Effects and feel (later)

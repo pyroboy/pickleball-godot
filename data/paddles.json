@@ -1,0 +1,12 @@
+{
+  "_doc": "Paddle looks (visual only, scripts/graphics/paddle_skin.gd). Colours are hex. face: carbon_twill | carbon_cross | graphite | fiberglass | wood | flat. graphic: none | wordmark | slash | dots_band | block | stamp | sunset. Shape and hitbox never change.",
+  "default": "raw_carbon",
+  "designs": {
+    "raw_carbon":   {"name": "Raw carbon",   "face": "carbon_twill", "base": "#262626", "alt": "#3a3a3a", "graphic": "wordmark",  "ink": "#9a9a9a", "edge": "#121212", "grip": "#e8e6e0", "seam": "#b8b5ac", "cap": "#222222"},
+    "graphite_red": {"name": "Graphite red", "face": "graphite",     "base": "#3c3f44", "alt": "#4b4f55", "graphic": "slash",     "ink": "#a32d2d", "edge": "#a32d2d", "grip": "#a32d2d", "seam": "#7a1f1f", "cap": "#222222"},
+    "lilac_print":  {"name": "Lilac print",  "face": "fiberglass",   "base": "#d9cfea", "alt": "#9c8cc4", "graphic": "dots_band", "ink": "#ffffff", "edge": "#f4f2f7", "grip": "#f1efe8", "seam": "#c9c6bc", "cap": "#9c8cc4"},
+    "ember_edge":   {"name": "Ember edge",   "face": "carbon_cross", "base": "#1e1e1e", "alt": "#2c2c2c", "graphic": "block",     "ink": "#5a5a5a", "edge": "#d85a30", "grip": "#1a1a1a", "seam": "#3a3a3a", "cap": "#d85a30"},
+    "walnut":       {"name": "Walnut",       "face": "wood",         "base": "#8a5a35", "alt": "#6e4527", "graphic": "stamp",     "ink": "#5a3820", "edge": "#5a3820", "grip": "#4a3a2e", "seam": "#6a5644", "cap": "#2e241c"},
+    "sunset_fade":  {"name": "Sunset fade",  "face": "flat",         "base": "#1b2a4a", "alt": "#22335a", "graphic": "sunset",    "ink": "#d85a30", "edge": "#ba7517", "grip": "#1b2a4a", "seam": "#33476e", "cap": "#ba7517"}
+  }
+}

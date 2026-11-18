@@ -1,0 +1,62 @@
+{
+ "name": "Power",
+ "sex": "female",
+ "paddle": "graphite_red",
+ "skin": "#8d5a3b",
+ "head": {
+  "hair": "bun",
+  "hair_color": "#1a1210",
+  "headwear": "headband",
+  "headwear_color": "T",
+  "headband_width": 0.03
+ },
+ "torso": {
+  "shoulders": 1.1,
+  "waist": 0.95,
+  "chest": 1.0,
+  "hips": 1.12
+ },
+ "top": {
+  "type": "tee",
+  "color": "T",
+  "sleeve": "#3a3a3e",
+  "sleeve_length": 0.35
+ },
+ "bottom": {
+  "type": "skirt_aline",
+  "color": "#3a3a3e",
+  "panel": "T",
+  "length": 0.18,
+  "flare": 0.045,
+  "under": "#141416",
+  "under_length": 0.3,
+  "thigh_cover": 0.3
+ },
+ "arms": {
+  "upper": 1.25,
+  "fore": 1.15,
+  "hand": 1.05,
+  "tape": "#f1efe8",
+  "forearm": {
+   "type": "elbow_sleeve",
+   "color": "#141416"
+  }
+ },
+ "legs": {
+  "thigh": 1.25,
+  "shin": 1.1,
+  "socks": {
+   "height": 0.12,
+   "color": "#141416"
+  },
+  "brace": {
+   "part": "shin",
+   "color": "#8a8a88"
+  }
+ },
+ "shoes": {
+  "color": "#18181a",
+  "sole": "T",
+  "high": true
+ }
+}
