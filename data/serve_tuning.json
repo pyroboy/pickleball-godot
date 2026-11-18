@@ -1,12 +1,34 @@
 {
  "_note": "Serve tuning per style (0 Flat,1 Topspin,2 Slice,3 High Soft,4 Drop Drive,5 Banana,6 Screwball). 'add' adds to the code-built key, 'set' replaces. Stance (planted) fields only take effect in windup. See docs/POSE_PASS_PLAN.md.",
  "0": {
+  "code_windup": true,
   "windup": {
+   "set": {
+    "stance_width": 0.4
+   },
    "add": {
+    "front_foot_forward": 0.32,
+    "back_foot_back": -0.03,
+    "weight_shift": -0.2,
+    "body_yaw_deg": 12,
     "charge_paddle_offset": [
+     0.05,
+     0.27,
+     -0.24
+    ],
+    "body_position_offset": [
      0,
-     0.17,
-     -0.2
+     0,
+     -0.12
+    ]
+   }
+  },
+  "contact": {
+   "add": {
+    "body_position_offset": [
+     0,
+     0,
+     0.06
     ]
    }
   },
@@ -16,7 +38,13 @@
      0,
      0,
      0.25
-    ]
+    ],
+    "body_position_offset": [
+     0,
+     0,
+     0.15
+    ],
+    "weight_shift": 0.3
    }
   }
  },

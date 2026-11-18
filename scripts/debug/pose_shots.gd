@@ -105,6 +105,7 @@ func _swing_trace(ed) -> Dictionary:
 	var elbows: Array = []
 	var bends: Array = []
 	var rolls: Array = []
+	var fields: Array = []
 	var clear := INF
 	var inward := 0
 	# Serves spend most of the first half waiting for the ball; trace only the real swing
@@ -124,6 +125,8 @@ func _swing_trace(ed) -> Dictionary:
 			var rect := Rect2i(ed._preview.get_global_rect()).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
 			img.get_region(rect).save_png(out_dir.path_join("strip_%s_%02d.png" % [ServeStore.style_id(ed._current) if ed._serve else ed._current.posture_id, k]))
 		var arm = p.right_arm_node
+		var pz = ed._preview.pose
+		fields.append([_r(pz.main_grip_rotation_deg), _r(pz.paddle_in_hand_rotation_deg), _r(pz.paddle_pitch_base_deg), _r(pz.paddle_yaw_base_deg), _r(pz.paddle_roll_base_deg), _rv(pz.right_elbow_pole)])
 		heads.append(_local(p, p.paddle_node.get_node("Head").global_position))
 		var sh: Vector3 = _local(p, arm.upper_pivot.global_position)
 		var e: Vector3 = _local(p, arm.forearm_pivot.global_position)
@@ -172,7 +175,7 @@ func _swing_trace(ed) -> Dictionary:
 		"max_elbow_bend_step_deg": _r(snap), "snap_at": snap_at, "max_elbow_jump_m": _r(jump),
 		"min_elbow_torso_clearance_m": _r(clear), "elbow_inward_steps": inward,
 		"forearm_roll_range_deg": [_r(roll_min), _r(roll_max)], "max_forearm_roll_step_deg": _r(roll_step),
-		"traced_from": _r(from), "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v))}
+		"traced_from": _r(from), "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v)), "grip_inhand_pitch_yaw_roll": fields}
 
 # Player-local frame: x = forehand side, y = height above the court floor, z = toward the net.
 # Metres and degrees.

@@ -105,6 +105,12 @@ static func _apply_tuning(def: PostureDefinition, style: int) -> void:
 			if parsed is Dictionary: _tuning = parsed
 	var entry = _tuning.get(str(style))
 	if not entry is Dictionary: return
+	if entry.get("code_windup", false):
+		# Use the code-built wind-up key (as the other styles do) instead of an imported one.
+		var code: PostureDefinition = _default(style)
+		def.windup_body = code.windup_body.duplicate(true)
+		def.charge_paddle_offset = code.charge_paddle_offset
+		def.charge_paddle_rotation_deg = code.charge_paddle_rotation_deg
 	for stage in ["windup", "contact", "finish"]:
 		var edits = entry.get(stage)
 		if not edits is Dictionary: continue

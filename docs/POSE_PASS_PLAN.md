@@ -136,5 +136,8 @@ Serves are built in code (`drive_serve_motion.gd`); packaged tuning now lives in
   Screwball 0.36/0.64 — from coaching sources (topspin further in front, slice/banana wider, lob later
   near full extension, screwball brushes the inside). Banana finishes across to the left, Screwball out
   to the right. Pushing contact past ~0.70 m forward made the elbow flip at full stretch.
-- Open: Flat's forearm rolls ~85° in the last frames before contact (its approved contact values);
-  drop serves keep a ~14° elbow re-bend at contact.
+- Flat twist fixed: its imported wind-up held the paddle face rolled ~57° the other way and the
+  elbow flared out/up, so the forearm flipped right before contact. Flat now uses the code-built
+  wind-up like the other styles (`code_windup` in serve_tuning.json), keeping its approved contact
+  and finish; forearm roll step 58° -> 21°, weight 0.38 -> 0.74 -> 0.72.
+- Open: drop serves keep a ~14° elbow re-bend at contact.
