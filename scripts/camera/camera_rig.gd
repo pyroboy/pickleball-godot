@@ -28,6 +28,13 @@ var portrait_max_baseline_view_angle: = 50.0
 var _portrait_fit_anchor: = Vector3.INF
 var portrait_adaptive_framing: = true
 var _portrait_action_zoom: = 1.0
+# Fixed zoom steps (measured from the fitted zoom: tight net play ~0.70,
+# serve / between points ~0.87, wide rallies ~0.95). The camera eases between
+# them instead of re-fitting continuously ("breathing").
+const ZOOM_STEPS: Array[float] = [0.72, 0.88, 1.0]
+const ZOOM_IN_HOLD := 0.6     # s the tighter step must fit before zooming in
+var _zoom_step: float = 1.0
+var _zoom_in_timer: float = 0.0
 
 const GameplayCamera = preload("res://scripts/camera/gameplay_camera.gd")
 var gameplay_camera = GameplayCamera.new()
@@ -127,12 +134,21 @@ func setup(
 	return camera
 
 
+# Gameplay camera follows what is drawn (interpolated), since it updates every
+# rendered frame; reading the 30 Hz physics positions would make it step.
+static func _drawn(node: Node3D) -> Vector3:
+	return node.get_global_transform_interpolated().origin
+
 func _process(delta: float) -> void:
 	var _pt := Time.get_ticks_usec()
 	_perf_process(delta)
 	PerfMonitor.record("proc.camera_rig", Time.get_ticks_usec() - _pt)
 
 func _perf_process(delta: float) -> void:
+	# The camera moves every rendered frame (was in game._physics_process at 30 Hz,
+	# which made it step on a 60 Hz screen). The pose editor path stays in physics.
+	if camera != null and not get_tree().paused and not (_game_root != null and _game_root._tool_state_active()):
+		update(delta)
 	# Player presentation and the held ball update after the physics camera.
 	# Correct against the actual rendered target, never a one-frame-old ball.
 	if camera == null or editor_active or orbit_mode != 0 or _between_point_camera.active or get_tree().paused: return
@@ -147,6 +163,8 @@ func _on_viewport_resized() -> void:
 	end_between_point_cinematic()
 	gameplay_camera.suspend()
 	_portrait_action_zoom = 1.0
+	_zoom_step = 1.0
+	_zoom_in_timer = 0.0
 
 func set_gameplay_camera_mode(value: int) -> void:
 	end_between_point_cinematic()
@@ -428,7 +446,7 @@ func _update_centered(delta: float) -> void:
 		camera.h_offset = 0.0
 
 
-	var player_x: float = to_local(_player_left.global_position).x
+	var player_x: float = to_local(_drawn(_player_left)).x
 	var camera_x: float = previous_x if gameplay_camera.active_kind == "center" and gameplay_camera._transition_elapsed >= GameplayCamera.TRANSITION_SECONDS else 0.0
 	var target_x: float = 0.0
 	var player_offset: float = player_x - camera_x
@@ -452,7 +470,7 @@ func _update_third_person(delta: float) -> void :
 	if orbit_auto and not _orbit_dragging and _orbit_idle_timer > 5.0:
 		orbit_angle += ORBIT_SPEED * delta
 
-	var player_pos: Vector3 = target_player.global_position
+	var player_pos: Vector3 = _drawn(target_player)
 	var cam_pos: Vector3
 	var look_target: Vector3
 
@@ -485,7 +503,7 @@ func _update_third_person(delta: float) -> void :
 	else:
 		var desired_side: float = 0.3
 		if _ball != null and _ball.is_in_play:
-			var ball_x: float = _ball.global_position.x - player_pos.x
+			var ball_x: float = _drawn(_ball).x - player_pos.x
 			desired_side = clampf(ball_x * 0.6, -1.2, 1.2)
 		elif target_player.posture:
 			var posture: int = target_player.posture.paddle_posture
@@ -497,7 +515,7 @@ func _update_third_person(delta: float) -> void :
 
 		var ball_height_boost: float = 0.0
 		if _ball != null and _ball.is_in_play and not _is_practice():
-			ball_height_boost = clampf(_ball.global_position.y - 1.5, 0.0, 0.8) * 0.3
+			ball_height_boost = clampf(_drawn(_ball).y - 1.5, 0.0, 0.8) * 0.3
 		var cam_height: float = ORBIT_HEIGHT + ball_height_boost
 
 		cam_pos = player_pos + Vector3(
@@ -507,7 +525,7 @@ func _update_third_person(delta: float) -> void :
 
 		var desired_look: Vector3
 		if _ball != null and _ball.is_in_play and not _is_practice():
-			var ball_pos: Vector3 = _ball.global_position
+			var ball_pos: Vector3 = _drawn(_ball)
 			var ahead_point: Vector3 = player_pos + Vector3(0.0, 0.5, - forward_sign * 5.0)
 			desired_look = ahead_point.lerp(ball_pos, 0.25)
 			desired_look.x = clampf(desired_look.x, player_pos.x - 2.5, player_pos.x + 2.5)
@@ -654,7 +672,17 @@ func _apply_portrait_action_framing(delta: float) -> void:
 		if _action_points_fit(points, band): high = middle
 		else: low = middle
 	var desired: float = high
-	_portrait_action_zoom = desired if desired > _portrait_action_zoom else lerpf(_portrait_action_zoom, desired, 1.0 - exp(-3.0 * maxf(delta, 0.0)))
+	var wanted: float = ZOOM_STEPS[-1]
+	for step in ZOOM_STEPS:
+		if step >= desired - 0.005: wanted = step; break
+	if wanted > _zoom_step:
+		_zoom_step = wanted; _zoom_in_timer = 0.0          # out: switch now
+	elif wanted < _zoom_step:
+		_zoom_in_timer += maxf(delta, 0.0)
+		if _zoom_in_timer >= ZOOM_IN_HOLD: _zoom_step = wanted; _zoom_in_timer = 0.0
+	else: _zoom_in_timer = 0.0
+	var rate: float = 14.0 if _zoom_step > _portrait_action_zoom else 4.0   # out fast, in gently
+	_portrait_action_zoom = lerpf(_portrait_action_zoom, _zoom_step, 1.0 - exp(-rate * maxf(delta, 0.0)))
 	camera.global_transform = Transform3D(full.basis, focus + (full.origin - focus) * _portrait_action_zoom)
 	_center_action_bounds(points, band, focus)
 
@@ -680,12 +708,12 @@ func _portrait_action_points() -> Array[Vector3]:
 	for player in roster:
 		if not is_instance_valid(player): continue
 		var head: Node3D = player.get_node_or_null("BodyPivot/TorsoMesh/HeadMesh")
-		var top: float = maxf(player.global_position.y + 0.55, head.global_position.y + 0.2 if head else 1.65)
+		var top: float = maxf(_drawn(player).y + 0.55, _drawn(head).y + 0.2 if head else 1.65)
 		for x in [-0.58, 0.58]:
-			points.append(Vector3(player.global_position.x + x, 0.08, player.global_position.z + 0.25))
-			points.append(Vector3(player.global_position.x + x, top, player.global_position.z))
+			points.append(Vector3(_drawn(player).x + x, 0.08, _drawn(player).z + 0.25))
+			points.append(Vector3(_drawn(player).x + x, top, _drawn(player).z))
 	if is_instance_valid(_ball):
-		for offset in [Vector3(-0.15, -0.15, 0), Vector3(0.15, 0.15, 0)]: points.append(_ball.global_position + offset)
+		for offset in [Vector3(-0.15, -0.15, 0), Vector3(0.15, 0.15, 0)]: points.append(_drawn(_ball) + offset)
 	return points
 
 func _action_points_fit(points: Array[Vector3], band: Rect2) -> bool:
@@ -694,7 +722,7 @@ func _action_points_fit(points: Array[Vector3], band: Rect2) -> bool:
 	if _game_root and _game_root.get("mobile_controls") and is_instance_valid(_ball):
 		var controls: Node = _game_root.mobile_controls
 		if controls.has_method("camera_occlusion_regions"):
-			var pixel: Vector2 = camera.unproject_position(_ball.global_position)
+			var pixel: Vector2 = camera.unproject_position(_drawn(_ball))
 			for region in controls.camera_occlusion_regions():
 				if region.has_point(pixel): return false
 	return true

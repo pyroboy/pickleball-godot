@@ -11,7 +11,7 @@ const TRAUMA_POWER: float = 2.0
 const DECAY: float = 1.8
 const MAX_OFFSET_H: float = 0.35
 const MAX_OFFSET_V: float = 0.25
-const MAX_ROLL: float = 0.08
+const MAX_ROLL: float = 0.0   # no roll: it reads as tilt on a pixel image
 const NOISE_SPEED: float = 22.0
 
 var trauma: float = 0.0

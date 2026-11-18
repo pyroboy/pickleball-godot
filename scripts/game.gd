@@ -801,7 +801,7 @@ func _perf_physics_process(delta: float) -> void:
 			camera_rig.editor_focus_point = posture_editor_ui.get_current_paddle_position()
 		else:
 			camera_rig.editor_focus_point = Vector3.INF
-		camera_rig.update(delta)
+		# camera_rig.update now runs every rendered frame in camera_rig._process.
 
 
 	if game_state == GameState.WAITING and (game_drop_test == null or not game_drop_test.is_active()):
@@ -1578,7 +1578,12 @@ func _on_any_paddle_hit(_player_num: int) -> void :
 		return
 	if ball != null:
 		scoreboard_ui.show_speed(ball.linear_velocity.length() * 2.23694)
-		scoreboard_ui.show_shot_type(game_shots._classify_trajectory(ball.linear_velocity))
+		var shot: String = game_shots._classify_trajectory(ball.linear_velocity)
+		scoreboard_ui.show_shot_type(shot)
+		# Camera shake by shot type (visual only): none for soft shots, light for
+		# drives, strong for a fast downward hit (smash).
+		if camera_rig != null and shot == "FAST":
+			camera_rig.add_shake(0.6 if ball.linear_velocity.y < -2.0 else 0.3)
 
 func _on_ball_bounced(bounce_pos: Vector3) -> void :
 	if game_state == GameState.SERVING and game_serve.is_release_pending() and not ball.is_in_play: return

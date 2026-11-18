@@ -56,6 +56,11 @@ func _ready() -> void:
 		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
 		if arg.begins_with("--frame-log="): _frame_file = FileAccess.open(arg.trim_prefix("--frame-log="), FileAccess.WRITE)
+		# Headless benches: --resolution is ignored, so size the root window here
+		# (portrait 720x1280 = the phone's camera framing path).
+		if arg.begins_with("--viewport="):
+			var wh := arg.trim_prefix("--viewport=").split("x")
+			if wh.size() == 2: get_tree().root.size = Vector2i(int(wh[0]), int(wh[1]))
 		if arg.begins_with("--spike-ms="): _spike_ms = float(arg.trim_prefix("--spike-ms="))
 		# Dev screenshots: --capture-at=20,30,40 --capture-out=/dir (seconds since start)
 		if arg.begins_with("--capture-at="):
