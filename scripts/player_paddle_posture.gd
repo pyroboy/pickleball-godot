@@ -336,6 +336,26 @@ func update_paddle_tracking(force: bool = false) -> void :
         _paddle_head_marker.visible = false
 
 var full_solve_stamp: Array = []   # [physics tick, def, paddle transform] of the last full solve
+var arm_pending_def = null         # pose whose arm IK is deferred until ensure_arm_pose()
+
+## Arms are deferred only in live rallies, where the lag is. Serves, between-point
+## cut-scenes, dives/special reaches and the pose editor read hand transforms
+## directly and keep immediate solves.
+func _defer_arms_allowed() -> bool:
+    if editor_preview_mode or not _player: return false
+    var game = _player.get_parent()
+    if game == null or not "game_state" in game or game.game_state != game.GameState.PLAYING: return false
+    if _player.has_method("_between_point_owner") and _player._between_point_owner() != null: return false
+    if "special_reach_driver" in _player and _player.special_reach_driver != null and _player.special_reach_driver.owns_presentation(): return false
+    return true
+
+## Solve the deferred arm IK now, against the paddle's current transform. Called
+## before anything reads arm/hand transforms, and at the end of each tick/frame.
+func ensure_arm_pose() -> void:
+    if arm_pending_def == null or not _player or not _player.arm_ik: return
+    var def = arm_pending_def
+    arm_pending_def = null
+    _player.arm_ik.update_arm_ik(0.0, def)
 
 func force_posture_update(def, solve_ik_now: bool = true) -> void :
     if not _player or not _player._ensure_paddle_ready():
@@ -377,13 +397,18 @@ func force_posture_update(def, solve_ik_now: bool = true) -> void :
             var support_delta: float = _player._consume_support_delta()
             if support_delta > 0.0: feet.update_leg_ik(support_delta, def)
             else: feet._solve_legs(0.0, def)
-    if _player.arm_ik: _player.arm_ik.update_arm_ik(0.0, def)
+    if _player.arm_ik:
+        # Perf: arms are solved once per tick (ensure_arm_pose) instead of on every
+        # owner call; body/legs above stay immediate for mid-tick readers.
+        if _defer_arms_allowed(): arm_pending_def = def
+        else: _player.arm_ik.update_arm_ik(0.0, def)
     # Perf: lets refresh_contact_support skip re-solving the same pose this tick.
     if _player.paddle_node: full_solve_stamp = [Engine.get_physics_frames(), def, _player.paddle_node.global_transform]
 
 
 
 func capture_displayed_pose() -> PostureDefinition:
+    ensure_arm_pose()   # reads elbow/wrist off the rig
     var source = _presented_body_pose if _presented_body_pose != null else _player.get_runtime_posture_def()
     var pose: PostureDefinition = source.lerp_with(source, 0.0)
     var fh: Vector3 = _player._get_forehand_axis()

@@ -374,6 +374,9 @@ func _setup_game() -> void :
 	player_right.setup(1, bounds, Color(1.0, 0.35, 0.35), RED_RESET_POSITION, true)
 	register_player(player_left)
 	register_player(player_right)
+	var rig_flush = preload("res://scripts/rig_arm_flush.gd").new()
+	rig_flush.name = "RigArmFlush"
+	add_child(rig_flush)
 	if doubles_mode:
 		for identity in [[2, 0], [3, 1]]:
 			var actor = player_script.new()

@@ -165,6 +165,7 @@ func note_serve_contact(server) -> void:
 	_serve_admitted = false; _serve_history.clear()
 
 func before_paddle(player, evidence: Dictionary = {}) -> bool:
+	_ensure_all_arms()
 	var began: int = Time.get_ticks_usec()
 	var queries_before: int = _query_work
 	var algebra_before: int = _algebra_units
@@ -258,7 +259,12 @@ func _capture_current() -> void:
 	_perf_capture_current()
 	PerfMonitor.record("contact.capture", Time.get_ticks_usec() - _pt)
 
+func _ensure_all_arms() -> void:
+	for p in _players():
+		if "posture" in p and p.posture != null: p.posture.ensure_arm_pose()
+
 func _perf_capture_current() -> void:
+	_ensure_all_arms()
 	_frame_current.clear()
 	for player in _players():
 		var snapshot: Dictionary = Surface.snapshot(player, true)

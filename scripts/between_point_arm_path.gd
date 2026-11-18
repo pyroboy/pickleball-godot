@@ -55,6 +55,7 @@ static func clock_weight(progress:float)->float:
  return (u-.5*ramp)/(1.0-ramp)
 func apply(owner,pose)->void:
  if pose==null:return
+ if actor.posture!=null:actor.posture.ensure_arm_pose() # reads hand/arm transforms below
  var arm=actor.left_arm_node;var model=arm.articulated_hand
  if owner.phase=="SET_SERVE" and owner.index_for_actor(actor)!=owner.server:
   _apply_receiver_exit(owner,pose)

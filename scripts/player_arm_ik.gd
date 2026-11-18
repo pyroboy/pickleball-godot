@@ -13,6 +13,7 @@ func _ready() -> void :
 	_player = get_parent() as CharacterBody3D
 
 func update_arm_ik(delta: float, def_override = null) -> void:
+	if _player != null and _player.posture != null: _player.posture.arm_pending_def = null
 	var _pt := Time.get_ticks_usec()
 	_perf_update_arm_ik(delta, def_override)
 	PerfMonitor.record("arm.ik", Time.get_ticks_usec() - _pt)

@@ -8,6 +8,7 @@ const PaddleClearance = preload("res://scripts/paddle_clearance.gd")
 const STEP := PI / 36.0
 
 static func displayed_report(player) -> Dictionary:
+	if player != null and "posture" in player and player.posture != null: player.posture.ensure_arm_pose()
 	# Admission observes the displayed skin and physical joints. Solver metadata
 	# is diagnostic only and can never certify a hand that was subsequently moved.
 	var result := {"valid": true, "arms": []}
