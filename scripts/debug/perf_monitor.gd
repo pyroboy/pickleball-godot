@@ -131,7 +131,59 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 	var scene := get_tree().current_scene
 	if scene != null and scene.has_method("get_players"):
 		for p in scene.get_players(): row["p%d" % p.actor_id] = _v(p.global_position)
+		# Motion (tools/motion_report.py): what is drawn this frame, i.e. the
+		# interpolated transforms, plus each player's intended speed.
+		var drawn := {}
+		var cam := get_viewport().get_camera_3d()
+		if cam != null: drawn["cam"] = _v(cam.get_global_transform_interpolated().origin)
+		var ball = scene.get("ball")
+		if ball is Node3D: drawn["ball"] = _v(ball.get_global_transform_interpolated().origin)
+		for p in scene.get_players():
+			drawn["p%d" % p.actor_id] = _v(p.get_global_transform_interpolated().origin)
+			var want = p.get("current_velocity")
+			if want is Vector3: drawn["v%d" % p.actor_id] = snappedf(Vector2(want.x, want.z).length(), 0.001)
+		row["drawn"] = drawn
+		_hook_events(scene)
+	var st := _state()
+	if st != _ev_state:
+		_event("state", {"from": _ev_state, "to": st})
+		_ev_state = st
+	if not _events.is_empty():
+		row["ev"] = _events
+		_events = []
 	_frame_file.store_line(JSON.stringify(row, "", false))
+
+# ---- events (frame log only): what happened, for the debugging timeline ----
+var _events: Array = []
+var _ev_state := ""
+var _ev_scene: Node = null
+
+func _event(kind: String, data: Dictionary = {}) -> void:
+	data["kind"] = kind
+	data["tick"] = Engine.get_physics_frames()
+	_events.append(data)
+
+func _hook_events(scene: Node) -> void:
+	if scene == _ev_scene: return
+	_ev_scene = scene
+	var ball = scene.get("ball")
+	if ball != null:
+		ball.actor_hit_paddle.connect(func(a, team, _side): _event("hit", {"actor": a, "team": team, "pos": _v(ball.global_position), "vel": _v(ball.linear_velocity)}))
+		ball.actor_hit_body.connect(func(a, team, _side): _event("body_hit", {"actor": a, "team": team, "pos": _v(ball.global_position)}))
+		ball.bounced.connect(func(at): _event("bounce", {"pos": _v(at)}))
+	var scorer = scene.get("rally_scorer")
+	if scorer != null:
+		scorer.rally_ended.connect(func(w, reason, detail): _event("rally_end", {"winner": w, "reason": reason, "detail": detail}))
+		scorer.rally_pending.connect(func(w, reason, detail): _event("rally_pending", {"winner": w, "reason": reason, "detail": detail}))
+	var serve = scene.get("game_serve")
+	if serve != null:
+		serve.serve_launched.connect(func(team): _event("serve", {"team": team, "pos": _v(ball.global_position) if ball != null else []}))
+		serve.serve_phase_changed.connect(func(phase, _style): _event("serve_phase", {"phase": phase}))
+	var between = scene.get("between_point_controller")
+	if between != null: between.phase_changed.connect(func(phase): _event("between_phase", {"phase": phase}))
+	var net = scene.get_node_or_null("Net")
+	if net != null and net.has_signal("ball_hit_post"): net.ball_hit_post.connect(func(at): _event("post_hit", {"pos": _v(at)}))
+	if scene.get("score_left") != null: _event("score", {"left": scene.score_left, "right": scene.score_right})
 
 # ---- pose trace (--pose-trace=path): joint positions per physics tick, for before/after diffs ----
 
