@@ -164,3 +164,15 @@ Swing trace: forearm roll flip 125° -> smooth (max 6°/step where the arm is be
 33° remains (paddle rotation changes direction at contact; reach is not the cause).
 Gameplay: contact paddle face changed, so wide backhands may go elsewhere; seed-1 bench has no wide
 backhand and stays IDENTICAL.
+
+### 03 Medium / 04 High Overhead — whole-pose rework — 2026-11-18
+Real smash: side-on trophy position (elbow ~90°, off-hand up at the ball, knees loaded, weight back),
+contact near full extension in front of the hitting shoulder, follow-through down across the body.
+- Wind-up: hips/shoulders 23/37° -> 50/75°, weight 0.45 -> 0.29, off-hand up, elbow guides raised
+  (were pointing down), trophy elbow Medium 119° / High 87° (was a straight arm, 36°).
+- Contact: Medium elbow 121° -> 74° (paddle 0.37 -> 0.64 m from the shoulder), High 92° -> 62°
+  (0.70 -> 0.83 m); legs no longer locked (knees 1° -> 20–41°); weight 0.62.
+- Finish: paddle down to the opposite hip, weight 0.82, CoG over base.
+- Gameplay: contact moved out to the hitting side and forward (Medium 0.08/0.45 -> 0.30/0.80, High
+  -0.02/0.45 -> 0.22/0.55; zones moved). Seed-1 bench has no overhead: IDENTICAL, same points.
+- High overhead elbow is above the shoulder from trophy through contact: correct for a smash.
