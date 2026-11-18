@@ -19,7 +19,7 @@ func _support_key()->Array:
  var ik=actor.leg_ik
  return [actor.get_instance_id(),actor.body_pivot.get_instance_id(),actor.right_arm_node.get_instance_id(),actor.left_arm_node.get_instance_id(),actor.right_arm_node.upper_arm_length,actor.right_arm_node.forearm_length,actor.left_arm_node.upper_arm_length,actor.left_arm_node.forearm_length,actor.global_transform,ik.right_foot_locked,ik.left_foot_locked,ik.right_foot_lock_pos,ik.left_foot_lock_pos,ik.right_contact_serial,ik.left_contact_serial,ik._active_side,ik._run_active,ik._airborne]
 func _eligible(owner)->bool:
- if owner.phase!="PASS" or owner.index_for_actor(actor)!=owner.server or owner._carry_team>=0:return false
+ if owner.phase!="PASS" or owner.index_for_actor(actor)!=owner.catcher or owner._carry_team>=0:return false
  if owner.hand_presentation_for(actor.get_actor_id()).get("mode","")!="CATCH_OPEN":return false
  var ik=actor.leg_ik
  return actor.current_velocity.length_squared()<.000001 and ik.feet_initialized and ik.right_foot_locked and ik.left_foot_locked and ik._active_side<0 and not ik._run_active and not ik._airborne

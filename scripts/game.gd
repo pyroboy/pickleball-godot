@@ -486,14 +486,18 @@ func _setup_game() -> void :
 	aim_focus = preload("res://scripts/solo_aim_focus.gd").new()
 	add_child(aim_focus)
 	aim_focus.setup(self)
-	movement_guide = preload("res://scripts/ui/incoming_movement_guide.gd").new()
-	add_child(movement_guide)
-	movement_guide.setup(self)
-	# Sample immediately after the human's published predictor cache, before
-	# the later ball callback applies this tick's aerodynamic velocity change.
-	# Existing player/ball ordering and all gameplay callbacks stay untouched.
-	movement_guide.process_physics_priority = player_left.process_physics_priority
-	move_child(movement_guide, player_left.get_index() + 1)
+	# Incoming-ball movement guide (MOVE / TIGHT / NO TIME ring): off by default
+	# and not even created then (it runs a flight trace every tick). Turn it on
+	# in Settings > "Incoming movement guide"; takes effect next match.
+	# Every use of movement_guide is null-guarded.
+	if bool(Settings.get_value("gameplay.movement_guide", false)):
+		movement_guide = preload("res://scripts/ui/incoming_movement_guide.gd").new()
+		add_child(movement_guide)
+		movement_guide.setup(self)
+		# Sample immediately after the human's published predictor cache, before
+		# the later ball callback applies this tick's aerodynamic velocity change.
+		movement_guide.process_physics_priority = player_left.process_physics_priority
+		move_child(movement_guide, player_left.get_index() + 1)
 	court_audio = preload("res://scripts/court_audio.gd").new()
 	court_audio.name = "CourtAudio"
 	add_child(court_audio)
@@ -1392,6 +1396,11 @@ func _clear_finished_match_controls(presentations: Array) -> void :
 func get_server_score(team: int = -1) -> int:
 	var selected_team: int = serving_team if team < 0 else team
 	return score_left if selected_team == 0 else score_right
+
+# True when the human has changed ends and plays from the far (-z) end. The
+# camera rig turns half a turn and screen-relative input is turned with it.
+func view_flipped() -> bool:
+	return doubles_mode and player_left != null and player_left.court_side == 1
 
 func _point_transition_blocks_attempt() -> bool:
 	return _fast_point_transition != null and _fast_point_transition.blocks_attempt()

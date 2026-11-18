@@ -133,6 +133,7 @@ func _perf_process(delta: float) -> void:
 	# Player presentation and the held ball update after the physics camera.
 	# Correct against the actual rendered target, never a one-frame-old ball.
 	if camera == null or editor_active or orbit_mode != 0 or _between_point_camera.active or get_tree().paused: return
+	_apply_end_flip()
 	if _game_root and _game_root.practice_launcher and _game_root.practice_launcher.is_wall() and gameplay_camera.mode == GameplayCamera.CENTER: return
 	if gameplay_camera.mode == GameplayCamera.POV:
 		gameplay_camera._update_pov(camera, _player_left, _ball, delta)
@@ -228,7 +229,16 @@ func handle_input(event: InputEvent) -> void :
 func cancel_orbit_drag() -> void :
 	_orbit_dragging = false
 
+# After a doubles change of ends the human plays from the far end. Turn the
+# whole rig half a turn about the court centre so the view stays behind them:
+# the court is symmetric, so this reads as the court flipping, not the camera.
+func _apply_end_flip() -> void:
+	var flipped: bool = not editor_active and _game_root != null and _game_root.has_method("view_flipped") and _game_root.view_flipped()
+	var wanted: Basis = Basis(Vector3.UP, PI) if flipped else Basis.IDENTITY
+	if not transform.basis.is_equal_approx(wanted): transform.basis = wanted
+
 func update(delta: float) -> void :
+	_apply_end_flip()
 	if _game_root != null and _game_root.practice_launcher and _game_root.practice_launcher.is_wall() and gameplay_camera.mode == GameplayCamera.CENTER:
 		gameplay_camera.suspend()
 		camera.projection = Camera3D.PROJECTION_PERSPECTIVE
@@ -415,7 +425,7 @@ func _update_centered(delta: float) -> void:
 		camera.h_offset = 0.0
 
 
-	var player_x: float = _player_left.global_position.x
+	var player_x: float = to_local(_player_left.global_position).x
 	var camera_x: float = previous_x if gameplay_camera.active_kind == "center" and gameplay_camera._transition_elapsed >= GameplayCamera.TRANSITION_SECONDS else 0.0
 	var target_x: float = 0.0
 	var player_offset: float = player_x - camera_x

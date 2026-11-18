@@ -34,8 +34,11 @@ Status: done, in progress, next, later.
 - [x] Seeded benchmark + pose trace (`tools/bench.sh`, `tools/pose_diff.py`)
 - [x] Physics catch-up cap, IK once per player per tick, READY recheck at 10 Hz, AI re-plan cap
 - [ ] On-device iPhone baseline (fps, frame-time spikes) in 4-player rallies
-- [ ] Decide on a 30 Hz physics / AI tick. It changes ball simulation, so treat it as a
-      gameplay change: separate branch, bench comparison, playtest.
+- [x] 30 Hz physics / AI tick with physics interpolation (decided 2026-11-18, kept after
+      playtest). Halves per-frame cost on the Mac bench (rally frame 9.4 -> 3.9 ms). It
+      changed ball simulation: 3-seed all-AI bench showed similar rally length but more
+      BALL_IN_NET (15 vs 9); watch this. Bench comparisons from here on are 30 Hz vs 30 Hz.
+      Anything placed in `_process` must read `get_global_transform_interpolated()`.
 
 ### Phase 1: Pixel-card players (prototype done, default on)
 - [x] Card rig on the existing joints: `scripts/graphics/pixel_card_rig.gd`

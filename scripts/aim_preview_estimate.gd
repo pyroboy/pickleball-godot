@@ -45,16 +45,17 @@ static func solve(start: Vector3, target: Vector3, charge: float, mode: int, int
 	var best_score: = INF
 	var integration_steps: = 0
 	for candidate in MAX_CANDIDATES:
-		var time: float = roundf(clampf(duration + candidate * 0.18, 0.24, 2.32) * 60.0) / 60.0
+		var hz: float = float(Engine.physics_ticks_per_second)
+		var time: float = roundf(clampf(duration + candidate * 0.18, 0.24, 2.32) * hz) / hz
 		var travel: Vector3 = Vector3(target.x - start.x, 0, target.z - start.z)
 		var velocity: Vector3 = travel.normalized() * ((exp(drag * horizontal) - 1.0) / (drag * time))
 		velocity.y = (target.y - start.y) / time + 0.5 * effective_gravity * time
 		velocity = velocity.limit_length(speed_cap)
 		var omega: = Vector3.ZERO
-		var count: int = roundi(time * 60.0)
+		var count: int = roundi(time * hz)
 		for iteration in REFINEMENTS:
 			omega = _omega(profile, velocity)
-			var position: Vector3 = BallModel.predict_aero_steps(start, velocity, omega, gravity, 1.0 / 60.0, count)[0]
+			var position: Vector3 = BallModel.predict_aero_steps(start, velocity, omega, gravity, 1.0 / hz, count)[0]
 			integration_steps += count
 			velocity += (target - Vector3(0, 0.0005, 0) - position) / time * 0.86
 			velocity = velocity.limit_length(speed_cap)

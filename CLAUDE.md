@@ -17,6 +17,8 @@ are in `docs/ROADMAP.md`. Read it before planning work.
 - Run on Mac: `tools/run_mac.sh` (log in `logs/game.log`), then `tools/game_errors.sh` for a deduplicated error summary.
 - Performance: every run writes `logs/perf.jsonl` (PerfMonitor autoload, `scripts/debug/perf_monitor.gd`). Read it with `python3 tools/perf_report.py`, not by opening the log. F3 toggles the in-game frame graph. Time new hot spots with `PerfMonitor.record("label", usec)`.
 - iOS Simulator is not usable: Godot 4.6.3's official simulator library is x86_64-only.
+- Physics runs at 30 Hz with physics interpolation (`project.godot`). Visuals placed in
+  `_process` must read `get_global_transform_interpolated()`, not `global_position`.
 - Visual-only changes must leave gameplay identical: compare `tools/bench.sh` runs with
   `python3 tools/pose_diff.py` (expect `IDENTICAL`). Never add nodes or meshes under a
   player's `BodyPivot`; gameplay scans every mesh there.

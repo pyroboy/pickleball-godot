@@ -264,6 +264,12 @@ static func _lean_variant(player, base: PostureDefinition, point: Vector3) -> Po
 	return lean
 
 static func select_extended(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_select_extended(player, ball, flight, previous_id, require_bounce, volley_override)
+	PerfMonitor.record("planner.extended", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_select_extended(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
 
 
 	var samples: Array = flight.get("samples", [])
@@ -325,6 +331,12 @@ static func select_extended(player, ball, flight: Dictionary, previous_id: int =
 
 
 static func select_floor_swept(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_select_floor_swept(player, ball, flight, previous_id, require_bounce, volley_override)
+	PerfMonitor.record("planner.floor_swept", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_select_floor_swept(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
 	ActivationZones.refresh(CONTACT_MARGIN)
 	var samples: Array = flight.get("samples", [])
 	var fault_time: float = predicted_fault_time(player, ball, flight)
@@ -419,6 +431,12 @@ static func _floor_reach_intervals(player, def: PostureDefinition, a: Vector3, b
 # between physics samples without crossing a posture's nominal front plane.
 # This predicts a contact; actual hits still require the finite paddle sweep.
 static func select_swept_extended(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_select_swept_extended(player, ball, flight, previous_id, require_bounce, volley_override)
+	PerfMonitor.record("planner.swept_extended", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_select_swept_extended(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
 	var samples: Array = flight.get("samples", [])
 	if samples.size() < 2 or not should_track(player, ball): return {}
 	var fault_time: float = predicted_fault_time(player, ball, flight)

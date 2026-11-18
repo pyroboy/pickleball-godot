@@ -17,6 +17,14 @@ var last_center:Vector3
 var last_body:Transform3D
 var cup_geometry:Dictionary={}
 var catch_surface_work_remaining:int=-1
+# Per-frame cap on cup candidate fits in _fit_cup (-1 = no cap). Each fit is
+# ~0.5 ms on an M-series Mac; uncapped fallbacks reached 200+ fits (100+ ms).
+const CUP_FIT_BUDGET:=48
+var cup_fit_budget:int=-1
+# Pixel-card mode: the 3D hand/sleeve is on a hidden layer, so grip fits skip
+# the sleeve-vs-body surface checks (and their body geometry build) and take
+# the first kinematically valid elbow. Classic 3D bodies keep the full checks.
+var pixel_cards:bool=false
 # Perf: the carry grip barely changes between frames. Remember which cup rotation
 # step won last frame and search only a small window around it; the full
 # 145-candidate sweep runs only when the window finds nothing.
@@ -39,6 +47,7 @@ func begin_exit()->void:
  for bone in arm.articulated_hand.skeleton.get_bone_count():exit_fingers.append(arm.articulated_hand.skeleton.get_bone_pose_rotation(bone))
 func _init(player):
  actor=player
+ pixel_cards=preload("res://scripts/graphics/pixel_card_rig.gd").enabled()
  var arm=actor.left_arm_node;var torso:Node3D=actor.body_pivot.get_node("TorsoMesh")
  var wrist:Vector3=arm.hand_mesh.global_transform*arm.articulated_hand.wrist_socket
  last_center=arm.hand_mesh.global_transform*arm.articulated_hand.cup_ball_center
@@ -113,13 +122,14 @@ func _fixed_hand(arm,left:bool)->void:
 func _fit_cup(arm,owner)->void:
  var transaction=Sleeve.Transaction.new(actor);var saved:Dictionary=transaction._snapshot(true)
  var model=arm.articulated_hand
- cup_geometry=Sleeve.body_geometry(actor)
+ cup_geometry={} if pixel_cards else Sleeve.body_geometry(actor)
  var original:Transform3D=arm.hand_mesh.global_transform
  var center:Vector3=original*model.cup_ball_center
  var request:Dictionary=owner.hand_presentation_for(actor.get_actor_id())
  if actor.get_meta("between_bounded_admission",false) and owner.phase=="PASS" and request.get("mode","")=="CATCH_OPEN" and actor.current_velocity.length_squared()<.000001:
   _fit_open_catch(arm,transaction,saved,original,center)
   return
+ cup_fit_budget=CUP_FIT_BUDGET
  var normal:Vector3=-(original.basis*model.palm_contact_basis.z).normalized()
  var preferred:Basis=(actor.body_pivot.global_basis*last_body.basis.inverse())*last_basis
  if owner.phase=="SET_SERVE":
@@ -132,10 +142,15 @@ func _fit_cup(arm,owner)->void:
  var relative:Quaternion=preferred.get_rotation_quaternion()*original.basis.orthonormalized().get_rotation_quaternion().inverse()
  var ideal:=2.0*atan2(Vector3(relative.x,relative.y,relative.z).dot(normal),relative.w)
  var chosen:Dictionary={}
- var chosen_step:int=0
+ var chosen_step:int=last_cup_step
+ # Steady carry: last frame's grip step, first elbow that still fits (one
+ # candidate instead of a 9-step window, ~2 ms each). Searches only if it fails.
+ # SET_SERVE ranks grips by closeness to the serve grasp, so it always searches.
+ if have_cup_step and owner.phase!="SET_SERVE" and not free_return:
+  chosen=_cup_candidate(arm,original,center,normal,ideal+float(last_cup_step)*TAU/144.0,INF,true)
  # Passes: 0 = window around last grip, 1 = coarse sweep (every 4th step),
  # 2 = refine +/-3 around the coarse winner. Was a full 145-step sweep.
- for sweep in ([0,1,2] if have_cup_step else [1,2]):
+ for sweep in ([] if not chosen.is_empty() else [0,1,2] if have_cup_step else [1,2]):
   var offsets:Array=[]
   if sweep==1:
    offsets=[0]
@@ -168,7 +183,10 @@ func _fit_cup(arm,owner)->void:
    var soft_mount:=Transform3D(softened,center-softened*model.cup_ball_center)
    chosen=_cup_candidate(arm,soft_mount,center,soft_normal,0.0)
    if not chosen.is_empty():break
- if chosen.is_empty():chosen=_cup_cone(arm,center,preferred)
+ # The wide cone search (~130 candidates, 50+ ms) is only worth it while the
+ # hand actually holds or is about to receive the ball; an empty hand returning
+ # to the side just keeps its last fitted pose this frame.
+ if chosen.is_empty() and not free_return:chosen=_cup_cone(arm,center,preferred)
  # A desired open/held hand target is a motion request. If its full current
  # frame is infeasible, advance only as far as a continuous physical arm can
  # support; an actual possessed ball follows that displayed cup below.
@@ -179,9 +197,10 @@ func _fit_cup(arm,owner)->void:
    var trial_center:Vector3=start_center.lerp(reachable_center,fraction)
    var trial:Transform3D=Transform3D(last_basis,trial_center-last_basis*model.cup_ball_center)
    chosen=_cup_candidate(arm,trial,trial_center,-(last_basis*model.palm_contact_basis.z).normalized(),0.0)
-   if chosen.is_empty():chosen=_cup_cone(arm,trial_center,preferred)
+   if chosen.is_empty() and not free_return:chosen=_cup_cone(arm,trial_center,preferred)
    if not chosen.is_empty():
     center=trial_center;break
+ cup_fit_budget=-1
  transaction._restore(saved)
  var best:=last_basis.get_rotation_quaternion().angle_to(chosen.basis.orthonormalized().get_rotation_quaternion()) if not chosen.is_empty() else INF
  if chosen.is_empty():
@@ -240,6 +259,8 @@ func _cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,angle
  return _pr
 
 func _perf_cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,angle:float,cost_ceiling:float=INF,first_valid:bool=false) -> Dictionary:
+ if cup_fit_budget==0:return {}
+ if cup_fit_budget>0:cup_fit_budget-=1
  var model=arm.articulated_hand
  var basis:Basis=Basis(normal,angle)*original.basis
  var allowed:float=deg_to_rad(700.0)*actor.get_physics_process_delta_time()
@@ -288,9 +309,9 @@ func _perf_cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,
   if not best.is_empty() and cost>=best.cost:continue
   if catch_surface_work_remaining==0:continue
   if catch_surface_work_remaining>0:catch_surface_work_remaining-=1
-  if not SleeveQuery.arm_clear(arm,cup_geometry,Sleeve.REQUIRED_GAP):continue
+  if not pixel_cards and not SleeveQuery.arm_clear(arm,cup_geometry,Sleeve.REQUIRED_GAP):continue
   best={"basis":basis,"wrist":wrist,"elbow":elbow,"cost":cost}
-  if first_valid:return best
+  if first_valid or pixel_cards:return best
  return best
 
 func _cup_cone(arm,center:Vector3,goal:Basis)->Dictionary:
@@ -314,6 +335,8 @@ func _cup_cone(arm,center:Vector3,goal:Basis)->Dictionary:
      if candidate.is_empty():continue
      candidate.cost+=goal_cost
      if best.is_empty() or candidate.cost<best.cost:best=candidate
+  # Smallest hand turn that works wins; larger rings only if this one had none.
+  if not best.is_empty() or cup_fit_budget==0:break
  return best
 
 func _apply_receiver_exit(owner,pose)->void:

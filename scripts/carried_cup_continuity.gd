@@ -21,6 +21,10 @@ static func _perf_apply(player,hands) -> Dictionary:
  # Perf: the cup search (rig snapshot, body geometry, up to 5 candidate fits) used
  # to rerun on every arm solve, ~5-6x per tick. Search once per tick and reuse it.
  var cached:Dictionary=player.get_meta(META)
+ # A search that found nothing this tick is not repeated by the next arm solves
+ # of the same tick (iPhone log: 1215 candidate fits in one frame).
+ if int(cached.get("failed_tick",-1))==Engine.get_physics_frames():
+  return {"active":true,"feasible":false,"reason":"no continuous fixed-center cup at current body","reused":true}
  if int(cached.get("tick",-1))==Engine.get_physics_frames() and cached.has("chosen"):
   var c:Dictionary=cached.chosen
   arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
@@ -47,7 +51,8 @@ static func _perf_apply(player,hands) -> Dictionary:
  var angle:=last.get_rotation_quaternion().angle_to(goal.get_rotation_quaternion())
  var desired:Basis=last.slerp(goal,minf(1.0,step/maxf(angle,.000001)))
  var transaction=Sleeve.Transaction.new(player);var saved:Dictionary=transaction._snapshot(true)
- path.cup_geometry=Sleeve.body_geometry(player)
+ path.cup_geometry={} if path.pixel_cards else Sleeve.body_geometry(player)
+ path.cup_fit_budget=Path.CUP_FIT_BUDGET
  var chosen:Dictionary={}
  # Walk from the previous physical orientation toward the requested cup.
  # Each candidate has the same authoritative ball center. A blocked rotation
@@ -64,7 +69,11 @@ static func _perf_apply(player,hands) -> Dictionary:
   var fit:Dictionary=path._cup_cone(arm,center,goal)
   if not fit.is_empty():chosen={"mount":Transform3D(fit.basis,center-fit.basis*model.cup_ball_center),"elbow":fit.elbow,"wrist":fit.wrist}
  transaction._restore(saved)
- if chosen.is_empty():return {"active":true,"feasible":false,"reason":"no continuous fixed-center cup at current body"}
+ if chosen.is_empty():
+  var failed:Dictionary=player.get_meta(META).duplicate()
+  failed["failed_tick"]=Engine.get_physics_frames()
+  player.set_meta(META,failed)
+  return {"active":true,"feasible":false,"reason":"no continuous fixed-center cup at current body"}
  arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
  arm.solve_ik(chosen.mount.origin,chosen.elbow,null,chosen.wrist)
  model.set_mesh_world_transform(chosen.mount);model.update_wrist_bridge(arm.fore_mesh.global_basis)

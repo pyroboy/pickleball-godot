@@ -903,6 +903,8 @@ func _get_human_input() -> Vector3:
 	if game and "practice_launcher" in game and game.practice_launcher and game.practice_launcher.has_method("is_exchange_demo") and game.practice_launcher.is_exchange_demo():
 		return game.practice_launcher.get_demo_movement()
 	var input_2d: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	# Screen-relative: with the view turned for the far end, up is +z.
+	if game != null and game.has_method("view_flipped") and game.view_flipped(): input_2d = -input_2d
 
 
 	if posture and posture.human_contact:

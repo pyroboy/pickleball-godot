@@ -5,15 +5,21 @@ const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const Geometry = preload("res://scripts/paddle_clearance.gd")
 const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
+const PixelCards = preload("res://scripts/graphics/pixel_card_rig.gd")
 signal active_changed(active: bool)
 signal phase_changed(phase: String)
 signal finished(skipped: bool)
-const WALK_SPEED: = 1.2
+const WALK_SPEED: = 1.6
 const RUN_SPEED: = 4.4
 const CARRY_SPEED: = 2.65
-const MOVE_ACCEL: = 6.5
+const MOVE_ACCEL: = 9.0
 const MOVE_BRAKE: = 7.0
-const WALK_APPROACH_DISTANCE: = 1.25
+const WALK_APPROACH_DISTANCE: = 0.6
+# Farther than this from the ball: run. Closer: walk the whole way.
+const RUN_DECISION_DISTANCE: = 1.8
+# Ground pickup timing (bend down, lift back up).
+const BEND_TIME: = 0.42
+const LIFT_TIME: = 0.42
 const TIMEOUT: = 15.0
 const HAND_BALL_OFFSET: = Vector3(0, 0.075, 0)
 var _end_route = preload("res://scripts/between_end_change_route.gd").new()
@@ -66,6 +72,12 @@ var _phase_entry_wrists: Array = [Vector3.ZERO, Vector3.ZERO]
 var _carry_heading: Array = [0.0, 0.0]
 var _carry_heading_tick: Array = [-1, -1]
 var _entry_side_relaxation: Array[bool] = [false, false]
+# Who is catching the ball in the air: the server for a partner pass, or the
+# retriever when the dead ball is still catchable on its way down.
+var catcher: = 0
+var _air_catch: = false
+var _run_approach: Array[bool] = [false, false]
+var _prev_ball_pos: = Vector3.INF
 
 func setup(game: Node) -> void :
 	_game = game
@@ -137,6 +149,9 @@ func begin(presentations: Array = []) -> bool:
 	transfer_bounce_position = Vector3.INF
 	last_result = ""
 	_pass_attempts = 0
+	catcher = server
+	_air_catch = false
+	_prev_ball_pos = Vector3.INF
 	missed_physical_catches = 0
 	pass_catch_declined = false
 	pass_catch_decision = {}
@@ -205,7 +220,8 @@ func velocity_for(actor_id: int) -> Vector3:
 	var distance: float = offset.length()
 
 
-	if phase != "APPROACH" or team != retriever:
+	var chasing: bool = team == retriever and (phase == "APPROACH" or (phase == "PASS" and _air_catch))
+	if not chasing:
 		_motion_velocity[team] = offset.normalized() * minf(CARRY_SPEED, distance * 8.0) if distance > 0.025 else Vector3.ZERO
 		return _motion_velocity[team]
 	var dt: float = maxf(get_physics_process_delta_time(), 1e-05)
@@ -213,7 +229,8 @@ func velocity_for(actor_id: int) -> Vector3:
 
 
 	var approach_cap: float = sqrt(WALK_SPEED * WALK_SPEED + 2.0 * MOVE_BRAKE * maxf(0.0, distance - WALK_APPROACH_DISTANCE))
-	var speed: float = minf(RUN_SPEED, minf(approach_cap, distance * 8.0))
+	var top_speed: float = RUN_SPEED if _run_approach[team] else WALK_SPEED
+	var speed: float = minf(top_speed, minf(approach_cap, distance * 8.0))
 	var desired: Vector3 = offset.normalized() * speed if distance > 0.0001 else Vector3.ZERO
 	var previous: Vector3 = _motion_velocity[team]
 	var acceleration: float = MOVE_ACCEL if desired.length() > previous.length() else MOVE_BRAKE
@@ -224,16 +241,24 @@ func velocity_for(actor_id: int) -> Vector3:
 	_motion_velocity[team] = motion
 	return motion
 
-func _ready_to_pickup(team: int) -> bool:
+func _ready_to_pickup(team: int, strict: bool = true) -> bool:
 	if not _at_target(team) or _players[team].current_velocity.length() > 0.001: return false
 	var player = _players[team]
 	var feet = player.leg_ik
 	if feet == null or not feet.is_support_ready(0) or not feet.is_support_ready(1): return false
+	# A ground pickup only needs both feet planted; the bend re-plants anyway.
+	if not strict: return true
 	# Contact readiness has a generous reach tolerance. Do not change phases
 	# while the stricter live-stance planner is about to take another step.
 	var base := Vector3(player.global_position.x, feet.ANKLE_HEIGHT, player.global_position.z)
 	var targets: Array[Vector3] = feet._stance_targets(_poses[team], base)
 	return feet.right_foot_smooth.distance_to(targets[0]) <= feet.STANCE_REPLANT_DISTANCE and feet.left_foot_smooth.distance_to(targets[1]) <= feet.STANCE_REPLANT_DISTANCE
+
+# Standing still, both feet planted, no step or weight shift in progress:
+# what the catch presentation (between_pose_admission) needs.
+func _settled_for_catch(team: int) -> bool:
+	var feet = _players[team].leg_ik
+	return feet != null and _ready_to_pickup(team) and feet.right_foot_locked and feet.left_foot_locked and feet._active_side < 0 and not feet._run_active and not feet._airborne and feet.locomotion_state == "ready" and feet.locomotion_body_weight < 0.2
 
 func pose_for(actor_id: int):
 	var team: int = index_for_actor_id(actor_id)
@@ -280,22 +305,23 @@ func _perf_physics_process(delta: float) -> void:
 				_start_offscreen_return()
 			else:
 				var ball = _game.ball
+				if missed_physical_catches == 0 and Engine.get_physics_frames() % maxi(1, Engine.physics_ticks_per_second / 10) == 0 and _try_air_catch(): return
 				var player = _players[retriever]
 				_targets[retriever] = _pickup_root(ball.global_position, player)
 				if ball.global_position.y < 0.19:
-					ball.linear_velocity.x = move_toward(ball.linear_velocity.x, 0.0, delta * 3.0)
-					ball.linear_velocity.z = move_toward(ball.linear_velocity.z, 0.0, delta * 3.0)
-				if _ready_to_pickup(retriever) and ball.global_position.y < 0.22 and ball.linear_velocity.length() < 0.85:
+					ball.linear_velocity.x = move_toward(ball.linear_velocity.x, 0.0, delta * 6.0)
+					ball.linear_velocity.z = move_toward(ball.linear_velocity.z, 0.0, delta * 6.0)
+				if _ready_to_pickup(retriever, false) and ball.global_position.y < 0.22 and ball.linear_velocity.length() < 0.85:
 					_pickup_position = ball.global_position
 					_pickup_wrist_position = _pickup_position - _hand_ball_offset(retriever, Vector3.DOWN)
 					ball.freeze = true
 					_set_phase("BEND")
 		"BEND":
 			_pickup_wrist_position = _pickup_position - _hand_ball_offset(retriever, Vector3.DOWN)
-			var blend: float = smoothstep(0.0, 0.6, phase_elapsed)
+			var blend: float = smoothstep(0.0, BEND_TIME - 0.05, phase_elapsed)
 			_poses[retriever] = _make_pose(retriever, blend)
 			_wrists[retriever] = _carry_wrist(retriever).lerp(_pickup_wrist_position, blend)
-			if phase_elapsed >= 0.65 and absf(_hand_surface_gap(retriever, _pickup_position)) < 0.012:
+			if phase_elapsed >= BEND_TIME and absf(_hand_surface_gap(retriever, _pickup_position)) < 0.012:
 				pickup_contact_gap = _hand_surface_gap(retriever, _pickup_position)
 				_carry_team = retriever
 				_carry_offset = _pickup_position - _carry_anchor(retriever)
@@ -305,11 +331,11 @@ func _perf_physics_process(delta: float) -> void:
 			elif phase_elapsed > 1.8:
 				_start_offscreen_return()
 		"LIFT":
-			var blend: float = smoothstep(0.0, 0.55, phase_elapsed)
+			var blend: float = smoothstep(0.0, LIFT_TIME - 0.08, phase_elapsed)
 			_poses[retriever] = _make_pose(retriever, 1.0 - blend)
 			_wrists[retriever] = (_pickup_wrist_position).lerp(_carry_wrist(retriever), blend)
-			_carry_direction = _lift_direction(retriever, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / 0.55))
-			if phase_elapsed > 0.65:
+			_carry_direction = _lift_direction(retriever, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / (LIFT_TIME - 0.08)))
+			if phase_elapsed > LIFT_TIME:
 				if retriever == server:
 					_targets[server] = _serve_position(server)
 					_set_phase("CARRY")
@@ -323,47 +349,74 @@ func _perf_physics_process(delta: float) -> void:
 				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(windup, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .15))
 			else:
 				_wrists[retriever] = windup.lerp(finish, load("res://scripts/between_point_arm_path.gd").clock_weight((phase_elapsed - .15) / .4))
-			if phase_elapsed > 0.55 and _at_target(server):
+			if phase_elapsed > 0.55 and _at_target(server) and (_settled_for_catch(server) or phase_elapsed > 3.5):
 				_launch_pass(_game.ball.global_position)
 		"PASS":
 			var ball = _game.ball
-			if retriever >= 0 and retriever != server and phase_elapsed > .4:
+			if retriever >= 0 and retriever != server and not _air_catch and phase_elapsed > .4:
 				_targets[retriever] = _serve_position(retriever)
+			# An air catch is decided while the catcher is still running; the hand
+			# opens once they have stopped and planted, like a pass receiver.
+			if _air_catch and pass_catch_declined and _settled_for_catch(catcher) and phase_elapsed < _planned_catch_time - 0.12:
+				pass_catch_declined = false
+				_phase_entry_wrists[catcher] = _actual_wrist(catcher)
+			var reach_clock: float = phase_elapsed if not _air_catch else maxf(0.0, phase_elapsed - maxf(0.0, _planned_catch_time - 0.6))
 			if not pass_catch_declined:
-				_wrists[server] = Vector3(_phase_entry_wrists[server]).lerp(_catch_position - HAND_BALL_OFFSET, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .35))
-			if retriever >= 0: _wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(_carry_wrist(retriever), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .4))
-			if not pass_catch_declined and observed_bounces > 0 and ball.global_position.distance_to(_catch_position) < 0.8:
-				var shoulder: Vector3 = _players[server].left_arm_node.get_node("UpperArmPivot").global_position
+				_wrists[catcher] = Vector3(_phase_entry_wrists[catcher]).lerp(_catch_position - HAND_BALL_OFFSET, load("res://scripts/between_point_arm_path.gd").clock_weight(reach_clock / .35))
+			if retriever >= 0 and retriever != catcher: _wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(_carry_wrist(retriever), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .4))
+			var catchable: bool = observed_bounces > 0 or _air_catch
+			if not pass_catch_declined and catchable and ball.global_position.distance_to(_catch_position) < 0.8:
+				var shoulder: Vector3 = _players[catcher].left_arm_node.get_node("UpperArmPivot").global_position
 				var next_ball: Dictionary = Flight.advance(ball.global_position, ball.linear_velocity, ball.angular_velocity, delta)
-				var wrist: Vector3 = next_ball.pos - _hand_ball_offset(server, Vector3.UP)
-				if shoulder.distance_to(wrist) <= 0.7: _wrists[server] = _actual_wrist(server).move_toward(wrist, 2.0 * delta)
-				if absf(_hand_surface_gap(server, ball.global_position)) <= 0.006 and ball.global_position.y > 0.25 and _catch_presentation_valid(_players[server]):
-					catch_contact_gap = _hand_surface_gap(server, ball.global_position)
-					catch_after_bounce = true
-					_carry_team = server
-					_carry_offset = ball.global_position - _carry_anchor(server)
+				var wrist: Vector3 = next_ball.pos - _hand_ball_offset(catcher, Vector3.UP)
+				if shoulder.distance_to(wrist) <= 0.7: _wrists[catcher] = _actual_wrist(catcher).move_toward(wrist, 4.0 * delta)
+				# The ball moves several centimetres per tick: test the whole step,
+				# not just this tick's end point, then seat it in the cup.
+				var cup: Vector3 = _hand_ball_position(catcher, Vector3.UP)
+				var swept: Vector3 = ball.global_position
+				if _prev_ball_pos.is_finite(): swept = Geometry3D.get_closest_point_to_segment(cup, _prev_ball_pos, ball.global_position)
+				if absf(_hand_surface_gap(catcher, swept)) <= 0.06 and swept.y > 0.25 and _catch_presentation_valid(_players[catcher]):
+					catch_contact_gap = _hand_surface_gap(catcher, swept)
+					catch_after_bounce = observed_bounces > 0
+					_carry_team = catcher
+					_carry_offset = cup - _carry_anchor(catcher)
 					_grasp_direction = -(_players[_carry_team].left_arm_node.hand_mesh.global_basis * _players[_carry_team].left_arm_node.articulated_hand.palm_contact_basis.z).normalized()
 					_carry_direction = _grasp_direction
 					ball.freeze = true
 					ball.linear_velocity = Vector3.ZERO
+					ball.global_position = cup
 					_set_phase("CATCH")
-			if phase == "PASS" and phase_elapsed > _planned_catch_time + .3 and observed_bounces > 0:
+			_prev_ball_pos = ball.global_position
+			if phase == "PASS" and phase_elapsed > _planned_catch_time + .3 and catchable:
 				# A missed decorative catch is still a real dead ball. Collect its
 				# actual position instead of forcing another throw or awarding possession.
 				missed_physical_catches += 1
 				var on_server_end: bool = ball.global_position.z >= 0.0 if _players[server].court_side == 0 else ball.global_position.z <= 0.0
+				_air_catch = false
+				catcher = server
 				retriever = server if on_server_end else _nearest_retriever(ball.global_position)
-				_targets[retriever] = _pickup_root(ball.global_position, _players[retriever])
-				if missed_physical_catches == 1:
-					missed_collection_plan = _missed_collection_budget(ball, _players[retriever])
-					_elapsed_limit = maxf(_elapsed_limit, elapsed + float(missed_collection_plan.seconds))
-				_set_phase("APPROACH")
+				if retriever < 0 or not _reachable_ball():
+					_start_offscreen_return()
+				else:
+					_targets[retriever] = _pickup_root(ball.global_position, _players[retriever])
+					_run_approach[retriever] = _players[retriever].global_position.distance_to(_targets[retriever]) > RUN_DECISION_DISTANCE
+					if missed_physical_catches == 1:
+						missed_collection_plan = _missed_collection_budget(ball, _players[retriever])
+						_elapsed_limit = maxf(_elapsed_limit, elapsed + float(missed_collection_plan.seconds))
+					_set_phase("APPROACH")
 		"CATCH":
-			_wrists[server] = Vector3(_phase_entry_wrists[server]).lerp(_carry_wrist(server), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .35))
-			_carry_direction = _lift_direction(server, smoothstep(0.0, 0.35, phase_elapsed))
+			_wrists[catcher] = Vector3(_phase_entry_wrists[catcher]).lerp(_carry_wrist(catcher), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .35))
+			_carry_direction = _lift_direction(catcher, smoothstep(0.0, 0.35, phase_elapsed))
 			if phase_elapsed > 0.45:
-				_targets[server] = _serve_position(server)
-				_set_phase("CARRY")
+				if catcher == server:
+					_targets[server] = _serve_position(server)
+					_set_phase("CARRY")
+				else:
+					# Caught by a partner: toss it to the server from here.
+					_air_catch = false
+					retriever = catcher
+					_targets[retriever] = _players[retriever].global_position
+					_set_phase("PASS_PREP")
 		"END_WALK":
 			var route: Dictionary = _end_route.advance(delta)
 			end_change_status = route
@@ -433,9 +486,9 @@ func hand_presentation_for(actor_id: int) -> Dictionary:
 	if not _active: return {}
 	if team == retriever and phase == "BEND":
 		return {"mode": "PICKUP", "normal": Vector3.DOWN, "closure": smoothstep(0.4, 0.65, phase_elapsed), "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
-	if team == server and phase == "PASS" and not pass_catch_declined:
+	if team == catcher and phase == "PASS" and not pass_catch_declined:
 		return {"mode": "CATCH_OPEN", "normal": Vector3.UP, "closure": 0.15, "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
-	if team == retriever and phase == "PASS" and phase_elapsed < 0.2:
+	if team == retriever and phase == "PASS" and not _air_catch and phase_elapsed < 0.2:
 		return {"mode": "PASS_RELEASE", "normal": Vector3.UP, "closure": 0.0, "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
 	if team == _carry_team and phase in ["LIFT", "CARRY", "PASS_PREP", "CATCH", "SET_SERVE", "END_WALK", "END_TURN", "END_BLOCKED"]:
 		var closure: = 1.0
@@ -447,7 +500,7 @@ func hand_presentation_for(actor_id: int) -> Dictionary:
 func declined_pass_recovery_for(actor_id: int) -> bool:
 	# No stale world-frame arm is restored. The normal free-hand path solves
 	# against this frame's moving torso and supported feet until real pickup.
-	return pass_catch_declined and index_for_actor_id(actor_id) == server
+	return pass_catch_declined and index_for_actor_id(actor_id) == catcher
 
 func support_wrist_for_body_fit(actor_id: int) -> Vector3:
 	var team: int = index_for_actor_id(actor_id)
@@ -495,9 +548,46 @@ func _perf_choose_retriever() -> void:
 	if not _initially_visible or not _reachable_ball():
 		_start_offscreen_return()
 		return
+	if _try_air_catch(): return
 	retriever = _nearest_retriever(_game.ball.global_position)
 	_targets[retriever] = _pickup_root(_game.ball.global_position, _players[retriever])
+	_run_approach[retriever] = _players[retriever].global_position.distance_to(_targets[retriever]) > RUN_DECISION_DISTANCE
 	_set_phase("APPROACH")
+
+# Catch the dead ball out of the air when someone can get under it in time:
+# a descending ball at chest height, on that player's side, reachable at a run
+# with time left to stop and plant before it arrives.
+func _try_air_catch() -> bool:
+	var ball = _game.ball
+	if ball.global_position.y < 0.3 and ball.linear_velocity.length() < 1.5: return false
+	var flight: Dictionary = Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity, 2.5, 2, false)
+	for sample in flight.samples:
+		var point: Vector3 = sample.pos
+		var t: float = float(sample.time)
+		if t < 0.35 or point.y < 0.62 or point.y > 1.35 or float(sample.vel.y) > 0.0: continue
+		var team: int = _nearest_retriever(point)
+		if team < 0: continue
+		var player = _players[team]
+		var root: Vector3 = point + player._get_forehand_axis() * 0.26 - player._get_forward_axis() * 0.32
+		root.y = player.ground_y
+		if root.x < player.min_x or root.x > player.max_x or root.z < player.min_z or root.z > player.max_z: continue
+		var run: float = player.global_position.distance_to(root)
+		# Run time at RUN_SPEED plus accel/brake and ~0.6 s to plant feet.
+		if run / RUN_SPEED + minf(run, RUN_SPEED) / MOVE_ACCEL + 0.9 > t: continue
+		retriever = team
+		catcher = team
+		_air_catch = true
+		_catch_position = point
+		_planned_catch_time = t
+		_targets[team] = root
+		_run_approach[team] = run > RUN_DECISION_DISTANCE
+		pass_catch_declined = true # opens once the catcher has planted
+		observed_bounces = 0
+		_prev_ball_pos = Vector3.INF
+		_carry_team = -1
+		_set_phase("PASS")
+		return true
+	return false
 
 func _missed_collection_budget(ball, player) -> Dictionary:
 	var _pt := Time.get_ticks_usec()
@@ -713,13 +803,18 @@ func _perf_launch_pass(origin: Vector3) -> void:
 		return
 	_catch_position = best.pos
 	_planned_catch_time = float(best.time)
-	_targets[server] = _catch_position + receiver._get_forehand_axis() * 0.26 - receiver._get_forward_axis() * 0.32 - Vector3.UP * 0.125
-	_targets[server].y = receiver.ground_y
-	# Decide before requesting a catch pose. A foot that is still travelling
-	# must finish its real support step; a decorative catch may miss instead.
-	# The loose ball and the existing ground-collection route are unchanged.
+	catcher = server
+	_air_catch = false
+	_prev_ball_pos = Vector3.INF
+	# Decide before requesting a catch pose, and before moving the receiver:
+	# a near catch is taken with the arm from where they already stand.
 	var feet = receiver.leg_ik
-	var settled: bool = feet != null and _ready_to_pickup(server) and feet.right_foot_locked and feet.left_foot_locked and feet._active_side < 0 and not feet._run_active and not feet._airborne and feet.locomotion_state == "ready" and feet.locomotion_body_weight == 0.0
+	var settled_now: bool = feet != null and _ready_to_pickup(server)
+	if best_cost > 0.45:
+		settled_now = false
+		_targets[server] = _catch_position + receiver._get_forehand_axis() * 0.26 - receiver._get_forward_axis() * 0.32 - Vector3.UP * 0.125
+		_targets[server].y = receiver.ground_y
+	var settled: bool = settled_now and _settled_for_catch(server)
 	pass_catch_declined = not settled
 	pass_catch_decision = {"declined": pass_catch_declined, "reason": "receiver is not settled at the actual catch target" if pass_catch_declined else "stationary supported catch may be attempted", "actor_id": receiver.get_actor_id(), "root": receiver.global_transform, "target": _targets[server], "velocity": receiver.current_velocity, "active_side": feet._active_side if feet != null else -1, "right_locked": feet.right_foot_locked if feet != null else false, "left_locked": feet.left_foot_locked if feet != null else false}
 	for index in _players.size():
@@ -769,6 +864,8 @@ func _complete(skipped: bool, result: String) -> void :
 func _catch_presentation_valid(player) -> bool:
 	# Only a proven actual hand intersection reaches this edge. Cosmetic
 	# preparation may fail, but it cannot award possession from an invalid rig.
+	# Pixel cards: the certified 3D hand/sleeve surfaces are hidden; skip.
+	if PixelCards.enabled(): return true
 	var identity: int = player.get_actor_id()
 	if not _presentation_admission.has(identity): _presentation_admission[identity] = load("res://scripts/between_pose_admission.gd").new(player)
 	var report: Dictionary = _presentation_admission[identity].displayed_report()
@@ -782,6 +879,7 @@ func prepare_pose_admission(player) -> Dictionary:
 	return _pr
 
 func _perf_prepare_pose_admission(player) -> Dictionary:
+	if PixelCards.enabled(): return {}
 	var identity: int = player.get_actor_id()
 	if not _presentation_admission.has(identity): _presentation_admission[identity] = load("res://scripts/between_pose_admission.gd").new(player)
 	return _presentation_admission[identity].begin(self)
@@ -800,7 +898,7 @@ func _perf_present_arm_path(player, pose) -> void:
 	var index: int = _players.find(player)
 	if index < 0: return
 	_arm_paths[index].apply(self, pose)
-	if phase == "SETTLE":
+	if phase == "SETTLE" and not PixelCards.enabled():
 		var sleeve: Script = load("res://scripts/live_ready_clearance.gd")
 		if not sleeve.clearance_report(player).valid:
 			var transaction = sleeve.Transaction.new(player)
@@ -833,6 +931,7 @@ func _initialize_roster_storage() -> void:
 	_entry_poses.resize(count); _entry_wrists.resize(count)
 	_phase_entry_wrists.resize(count); _carry_heading.resize(count); _carry_heading_tick.resize(count)
 	_entry_side_relaxation.resize(count); _receiver_settle_poses.resize(count)
+	_run_approach.resize(count); _run_approach.fill(false)
 
 func _all_support_ready(include_server: bool = true) -> bool:
 	for index in _players.size():

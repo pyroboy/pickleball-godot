@@ -10,6 +10,7 @@ extends Node
 ## exported build (iPhone). Summarise with: python3 tools/perf_report.py
 
 const SPIKE_MS := 50.0          # ~3 dropped frames at 60 fps
+var _spike_ms: float = SPIKE_MS  # --spike-ms=N overrides (bench: SPIKE_MS=N tools/bench.sh)
 const GRAPH_SAMPLES := 240      # ~4 s of history
 const TOP_SCOPES := 6
 
@@ -47,6 +48,7 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
+		if arg.begins_with("--spike-ms="): _spike_ms = float(arg.trim_prefix("--spike-ms="))
 	_file = FileAccess.open(path, FileAccess.WRITE)
 	if _pose_path != "":
 		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)
@@ -58,7 +60,7 @@ func _ready() -> void:
 	_sec_start = _t0
 	_write({"kind": "meta", "engine": Engine.get_version_info().string, "os": OS.get_name(),
 		"model": OS.get_model_name(), "renderer": RenderingServer.get_current_rendering_method(),
-		"physics_hz": Engine.physics_ticks_per_second, "spike_ms": SPIKE_MS})
+		"physics_hz": Engine.physics_ticks_per_second, "spike_ms": _spike_ms})
 	_build_graph()
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
@@ -85,7 +87,7 @@ func _process(_delta: float) -> void:
 	_history.append(frame_ms)
 	if _history.size() > GRAPH_SAMPLES: _history.remove_at(0)
 
-	if frame_ms >= SPIKE_MS and _frames > 30:
+	if frame_ms >= _spike_ms and _frames > 30:
 		_sec_spikes += 1
 		_write({"kind": "spike", "t": _t(now), "ms": snappedf(frame_ms, 0.1), "state": _state(),
 			"top": _top(costs, func(c): return c[1])})

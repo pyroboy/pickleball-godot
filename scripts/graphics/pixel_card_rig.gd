@@ -100,6 +100,8 @@ func _add(part: String, a: Node3D, b: Node3D, mirror: bool, tex: Texture2D, meta
 	mesh.material_override = mat
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.top_level = true
+	# Placed every rendered frame from interpolated joints (see _process).
+	mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	mesh.set_meta("pixel_card", true)
 	add_child(mesh)
 	_cards.append({"mesh": mesh, "mat": mat, "a": a, "b": b, "prev": prev, "mirror": mirror, "row": int(info.row),
@@ -126,17 +128,19 @@ func _process(delta: float) -> void:
 	var cell: Vector2 = Vector2(meta.cell[0], meta.cell[1])
 	var cols: int = int(meta.cols)
 	var rows: int = int(meta.rows)
-	var cam_pos: = cam.global_position
+	# Physics runs at 30 Hz with interpolation: read the rendered (interpolated)
+	# transforms, not the last physics tick, or the cards step at 30 Hz.
+	var cam_pos: = cam.get_global_transform_interpolated().origin
 	var body_cell: int = _cell_for("body", _player.body_pivot, cam_pos)
 	var torso_node: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var torso_cell: int = _cell_for("torso", torso_node, cam_pos) if torso_node else body_cell
 	var head_node: Node3D = torso_node.get_node_or_null("HeadMesh") if torso_node else null
 	var head_cell: int = _cell_for("head", head_node, cam_pos) if head_node else torso_cell
 	for c in _cards:
-		var a: Vector3 = c.a.global_position
+		var a: Vector3 = c.a.get_global_transform_interpolated().origin
 		var b: Vector3
-		if c.limb: b = c.b.global_position
-		elif c.prev != null: b = a + (a - c.prev.global_position).normalized() * 0.06
+		if c.limb: b = c.b.get_global_transform_interpolated().origin
+		elif c.prev != null: b = a + (a - c.prev.get_global_transform_interpolated().origin).normalized() * 0.06
 		else: b = a
 		var mid: Vector3 = (a + b) * 0.5
 		var z: Vector3 = (cam_pos - mid).normalized()
@@ -150,7 +154,7 @@ func _process(delta: float) -> void:
 			up_dir = -dp.normalized()
 			if c.limb: sy = dp.length() / texel_len
 		else:
-			var up_hint: Vector3 = c.a.global_basis.y if c.facing != "body" else Vector3.UP
+			var up_hint: Vector3 = c.a.get_global_transform_interpolated().basis.y if c.facing != "body" else Vector3.UP
 			up_dir = (up_hint - z * up_hint.dot(z)).normalized()
 		var x: Vector3 = up_dir.cross(z).normalized()
 		var k: int = head_cell if c.facing == "head" else (torso_cell if c.facing == "torso" else body_cell)

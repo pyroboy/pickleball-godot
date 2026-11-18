@@ -54,7 +54,7 @@ const DEFAULTS: Dictionary = {
 	"gameplay.reaction_button": true, 
 	"gameplay.timing_vibration": true, 
 	"gameplay.aim_focus_seconds": 3.0,
-	"gameplay.movement_guide": true,
+	"gameplay.movement_guide": false,
 	"beta_debug.reach_rings": false, 
 	"beta_debug.preparation_blocks": false, 
 }

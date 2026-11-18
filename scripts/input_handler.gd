@@ -70,6 +70,7 @@ func _perf_process(delta: float) -> void:
 		var mobile = _game.mobile_controls
 		var separate_aim: bool = mobile != null and mobile.uses_touch_aim()
 		var direction: Vector2 = mobile.aim_direction() if separate_aim else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+		if _game.view_flipped(): direction = -direction   # screen-relative aim at the far end
 		_game.aim_controller.update(control_delta, Input.is_action_pressed("ui_accept"), direction, separate_aim)
 	if _sound_panel and _sound_panel.visible:
 		_deferred_rally_hold = false

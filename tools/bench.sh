@@ -16,7 +16,7 @@ if [ -z "${GODOT:-}" ]; then
 fi
 "$GODOT" --headless --path . --fixed-fps 60 --quit-after $((SECS * 60)) res://scenes/game.tscn -- \
   $([ "${DESKTOP:-0}" = 1 ] || echo --mobile-runtime) --autoplay --doubles --seed=$SEED \
-  --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" \
+  --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --spike-ms=${SPIKE_MS:-50} --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" \
   > "logs/bench_$NAME.log" 2>&1
 echo "script errors: $(grep -cE 'SCRIPT ERROR|Parse Error' "logs/bench_$NAME.log")"
 grep -hE 'SCRIPT ERROR|Parse Error' "logs/bench_$NAME.log" | sort | uniq -c | head -5

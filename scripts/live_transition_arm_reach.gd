@@ -21,7 +21,10 @@ const SEARCH_BISECTIONS := 5
 # (100+ ms frames). If nothing fits within the cap the body keeps the base offset.
 const MAX_BUDGET_CHECKS := 8
 # Between points (cut-scene) each check also tests the carried cup (~0.5 ms); cap lower.
-const MAX_BUDGET_CHECKS_BETWEEN := 4
+const MAX_BUDGET_CHECKS_BETWEEN := 2
+# ...and no bisection refinement there: each between-point check also runs the
+# carried-cup lattice (up to ~2.6k elbow tests when it fails). iPhone 15 Pro log:
+# 20 checks = 55 ms while the server steps into position.
 
 static func enabled(player, pose) -> bool:
 	if pose == null: return false
@@ -126,7 +129,7 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 					checks += 1
 					if not _targets_fit(player, pose, trial, centers, radii, not release.is_empty()) or not _wrist_budgets_fit(player, pose, paddle, trial): continue
 					var low := float(index - 1) * SEARCH_STEP_M; var high := float(index) * SEARCH_STEP_M
-					for unused in range(SEARCH_BISECTIONS):
+					for unused in range(0 if between != null else SEARCH_BISECTIONS):
 						var middle := (low + high) * .5
 						var candidate: Vector3 = offset + direction * middle
 						if not release.is_empty(): report.candidate_checks += 1

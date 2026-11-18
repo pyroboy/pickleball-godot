@@ -81,7 +81,13 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 		phase = "adjust" if charged_phase == "adjust" else "travel"
 		var turn_distance := WALL_TURN_DISTANCE if context == "wall" else LATERAL_TURN_DISTANCE
 		var sustained := route_time >= TURN_ROUTE_TIME
-		if context == "pickup":
+		if context == "pickup" and backward > backward_limit:
+			# Walking back behind the baseline between points: backpedal facing
+			# the net instead of turning the back to it.
+			next = "backward_strafe" if lateral > 0.35 else "backpedal"
+			reason = "dead-ball retreat while facing the net"
+			gait = "shuffle" if speed < 1.65 else "run"
+		elif context == "pickup":
 			next = "pickup_travel"; reason = "dead-ball approach or carry"
 			desired_heading = court.signed_angle_to(travel, Vector3.UP)
 			gait = "walk" if speed < 1.65 else "run"

@@ -7,6 +7,11 @@ static var exact_cache={}
 static var cache_hits=0
 static var cache_misses=0
 const CACHE_LIMIT=512
+const FLEX_LIMIT:float=Budget.Anatomy.FLEXION_BUDGET_DEG
+const EXT_LIMIT:float=Budget.Anatomy.EXTENSION_BUDGET_DEG
+const RADIAL_LIMIT:float=Budget.Anatomy.RADIAL_BUDGET_DEG
+const ULNAR_LIMIT:float=Budget.Anatomy.ULNAR_BUDGET_DEG
+const AXIAL_LIMIT:float=Budget.Anatomy.AXIAL_BUDGET_DEG
 const CACHE_LIFETIME_TICKS=60
 static var cache_epoch=-1
 static var cache_clears=0
@@ -35,19 +40,19 @@ static func cached_core(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,
 static func core(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:float,fore:float,left:bool,maximum:float)->bool:
  if not shoulder.is_finite() or not wrist.is_finite() or not elbow.is_finite() or not hand.is_finite() or not is_finite(upper) or not is_finite(fore) or not is_finite(maximum) or maximum>1.:
   return fallback(shoulder,wrist,elbow,hand,upper,fore,left,maximum)
- var span=wrist-shoulder;var distance=span.length()
+ var span:Vector3=wrist-shoulder;var distance:float=span.length()
  if distance<.00001 or distance>=upper+fore or distance<=absf(upper-fore):return false
- var axis=span/distance;var along=(upper*upper-fore*fore+distance*distance)/(2.*distance);var radius=sqrt(maxf(0.,upper*upper-along*along));var center=shoulder+axis*along
- var radial=elbow-center;radial-=axis*radial.dot(axis)
+ var axis:Vector3=span/distance;var along:float=(upper*upper-fore*fore+distance*distance)/(2.*distance);var radius:float=sqrt(maxf(0.,upper*upper-along*along));var center:Vector3=shoulder+axis*along
+ var radial:Vector3=elbow-center;radial-=axis*radial.dot(axis)
  if radial.length_squared()<.00000001:radial=Vector3.UP-axis*axis.y
  if radial.length_squared()<.00000001:radial=Vector3.RIGHT-axis*axis.x
  radial=radial.normalized()
- var hand_orthonormal=hand.orthonormalized()
- var initial=cost(shoulder,wrist,center+radial*radius,hand_orthonormal,left)
+ var hand_orthonormal:Basis=hand.orthonormalized()
+ var initial:float=cost(shoulder,wrist,center+radial*radius,hand_orthonormal,left)
  if not is_finite(initial):return fallback(shoulder,wrist,elbow,hand,upper,fore,left,maximum)
  # The original solve does not search a different plane if this one is <=1.
  if initial<=1.:return not initial>maximum
- var reference=hand.y-axis*hand.y.dot(axis)
+ var reference:Vector3=hand.y-axis*hand.y.dot(axis)
  if reference.length_squared()<.00000001:reference=hand.z-axis*hand.z.dot(axis)
  reference=reference.normalized()
  if Screen.enabled and Screen.rejects(shoulder,wrist,hand,hand_orthonormal,axis,center,distance,along,radius,reference,upper,fore,left,maximum,initial):return false
@@ -55,8 +60,8 @@ static func core(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:f
  # It only answers "is some elbow plane within budget"; budgets are wide, so a
  # 10 deg lattice finds the same answer in practice at half the cost.
  for index in 36:
-  var angle=float(index)*Budget.STEP*2.0;var candidate=center+reference.rotated(axis,angle)*radius
-  var candidate_cost=cost(shoulder,wrist,candidate,hand_orthonormal,left)
+  var angle:float=float(index)*Budget.STEP*2.0;var candidate:Vector3=center+reference.rotated(axis,angle)*radius
+  var candidate_cost:float=cost(shoulder,wrist,candidate,hand_orthonormal,left)
   if not is_finite(candidate_cost):return fallback(shoulder,wrist,elbow,hand,upper,fore,left,maximum)
   if candidate_cost<=maximum:return true
  return false
@@ -68,12 +73,25 @@ static func fallback(shoulder,wrist,elbow,hand,upper,fore,left,maximum)->bool:
 ## constructing fields that this Boolean preflight never reads. Hand normalization
 ## is identical for every lattice sample and is computed once by the caller.
 static func cost(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand_orthonormal:Basis,left:bool)->float:
- var Anatomy=Budget.Anatomy
- var forearm=Anatomy.forearm_reference(shoulder,elbow,wrist,Vector3.UP,left)
- var relative=forearm.orthonormalized().inverse()*hand_orthonormal
- var flexion=asin(clampf(relative.z.x,-1.,1.));var deviation=atan2(-relative.y.x,relative.x.x);var axial=atan2(-relative.z.y,relative.z.z)
- var sign_side=-1. if left else 1.;var flex_deg=rad_to_deg(flexion);var dev_deg=rad_to_deg(deviation)*sign_side;var axial_deg=rad_to_deg(axial)*sign_side
- var flex_limit=Anatomy.FLEXION_BUDGET_DEG if flex_deg>=0 else Anatomy.EXTENSION_BUDGET_DEG
- var dev_limit=Anatomy.RADIAL_BUDGET_DEG if dev_deg>=0 else Anatomy.ULNAR_BUDGET_DEG
- var ellipse=pow(flex_deg/flex_limit,2.)+pow(dev_deg/dev_limit,2.)
- return maxf(ellipse/.999,absf(axial_deg)/(Anatomy.AXIAL_BUDGET_DEG-.05))
+ # Perf: Anatomy.forearm_reference + frame inlined with static types (typed
+ # GDScript ops). Same operations in the same order, so results are bit-equal.
+ var distal:Vector3=(wrist-elbow).normalized()
+ var upper:Vector3=(elbow-shoulder).normalized()
+ var thumbward:Vector3=-upper+distal*upper.dot(distal)
+ if thumbward.length_squared()<1e-05:thumbward=Vector3.UP-distal*Vector3.UP.dot(distal)
+ var radial_sign:float=-1.0 if left else 1.0
+ var hint:Vector3=thumbward*radial_sign
+ var x:Vector3=distal.normalized()
+ if x.length_squared()<0.5:x=Vector3.RIGHT
+ var y:Vector3=hint-x*hint.dot(x)
+ if y.length_squared()<1e-05:y=Vector3.UP-x*Vector3.UP.dot(x)
+ if y.length_squared()<1e-05:y=Vector3.FORWARD-x*Vector3.FORWARD.dot(x)
+ y=y.normalized()
+ var forearm:Basis=Basis(x,y,x.cross(y).normalized()).orthonormalized()
+ var relative:Basis=forearm.orthonormalized().inverse()*hand_orthonormal
+ var flexion:float=asin(clampf(relative.z.x,-1.,1.));var deviation:float=atan2(-relative.y.x,relative.x.x);var axial:float=atan2(-relative.z.y,relative.z.z)
+ var sign_side:float=-1. if left else 1.;var flex_deg:float=rad_to_deg(flexion);var dev_deg:float=rad_to_deg(deviation)*sign_side;var axial_deg:float=rad_to_deg(axial)*sign_side
+ var flex_limit:float=FLEX_LIMIT if flex_deg>=0 else EXT_LIMIT
+ var dev_limit:float=RADIAL_LIMIT if dev_deg>=0 else ULNAR_LIMIT
+ var ellipse:float=pow(flex_deg/flex_limit,2.)+pow(dev_deg/dev_limit,2.)
+ return maxf(ellipse/.999,absf(axial_deg)/(AXIAL_LIMIT-.05))
