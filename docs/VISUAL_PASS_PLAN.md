@@ -1,5 +1,37 @@
 # Visual pass: pixel look, camera, poses, scoring, effects, HUD (performance first)
 
+## Status (2026-11-18)
+Branch `visual-pass`. **Step 0 done**; next is **Step 1 (camera)**. The phone has the
+f5c5149 build (installed from a clean worktree, without uncommitted pose edits).
+
+Step 0 results:
+- Phone baseline: `logs/phone/baseline_perf.jsonl` (32 min, main @ 08667b1): median and
+  worst-5% 60 fps, 56 freezes >50 ms (31 in-play shot planner `human.update`, 19 between
+  points). After the gates below (`logs/phone/step0_perf.jsonl`, 103 s): 0 between-point
+  freezes; serve/in-play freezes need a longer session to judge.
+- Pixel cards skip invisible 3D hand work (user OK'd small arm/paddle drift, rallies match
+  over 3 seeds): cup-pose search (eb78902), sleeve clearance + carried-cup continuity +
+  receiver exit sleeve search (ff24266). Bench worst between-point tick 28.6 -> ~8 ms.
+- Fixed: startup `_hands` null (6624c04); rally freeze "Contact simulation paused" on an
+  over-budget wrist under pixel cards (b7bff84, 1 in 66 runs before).
+- Faster between points (f47d091): walk 2.4 m/s, run from 1.2 m, carry 3.4 m/s, AI serve
+  wait 0.8 s (Step 6 item, done early). Between points 8.2 -> ~7.1 s. Pass toss unchanged
+  (a flatter toss caused missed catches).
+- Skipped: per-frame UI label rewrites (all UI ~0.25 ms/frame on phone, not worth it).
+- Debug data (all text, for Claude): `FRAME_LOG=1 tools/bench.sh` frame log with drawn
+  positions + events; `tools/court_trace.py` (top-down CSV, position checks, event
+  timeline); `tools/motion_report.py`; always-on jitter counts + burst snapshots in
+  `perf.jsonl`, shown by `tools/perf_report.py` (f5c5149).
+
+Open items found in Step 0:
+- In-play freezes in the human shot planner (`human.update` / `planner.*`, ~70-100 ms).
+- Partners walk through each other between points (gap down to 0.23 m).
+- Change of ends walk takes ~13 s (Step 8 replaces it with a 3 s banner + fade).
+- Camera stalls on ~22% of frames outside rallies (30 Hz camera) -> Step 1.
+- The serve path still blocks on "infeasible_actual_arm" (never seen firing).
+- Another session ("Game poses improvement and audit") edits poses in this same checkout
+  and commits to `visual-pass` (6eab862, 1ef1df5).
+
 ## Context
 The PDF "Pickleball 2.5D proposal" (~/Downloads) defines the 2.5D pixel look. Pixel cards,
 perf tooling and 30 Hz physics + interpolation are done (main @ 08667b1). The user wants the
