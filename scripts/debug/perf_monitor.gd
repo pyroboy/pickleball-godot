@@ -149,6 +149,12 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 		var drawn := {}
 		var cam := get_viewport().get_camera_3d()
 		if cam != null: drawn["cam"] = _v(cam.get_global_transform_interpolated().origin)
+		# Where two fixed court points land on screen (centre, far corner): shows
+		# any camera move, including turns, zoom and lens offsets.
+		if cam != null:
+			var px_a: Vector2 = cam.unproject_position(Vector3.ZERO)
+			var px_b: Vector2 = cam.unproject_position(Vector3(3.05, 0.0, -6.7))
+			drawn["cam_px"] = [snappedf(px_a.x, 0.1), snappedf(px_a.y, 0.1), snappedf(px_b.x, 0.1), snappedf(px_b.y, 0.1)]
 		var ball = scene.get("ball")
 		if ball is Node3D: drawn["ball"] = _v(ball.get_global_transform_interpolated().origin)
 		for p in scene.get_players():

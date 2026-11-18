@@ -9,8 +9,8 @@ class_name CameraShake
 
 const TRAUMA_POWER: float = 2.0
 const DECAY: float = 1.8
-const MAX_OFFSET_H: float = 0.35
-const MAX_OFFSET_V: float = 0.25
+const MAX_OFFSET_H: float = 0.9   # metres at the lens; the rally camera is ~19 m back
+const MAX_OFFSET_V: float = 0.65
 const MAX_ROLL: float = 0.0   # no roll: it reads as tilt on a pixel image
 const NOISE_SPEED: float = 22.0
 

@@ -26,7 +26,18 @@ var portrait_anchor_z: = 6.8
 var portrait_anchor_height: = 1.0
 var portrait_max_baseline_view_angle: = 50.0
 var _portrait_fit_anchor: = Vector3.INF
-var portrait_adaptive_framing: = true
+# Off: the rally view is one fixed framing. The adaptive fit re-zoomed and
+# re-centred on the players and ball all the time, which read as a restless camera.
+var portrait_adaptive_framing: = false
+# The between-point close-up flew across the net to the ball pickup. Off: the
+# camera stays in its overview on the near side of the court.
+var between_point_cinematic_enabled: = false
+# Slow motion (aim hold): ease in toward the ball with a slightly wider lens.
+const SLOWMO_PUSH: = 0.26          # share of the way to the ball at full effect
+const SLOWMO_FOV_ADD: = 5.0        # degrees wider while pushed in (perspective stretch)
+const SLOWMO_FULL_SCALE: = 0.55    # time scale at which the effect is complete
+var _slowmo_focus: = 0.0
+var _slowmo_point: = Vector3.ZERO
 var _portrait_action_zoom: = 1.0
 # Fixed zoom steps (measured from the fitted zoom: tight net play ~0.70,
 # serve / between points ~0.87, wide rallies ~0.95). The camera eases between
@@ -156,7 +167,7 @@ func _perf_process(delta: float) -> void:
 	if _game_root and _game_root.practice_launcher and _game_root.practice_launcher.is_wall() and gameplay_camera.mode == GameplayCamera.CENTER: return
 	if gameplay_camera.mode == GameplayCamera.POV:
 		gameplay_camera._update_pov(camera, _player_left, _ball, delta)
-	else:
+	elif gameplay_camera.active_kind != "center":
 		gameplay_camera._keep_ball_visible(camera, _ball)
 
 func _on_viewport_resized() -> void:
@@ -428,6 +439,7 @@ func _update_centered(delta: float) -> void:
 	if MobileLayout.is_portrait(viewport_size):
 		_update_portrait_camera(viewport_size)
 		if portrait_adaptive_framing: _apply_portrait_action_framing(delta)
+		_apply_slowmo_focus(delta)
 		return
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera.keep_aspect = Camera3D.KEEP_HEIGHT
@@ -456,6 +468,29 @@ func _update_centered(delta: float) -> void:
 		target_x = player_x + EDGE_THRESHOLD
 	target_x = clamp(target_x, - MAX_CAMERA_OFFSET, MAX_CAMERA_OFFSET)
 	camera.position.x = lerp(camera_x, target_x, 4.0 * delta)
+	_apply_slowmo_focus(delta)
+
+# The only camera move during play besides shake: while time is slowed, push in
+# toward the ball (it stays where it is on screen and grows) and widen the lens
+# a little. Eased in real time, so it is as smooth at 0.1x as at 1x.
+func _apply_slowmo_focus(delta: float) -> void:
+	var time_scale: Node = get_node_or_null("/root/TimeScale")
+	var slow: float = time_scale.slowmo_scale() if time_scale != null and time_scale.has_method("slowmo_scale") else 1.0
+	var wanted: float = clampf((1.0 - slow) / (1.0 - SLOWMO_FULL_SCALE), 0.0, 1.0)
+	var real_delta: float = clampf(delta / maxf(Engine.time_scale, 0.001), 0.0, 0.1)
+	var subject: Node3D = _ball if is_instance_valid(_ball) and _ball.is_in_play else _player_left
+	if not is_instance_valid(subject): return
+	var point: Vector3 = _drawn(subject)
+	point = Vector3(clampf(point.x, -3.5, 3.5), clampf(point.y, 0.4, 2.2), clampf(point.z, -7.0, 7.0))
+	if _slowmo_focus <= 0.001: _slowmo_point = point
+	else: _slowmo_point = _slowmo_point.lerp(point, 1.0 - exp(-5.0 * real_delta))
+	_slowmo_focus = lerpf(_slowmo_focus, wanted, 1.0 - exp(-(5.0 if wanted > _slowmo_focus else 3.0) * real_delta))
+	if _slowmo_focus <= 0.001:
+		_slowmo_focus = 0.0
+		return
+	var amount: float = smoothstep(0.0, 1.0, _slowmo_focus)
+	camera.global_position += (_slowmo_point - camera.global_position) * SLOWMO_PUSH * amount
+	camera.fov += SLOWMO_FOV_ADD * amount
 
 func _update_third_person(delta: float) -> void :
 	var target_player: CharacterBody3D = _player_left if (orbit_mode == 1 or orbit_mode == 3) else _player_right
@@ -613,6 +648,7 @@ func _portrait_projected_bounds() -> Rect2:
 
 
 func begin_between_point_cinematic(focus_provider: Callable = Callable(), duration: float = 4.0) -> bool:
+	if not between_point_cinematic_enabled: return false
 	if camera == null or _between_point_camera.active or _cinematic_blocked(): return false
 	if _game_root and int(_game_root.get("game_state")) != 3: return false
 	return _between_point_camera.begin(camera, focus_provider, duration)

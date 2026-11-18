@@ -93,8 +93,9 @@ func update(rig, delta: float) -> bool:
 	camera.global_transform = _transition_from.interpolate_with(desired, blend) if blend < 1.0 else desired
 	camera.fov = lerpf(_transition_fov, desired_fov, blend)
 	camera.v_offset = lerpf(_transition_offset, desired_offset, blend)
-	# Framing corrections are immediate, including during the serve return.
-	_keep_ball_visible(camera, rig._ball)
+	# The centre view is a fixed framing: it never swings round to chase the
+	# ball. The behind-the-player view still keeps the ball in frame.
+	if kind != "center": _keep_ball_visible(camera, rig._ball)
 	return true
 
 func _update_third(camera: Camera3D, player: Node3D, ball: Node3D, side: float) -> void:

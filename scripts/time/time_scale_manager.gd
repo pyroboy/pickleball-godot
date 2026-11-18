@@ -106,6 +106,12 @@ func set_test_fast_forward(scale: float) -> void :
 	_test_fast_forward = clampf(scale, 0.0, 20.0)
 	_apply()
 
+# Lowest requested slow-motion scale (1.0 = none). Hitstop is not slow motion.
+func slowmo_scale() -> float:
+	var lowest: float = 1.0
+	for v in _slowmo_sources.values(): lowest = minf(lowest, float(v))
+	return lowest
+
 func is_slowmo_active() -> bool:
 	return not _slowmo_sources.is_empty()
 
