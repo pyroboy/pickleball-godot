@@ -335,6 +335,8 @@ func update_paddle_tracking(force: bool = false) -> void :
     elif _paddle_head_marker:
         _paddle_head_marker.visible = false
 
+var full_solve_stamp: Array = []   # [physics tick, def, paddle transform] of the last full solve
+
 func force_posture_update(def, solve_ik_now: bool = true) -> void :
     if not _player or not _player._ensure_paddle_ready():
         return
@@ -376,6 +378,8 @@ func force_posture_update(def, solve_ik_now: bool = true) -> void :
             if support_delta > 0.0: feet.update_leg_ik(support_delta, def)
             else: feet._solve_legs(0.0, def)
     if _player.arm_ik: _player.arm_ik.update_arm_ik(0.0, def)
+    # Perf: lets refresh_contact_support skip re-solving the same pose this tick.
+    if _player.paddle_node: full_solve_stamp = [Engine.get_physics_frames(), def, _player.paddle_node.global_transform]
 
 
 

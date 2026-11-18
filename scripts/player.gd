@@ -621,6 +621,14 @@ func refresh_contact_support(owned_pose: PostureDefinition, physics_presentation
 	if _support_last_refresh_tick == tick: return false
 	_support_last_refresh_tick = tick
 	var raw: Transform3D = paddle_node.global_transform
+	# Perf: the owner already fully solved this exact pose this tick and nothing has
+	# moved the paddle since (e.g. no reach clamp) -> re-solving would repeat it.
+	var stamp: Array = posture.full_solve_stamp
+	if stamp.size() == 3 and stamp[0] == tick and stamp[1] == owned_pose and (stamp[2] as Transform3D).is_equal_approx(raw):
+		PerfMonitor.record("rig.refresh_skipped", 0)
+		_cache_paddle_rest_transform()
+		_nvz_state.update(self)
+		return true
 	var lerp_pos: Vector3 = posture._posture_lerp_pos
 	var lerp_rot: Vector3 = posture._posture_lerp_rot
 	var lerp_basis: Basis = posture._posture_lerp_basis
