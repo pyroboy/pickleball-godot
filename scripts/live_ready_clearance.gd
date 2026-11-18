@@ -18,6 +18,7 @@ const STEP := 0.005
 # geometry and sweeping both elbows at 5 deg with triangle-level collision tests (up to
 # ~130 ms in one frame at point end). Now 1 cm shifts, 10 deg elbow sweep, max 12 tries.
 const SEARCH_STEP := 0.01
+const READY_RECHECK_TICKS := 6
 const SEARCH_MAX_TRIALS := 12
 const ELBOW_STEP_DEG := 10.0   # wide sweeps only; short precise calls (attempts <= 3) keep 5 deg
 static var _bvh_topologies: Dictionary = {}
@@ -473,10 +474,11 @@ static func _perf_apply_presented_ready(player, pose) -> Dictionary:
 	if not _presented_ready(player, pose): report["reason"] = "actual presentation is not supported seated READY"; return report
 	report.eligible = true
 	# Perf: the READY pose is pre-baked to clear the torso (data/postures/20_ready.tres
-	# elbow poles), so once a tick has confirmed clearance, skip re-checking it on the
-	# other arm solves in the same tick.
-	if int(player.body_pivot.get_meta("_ready_clear_tick", -1)) == Engine.get_physics_frames():
-		report.feasible = true; report["reason"] = "clear this tick"; return report
+	# elbow poles). Once clearance is confirmed, re-check at ~10 Hz instead of on every
+	# arm solve (receivers stand in READY through every serve).
+	var last_clear: int = int(player.body_pivot.get_meta("_ready_clear_tick", -1000000))
+	if Engine.get_physics_frames() - last_clear < READY_RECHECK_TICKS:
+		report.feasible = true; report["reason"] = "clear recently"; return report
 	var existing: Vector3 = player.body_pivot.get_meta("live_transition_arm_reach", {}).get("world_offset", Vector3.ZERO)
 	var canonical_body: Transform3D = player.body_pivot.global_transform.translated(-existing)
 	var previous: Dictionary = player.body_pivot.get_meta("live_ready_clearance", {})

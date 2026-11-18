@@ -263,10 +263,28 @@ func _ensure_all_arms() -> void:
 	for p in _players():
 		if "posture" in p and p.posture != null: p.posture.ensure_arm_pose()
 
+const CONTACT_CAPTURE_RADIUS_M := 3.0
+
+## This tick's snapshot of an actor, capturing it now if it was skipped as out of reach.
+func _current_snapshot(actor) -> Dictionary:
+	var id: int = ActorIdentity.actor_id(actor)
+	if not _frame_current.has(id):
+		var snapshot: Dictionary = Surface.snapshot(actor, true)
+		snapshot["endpoint_anatomy"] = ArmBudget.displayed_report(actor)
+		_frame_current[id] = snapshot
+	return _frame_current[id]
+
 func _perf_capture_current() -> void:
 	_ensure_all_arms()
 	_frame_current.clear()
+	# Perf: in a live rally, skip players the ball cannot reach this tick (ball moves
+	# ~0.33 m/tick; arm + paddle reach ~1.5 m). A skipped player has no previous
+	# snapshot, so when they come in range their sweep starts fresh (previous falls
+	# back to current). Serves and hit validation still capture everyone.
+	var ball = game.ball if game != null else null
+	var cull: bool = ball != null and ball.is_in_play and game.game_state == game.GameState.PLAYING
 	for player in _players():
+		if cull and player.global_position.distance_to(ball.global_position) > CONTACT_CAPTURE_RADIUS_M: continue
 		var snapshot: Dictionary = Surface.snapshot(player, true)
 		snapshot["endpoint_anatomy"] = ArmBudget.displayed_report(player)
 		_frame_current[ActorIdentity.actor_id(player)] = snapshot
@@ -285,6 +303,7 @@ func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, inc
 	for player in _players():
 		if _query_work >= MAX_FRAME_TRIANGLE_QUERIES:
 			return {"hit": false, "blocked": true, "ambiguous": true, "fraction": start, "reason": "frame_contact_budget"}
+		if not _frame_current.has(ActorIdentity.actor_id(player)): continue   # out of ball reach this tick
 		var current: Dictionary = _frame_current[ActorIdentity.actor_id(player)]
 		var previous: Dictionary = _snapshots.get(ActorIdentity.actor_id(player), current) if _flight == incoming_flight else current
 		var departing: int = int(_last_contact.get("mesh_id", -1)) if _evidence_actor(_last_contact) == ActorIdentity.actor_id(player) else -1
@@ -1032,7 +1051,7 @@ func _seal_contact_intents(pending: Dictionary, seconds: float) -> bool:
 	if not _intents.begin(_intent_interval, roster): return false
 	for actor in _players():
 		var id: int = ActorIdentity.actor_id(actor)
-		var version: PackedByteArray = _snapshot_version(_frame_current[id])
+		var version: PackedByteArray = _snapshot_version(_current_snapshot(actor))
 		if not _intents.publish_pose(id, actor.get_instance_id(), _intent_interval, version): return false
 		var offer: Dictionary = _published_intents.get(id, {})
 		if offer.is_empty() or int(offer.frame) != Engine.get_physics_frames() or int(offer.flight) != game.ball.flight_id or int(offer.epoch) != _interval_reset_epoch or int(offer.instance) != actor.get_instance_id() or int(offer.team_id) != ActorIdentity.team_id(actor) or int(offer.court_side) != ActorIdentity.court_side(actor): continue
@@ -1145,7 +1164,7 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	if entry.is_empty(): return {}
 	var controller = _controller_for_intent(actor, str(entry.intent.get("kind", "")))
 	if controller == null or not _event_permission_valid(actor, entry, event_permission): return {}
-	var previous: Dictionary = _snapshots.get(id, _frame_current[id])
+	var previous: Dictionary = _snapshots.get(id, _current_snapshot(actor))
 	if not previous.get("endpoint_anatomy", {}).get("valid", false) or not _frame_current[id].get("endpoint_anatomy", {}).get("valid", false):
 		last_evidence["intended_decline"] = "uncertified_published_endpoint_anatomy"
 		return {}

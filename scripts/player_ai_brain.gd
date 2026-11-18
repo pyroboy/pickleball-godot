@@ -267,14 +267,24 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 		predicted_landing = _predict_first_bounce_position(ball)
 		# Reconsider foot travel at a human cadence; contact support may still track
 		# continuously inside the physically reachable paddle envelope.
-		if _movement_plan.is_empty() or _observation_time >= _movement_plan_due:
+		# Perf: an intercept solve can cost ~25 ms (select_extended fallback). After a
+		# hit every AI re-plans on the same tick, stacking into one long frame, so at
+		# most one AI re-plans per physics tick; the others keep their plan (or hold
+		# position) for a tick or two, like a slightly longer reaction.
+		var tick: int = Engine.get_physics_frames()
+		if (_movement_plan.is_empty() or _observation_time >= _movement_plan_due) and _intercept_slot_tick != tick:
+			_intercept_slot_tick = tick
 			_movement_plan = _get_ai_intercept_solution(predicted_landing)
 			_movement_plan_due = _observation_time + Movement.REPLAN_SECONDS[clampi(ai_difficulty, 0, 2)]
 			_movement_plan["observed_at"] = _observation_time
-		intercept_solution = _movement_plan.duplicate()
+		if _movement_plan.is_empty():
+			intercept_solution = {"target": _player.global_position, "posture": PP_READY, "contact": predicted_landing,
+				"time": -1.0, "reachable": false, "observed_at": _observation_time, "deferred": true}
+		else:
+			intercept_solution = _movement_plan.duplicate()
 		if float(intercept_solution.time) > 0.0:
 			intercept_solution.time = maxf(0.0, float(intercept_solution.time) - (_observation_time - float(intercept_solution.observed_at)))
-		_retire_uncommitted_unreachable_charge(ball, intercept_solution)
+		if not intercept_solution.get("deferred", false): _retire_uncommitted_unreachable_charge(ball, intercept_solution)
 	var coordination = _team_coordination()
 	if coordination != null:
 		var decision: Dictionary = coordination.advise(self, intercept_solution, delta)
@@ -370,7 +380,15 @@ func _get_posture_for_height(rel_height: float) -> Array[int]:
 	return candidates
 
 
+static var _intercept_slot_tick: int = -1   # physics tick of the last AI intercept solve (any AI)
+
 func _get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_get_ai_intercept_solution(predicted_ball_pos)
+	PerfMonitor.record("ai.get_ai_intercept_solution", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 	var ball: RigidBody3D = _player._get_ball_ref()
 	var best_target: Vector3 = _player.global_position
 	var best_score: float = INF
@@ -549,7 +567,12 @@ func _get_latency_frames() -> int:
 	var seconds: float = _execution_reaction_latency if _execution_commit_active and _execution_commit_flight == _observed_flight_id else _selected_reaction_seconds()
 	return roundi(seconds * Engine.physics_ticks_per_second)
 
-func _sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void :
+func _sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_sample_ball_history(ball, delta)
+	PerfMonitor.record("ai.sample_ball_history", Time.get_ticks_usec() - _pt)
+
+func _perf_sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
 	if ball == null or not is_instance_valid(ball):
 		return
 	var flight_id: int = ball.flight_id if ball is Ball else 0
@@ -642,6 +665,12 @@ func _observed_contact_bounces() -> int:
 	return base + advanced
 
 func _get_predicted_flight(ball: RigidBody3D) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_get_predicted_flight(ball)
+	PerfMonitor.record("ai.get_predicted_flight", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_get_predicted_flight(ball: RigidBody3D) -> Dictionary:
 	if ball == null:
 		return {}
 	var frame: int = Engine.get_physics_frames()
@@ -652,6 +681,12 @@ func _get_predicted_flight(ball: RigidBody3D) -> Dictionary:
 	return _predicted_flight
 
 func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_predict_first_bounce_position(ball)
+	PerfMonitor.record("ai.predict_first_bounce_position", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	var flight: Dictionary = _get_predicted_flight(ball)
 	var bounce: Vector3 = flight.get("first_bounce", Vector3.ZERO)
 	if bounce != Vector3.ZERO:
@@ -660,7 +695,12 @@ func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	return samples.back()["pos"] if not samples.is_empty() else ball.global_position
 
 
-func _commit_ai_target_position(new_target: Vector3) -> void :
+func _commit_ai_target_position(new_target: Vector3) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_commit_ai_target_position(new_target)
+	PerfMonitor.record("ai.commit_ai_target_position", Time.get_ticks_usec() - _pt)
+
+func _perf_commit_ai_target_position(new_target: Vector3) -> void:
 	var recommit_distance: float = AI_TARGET_POST_BOUNCE_RECOMMIT_DISTANCE
 	if ai_committed_target_position == Vector3.ZERO or ai_committed_target_position.distance_to(new_target) >= recommit_distance:
 		ai_committed_target_position = new_target
@@ -1439,6 +1479,11 @@ func _compute_ai_shot_velocity(ball_pos: Vector3, charge: float, difficulty: int
 
 
 func _exchange_practice():
+	var _pt := Time.get_ticks_usec()
+	_perf_exchange_practice()
+	PerfMonitor.record("ai.exchange_practice", Time.get_ticks_usec() - _pt)
+
+func _perf_exchange_practice():
 	if _game_node and "practice_launcher" in _game_node and _game_node.practice_launcher and _game_node.practice_launcher.is_exchange():
 		return _game_node.practice_launcher
 	return null
@@ -1468,7 +1513,12 @@ func choose_kitchen_tactic(ball_pos: Vector3) -> String:
 	last_kitchen_tactic = preload("res://scripts/ai_kitchen_tactics.gd").choose(context, _tactic_rng.randf())
 	return last_kitchen_tactic
 
-func _update_foot_legality() -> void :
+func _update_foot_legality() -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_update_foot_legality()
+	PerfMonitor.record("ai.update_foot_legality", Time.get_ticks_usec() - _pt)
+
+func _perf_update_foot_legality() -> void:
 	_player.can_volley_from_feet()
 
 func _feet_established_outside_kitchen() -> bool:
@@ -1718,6 +1768,12 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 	return {"accepted": true}
 
 func _retire_uncommitted_unreachable_charge(ball, ordinary_offer: Dictionary) -> bool:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_retire_uncommitted_unreachable_charge(ball, ordinary_offer)
+	PerfMonitor.record("ai.retire_uncommitted_unreachable_charge", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_retire_uncommitted_unreachable_charge(ball, ordinary_offer: Dictionary) -> bool:
 	# A fresh failed prediction can retire an uncommitted charge, without
 	# canceling the previous accepted contact's still-continuous recovery.
 	# The predicted timestamp is never treated as a physical contact cutoff.
