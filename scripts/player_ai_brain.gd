@@ -174,8 +174,8 @@ var ai_contact_indicator_position: Vector3 = Vector3.ZERO
 
 var _player
 
-const OVERHEAD_PREFER_HEIGHT := 1.5   # m above the floor
-const OVERHEAD_PREFERENCE := 0.35     # score bonus (score is roughly seconds to contact)
+const OVERHEAD_PREFER_HEIGHT := 1.4   # m above the floor: take it in the air from here
+const OVERHEAD_PREFERENCE := 1.0     # score bonus (~seconds): a reachable high ball beats letting it drop
 
 const LUNGE_ALLOWANCE := 0.45   # m of the final approach a lunge / reach covers
 
@@ -1576,10 +1576,17 @@ func match_context(ball_pos: Vector3) -> Dictionary:
 		"near_kitchen": absf(ball_pos.z) <= 3.4, "legal_volley": ball != null and ball.both_bounces_complete and _feet_established_outside_kitchen(),
 		"reachable": ai_selected_contact_reachable, "reaction_ready": _perception_ready}
 
+var _rethought_flight := -1
 func solve_match_launch(ball_pos: Vector3) -> Dictionary:
 	var context: Dictionary = match_context(ball_pos)
 	var ball = _player._get_ball_ref()
-	if _planned_shot.is_empty() or ball == null or _planned_flight != ball.flight_id or _planned_bounces != ball.bounces_since_last_hit:
+	# The plan is made once per flight from an early contact estimate. If the
+	# actual contact turns out smash-high, choose again once: otherwise a lob
+	# taken overhead was still hit as the earlier drive / drop plan.
+	var smash_high: bool = ball != null and ball.both_bounces_complete and float(context.ball_height) >= float(context.net_height) + MatchTactics.SMASH_MIN_OVER_NET
+	var rethink: bool = smash_high and not _planned_shot.is_empty() and str(_planned_shot.get("kind", "")) != "SMASH" and _rethought_flight != (ball.flight_id if ball else -1)
+	if rethink: _rethought_flight = ball.flight_id
+	if rethink or _planned_shot.is_empty() or ball == null or _planned_flight != ball.flight_id or _planned_bounces != ball.bounces_since_last_hit:
 		if not _opponent_sample_available: return {}
 		_planned_shot = MatchTactics.plan(context, _tactic_rng.randf(), _tactic_rng.randf())
 		_planned_flight = ball.flight_id if ball else -1

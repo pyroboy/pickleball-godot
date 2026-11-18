@@ -26,7 +26,8 @@ static func _choose_base(context: Dictionary, roll: float) -> String:
 	# is smashed from anywhere up to mid-court (was only near the kitchen, after
 	# an attack roll). The launch is still validated to clear the net.
 	var difficulty: int = clampi(int(context.get("difficulty", 1)), 0, 2)
-	if height >= net + SMASH_MIN_OVER_NET and depth <= SMASH_MAX_DEPTH and balanced and not stretched and not moving_fast:
+	# No balance requirement: players smash right after moving under the ball.
+	if height >= net + SMASH_MIN_OVER_NET and depth <= SMASH_MAX_DEPTH and not stretched and not moving_fast:
 		if roll < [0.55, 0.75, 0.9][difficulty]: return "SMASH"
 	# Rally lobs make the high balls that can be smashed: over an opponent at
 	# the kitchen line more often, otherwise now and then from mid-court back.
