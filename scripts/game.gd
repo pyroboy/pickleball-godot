@@ -1581,10 +1581,13 @@ func _on_any_paddle_hit(_player_num: int) -> void :
 		scoreboard_ui.show_speed(ball.linear_velocity.length() * 2.23694)
 		var shot: String = game_shots._classify_trajectory(ball.linear_velocity)
 		scoreboard_ui.show_shot_type(shot)
-		# Camera shake by shot type (visual only): none for soft shots, light for
-		# drives, strong for a fast downward hit (smash).
-		if camera_rig != null and shot == "FAST":
-			camera_rig.add_shake(0.6 if ball.linear_velocity.y < -2.0 else 0.3)
+		# Camera shake by ball speed (visual only): none for soft and medium shots,
+		# light from 12.5 m/s, full at 17 m/s; a hard downward hit (smash) adds more.
+		# (The "FAST" shot type almost never comes up, so it gave no shake at all.)
+		var hit_speed: float = ball.linear_velocity.length()
+		if camera_rig != null and hit_speed >= 12.5:
+			var smash: float = 0.15 if ball.linear_velocity.y < -2.0 else 0.0
+			camera_rig.add_shake(remap(minf(hit_speed, 17.0), 12.5, 17.0, 0.45, 0.85) + smash)
 
 func _on_ball_bounced(bounce_pos: Vector3) -> void :
 	if game_state == GameState.SERVING and game_serve.is_release_pending() and not ball.is_in_play: return
