@@ -40,3 +40,6 @@ data/postures_backup/
 *.swp
 *.swo
 *~
+
+# Local native iOS project + build output
+build/
