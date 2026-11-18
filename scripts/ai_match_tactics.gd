@@ -5,7 +5,8 @@ const Styles = preload("res://scripts/ai_playing_styles.gd")
 const Kitchen = preload("res://scripts/ai_kitchen_tactics.gd")
 const SMASH_MIN_OVER_NET := 0.6    # m above the net at contact (~1.5 m: medium overhead)
 const SMASH_MAX_DEPTH := 6.0       # m from the net
-const BACKCOURT_LOB_SHARE := 0.12  # of balanced back-court shots
+const LOB_SHARE := 0.3         # rally lobs from mid-court back
+const LOB_SHARE_VS_NET := 0.45 # ... when the opponent is at the kitchen line
 
 # The roll chooses only among shots suited to this contact. There is no miss roll.
 static func _choose_base(context: Dictionary, roll: float) -> String:
@@ -17,19 +18,26 @@ static func _choose_base(context: Dictionary, roll: float) -> String:
 	var stretched: bool = float(context.get("contact_distance", 0.7)) > 1.0
 	var moving_fast: bool = float(context.get("movement_speed", 0.0)) > 2.6
 	var rushed: bool = float(context.get("incoming_speed", 0.0)) >= 9.0 or stretched or moving_fast or not balanced
-	# Occasional lob from the back (also on the opening return / third shot), so
-	# rallies have high balls and smash chances at all; before this, 0 of 151
-	# AI shots in 3 bench matches went more than 0.22 m above the net.
-	if depth > 4.5 and balanced and not rushed and roll > 1.0 - BACKCOURT_LOB_SHARE:
-		return "LOB"
+	# Opening return / third shot must bounce on the other side, so a high one
+	# can't be smashed: no lobs there (the returns already arc high).
 	if bool(context.get("opening_return", false)):
 		return "RETURN"
-	# Overhead: a ball well above the net, met balanced and within reach, is
-	# smashed from anywhere up to mid-court (was only near the kitchen, and only
-	# after an attack roll). The launch is still validated to clear the net.
+	# Overhead first: a ball well above the net, met balanced and within reach,
+	# is smashed from anywhere up to mid-court (was only near the kitchen, after
+	# an attack roll). The launch is still validated to clear the net.
 	var difficulty: int = clampi(int(context.get("difficulty", 1)), 0, 2)
 	if height >= net + SMASH_MIN_OVER_NET and depth <= SMASH_MAX_DEPTH and balanced and not stretched and not moving_fast:
 		if roll < [0.55, 0.75, 0.9][difficulty]: return "SMASH"
+	# Rally lobs make the high balls that can be smashed: over an opponent at
+	# the kitchen line more often, otherwise now and then from mid-court back.
+	# (Bench: 290 of 374 rejected high contacts were opening shots; rally
+	# shots were almost all low, 7 lobs in 280 AI shots.)
+	var lob_share: float = LOB_SHARE_VS_NET if opponent_depth < 3.5 else LOB_SHARE
+	# Rushed counts too: under pressure from the back, a defensive lob is the
+	# classic reply (nearly every rally shot was "rushed", so this gate made
+	# lobs rarer, not more common).
+	if depth > 3.4 and roll > 1.0 - lob_share:
+		return "LOB"
 	if height < net + 0.28 and rushed:
 		return "DROP" if depth > 4.5 else "RESET"
 	if depth <= 3.4:
@@ -54,7 +62,7 @@ static func eligible_distribution(context: Dictionary) -> Dictionary:
 	var attack_context: Dictionary = context.duplicate()
 	attack_context["near_kitchen"] = true
 	var smash_p: float = [0.55, 0.75, 0.9][clampi(int(context.get("difficulty", 1)), 0, 2)]
-	var boundaries: Array = [0.0, clampf(Kitchen.attack_probability(attack_context), 0.0, 1.0), 0.72, 0.86, 0.87, 1.0 - BACKCOURT_LOB_SHARE, smash_p, 1.0]
+	var boundaries: Array = [0.0, clampf(Kitchen.attack_probability(attack_context), 0.0, 1.0), 0.72, 0.86, 0.87, 1.0 - LOB_SHARE, 1.0 - LOB_SHARE_VS_NET, smash_p, 1.0]
 	boundaries.sort()
 	var out: Dictionary = {}
 	for i in range(boundaries.size() - 1):
