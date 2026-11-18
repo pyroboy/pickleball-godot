@@ -6,12 +6,12 @@
 [sub_resource type="Resource" id="Resource_oejpp"]
 script = ExtResource("1")
 values = {
-"back_foot_back": -0.12,
+"back_foot_back": -0.4,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
 "body_yaw_deg": -12,
-"crouch_amount": 0.265,
-"front_foot_forward": 0.16,
+"crouch_amount": 0.5,
+"front_foot_forward": 0.4,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": -20.0,
@@ -37,8 +37,8 @@ values = {
 "right_knee_pole": Vector3(0, 0, 0),
 "right_shoulder_rotation_deg": Vector3(0, 0, 0),
 "spine_curve_deg": 0.0,
-"stance_width": 0.56,
-"torso_pitch_deg": 6.0,
+"stance_width": 0.42,
+"torso_pitch_deg": 20,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -8,
 "weight_shift": 0.65
@@ -47,12 +47,12 @@ values = {
 [sub_resource type="Resource" id="Resource_hp666"]
 script = ExtResource("1")
 values = {
-"back_foot_back": -0.12,
+"back_foot_back": -0.4,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
 "body_yaw_deg": -22,
-"crouch_amount": 0.33499999999999996,
-"front_foot_forward": 0.16,
+"crouch_amount": 0.5,
+"front_foot_forward": 0.4,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 32.0,
@@ -78,8 +78,8 @@ values = {
 "right_knee_pole": Vector3(0, 0, 0),
 "right_shoulder_rotation_deg": Vector3(0, 0, 0),
 "spine_curve_deg": 0.0,
-"stance_width": 0.56,
-"torso_pitch_deg": 6.0,
+"stance_width": 0.42,
+"torso_pitch_deg": 20,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -10,
 "weight_shift": -0.45
@@ -91,7 +91,7 @@ posture_id = 19
 display_name = "Low Wide Backhand"
 family = 1
 height_tier = 0
-paddle_forehand_mul = -0.62
+paddle_forehand_mul = -0.82
 paddle_forward_mul = 0.4
 paddle_y_offset = -0.49
 paddle_pitch_signed_deg = -8.0
@@ -102,8 +102,8 @@ paddle_roll_signed_deg = -45.0
 paddle_roll_sign_source = 1
 paddle_floor_clearance = 0.3
 has_zone = true
-zone_x_min = -0.8
-zone_x_max = -0.44
+zone_x_min = -1.0
+zone_x_max = -0.64
 zone_y_min = 0.3
 zone_y_max = 0.595
 zone_forward_offset = 0.4
@@ -113,21 +113,21 @@ right_elbow_pole = Vector3(0.06, -0.3, 0.2)
 left_hand_mode = 4
 left_hand_offset = Vector3(-0.1, 0, -0.24)
 left_elbow_pole = Vector3(-0.4, -0.35, 0.1)
-stance_width = 0.56
-front_foot_forward = 0.16
-back_foot_back = -0.12
+stance_width = 0.42
+front_foot_forward = 0.4
+back_foot_back = -0.4
 right_foot_yaw_deg = -5.0
 left_foot_yaw_deg = -5.0
-crouch_amount = 0.305
+crouch_amount = 0.5
 weight_shift = 0.2
 hip_yaw_deg = -4.0
 torso_yaw_deg = -8.0
-torso_pitch_deg = 6.0
+torso_pitch_deg = 20
 body_yaw_deg = -18.0
 head_yaw_deg = -2.0
 head_pitch_deg = -38.0
 head_track_ball_weight = 0.8
-charge_paddle_offset = Vector3(0.04, 0.08, -0.2)
+charge_paddle_offset = Vector3(0.04, -0.15, -0.25)
 charge_body_rotation_deg = -8.0
 charge_hip_coil_deg = -8.0
 charge_back_foot_load = 0.45
@@ -145,3 +145,5 @@ charge_duration = 0.24
 notes = "Right-dominant one-handed backhand; left hand counterbalances. Unit turn and diagonal shaft keep the original contact center reachable. Low strokes retain an open face and head below hand; normal strokes retain their shot-specific face."
 last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
+right_foot_offset = Vector3(0, 0, 0)
+left_foot_offset = Vector3(0, 0, 0)

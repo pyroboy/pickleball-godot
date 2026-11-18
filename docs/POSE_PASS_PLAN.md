@@ -118,3 +118,16 @@ limb angles, then reach. Loop per pose: `tools/pose_review.sh s00` (sheets + met
 - Gameplay change: contact forward 0.42 → 0.67, side −0.53 → −0.55; zone x −0.68…−0.28,
   forward 0.69. Finish end kept in place; wind-up brought closer to the body. Bench: 0 script errors.
 - Backhand side mirrors the sideways body offset: finish `body_position_offset` (0.2, 0, 0.08).
+
+### Serves (all 7 styles) — 2026-11-18
+Serves are built in code (`drive_serve_motion.gd`); packaged tuning now lives in
+`data/serve_tuning.json` (per style and stage, `add`/`set`), applied in
+`mobile_serve_pose_store.gd` `packaged_default()` so gameplay picks it up like the approved Flat import.
+- Balance: styles 1–6 had both feet behind the body (front foot −0.12, back −0.27), CoG 0.18–0.25 m
+  off the base. Now staggered 0.20 / −0.30 (0.50 m deep), CoG 0.38 → 0.69 → 0.89, over base in all stages.
+- Wind-up: paddle back to hip height behind the body (0.58 → 0.85 m high, 0.55 m back), body turned
+  12° more; pendulum low point stays just before contact. Flat: wind-up raised the same way only.
+- Finish: higher toward the target (Topspin/High Soft +0.30 m, Drop Drive/Banana/Screwball +0.15,
+  Slice unchanged), weight 0.89 on the front foot.
+- Open: ball hand is held out at shoulder height (real serves hold it at waist height); it sets the
+  ball release point, so it is a gameplay change and was left alone.

@@ -82,6 +82,8 @@ def main():
         return
     for e in edits:
         lhs, value = e.split("=", 1)
+        if "=" in value or (" " in value and not value.startswith("Vector3(")):
+            sys.exit(f"bad value for {lhs!r}: {value!r} (one field=value per argument)")
         stage, field = lhs.split(".", 1)
         text, old = set_value(text, stage, field, value)
         print(f"{path}: {stage}.{field} {old} -> {value}")
