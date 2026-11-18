@@ -911,6 +911,9 @@ func cup_can_fit_body_offset(actor_id: int, offset: Vector3) -> bool:
 	var team: int = index_for_actor_id(actor_id)
 	if team < 0: return false
 	if not _active or phase != "SET_SERVE" or team != _carry_team: return false
+	# Pixel cards don't draw the 3D hand/cup, so the exact cup-pose search
+	# (thousands of candidates per tick) has nothing to protect.
+	if PixelCards.enabled(): return true
 	var center: Vector3 = _wrists[team] + _carry_direction.normalized() * HandPresentation.RETRIEVAL_BALL_DEPTH
 	return _arm_paths[team].cup_kinematic_fit(_players[team].left_arm_node, center, offset)
 
