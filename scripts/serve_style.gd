@@ -31,7 +31,7 @@ static func spin_mode(style: int) -> int:
 
 static func hold_offset(style: int) -> Vector3:
 
-	return Delivery.hold_offset(is_drop(style))
+	return Delivery.hold_offset(is_drop(style), valid_style(style))
 
 static func stroke_duration(style: int) -> float:
 	return 0.23 if style == Style.HIGH_SOFT else (0.15 if is_drop(style) else 0.12)

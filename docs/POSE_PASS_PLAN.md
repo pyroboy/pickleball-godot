@@ -131,3 +131,10 @@ Serves are built in code (`drive_serve_motion.gd`); packaged tuning now lives in
   Slice unchanged), weight 0.89 on the front foot.
 - Open: ball hand is held out at shoulder height (real serves hold it at waist height); it sets the
   ball release point, so it is a gameplay change and was left alone.
+- Per-serve contact points (`serve_delivery_profile.gd` STYLE_COLUMNS, side/forward m): Flat 0.42/0.62,
+  Topspin 0.40/0.68, Slice 0.47/0.64, High Soft 0.45/0.57, Drop Drive 0.41/0.68, Banana 0.46/0.64,
+  Screwball 0.36/0.64 — from coaching sources (topspin further in front, slice/banana wider, lob later
+  near full extension, screwball brushes the inside). Banana finishes across to the left, Screwball out
+  to the right. Pushing contact past ~0.70 m forward made the elbow flip at full stretch.
+- Open: Flat's forearm rolls ~85° in the last frames before contact (its approved contact values);
+  drop serves keep a ~14° elbow re-bend at contact.
