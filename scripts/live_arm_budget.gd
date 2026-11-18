@@ -99,6 +99,11 @@ static func _cost(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis
 	return maxf(report.coupled_budget_ratio / .999, absf(report.forearm_axial_deg) / (Anatomy.AXIAL_BUDGET_DEG - .05))
 
 static func apply(player, pose, hands) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_apply(player, pose, hands)
+	PerfMonitor.record("arm.budget", Time.get_ticks_usec() - _pt)
+
+static func _perf_apply(player, pose, hands) -> void:
 	if not load("res://scripts/live_transition_arm_reach.gd").enabled(player, pose): return
 	var reports: Array = []
 	for side in range(2):

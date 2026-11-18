@@ -401,6 +401,12 @@ static func _certificate_still_clear(player, previous: Dictionary) -> bool:
 	return body_change + maxf(main_change, support_change) + CERTIFICATE_FLOAT_RESERVE <= float(previous.gap) - REQUIRED_GAP
 
 static func apply_presented_ready(player, pose) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_apply_presented_ready(player, pose)
+	PerfMonitor.record("arm.ready_clearance", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_apply_presented_ready(player, pose) -> Dictionary:
 	# Bounded post-Budget hook candidate. Never requests or resets a pose.
 	var started := Time.get_ticks_usec()
 	var report := {"eligible": false, "active": false, "feasible": false, "offset": Vector3.ZERO}

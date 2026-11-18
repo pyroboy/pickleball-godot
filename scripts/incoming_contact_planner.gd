@@ -166,6 +166,12 @@ static func pose_at(player, def: PostureDefinition, point: Vector3) -> PostureDe
 	return pose
 
 static func select(player, ball, flight: Dictionary, previous_id: int = -1, volley_override: int = -1) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_select(player, ball, flight, previous_id, volley_override)
+	PerfMonitor.record("planner.select", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_select(player, ball, flight: Dictionary, previous_id: int = -1, volley_override: int = -1) -> Dictionary:
 	ActivationZones.refresh(CONTACT_MARGIN)
 	var samples: Array = flight.get("samples", [])
 	if samples.is_empty() or not ball.is_in_play or ball.last_hit_by == player.player_num: return {}

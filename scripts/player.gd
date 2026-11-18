@@ -400,7 +400,12 @@ func _wire_hitbox() -> void :
 		initial_paddle_setup_completed.emit()
 
 
-func _physics_process(delta: float) -> void :
+func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("player.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	_physics_human_presentation = false
 	_physics_ai_presentation = false
 	_advance_support_clock(delta)

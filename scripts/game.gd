@@ -728,7 +728,12 @@ func _set_game_state(new_state: GameState) -> void :
 
 
 
-func _physics_process(delta: float) -> void :
+func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("game.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if team_coordination != null: team_coordination.begin_physics_frame(delta)
 	if _tool_state_active():
 		if camera_rig and posture_editor_v2 and posture_editor_v2.visible:

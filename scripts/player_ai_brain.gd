@@ -189,6 +189,12 @@ func _team_coordination():
 	return _game_node.team_coordination if _game_node != null and "team_coordination" in _game_node else null
 
 func get_ai_input(delta: float = -1.0) -> Vector3:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_get_ai_input(delta)
+	PerfMonitor.record("ai.input", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 	var input_dir: Vector3 = Vector3.ZERO
 
 	var ball: RigidBody3D = _player._get_ball_ref()

@@ -28,6 +28,7 @@ Settings="*res://scripts/ui/settings.gd"
 TimeScale="*res://scripts/time/time_scale_manager.gd"
 FXPool="*res://scripts/fx/fx_pool.gd"
 PauseController="*res://scripts/ui/pause_controller.gd"
+PerfMonitor="*res://scripts/debug/perf_monitor.gd"
 
 [display]
 

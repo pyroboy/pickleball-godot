@@ -303,6 +303,11 @@ func _fault(evidence: Dictionary) -> void:
 	game.rally_scorer.on_actor_body_contact(_evidence_actor(evidence), evidence)
 
 func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("contact.authority", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	var pending: Dictionary = game.ball.deferred_scene_interval() if game != null and game.ball != null else {}
 	_process_authoritative_interval(delta)
 	if not pending.is_empty() and unresolved_continuation.is_empty() and game.rally_scorer.has_method("resume_deferred_scene_rules"):

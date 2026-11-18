@@ -1036,7 +1036,12 @@ func _hold_service_stance(serving: bool, velocity: Vector3, displacement: float)
 		_serve_stance_recovering = false
 	return true
 
-func update_leg_ik(delta: float, def_override = null) -> void :
+func update_leg_ik(delta: float, def_override = null) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_update_leg_ik(delta, def_override)
+	PerfMonitor.record("leg.ik", Time.get_ticks_usec() - _pt)
+
+func _perf_update_leg_ik(delta: float, def_override = null) -> void:
 	if not _player.right_leg_node or not _player.left_leg_node: return
 	if not is_finite(delta) or delta < 0.0: return
 	if _split_pose_active and _split_hard_interrupted():

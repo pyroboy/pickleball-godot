@@ -244,6 +244,11 @@ func support_hand_target_for(actor_id: int) -> Vector3:
 	return _wrists[team] if _active and team >= 0 and team < _players.size() else Vector3.INF
 
 func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("between.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if not _active: return
 	if _generation != _game._point_reset_generation or _game._is_practice() or _game.match_over or _game.game_state != _game.GameState.POINT_SCORED:
 		cancel()

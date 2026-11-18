@@ -367,7 +367,12 @@ func is_release_pending() -> bool:
 	return not _pending_release.is_empty()
 
 
-func _physics_process(delta: float) -> void :
+func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("serve.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if _game == null: return
 	if get_tree().paused or _game._tool_state_active():
 		_physics_presentations.clear()

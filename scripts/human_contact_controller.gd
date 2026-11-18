@@ -88,7 +88,12 @@ func _init(owner, module) -> void :
 	posture = module
 	footwork = Footwork.new(owner, self)
 
-func update(delta: float) -> void :
+func update(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_update(delta)
+	PerfMonitor.record("human.update", Time.get_ticks_usec() - _pt)
+
+func _perf_update(delta: float) -> void:
 	if "special_reach_driver" in player and player.special_reach_driver != null and player.special_reach_driver.owns_presentation(): return
 	if not Input.is_action_pressed("ui_accept"): _preparation_hold_suppressed = false
 	var ball = player._get_ball_ref()

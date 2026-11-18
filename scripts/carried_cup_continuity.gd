@@ -6,7 +6,13 @@ const META="carried_cup_continuity"
 static func remember(player)->void:
  var arm=player.left_arm_node
  player.set_meta(META,{"basis":arm.hand_mesh.global_basis.orthonormalized(),"elbow":arm.forearm_pivot.global_position,"upper":arm.upper_pivot.global_basis.orthonormalized(),"fore":arm.forearm_pivot.global_basis.orthonormalized(),"body":player.body_pivot.global_transform,"tick":Engine.get_physics_frames()})
-static func apply(player,hands)->Dictionary:
+static func apply(player,hands) -> Dictionary:
+ var _pt := Time.get_ticks_usec()
+ var _pr = _perf_apply(player, hands)
+ PerfMonitor.record("arm.carried_cup", Time.get_ticks_usec() - _pt)
+ return _pr
+
+static func _perf_apply(player,hands) -> Dictionary:
  if not player.has_meta(META):return {}
  var game=player.get_parent()
  if game==null or game.game_state!=game.GameState.WAITING or game.get_server_actor()!=player or game.ball.is_in_play or game.game_serve.is_release_pending():return {}
