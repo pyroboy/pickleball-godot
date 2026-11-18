@@ -8,8 +8,8 @@ class_name ReactionHitButton extends Control
 
 signal auto_fire_requested
 
-const BUTTON_RADIUS: float = 60.0
-const RING_RADIUS_MAX: float = 160.0            # ~2.67x button radius
+const BUTTON_RADIUS: float = 42.0
+const RING_RADIUS_MAX: float = 105.0            # ~2.67x button radius
 const PERFECT_TOLERANCE: float = 14.0           # pixels — ring within ±14px of button edge = perfect
 const TTC_MAX: float = 1.2                      # seconds — ring starts closing when ball is ≤ this far out
 const TTC_PERFECT: float = 0.15                 # seconds — TTC threshold for the perfect window

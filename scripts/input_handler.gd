@@ -24,6 +24,7 @@ const ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
 const ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
 
 # State
+var _swing_was_pressed: bool = false
 var serve_is_charging: bool = false
 var serve_charge_time: float = 0.0
 var serve_aim_offset_x: float = 0.0
@@ -46,6 +47,21 @@ func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: Char
 
 func _process(delta: float) -> void:
 	_handle_debug_toggles()
+	if _sound_panel and _sound_panel.visible:
+		serve_is_charging = false
+		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		_handle_sound_controls()
+		_game.game_sound_tune._handle_sound_panel_input()
+		return
+	var editor_v2 = _game.get("posture_editor_v2") if _game else null
+	if editor_v2 and editor_v2.visible:
+		serve_is_charging = false
+		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		if _player_left and _player_left.hitting:
+			_player_left.hitting.clear_charge_visual()
+		return
 	_handle_camera_and_movement_controls()
 	_handle_practice_controls()
 	_handle_sound_controls()
@@ -53,38 +69,36 @@ func _process(delta: float) -> void:
 	_update_aim_and_arc(delta)
 
 func _handle_debug_toggles() -> void:
+	# Tool hotkeys use events below so a quick press cannot disappear between frames.
+	if _game._tool_state_active():
+		return
 	if _just_pressed(KEY_T):
-		if _game.has_method("_start_drop_test"): _game._start_drop_test()
-	
+		_game._start_drop_test()
 	if _just_pressed(KEY_X):
-		if _game.has_method("_cycle_difficulty"): _game._cycle_difficulty()
-		
+		_game._cycle_difficulty()
 	if _just_pressed(KEY_Z):
-		if _game.has_method("_cycle_debug_visuals"): _game._cycle_debug_visuals()
-		
-	if _just_pressed(KEY_E):
-		if _game.has_method("_toggle_posture_editor_v2"):
-			_game._toggle_posture_editor_v2()
-
-	if _just_pressed(KEY_Q):
-		if _game.has_method("_toggle_posture_editor_v2"):
-			_game._toggle_posture_editor_v2()
-
-	if _just_pressed(KEY_ESCAPE):
-		if _posture_editor and _posture_editor.visible:
-			if _game.has_method("_toggle_posture_editor"):
-				_game._toggle_posture_editor()
-		if _game.get("posture_editor_v2") and _game.posture_editor_v2.visible:
-			if _game.has_method("_toggle_posture_editor_v2"):
-				_game._toggle_posture_editor_v2()
-		
+		_game._cycle_debug_visuals()
 	if _just_pressed(KEY_N):
-		if _game.has_method("_toggle_intent_indicators"): _game._toggle_intent_indicators()
-
+		_game._toggle_intent_indicators()
 	if _just_pressed(KEY_5):
-		if _game.has_method("_toggle_ball_freeze"): _game._toggle_ball_freeze()
+		_game._toggle_ball_freeze()
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	if event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+		return
+	if event.keycode in [KEY_E, KEY_Q]:
+		_game._toggle_posture_editor_v2()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_M:
+		_game._toggle_sound_panel()
+		get_viewport().set_input_as_handled()
 
 func _handle_camera_and_movement_controls() -> void:
+	var editor_v2 = _game.get("posture_editor_v2") if _game else null
+	if editor_v2 and editor_v2.visible:
+		return
 	# O key toggles auto-orbit even in editor mode (camera still orbits in editor)
 	if _just_pressed(KEY_O) and _camera_rig:
 		if _camera_rig.has_method("toggle_auto_orbit"): _camera_rig.toggle_auto_orbit()
@@ -107,14 +121,6 @@ func _handle_practice_controls() -> void:
 	if _just_pressed(KEY_2): _practice.toggle_loop()
 
 func _handle_sound_controls() -> void:
-	if _just_pressed(KEY_M):
-		if _sound_panel:
-			_sound_panel.visible = not _sound_panel.visible
-			if _sound_panel.visible and _game.has_method("_refresh_sound_tune_panel"):
-				_game._refresh_sound_tune_panel()
-		if Input.is_key_pressed(KEY_SHIFT): # Shift-M to print
-			if _game.has_method("_print_sound_tunings"): _game._print_sound_tunings()
-			
 	# Sound test triggers (6-8, Y, U, I)
 	_test_sound(KEY_6, "6", "paddle", 0)
 	_test_sound(KEY_7, "7", "paddle", 1)
@@ -135,16 +141,21 @@ func _handle_swing_charge(delta: float) -> void:
 	if _posture_editor and _posture_editor.visible:
 		serve_is_charging = false
 		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		if _player_left and _player_left.hitting:
+			_player_left.hitting.clear_charge_visual()
 		return
 
-	if Input.is_action_just_pressed("ui_accept"):
+	var swing_pressed: bool = Input.is_action_pressed("ui_accept")
+	if swing_pressed and not _swing_was_pressed:
 		serve_is_charging = true
 		serve_charge_time = 0.0
 		if _game.has_method("_on_player_swing_press"):
 			_game._on_player_swing_press()
 			
+	_swing_was_pressed = swing_pressed
 	if serve_is_charging:
-		if Input.is_action_pressed("ui_accept"):
+		if swing_pressed:
 			serve_charge_time = min(serve_charge_time + delta, MAX_SERVE_CHARGE_TIME)
 			var charge_ratio = serve_charge_time / MAX_SERVE_CHARGE_TIME
 			if _player_left: _player_left.set_serve_charge_visual(charge_ratio)
@@ -159,7 +170,7 @@ func _handle_swing_charge(delta: float) -> void:
 			serve_charge_time = 0.0
 			
 			# Check for perfect reaction bonus (Easy mode)
-			if _reaction_button and _reaction_button.has_method("is_perfect") and _reaction_button.is_perfect():
+			if _game.ai_difficulty == 0 and _reaction_button and _reaction_button.has_method("is_perfect") and _reaction_button.is_perfect():
 				ratio = 1.0
 				if _reaction_button.has_method("trigger_perfect_flash"): _reaction_button.trigger_perfect_flash()
 				print("[INPUT] PERFECT window bonus applied")
@@ -173,11 +184,11 @@ func _update_aim_and_arc(delta: float) -> void:
 	if _posture_editor and _posture_editor.visible:
 		return
 		
-	# Serve aiming (Q/E)
+	# Serve aiming ([ / ])
 	if _game.game_state == 0: # WAITING
-		if Input.is_key_pressed(KEY_Q):
+		if Input.is_key_pressed(KEY_BRACKETLEFT):
 			serve_aim_offset_x = clamp(serve_aim_offset_x - SERVE_AIM_STEP * delta * 10.0, -SERVE_AIM_MAX, SERVE_AIM_MAX)
-		elif Input.is_key_pressed(KEY_E):
+		elif Input.is_key_pressed(KEY_BRACKETRIGHT):
 			serve_aim_offset_x = clamp(serve_aim_offset_x + SERVE_AIM_STEP * delta * 10.0, -SERVE_AIM_MAX, SERVE_AIM_MAX)
 		_game._update_waiting_ui()
 
@@ -193,6 +204,12 @@ func _update_aim_and_arc(delta: float) -> void:
 	
 	_key_states[KEY_R] = raise
 	_key_states[KEY_F] = lower
+	if _game and _game.serving_team == 0:
+		_game.serve_aim_offset_x = serve_aim_offset_x
+		_game.trajectory_arc_offset = trajectory_arc_offset
+		if _game.game_serve:
+			_game.game_serve.set_aim_offset(serve_aim_offset_x)
+			_game.game_serve.set_arc_offset(trajectory_arc_offset)
 
 func _just_pressed(keycode: int) -> bool:
 	var pressed = Input.is_key_pressed(keycode)

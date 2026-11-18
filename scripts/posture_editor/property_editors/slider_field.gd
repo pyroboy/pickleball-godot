@@ -15,7 +15,7 @@ func _init(label_text: String, min_val: float, max_val: float, step: float, defa
 	# Label
 	_label = Label.new()
 	_label.text = label_text
-	_label.add_theme_font_size_override("font_size", 13)
+	_label.add_theme_font_size_override("font_size", 20)
 	_label.modulate = Color(0.88, 0.92, 0.98)
 	add_child(_label)
 
@@ -31,6 +31,7 @@ func _init(label_text: String, min_val: float, max_val: float, step: float, defa
 	_slider.step = step
 	_slider.value = default_val
 	_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_slider.custom_minimum_size = Vector2(100, 36)
 	row.add_child(_slider)
 	
 	# Spin box for precise input
@@ -39,7 +40,7 @@ func _init(label_text: String, min_val: float, max_val: float, step: float, defa
 	_spin.max_value = max_val
 	_spin.step = step
 	_spin.value = default_val
-	_spin.custom_minimum_size = Vector2(88, 0)
+	_spin.custom_minimum_size = Vector2(112, 38)
 	row.add_child(_spin)
 	
 	# Connect signals
@@ -47,11 +48,11 @@ func _init(label_text: String, min_val: float, max_val: float, step: float, defa
 	_spin.value_changed.connect(_on_spin_changed)
 
 func _on_slider_changed(val: float) -> void:
-	_spin.value = val
+	_spin.set_value_no_signal(val)
 	value_changed.emit(val)
 
 func _on_spin_changed(val: float) -> void:
-	_slider.value = val
+	_slider.set_value_no_signal(val)
 	value_changed.emit(val)
 
 func set_value(val: float) -> void:

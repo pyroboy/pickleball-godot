@@ -223,34 +223,35 @@ func check_service_ball_landed(bounce_pos: Vector3) -> Dictionary:
 		if not correct_diag:
 			return {"valid": false, "winner": 1, "reason": FAULT_WRONG_SERVICE_COURT, "detail": "Blue: wrong service court"}
 	else:
-		# Red serves toward Blue's side (+Z)
+		# Red serves toward Blue's side (+Z); the diagonal flips world X.
 		var correct_side2: bool = bounce_pos.z > nvz
 		var correct_diag2: bool
 		if _serving_from_right:
-			correct_diag2 = bounce_pos.x < 0.0
-		else:
 			correct_diag2 = bounce_pos.x > 0.0
+		else:
+			correct_diag2 = bounce_pos.x < 0.0
 		if not correct_side2:
 			return {"valid": false, "winner": 0, "reason": FAULT_SHORT_SERVE, "detail": "Red: serve landed in kitchen"}
 		if not correct_diag2:
 			return {"valid": false, "winner": 0, "reason": FAULT_WRONG_SERVICE_COURT, "detail": "Red: wrong service court"}
 	return {"valid": true}
 
-## Server position pre-serve check. Returns a {valid, reason} dict (no winner —
-## the caller in game.gd triggers the fault and awards the point).
-func check_server_position(server_pos: Vector3) -> Dictionary:
-	var total_score_parity_bool: bool = _serving_from_right
+## Server position pre-serve check. The overrides describe the upcoming serve;
+## stored rally context still belongs to the previous rally until launch.
+func check_server_position(server_pos: Vector3, serving_team_override: int = -1, serving_from_right_override: int = -1) -> Dictionary:
+	var checked_team: int = _serving_team if serving_team_override == -1 else serving_team_override
+	var from_right: bool = _serving_from_right if serving_from_right_override == -1 else serving_from_right_override == 1
 	var baseline_edge: float = PickleballConstants.BASELINE_Z - PickleballConstants.FOOT_FAULT_TOLERANCE
 	var on_correct_half: bool
 	var on_correct_side: bool
 	var behind_baseline: bool
-	if _serving_team == 0:
+	if checked_team == 0:
 		on_correct_half = server_pos.z > 0.2
-		on_correct_side = (server_pos.x > 0.2) if total_score_parity_bool else (server_pos.x < -0.2)
+		on_correct_side = (server_pos.x > 0.2) if from_right else (server_pos.x < -0.2)
 		behind_baseline = server_pos.z >= baseline_edge
 	else:
 		on_correct_half = server_pos.z < -0.2
-		on_correct_side = (server_pos.x < -0.2) if total_score_parity_bool else (server_pos.x > 0.2)
+		on_correct_side = (server_pos.x < -0.2) if from_right else (server_pos.x > 0.2)
 		behind_baseline = server_pos.z <= -baseline_edge
 	var reason: String = ""
 	if not on_correct_half:
@@ -285,7 +286,9 @@ func check_two_bounce_rule(player_num: int) -> Dictionary:
 		return {"valid": true}
 	if _ball.get("both_bounces_complete") == true:
 		return {"valid": true}
-	if _ball.get("ball_bounced_since_last_hit") == true:
+	# Ball.hit_by_player() resets ball_bounced_since_last_hit before emitting
+	# hit_by_paddle. was_volley preserves the pre-hit state for this rule.
+	if _ball.get("was_volley") == false:
 		return {"valid": true}
 	var hitter: String = "Blue" if player_num == 0 else "Red"
 	return {

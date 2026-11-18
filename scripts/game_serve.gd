@@ -1,5 +1,6 @@
 extends Node
 class_name GameServe
+const _Flight = preload("res://scripts/ball_flight_predictor.gd")
 
 ## GameServe.gd - Serve subsystem child node.
 ## Owns all serve state: charge tracking, aim/arc offsets, serve execution,
@@ -109,7 +110,9 @@ func release(charge_ratio: float) -> void:
 func perform_serve(charge_ratio: float) -> void:
 	var serving_team := _game.serving_team as int
 	var server_pos: Vector3 = player_left.global_position if serving_team == 0 else player_right.global_position
-	var zone_check: Dictionary = rally_scorer.check_server_position(server_pos)
+	var total_score: int = _game.score_left + _game.score_right as int
+	var from_right: int = 1 if (total_score % 2) == 0 else 0
+	var zone_check: Dictionary = rally_scorer.check_server_position(server_pos, serving_team, from_right)
 	if not zone_check["valid"]:
 		trigger_server_position_fault(zone_check["reason"])
 		return
@@ -131,6 +134,9 @@ func perform_serve(charge_ratio: float) -> void:
 		ball.linear_velocity = get_predicted_serve_velocity(charge_ratio, true)
 		ball.last_hit_by = 1
 		_log_serve(serving_team, ball.global_position, ball.linear_velocity, charge_ratio)
+	ball.angular_velocity = Vector3.ZERO
+	ball.is_in_play = true
+	ball.flight_id += 1
 
 	scoreboard_ui.set_state_text("Rally!")
 	ball.audio_synth.play_serve_sound()
@@ -150,50 +156,45 @@ func get_serve_launch_position(is_red_side: bool) -> Vector3:
 	return player_left.global_position + Vector3(0.0, 0.8, -0.55)
 
 func get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool = false) -> Vector3:
-	var MIN_SERVE_SPEED := PickleballConstants.MIN_SERVE_SPEED
-	var MAX_SERVE_SPEED := PickleballConstants.MAX_SERVE_SPEED
-	var _SERVE_AIM_MAX := PickleballConstants.SERVE_AIM_MAX
-	var _SERVE_AIM_STEP := PickleballConstants.SERVE_AIM_STEP
-	var _ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
-	var _ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
-	var _ARC_INTENT_STEP := PickleballConstants.ARC_INTENT_STEP
-
-	var serve_speed: float = lerp(MIN_SERVE_SPEED, MAX_SERVE_SPEED, clampf(charge_ratio, 0.0, 1.0))
 	var serve_origin: Vector3 = get_serve_launch_position(from_red_side)
-
 	var total_score: int = _game.score_left + _game.score_right as int
-	var serve_from_right: bool = (total_score % 2) == 0  # Even = serve from right side
-
-	var target_x_offset: float = _serve_aim_offset_x
-
-	if not from_red_side:
-		# BLUE SERVE (serving to red's side at Z > 0)
-		# Even score: stand RIGHT (X>0), serve to LEFT diagonal (X<0)
-		# Odd score:  stand LEFT  (X<0), serve to RIGHT diagonal (X>0)
-		if serve_from_right:
-			target_x_offset = minf(_serve_aim_offset_x, -1.5)
-		else:
-			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
-
-		var target_z: float = -4.6  # Red's service box (negative Z)
-		var target_position: Vector3 = Vector3(target_x_offset, 0.08, target_z)
-		var target_dir: Vector3 = (target_position - serve_origin).normalized()
-		target_dir.y = 0.32 + 0.22 * clampf(charge_ratio, 0.0, 1.0) + _trajectory_arc_offset
-		return target_dir.normalized() * serve_speed
+	var serve_from_right: bool = (total_score % 2) == 0
+	var aim: float = _game.serve_aim_offset_x
+	var target_x: float = aim
+	if from_red_side:
+		target_x = maxf(aim, 1.5) if serve_from_right else minf(aim, -1.5)
 	else:
-		# RED SERVE (serving to blue's side at Z < 0)
-		# Even score: stand RIGHT (X<0 in world), serve to LEFT diagonal (X>0 in world)
-		# Odd score:  stand LEFT  (X>0 in world), serve to RIGHT diagonal (X<0 in world)
-		if serve_from_right:
-			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
-		else:
-			target_x_offset = minf(_serve_aim_offset_x, -1.5)
-
-		var target_z: float = 4.6   # Blue's service box (positive Z)
-		var target_position: Vector3 = Vector3(target_x_offset, 0.08, target_z)
-		var target_dir: Vector3 = (target_position - serve_origin).normalized()
-		target_dir.y = 0.32 + 0.22 * clampf(charge_ratio, 0.0, 1.0) + _trajectory_arc_offset
-		return target_dir.normalized() * serve_speed
+		target_x = minf(aim, -1.5) if serve_from_right else maxf(aim, 1.5)
+	var target_z: float = 4.6 if from_red_side else -4.6
+	var target: Vector3 = Vector3(target_x, _Flight.FLOOR_REST_Y, target_z)
+	var horizontal: Vector2 = Vector2(target.x - serve_origin.x, target.z - serve_origin.z)
+	var pace: float = lerpf(9.0, 13.0, clampf(charge_ratio, 0.0, 1.0))
+	var duration: float = clampf(horizontal.length() / pace + _game.trajectory_arc_offset * 0.6, 0.8, 1.7)
+	var launch: Vector3 = Vector3(horizontal.x / duration,
+		(target.y - serve_origin.y + 0.5 * Ball.get_effective_gravity() * duration * duration) / duration,
+		horizontal.y / duration)
+	var best: Vector3 = launch
+	var best_score: float = INF
+	for iteration in range(24):
+		var flight: Dictionary = _Flight.trace(serve_origin, launch, Vector3.ZERO, 3.0, 1, false)
+		var landing: Vector3 = flight["first_bounce"]
+		var net: Dictionary = flight["net_crossing"]
+		var clears_net: bool = not net.is_empty() and net["pos"].y >= _Flight.NET_CLEAR_Y + 0.08
+		var error: Vector2 = Vector2(target.x - landing.x, target.z - landing.z)
+		var score: float = error.length() + (4.0 if not clears_net else 0.0)
+		if float(flight["first_bounce_time"]) >= 0.0 and score < best_score:
+			best = launch
+			best_score = score
+		if score < 0.12:
+			break
+		if not clears_net and not net.is_empty():
+			launch.y += (_Flight.NET_CLEAR_Y + 0.2 - net["pos"].y) / maxf(float(net["time"]), 0.1)
+		if float(flight["first_bounce_time"]) >= 0.0:
+			var actual_time: float = maxf(float(flight["first_bounce_time"]), 0.2)
+			launch.x += error.x / actual_time * 0.9
+			launch.z += error.y / actual_time * 0.9
+		launch = launch.limit_length(Ball.MAX_SPEED)
+	return best
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Server position fault
@@ -306,7 +307,8 @@ func _log_serve(serving_team: int, pos: Vector3, vel: Vector3, charge: float) ->
 	var score_right := _game.score_right as int
 	var total_score: int = score_left + score_right
 	var serve_from_right: bool = (total_score % 2) == 0
-	var target_diag: String = "LEFT" if serve_from_right else "RIGHT"
+	var target_on_positive_x: bool = serve_from_right == (serving_team == 1)
+	var target_diag: String = "RIGHT" if target_on_positive_x else "LEFT"
 	var server_name: String = "BLUE" if serving_team == 0 else "RED"
 	print("[SERVE %s] pos=%s vel=%s charge=%s score=%d from_right=%s target=%s (X<0=left, X>0=right)" % [
 		server_name, pos, vel, snappedf(charge, 0.01), total_score,

@@ -98,6 +98,8 @@ func compose_runtime_posture(def_override = null):
 		return stroke_def
 
 	var composed = base_def.blend_onto_stroke(stroke_def)
+	if stroke_def.left_hand_mode == 0 and stroke_def.posture_id != _player.PaddlePosture.READY:
+		composed.left_hand_mode = 0
 	if def_override == null:
 		_composed_pose_cache = composed
 		_cache_posture_id = stroke_def.posture_id

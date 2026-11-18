@@ -25,7 +25,6 @@ var _awaiting_return: bool = false  # set by game_serve, read by game_serve to t
 const MIN_SERVE_SPEED := PickleballConstants.MIN_SERVE_SPEED
 const MAX_SERVE_SPEED := PickleballConstants.MAX_SERVE_SPEED
 const MAX_SERVE_CHARGE_TIME := PickleballConstants.MAX_SERVE_CHARGE_TIME
-const HIT_REACH_DISTANCE := PickleballConstants.HIT_REACH_DISTANCE
 const NON_VOLLEY_ZONE := PickleballConstants.NON_VOLLEY_ZONE
 const BLUE_RESET_POSITION := Vector3(1.5, 1.0, 6.8)
 const RED_RESET_POSITION := Vector3(-1.5, 1.0, -6.8)
@@ -42,17 +41,17 @@ const _ShotPhysics = preload("res://scripts/shot_physics.gd")
 const _InputHandler = preload("res://scripts/input_handler.gd")
 const _ScoreboardUI = preload("res://scripts/scoreboard_ui.gd")
 const _PracticeLauncher = preload("res://scripts/practice_launcher.gd")
-const _BallPhysicsProbe = preload("res://scripts/ball_physics_probe.gd")
+const _BallPhysicsProbe = preload("res://scripts/tests/runtime/ball_physics_probe.gd")
 const _GameServe = preload("res://scripts/game_serve.gd")
 const _GameTrajectory = preload("res://scripts/game_trajectory.gd")
 const _GameShots = preload("res://scripts/game_shots.gd")
-const _GameDropTest = preload("res://scripts/game_drop_test.gd")
+const _GameDropTest = preload("res://scripts/tests/runtime/game_drop_test.gd")
 const _GameDebugUI = preload("res://scripts/game_debug_ui.gd")
 const _GameSoundTune = preload("res://scripts/game_sound_tune.gd")
 const _PostureEditorUI = preload("res://scripts/posture_editor_ui.gd")
 const _PostureEditorV2 = preload("res://scripts/posture_editor_v2.gd")
 const _ReactionHitButton = preload("res://scripts/reaction_hit_button.gd")
-const _SwingE2EProbe = preload("res://scripts/swing_e2e_probe.gd")
+const _SwingE2EProbe = preload("res://scripts/tests/runtime/swing_e2e_probe.gd")
 
 # ── Posture system class_name scripts (subfolder scripts need early preload for class resolution) ──
 const _PostureDefinition = preload("res://scripts/posture_definition.gd")
@@ -321,6 +320,7 @@ func _setup_subsystems() -> void:
 	game_sound_tune = _GameSoundTune.new()
 	add_child(game_sound_tune)
 	game_sound_tune.setup(ball.audio_synth, scoreboard_ui, hud)
+	game_sound_tune._create_sound_tune_panel(hud)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Serve aim UI update (called from input_handler during WAITING state)
@@ -388,6 +388,8 @@ func _create_ui() -> void:
 	var HudScript = preload("res://scripts/ui/hud.gd")
 	hud = HudScript.new()
 	add_child(hud)
+	hud.pose_editor_requested.connect(_toggle_posture_editor_v2)
+	hud.pause_requested.connect(func(): PauseController.open())
 
 	if scoreboard_ui:
 		scoreboard_ui.setup(hud)
@@ -403,9 +405,9 @@ func _create_ui() -> void:
 	reaction_button.anchor_right = 1.0
 	reaction_button.anchor_top = 1.0
 	reaction_button.anchor_bottom = 1.0
-	reaction_button.offset_left = -380.0
+	reaction_button.offset_left = -268.0
 	reaction_button.offset_right = -20.0
-	reaction_button.offset_top = -380.0
+	reaction_button.offset_top = -268.0
 	reaction_button.offset_bottom = -20.0
 	canvas.add_child(reaction_button)
 	if player_left and player_left.posture:
@@ -434,17 +436,13 @@ func _create_ui() -> void:
 		posture_editor_v2.set_player(player_left)
 	if camera_rig != null:
 		camera_rig.is_mouse_over_editor_ui_cb = Callable(posture_editor_v2, "contains_screen_point")
+		posture_editor_v2.set_camera_rig(camera_rig)
 
 	# Transport bar — sibling of posture_editor_ui on canvas (spans viewport 0.0-0.65)
 	# Hidden by default; shown only when posture editor is open.
 	_transport_bar = posture_editor_ui.build_transport_bar()
 	_transport_bar.visible = false
 	canvas.add_child(_transport_bar)
-
-	# Sound tune panel — created via game_sound_tune subsystem
-	# (called after _setup_subsystems so game_sound_tune is initialized)
-	if game_sound_tune != null:
-		game_sound_tune._create_sound_tune_panel(canvas)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # State machine
@@ -467,6 +465,10 @@ func _set_game_state(new_state: GameState) -> void:
 # Physics process — main game loop (delegates to subsystems)
 # ═══════════════════════════════════════════════════════════════════════════════
 func _physics_process(delta: float) -> void:
+	if _tool_state_active():
+		if camera_rig and posture_editor_v2.visible:
+			camera_rig.update(delta)
+		return
 	# Exit slow-mo if we leave PLAYING
 	if _in_slow_mo and game_state != GameState.PLAYING:
 		_exit_slow_mo()
@@ -550,6 +552,8 @@ func _format_serve_call() -> String:
 # Reaction button / slow-mo
 # ═══════════════════════════════════════════════════════════════════════════════
 func _on_player_stage_changed(stage: int, posture: int, commit_dist: float, ball2ghost: float, ttc: float) -> void:
+	if _tool_state_active():
+		return
 	if stage < 0:
 		if reaction_button:
 			reaction_button.enter_idle()
@@ -572,7 +576,7 @@ func _on_player_grade_flashed(grade: String) -> void:
 	print("[REACT] grade=%s" % grade)
 
 func _on_reaction_auto_fire() -> void:
-	if game_state == GameState.PLAYING:
+	if game_state == GameState.PLAYING and not input_handler.serve_is_charging:
 		_perform_player_swing(1.0)
 
 func _enter_slow_mo() -> void:
@@ -590,6 +594,9 @@ func _exit_slow_mo() -> void:
 # Swing handling (space press/release) — delegates to game_serve + game_shots
 # ═══════════════════════════════════════════════════════════════════════════════
 func _on_player_swing_press() -> void:
+	if game_state == GameState.WAITING:
+		game_serve.start_charge()
+		return
 	if game_state != GameState.PLAYING:
 		return
 	_enter_slow_mo()
@@ -606,6 +613,7 @@ func _on_player_swing_release(charge_ratio: float) -> void:
 	game_trajectory.clear()
 	if game_state == GameState.WAITING:
 		game_serve.release(charge_ratio)
+		serve_charge_time = 0.0
 	elif game_state == GameState.PLAYING:
 		_perform_player_swing(charge_ratio)
 	_deactivate_reaction_button()
@@ -617,28 +625,39 @@ func _perform_serve(charge_ratio: float) -> void:
 	game_serve.perform_serve(charge_ratio)
 
 func _on_serve_launched(_team: int) -> void:
-	# game_serve.perform_serve already set game_state = SERVING
-	pass
+	_set_game_state(GameState.PLAYING)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Player swing (human)
 # ═══════════════════════════════════════════════════════════════════════════════
+func _update_charge_ui(charge_ratio: float) -> void:
+	if game_state == GameState.WAITING:
+		game_serve._update_charge_ui(charge_ratio)
+	elif game_state == GameState.PLAYING:
+		var human = player_left.posture.human_contact
+		if human == null or human.contact.is_empty():
+			scoreboard_ui.set_state_text("Move into reach of the incoming ball\nPower: %d%%" % roundi(charge_ratio * 100))
+		else:
+			scoreboard_ui.set_state_text("%s · Power: %d%%\nRelease SPACE to swing" % [human.contact.def.display_name, roundi(charge_ratio * 100)])
+
 func _perform_player_swing(charge_ratio: float) -> void:
-	player_left.animate_serve_release(charge_ratio)
-	if player_left.posture:
-		player_left.posture.notify_ball_hit()
+	var human = player_left.posture.human_contact
+	if human != null and human.phase >= 0: return
+	if human == null or not human.request_swing(charge_ratio):
+		player_left.hitting.clear_charge_visual()
+		scoreboard_ui.set_state_text("Move into reach of the incoming ball")
+	else:
+		scoreboard_ui.set_state_text("Swing ready · %s" % human.contact.def.display_name)
 
-	if ball == null:
-		return
-
-	var paddle_pos: Vector3 = player_left.global_position + player_left._get_posture_offset_for(player_left.paddle_posture)
-	var reach := HIT_REACH_DISTANCE
-	var player_to_ball: float = player_left.global_position.distance_to(ball.global_position)
-	if player_to_ball < 1.80:
-		reach = maxf(reach, player_to_ball * 0.85)
-	if paddle_pos.distance_to(ball.global_position) > reach:
-		scoreboard_ui.set_state_text("Rally!")
-		return
+func _apply_player_contact_hit(charge_ratio: float, contact_posture: int) -> bool:
+	if game_state != GameState.PLAYING or ball == null: return false
+	var planner = preload("res://scripts/incoming_contact_planner.gd")
+	if not planner.legal_ball(player_left, ball): return false
+	var paddle_pos: Vector3 = PaddleReach.head_world(player_left)
+	var contact_error: float = paddle_pos.distance_to(ball.global_position)
+	if contact_error > planner.IMPACT_DISTANCE: return false
+	if paddle_pos.distance_to(PaddleReach.shoulder_world(player_left)) > PaddleReach.MAX_HEAD_DISTANCE + 0.001: return false
+	player_left.posture.notify_ball_hit()
 
 	var _vel: Vector3 = compute_shot_velocity(ball.global_position, charge_ratio, 0, _pending_shot_type)
 	# GAP-X: paddle velocity at impact contributes to ball speed.
@@ -654,7 +673,7 @@ func _perform_player_swing(charge_ratio: float) -> void:
 	var speed_factor := compute_sweet_spot_speed(ball.global_position, paddle_pos, _vel)
 	_vel = _vel * speed_factor
 	ball.linear_velocity = _vel
-	var _shot_spin: Vector3 = compute_shot_spin(_pending_shot_type, _vel, charge_ratio, 0, player_left.paddle_posture)
+	var _shot_spin: Vector3 = compute_shot_spin(_pending_shot_type, _vel, charge_ratio, 0, contact_posture)
 	var _sweet_spin: Vector3 = compute_sweet_spot_spin(ball.global_position, paddle_pos, _vel)
 	ball.angular_velocity = _shot_spin + _sweet_spin
 	ball.hit_by_player(0)
@@ -665,6 +684,8 @@ func _perform_player_swing(charge_ratio: float) -> void:
 		scoreboard_ui.show_shot_type(game_shots._classify_trajectory(ball.linear_velocity))
 	_pending_shot_type = ""
 	scoreboard_ui.set_state_text("Rally!")
+	player_left.posture.grade_flashed.emit(player_left.posture._commit_selector.grade_ball_to_ghost(contact_error))
+	return true
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rally helpers — delegate to game_shots
@@ -730,8 +751,12 @@ func _reset_ball() -> void:
 	_reset_player_positions()
 	if player_left and player_left.posture:
 		player_left.posture.reset_incoming_highlight()
+	if player_left and player_left.hitting:
+		player_left.hitting.clear_charge_visual()
 	if player_right and player_right.posture:
 		player_right.posture.reset_incoming_highlight()
+	if player_right and player_right.hitting:
+		player_right.hitting.clear_charge_visual()
 	player_right.set_ai_movement_enabled(false)
 	_update_held_ball_position()
 	scoreboard_ui.hide_out()
@@ -885,6 +910,8 @@ func _toggle_posture_editor_v2() -> void:
 	if posture_editor_v2 == null:
 		push_warning("[POSTURE EDITOR V2] posture_editor_v2 is null — editor not initialized")
 		return
+	if not posture_editor_v2.visible and game_sound_tune.sound_tune_panel.visible:
+		_toggle_sound_panel()
 	posture_editor_v2.toggle()
 	if posture_editor_v2.visible:
 		print("[POSTURE EDITOR V2] ON")
@@ -892,28 +919,28 @@ func _toggle_posture_editor_v2() -> void:
 		print("[POSTURE EDITOR V2] OFF")
 
 func _on_editor_v2_opened() -> void:
-	# CP2 — editor camera: orbit around player from a fixed angle.
-	if camera_rig != null and camera_rig.camera != null:
-		_editor_previous_camera_mode = camera_rig.orbit_mode
-		_editor_previous_camera_pos = camera_rig.camera.position
-		_editor_previous_camera_rot = camera_rig.camera.rotation_degrees
-		camera_rig.orbit_mode = 3
-		camera_rig.orbit_pitch = 0.24
-		camera_rig.orbit_angle = PI
-		camera_rig.orbit_auto = false
-		print("[EDITOR V2] Camera switched to editor orbit")
+	_suspend_tool_gameplay()
+	if scoreboard_ui:
+		scoreboard_ui.hide_all_hud()
+	if reaction_button:
+		reaction_button.hide()
+	if _transport_bar:
+		_transport_bar.hide()
+	if camera_rig != null and player_left != null:
+		camera_rig.begin_editor_view(player_left)
 	# Show posture ghosts for editor
 	if player_left and player_left.posture:
 		player_left.posture.set_ghosts_visible(true)
 
 func _on_editor_v2_closed() -> void:
-	# CP2 — restore previous camera.
-	if camera_rig != null and camera_rig.camera != null:
-		camera_rig.orbit_mode = _editor_previous_camera_mode
-		if _editor_previous_camera_mode == 0:
-			camera_rig.camera.position = _editor_previous_camera_pos
-			camera_rig.camera.rotation_degrees = _editor_previous_camera_rot
-		print("[EDITOR V2] Camera restored")
+	_resume_tool_gameplay()
+	if scoreboard_ui:
+		scoreboard_ui.show_all_hud()
+		scoreboard_ui.set_debug_visuals_active(debug_visuals_visible)
+	if reaction_button and ai_difficulty == 0:
+		reaction_button.enter_idle()
+	if camera_rig != null:
+		camera_rig.end_editor_view()
 	# Restore ghost visibility to match debug state
 	if player_left and player_left.posture:
 		player_left.posture.set_ghosts_visible(debug_visuals_visible)
@@ -994,6 +1021,11 @@ func _simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3,
 func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: int, shot_type: String) -> Vector3:
 	return shot_physics.compute_shot_velocity(ball_pos, charge_ratio, player_num, shot_type, ai_difficulty)
 
+func solve_ai_launch(ball_pos: Vector3, charge: float, posture: int, paddle_pos: Vector3,
+		paddle_velocity: Vector3, transfer: float) -> Dictionary:
+	return shot_physics.solve_ai_launch(ball_pos, charge, ai_difficulty, posture,
+		paddle_pos, paddle_velocity, transfer)
+
 func compute_shot_spin(shot_type: String, vel: Vector3, charge_ratio: float, player_num: int, posture: int = -1) -> Vector3:
 	return shot_physics.compute_shot_spin(shot_type, vel, charge_ratio, player_num, posture)
 
@@ -1057,3 +1089,64 @@ func _exit_tree() -> void:
 	if _net_helper != null:
 		_net_helper.free()
 		_net_helper = null
+
+
+var _tool_suspended_nodes: Dictionary = {}
+var _tool_ball_was_frozen: bool = false
+
+func _tool_state_active() -> bool:
+	return (posture_editor_v2 != null and posture_editor_v2.visible) or (game_sound_tune != null and game_sound_tune.sound_tune_panel != null and game_sound_tune.sound_tune_panel.visible)
+
+func close_active_tool() -> bool:
+	if posture_editor_v2 and posture_editor_v2.visible:
+		posture_editor_v2.close()
+		return true
+	if game_sound_tune and game_sound_tune.sound_tune_panel.visible:
+		_toggle_sound_panel()
+		return true
+	if hud and hud._guide and hud._guide.visible:
+		hud._guide.hide()
+		return true
+	return false
+
+func _toggle_sound_panel() -> void:
+	if posture_editor_v2 and posture_editor_v2.visible:
+		return
+	var panel: Control = game_sound_tune.sound_tune_panel
+	panel.visible = not panel.visible
+	if panel.visible:
+		_suspend_tool_gameplay()
+		scoreboard_ui.hide_all_hud()
+		reaction_button.hide()
+		game_sound_tune._refresh_sound_tune_panel()
+	else:
+		_resume_tool_gameplay()
+		scoreboard_ui.show_all_hud()
+		scoreboard_ui.set_debug_visuals_active(debug_visuals_visible)
+		if ai_difficulty == 0:
+			reaction_button.enter_idle()
+
+func _suspend_tool_gameplay() -> void:
+	if not _tool_suspended_nodes.is_empty():
+		return
+	game_serve.cleanup()
+	serve_charge_time = 0.0
+	serve_is_charging = false
+	if player_left and player_left.hitting:
+		player_left.hitting.clear_charge_visual()
+	_tool_ball_was_frozen = ball.freeze
+	ball.freeze = true
+	for node in [ball, player_left, player_right, rally_scorer, practice_launcher]:
+		if node:
+			_tool_suspended_nodes[node] = {"physics": node.is_physics_processing(), "process": node.is_processing()}
+			node.set_physics_process(false)
+			if node == practice_launcher:
+				node.set_process(false)
+
+func _resume_tool_gameplay() -> void:
+	ball.freeze = _tool_ball_was_frozen
+	for node in _tool_suspended_nodes:
+		if is_instance_valid(node):
+			node.set_physics_process(_tool_suspended_nodes[node]["physics"])
+			node.set_process(_tool_suspended_nodes[node]["process"])
+	_tool_suspended_nodes.clear()

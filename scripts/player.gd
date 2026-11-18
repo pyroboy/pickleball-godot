@@ -321,7 +321,8 @@ func _wire_hitbox() -> void:
 
 func _physics_process(delta: float) -> void:
 	var input_dir: Vector3 = Vector3.ZERO
-	_update_jump_state(delta)
+	if not (posture and posture.editor_preview_mode):
+		_update_jump_state(delta)
 	if ai_brain and ai_brain.ai_hit_cooldown > 0.0:
 		ai_brain.ai_hit_cooldown = max(ai_brain.ai_hit_cooldown - delta, 0.0)
 
@@ -330,7 +331,7 @@ func _physics_process(delta: float) -> void:
 			input_dir = ai_brain.get_ai_input()
 		if ai_brain:
 			ai_brain._update_ai_trajectory_fade(delta)
-	elif player_num == 0:
+	elif player_num == 0 and not (posture and posture.editor_preview_mode):
 		input_dir = _get_human_input()
 
 	if input_dir.length() > 0.0:
@@ -360,6 +361,9 @@ func _physics_process(delta: float) -> void:
 				awareness_grid.set_trajectory_points(debug_visual._last_trajectory_points)
 	if posture:
 		posture.update_paddle_tracking(false)
+	if is_ai and ai_brain:
+		ai_brain.align_paddle_to_contact(delta)
+	PaddleReach.clamp_paddle_for_player(self)
 	if pose_controller:
 		pose_controller.update_runtime_pose_state(delta)
 	if posture:
@@ -371,20 +375,27 @@ func _physics_process(delta: float) -> void:
 	if ai_brain:
 		ai_brain._try_ai_hit_ball()
 
+
 func _process(delta: float) -> void:
-	if body_anim:
+	var editor_preview: bool = posture != null and posture.editor_preview_mode
+	var incoming_pose: bool = posture != null and posture.human_contact != null and posture.human_contact.visual_pose != null
+	var authored_swing: bool = hitting != null and (hitting.is_in_follow_through or hitting.charge_visual_active)
+	if body_anim and not editor_preview:
 		body_anim.update_body_lean(delta)
 		body_anim.update_crouch(delta)
 		body_anim.update_idle_sway(delta)
 		body_anim.update_body_track_ball(delta)
+	if posture and posture.transition_pose_blend and (editor_preview or authored_swing):
+		posture.force_posture_update(posture.transition_pose_blend)
 	# Force paddle to ghost BEFORE arm IK so arms reach the correct position
 	if posture:
 		posture.force_paddle_head_to_ghost()
+	PaddleReach.clamp_paddle_for_player(self)
 	if arm_ik:
-		var arm_def = posture.transition_pose_blend if posture and posture.editor_preview_mode else null
+		var arm_def = posture.transition_pose_blend if posture and (editor_preview or authored_swing or incoming_pose) else null
 		arm_ik.update_arm_ik(delta, arm_def)
 	if leg_ik:
-		var leg_def = posture.transition_pose_blend if posture and posture.editor_preview_mode else null
+		var leg_def = posture.transition_pose_blend if posture and (editor_preview or authored_swing) else null
 		leg_ik.update_leg_ik(delta, leg_def)
 
 # --- Utility functions (shared with child nodes) ---

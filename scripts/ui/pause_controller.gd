@@ -50,7 +50,9 @@ func _on_window_focus_exited() -> void:
 	Engine.max_fps = 5
 	_focus_paused = true
 	_set_pause_state()
-	_show_pause_menu()
+	var scene = get_tree().current_scene
+	if scene == null or not scene.has_method("_tool_state_active") or not scene._tool_state_active():
+		_show_pause_menu()
 	print("[PauseController] window focus lost — throttling to 5 FPS")
 
 func _on_window_focus_entered() -> void:
@@ -64,6 +66,13 @@ func _on_window_focus_entered() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
+			if _menu != null and is_instance_valid(_menu) and _menu.close_settings():
+				get_viewport().set_input_as_handled()
+				return
+			var scene = get_tree().current_scene
+			if _menu == null and scene != null and scene.has_method("close_active_tool") and scene.close_active_tool():
+				get_viewport().set_input_as_handled()
+				return
 			toggle()
 			get_viewport().set_input_as_handled()
 

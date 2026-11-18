@@ -7,6 +7,9 @@ extends CanvasLayer
 ## Lifecycle: instantiated by pause_menu.gd. Closes itself on the X button
 ## (or on Esc handled here). Fires meta "on_close" callback when closing.
 
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+var _panel: Panel
+
 func _ready() -> void:
 	layer = 101
 	process_mode = Node.PROCESS_MODE_WHEN_PAUSED
@@ -24,14 +27,14 @@ func _build() -> void:
 
 	# Panel
 	var panel: Panel = Panel.new()
+	_panel = panel
+	panel.theme = UiTheme.create()
 	panel.anchor_left = 0.5
 	panel.anchor_top = 0.5
 	panel.anchor_right = 0.5
 	panel.anchor_bottom = 0.5
-	panel.offset_left = -420
-	panel.offset_top = -620
-	panel.offset_right = 420
-	panel.offset_bottom = 620
+	get_viewport().size_changed.connect(_fit_panel)
+	_fit_panel()
 	panel.add_theme_stylebox_override("panel", _panel_stylebox())
 	add_child(panel)
 
@@ -51,16 +54,16 @@ func _build() -> void:
 
 	var title: Label = Label.new()
 	title.text = "SETTINGS"
-	title.add_theme_font_size_override("font_size", 44)
+	title.add_theme_font_size_override("font_size", 22)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	_apply_bold(title, 800)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
 	var close_btn: Button = Button.new()
-	close_btn.text = "✕"
-	close_btn.custom_minimum_size = Vector2(72, 72)
-	close_btn.add_theme_font_size_override("font_size", 36)
+	close_btn.text = "Back"
+	close_btn.custom_minimum_size = Vector2(88, 44)
+	close_btn.add_theme_font_size_override("font_size", 20)
 	_apply_bold(close_btn, 700)
 	close_btn.add_theme_stylebox_override("normal", _btn_style(Color(0.25, 0.10, 0.14, 1.0)))
 	close_btn.add_theme_stylebox_override("hover", _btn_style(Color(0.45, 0.15, 0.20, 1.0)))
@@ -71,7 +74,7 @@ func _build() -> void:
 	# Tab container
 	var tabs: TabContainer = TabContainer.new()
 	tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tabs.add_theme_font_size_override("font_size", 28)
+	tabs.add_theme_font_size_override("font_size", 22)
 	vbox.add_child(tabs)
 
 	tabs.add_child(_build_video_tab())
@@ -136,6 +139,7 @@ func _apply_audio_bus(_key: String, value: float, bus_name: String) -> void:
 
 func _inner_vbox() -> VBoxContainer:
 	var v: VBoxContainer = VBoxContainer.new()
+	v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_theme_constant_override("separation", 22)
 	v.offset_left = 12
 	v.offset_top = 16
@@ -153,14 +157,14 @@ func _slider_row(parent: Node, label_text: String, key: String, vmin: float, vma
 
 	var lbl: Label = Label.new()
 	lbl.text = label_text
-	lbl.add_theme_font_size_override("font_size", 26)
+	lbl.add_theme_font_size_override("font_size", 20)
 	lbl.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_apply_bold(lbl, 600)
 	header.add_child(lbl)
 
 	var value_lbl: Label = Label.new()
-	value_lbl.add_theme_font_size_override("font_size", 26)
+	value_lbl.add_theme_font_size_override("font_size", 20)
 	value_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3, 1.0))
 	_apply_bold(value_lbl, 700)
 	header.add_child(value_lbl)
@@ -194,7 +198,7 @@ func _checkbox_row(parent: Node, label_text: String, key: String) -> void:
 
 	var lbl: Label = Label.new()
 	lbl.text = label_text
-	lbl.add_theme_font_size_override("font_size", 26)
+	lbl.add_theme_font_size_override("font_size", 20)
 	lbl.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_apply_bold(lbl, 600)
@@ -214,15 +218,15 @@ func _option_row(parent: Node, label_text: String, key: String, options: Array) 
 
 	var lbl: Label = Label.new()
 	lbl.text = label_text
-	lbl.add_theme_font_size_override("font_size", 26)
+	lbl.add_theme_font_size_override("font_size", 20)
 	lbl.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0, 1.0))
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_apply_bold(lbl, 600)
 	row.add_child(lbl)
 
 	var opt: OptionButton = OptionButton.new()
-	opt.add_theme_font_size_override("font_size", 26)
-	opt.custom_minimum_size = Vector2(220, 56)
+	opt.add_theme_font_size_override("font_size", 20)
+	opt.custom_minimum_size = Vector2(190, 44)
 	for i in range(options.size()):
 		opt.add_item(str(options[i]), i)
 	opt.select(clampi(int(Settings.get_value(key, 0)), 0, options.size() - 1))
@@ -287,3 +291,13 @@ func _on_close() -> void:
 		if cb.is_valid():
 			cb.call()
 	queue_free()
+
+func _fit_panel() -> void:
+	if _panel == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var half_size := Vector2(minf(760, viewport_size.x - 48), minf(700, viewport_size.y - 48)) * 0.5
+	_panel.offset_left = -half_size.x
+	_panel.offset_right = half_size.x
+	_panel.offset_top = -half_size.y
+	_panel.offset_bottom = half_size.y

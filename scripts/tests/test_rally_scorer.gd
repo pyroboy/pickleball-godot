@@ -51,13 +51,17 @@ func run_all(totals: Dictionary) -> void:
 		test_two_bounce_blue_legal_return_after_bounce,
 		test_two_bounce_red_illegal_return_of_return,
 		test_two_bounce_legal_volley_after_both_bounces,
+		test_hit_signal_preserves_legal_bounce,
+		test_hit_signal_rejects_early_volley,
 		# Service fault (4)
 		test_short_serve_blue,
 		test_wrong_service_court_blue,
 		test_valid_serve_lands_correct_diagonal,
 		test_short_serve_red,
+		test_red_serve_diagonal_both_parities,
 		# Server position (4)
 		test_server_position_valid,
+		test_server_position_uses_upcoming_serve_context,
 		test_server_position_wrong_half,
 		test_server_position_wrong_court,
 		test_server_position_foot_fault,
@@ -312,6 +316,7 @@ func test_two_bounce_blue_illegal_volley_of_serve() -> void:
 	var b := _ball()
 	b.both_bounces_complete = false
 	b.ball_bounced_since_last_hit = false  # ball is airborne since the serve
+	b.was_volley = true
 	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
 	var r := s.check_two_bounce_rule(0)
 	_assert_false(r["valid"])
@@ -323,6 +328,7 @@ func test_two_bounce_blue_legal_return_after_bounce() -> void:
 	var b := _ball()
 	b.both_bounces_complete = false
 	b.ball_bounced_since_last_hit = true  # ball bounced once since last hit
+	b.was_volley = false
 	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
 	var r := s.check_two_bounce_rule(0)
 	_assert_true(r["valid"])
@@ -332,6 +338,7 @@ func test_two_bounce_red_illegal_return_of_return() -> void:
 	var b := _ball()
 	b.both_bounces_complete = false
 	b.ball_bounced_since_last_hit = false
+	b.was_volley = true
 	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
 	var r := s.check_two_bounce_rule(1)
 	_assert_false(r["valid"])
@@ -345,6 +352,36 @@ func test_two_bounce_legal_volley_after_both_bounces() -> void:
 	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
 	var r := s.check_two_bounce_rule(0)
 	_assert_true(r["valid"])
+
+func test_hit_signal_preserves_legal_bounce() -> void:
+	var s := _scorer()
+	var b := Ball.new()
+	b.ball_bounced_since_last_hit = true
+	b.both_bounces_complete = false
+	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
+	var faults: Array[String] = []
+	s.rally_ended.connect(func(_winner: int, reason: String, _detail: String) -> void: faults.append(reason))
+	s.start_rally(0, true)
+	b.hit_by_player(1)
+	_assert_true(faults.is_empty(), "return after a bounce stays legal through the hit signal")
+	b.free()
+	s.free()
+
+func test_hit_signal_rejects_early_volley() -> void:
+	var s := _scorer()
+	var b := Ball.new()
+	b.ball_bounced_since_last_hit = false
+	b.both_bounces_complete = false
+	s.bind(b, _player(0, Vector3(0, 1, 6.8)), _player(1, Vector3(0, 1, -6.8)))
+	var faults: Array[String] = []
+	s.rally_ended.connect(func(_winner: int, reason: String, _detail: String) -> void: faults.append(reason))
+	s.start_rally(0, true)
+	b.hit_by_player(1)
+	_assert_eq(faults.size(), 1, "early volley emits a fault")
+	if not faults.is_empty():
+		_assert_eq(faults[0], _RallyScorer.FAULT_TWO_BOUNCE_RULE)
+	b.free()
+	s.free()
 
 # ── Tests: Service fault ─────────────────────────────────────────────────────
 func test_short_serve_blue() -> void:
@@ -376,6 +413,19 @@ func test_short_serve_red() -> void:
 	var r := s.check_service_ball_landed(Vector3(1.5, 0.1, 1.5))
 	_assert_false(r["valid"])
 	_assert_eq(r["winner"], 0)
+
+func test_red_serve_diagonal_both_parities() -> void:
+	var s := _scorer(1, true)
+	_assert_true(s.check_service_ball_landed(Vector3(1.5, 0.1, 4.5))["valid"])
+	_assert_eq(s.check_service_ball_landed(Vector3(-1.5, 0.1, 4.5))["reason"], _RallyScorer.FAULT_WRONG_SERVICE_COURT)
+	s.start_rally(1, false)
+	_assert_true(s.check_service_ball_landed(Vector3(-1.5, 0.1, 4.5))["valid"])
+	_assert_eq(s.check_service_ball_landed(Vector3(1.5, 0.1, 4.5))["reason"], _RallyScorer.FAULT_WRONG_SERVICE_COURT)
+
+func test_server_position_uses_upcoming_serve_context() -> void:
+	var s := _scorer(0, true)
+	_assert_true(s.check_server_position(Vector3(-1.5, 1, -6.8), 1, 1)["valid"])
+	_assert_true(s.check_server_position(Vector3(1.5, 1, -6.8), 1, 0)["valid"])
 
 # ── Tests: Server position ───────────────────────────────────────────────────
 func test_server_position_valid() -> void:

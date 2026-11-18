@@ -1,6 +1,7 @@
 class_name PostureSkeletonApplier extends RefCounted
 
 const _PostureDefinition = preload("res://scripts/posture_definition.gd")
+const VisibleBody = preload("res://scripts/stroke_body_pose.gd")
 
 ## World-space offset from forehand (X), up (Y), forward (Z) components — matches editor / foot metadata.
 static func stance_offset(v: Vector3, forehand_axis: Vector3, forward_axis: Vector3) -> Vector3:
@@ -24,6 +25,7 @@ func _init(player) -> void:
 
 ## Apply full-body posture fields to the skeleton.
 func apply(def) -> void:
+	VisibleBody.apply(_player, def)
 	if not _player.skeleton:
 		push_warning("PostureSkeletonApplier: _player.skeleton is null — cannot apply posture")
 		return

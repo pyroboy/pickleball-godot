@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+McpBridge="*res://mcp_bridge.gd"
 PickleballConstants="*res://scripts/constants.gd"
 Settings="*res://scripts/ui/settings.gd"
 TimeScale="*res://scripts/time/time_scale_manager.gd"
@@ -29,8 +30,10 @@ PauseController="*res://scripts/ui/pause_controller.gd"
 
 [display]
 
-window/size/viewport_width=1080
-window/size/viewport_height=1920
+window/size/viewport_width=1440
+window/size/viewport_height=900
+window/size/window_width_override=1280
+window/size/window_height_override=800
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 

@@ -1,6 +1,8 @@
 class_name GameTrajectory
 extends Node
 
+const _Flight = preload("res://scripts/ball_flight_predictor.gd")
+
 ## GameTrajectory - Owns all trajectory visualization for the game.
 ## Extracted from game.gd (trajectory predictor sections) and serve_trajectory.gd.
 ## Handles serve trajectory drawing, aim/arc labels, red target marker, and ball landing prediction.
@@ -25,11 +27,6 @@ var _serve_aim_offset_x: float = 0.0
 var _trajectory_arc_offset: float = 0.0
 
 # Constants mirrored from PickleballConstants for standalone use
-const TRAJECTORY_STEP_TIME: float = 0.08
-const TRAJECTORY_STEPS: int = 14
-const TRAJECTORY_SUBSTEPS: int = 3
-const MIN_SERVE_SPEED: float = 5.5
-const MAX_SERVE_SPEED: float = 12.0
 const MAX_SERVE_CHARGE_TIME: float = 1.5
 
 
@@ -76,13 +73,13 @@ func update(game_state: int, serving_team: int, serve_aim_offset_x: float,
 			start_velocity = _get_predicted_serve_velocity(charge_ratio, false)
 			if target_marker:
 				target_marker.visible = false
-			cache_key = "s0_%f" % charge_ratio
+			cache_key = "s0_%f_%f_%f_%v" % [charge_ratio, serve_aim_offset_x, trajectory_arc_offset, player_left_pos]
 		else:
 			# Red serving (PlayerRight at -Z side)
 			start_position = _get_serve_launch_position(true, player_right_pos)
 			start_velocity = _get_predicted_serve_velocity(charge_ratio, true)
 			_update_red_target_marker()
-			cache_key = "s1_%f" % charge_ratio
+			cache_key = "s1_%f_%f_%f_%v" % [charge_ratio, serve_aim_offset_x, trajectory_arc_offset, player_right_pos]
 		start_angular = Vector3.ZERO
 	
 	# PLAYING state — rally trajectory from ball velocity + player impulse
@@ -215,83 +212,16 @@ func _get_serve_launch_position(is_red_side: bool, player_pos: Vector3) -> Vecto
 
 ## Predicts the velocity of a serve at the given charge ratio.
 func _get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool) -> Vector3:
-	var serve_speed: float = lerp(MIN_SERVE_SPEED, MAX_SERVE_SPEED, clamp(charge_ratio, 0.0, 1.0))
-	var serve_origin: Vector3 = _get_serve_launch_position(from_red_side,
-		_game.player_right.global_position if from_red_side else _game.player_left.global_position)
-	
-	# Pickleball diagonal serve rules (opposite adjacent box)
-	var score_left: int = _game.score_left
-	var score_right: int = _game.score_right
-	var total_score: int = score_left + score_right
-	var serve_from_right: bool = (total_score % 2) == 0  # Even = serve from right side
-	
-	var target_x_offset: float = _serve_aim_offset_x
-	
-	if not from_red_side:
-		# BLUE SERVE (serving to red's side at Z > 0)
-		if serve_from_right:
-			target_x_offset = minf(_serve_aim_offset_x, -1.5)
-		else:
-			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
-		
-		var target_z: float = -4.6  # Red's service box (negative Z)
-		var target_position: Vector3 = Vector3(target_x_offset, 0.08, target_z)
-		var target_dir: Vector3 = (target_position - serve_origin).normalized()
-		target_dir.y = 0.32 + 0.22 * clamp(charge_ratio, 0.0, 1.0) + _trajectory_arc_offset
-		return target_dir.normalized() * serve_speed
-	else:
-		# RED SERVE (serving to blue's side at Z < 0)
-		if serve_from_right:
-			target_x_offset = maxf(_serve_aim_offset_x, 1.5)
-		else:
-			target_x_offset = minf(_serve_aim_offset_x, -1.5)
-		
-		var target_z: float = 4.6  # Blue's service box (positive Z)
-		var target_position: Vector3 = Vector3(target_x_offset, 0.08, target_z)
-		var target_dir: Vector3 = (target_position - serve_origin).normalized()
-		target_dir.y = 0.32 + 0.22 * clamp(charge_ratio, 0.0, 1.0) + _trajectory_arc_offset
-		return target_dir.normalized() * serve_speed
+	return _game.game_serve.get_predicted_serve_velocity(charge_ratio, from_red_side)
 
 
 ## Draws the trajectory arc using ImmediateMesh with dashed line effect.
 func _draw_trajectory(start_position: Vector3, start_velocity: Vector3, start_angular: Vector3 = Vector3.ZERO) -> void:
 	trajectory_mesh.clear_surfaces()
 	trajectory_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, trajectory_material)
-	
-	var gravity: float = 0.0
-	if _ball != null and _ball.has_method("get_effective_gravity"):
-		gravity = _ball.get_effective_gravity()
-	
-	var traj_pos: Vector3 = start_position
-	var velocity: Vector3 = start_velocity
-	var angular: Vector3 = start_angular
-	# Ball center rests at FLOOR_Y + BALL_RADIUS — matches ball.gd bounce threshold (0.135)
-	var floor_y: float = 0.135  # PickleballConstants.FLOOR_Y + ball.BALL_RADIUS
-	var sub_dt: float = TRAJECTORY_STEP_TIME / float(TRAJECTORY_SUBSTEPS)
-	var hit_floor: bool = false
-	var dash_counter: int = 0
-	var dash_interval: int = 2  # Draw every N steps for dashed effect
-	
-	for step in range(TRAJECTORY_STEPS):
-		# Dashed line: only draw every dash_interval steps
-		if dash_counter % dash_interval == 0:
-			trajectory_mesh.surface_add_vertex(traj_pos + Vector3(0.0, 0.03, 0.0))
-		dash_counter += 1
-		
-		for _sub in range(TRAJECTORY_SUBSTEPS):
-			var stepped: Array = _ball.predict_aero_step(traj_pos, velocity, angular, gravity, sub_dt) if _ball else [traj_pos, velocity, angular]
-			traj_pos = stepped[0]
-			velocity = stepped[1]
-			angular = stepped[2]
-			if traj_pos.y <= floor_y:
-				traj_pos.y = floor_y
-				hit_floor = true
-				break
-		if hit_floor:
-			if dash_counter % dash_interval == 0:
-				trajectory_mesh.surface_add_vertex(traj_pos + Vector3(0.0, 0.03, 0.0))
-			break
-	
+	var flight: Dictionary = _Flight.trace(start_position, start_velocity, start_angular, 3.0, 1, true)
+	for sample in flight["samples"]:
+		trajectory_mesh.surface_add_vertex(sample["pos"] + Vector3(0.0, 0.03, 0.0))
 	trajectory_mesh.surface_end()
 	trajectory_mesh_instance.visible = true
 
@@ -301,27 +231,9 @@ func _draw_trajectory(start_position: Vector3, start_velocity: Vector3, start_an
 func _predict_ball_landing_pos() -> Vector3:
 	if _ball == null:
 		return Vector3.INF
-	
-	var gravity: float = 0.0
-	if _ball.has_method("get_effective_gravity"):
-		gravity = _ball.get_effective_gravity()
-	
-	var pos: Vector3 = _ball.global_position
-	var vel: Vector3 = _ball.linear_velocity
-	var angular: Vector3 = _ball.angular_velocity
-	var floor_y: float = 0.135  # FLOOR_Y + BALL_RADIUS
-	var sub_dt: float = TRAJECTORY_STEP_TIME / float(TRAJECTORY_SUBSTEPS)
-	
-	for _step in range(80 * TRAJECTORY_SUBSTEPS):
-		var prev_pos: Vector3 = pos
-		var stepped: Array = _ball.predict_aero_step(pos, vel, angular, gravity, sub_dt) if _ball else [pos, vel, angular]
-		pos = stepped[0]
-		vel = stepped[1]
-		angular = stepped[2]
-		if pos.y <= floor_y:
-			var frac: float = (prev_pos.y - floor_y) / maxf(prev_pos.y - pos.y, 0.0001)
-			return prev_pos.lerp(pos, frac)
-	return Vector3.INF
+	var flight: Dictionary = _Flight.trace(_ball.global_position, _ball.linear_velocity,
+		_ball.angular_velocity, 3.0, 1, true)
+	return flight["first_bounce"] if flight["first_bounce_time"] >= 0.0 else Vector3.INF
 
 
 ## Returns true if the given position is outside court boundaries.

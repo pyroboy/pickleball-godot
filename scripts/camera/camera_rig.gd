@@ -48,6 +48,15 @@ var _base_fov: float = 60.0
 ## button/wheel events at that position so the posture editor UI isn't stolen.
 var is_mouse_over_editor_ui_cb: Callable = Callable()
 
+const EDITOR_MIN_DISTANCE := 1.5
+const EDITOR_MAX_DISTANCE := 12.0
+var editor_active := false
+var editor_distance := 4.6
+var editor_target := Vector3.ZERO
+var _editor_orbit_dragging := false
+var _editor_pan_dragging := false
+var _editor_saved_state: Dictionary = {}
+
 func _ready() -> void:
 	name = "CameraRig"
 
@@ -85,7 +94,7 @@ func setup(
 
 ## Add shake trauma (0..1). Scaled by Settings "video.shake" inside CameraShake.
 func add_shake(amount: float) -> void:
-	if _shake != null:
+	if _shake != null and not editor_active:
 		_shake.add_trauma(amount)
 
 func set_fov(new_fov: float) -> void:
@@ -117,6 +126,9 @@ func toggle_auto_orbit() -> void:
 
 ## Forward _unhandled_input from game.gd here.
 func handle_input(event: InputEvent) -> void:
+	if editor_active:
+		_handle_editor_input(event)
+		return
 	if orbit_mode == 0:
 		return
 	
@@ -155,13 +167,122 @@ func cancel_orbit_drag() -> void:
 	_orbit_dragging = false
 
 func update(delta: float) -> void:
-	_update_follow(delta)
-	if _shake != null:
+	if editor_active:
+		_update_editor_camera()
+	else:
+		_update_follow(delta)
+	if _shake != null and not editor_active:
 		_shake.update(delta)
 	
 	if camera != null:
-		var target_fov: float = 72.0 if orbit_mode == 3 else _base_fov
+		var target_fov: float = 72.0 if editor_active or orbit_mode == 3 else _base_fov
 		camera.fov = lerpf(camera.fov, target_fov, 5.0 * delta)
+
+func begin_editor_view(player: Node3D) -> void:
+	if editor_active or camera == null or player == null:
+		return
+	_editor_saved_state = {
+		"mode": orbit_mode, "angle": orbit_angle, "pitch": orbit_pitch,
+		"auto": orbit_auto, "position": camera.position,
+		"rotation": camera.rotation_degrees, "fov": camera.fov,
+		"v_offset": camera.v_offset, "h_offset": camera.h_offset,
+	}
+	editor_active = true
+	orbit_mode = 3
+	orbit_auto = false
+	reset_editor_view(player.global_position)
+
+func end_editor_view() -> void:
+	if not editor_active or camera == null:
+		return
+	editor_active = false
+	_editor_orbit_dragging = false
+	_editor_pan_dragging = false
+	orbit_mode = _editor_saved_state.get("mode", 0)
+	orbit_angle = _editor_saved_state.get("angle", 0.0)
+	orbit_pitch = _editor_saved_state.get("pitch", 0.35)
+	orbit_auto = _editor_saved_state.get("auto", false)
+	camera.position = _editor_saved_state.get("position", _default_pos)
+	camera.rotation_degrees = _editor_saved_state.get("rotation", _default_rot)
+	camera.fov = _editor_saved_state.get("fov", _base_fov)
+	camera.v_offset = _editor_saved_state.get("v_offset", 0.0)
+	camera.h_offset = _editor_saved_state.get("h_offset", 0.0)
+	_editor_saved_state.clear()
+
+func reset_editor_view(player_position: Vector3) -> void:
+	editor_target = player_position + Vector3.UP * 0.15
+	editor_distance = 3.4
+	orbit_angle = -PI * 0.5 + 0.55
+	orbit_pitch = 0.24
+	_update_editor_camera()
+
+func focus_editor_view(world_point: Vector3) -> void:
+	editor_target = world_point
+	_update_editor_camera()
+
+func set_editor_view(view: String) -> void:
+	match view:
+		"front":
+			orbit_angle = -PI * 0.5
+			orbit_pitch = 0.24
+		"side":
+			orbit_angle = 0.0
+			orbit_pitch = 0.24
+		"top":
+			orbit_angle = -PI * 0.5
+			orbit_pitch = 1.48
+	_update_editor_camera()
+
+func _handle_editor_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if not event.pressed:
+			if event.button_index == MOUSE_BUTTON_RIGHT:
+				_editor_orbit_dragging = false
+			elif event.button_index == MOUSE_BUTTON_MIDDLE:
+				_editor_pan_dragging = false
+			return
+		if is_mouse_over_editor_ui_cb.is_valid() and is_mouse_over_editor_ui_cb.call(event.position):
+			return
+		match event.button_index:
+			MOUSE_BUTTON_RIGHT:
+				_editor_orbit_dragging = true
+				get_viewport().set_input_as_handled()
+			MOUSE_BUTTON_MIDDLE:
+				_editor_pan_dragging = true
+				get_viewport().set_input_as_handled()
+			MOUSE_BUTTON_WHEEL_UP:
+				editor_distance = clampf(editor_distance * 0.9, EDITOR_MIN_DISTANCE, EDITOR_MAX_DISTANCE)
+				get_viewport().set_input_as_handled()
+			MOUSE_BUTTON_WHEEL_DOWN:
+				editor_distance = clampf(editor_distance * 1.1, EDITOR_MIN_DISTANCE, EDITOR_MAX_DISTANCE)
+				get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
+		if is_mouse_over_editor_ui_cb.is_valid() and is_mouse_over_editor_ui_cb.call(event.position):
+			return
+		if _editor_orbit_dragging:
+			orbit_angle -= event.relative.x * ORBIT_DRAG_SENSITIVITY
+			orbit_pitch = clampf(orbit_pitch - event.relative.y * ORBIT_DRAG_SENSITIVITY, -1.35, 1.5)
+			get_viewport().set_input_as_handled()
+		elif _editor_pan_dragging and camera:
+			var scale: float = editor_distance * 0.0015
+			editor_target += camera.global_transform.basis.x * -event.relative.x * scale
+			editor_target += camera.global_transform.basis.y * event.relative.y * scale
+			get_viewport().set_input_as_handled()
+
+func _update_editor_camera() -> void:
+	if camera == null:
+		return
+	var horizontal: float = editor_distance * cos(orbit_pitch)
+	camera.global_position = editor_target + Vector3(
+		cos(orbit_angle) * horizontal,
+		editor_distance * sin(orbit_pitch),
+		sin(orbit_angle) * horizontal
+	)
+	camera.look_at(editor_target, Vector3.UP)
+	camera.v_offset = 0.0
+	var viewport_size := get_viewport().get_visible_rect().size
+	var dock_fraction: float = minf(0.48, 610.0 / maxf(viewport_size.x, 1.0))
+	camera.h_offset = editor_distance * tan(deg_to_rad(camera.fov) * 0.5) * viewport_size.x / maxf(viewport_size.y, 1.0) * dock_fraction
 
 func _is_practice() -> bool:
 	if _is_practice_cb.is_valid():

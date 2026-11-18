@@ -61,6 +61,7 @@ const SHOW_SPIN_DEBUG := true
 # State
 var is_in_play: bool = false
 var last_hit_by: int = -1
+var flight_id: int = 0
 var serve_team: int = 0
 var can_register_floor_bounce: bool = true
 var was_above_bounce_height: bool = true
@@ -368,6 +369,7 @@ func _physics_process(_delta: float) -> void:
 # ── Public API ───────────────────────────────────────────────────────────────
 
 func serve(team: int, direction: Vector3) -> void:
+	flight_id += 1
 	serve_team = team
 	is_in_play = true
 	last_hit_by = team
@@ -378,6 +380,7 @@ func serve(team: int, direction: Vector3) -> void:
 	# rotation only, but also unseen since ball texture is uniform.
 
 func reset() -> void:
+	flight_id += 1
 	global_position = Vector3(-1.5, 1.5, -4)
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
@@ -388,6 +391,7 @@ func reset() -> void:
 	bounce_count = 0
 
 func hit_by_player(player_num: int) -> void:
+	flight_id += 1
 	was_volley = not ball_bounced_since_last_hit  # Capture before reset
 	last_hit_by = player_num
 	ball_bounced_since_last_hit = false
@@ -449,6 +453,11 @@ static func predict_aero_step(pos: Vector3, vel: Vector3, omega: Vector3, gravit
 
 	if vel.length() > MAX_SPEED:
 		vel = vel.normalized() * MAX_SPEED
+
+	# RigidBody3D also applies the project's default linear damping during its
+	# integration step. Account for it here so prediction matches the live body.
+	var engine_damp: float = float(ProjectSettings.get_setting("physics/3d/default_linear_damp"))
+	vel *= maxf(1.0 - engine_damp * dt, 0.0)
 
 	pos += vel * dt
 	return [pos, vel, omega]

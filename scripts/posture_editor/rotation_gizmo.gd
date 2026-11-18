@@ -30,8 +30,8 @@ func _create_rings() -> void:
 		
 		# Torus for rotation ring
 		var torus := TorusMesh.new()
-		ring.inner_radius = ring_radius - ring_tube_radius
-		ring.outer_radius = ring_radius + ring_tube_radius
+		torus.inner_radius = ring_radius - ring_tube_radius
+		torus.outer_radius = ring_radius + ring_tube_radius
 		ring.mesh = torus
 		
 		# Orient based on axis

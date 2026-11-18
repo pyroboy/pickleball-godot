@@ -4,8 +4,6 @@ class_name PlayerDebugVisual extends Node
 
 const HUMAN_INTERCEPT_POOL_SIZE = 4  # Mobile: reduced from 8
 const AI_MARKER_HEIGHT = 0.09
-const AI_MARKER_SMOOTHING = 0.08
-const AI_POST_BOUNCE_MARKER_SMOOTHING = 0.12
 const NON_VOLLEY_ZONE = PickleballConstants.NON_VOLLEY_ZONE
 const MEDIUM_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.MEDIUM_OVERHEAD_TRIGGER_HEIGHT
 const HIGH_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.HIGH_OVERHEAD_TRIGGER_HEIGHT
@@ -45,6 +43,7 @@ var human_postbounce_labels: Array[Label3D] = []
 var incoming_traj_mesh: ImmediateMesh = null
 var incoming_traj_instance: MeshInstance3D = null
 var incoming_traj_material: StandardMaterial3D = null
+var _last_flight: Dictionary = {}
 var _last_trajectory_points: Array[Vector3] = []
 var _traj_log_pending: bool = false  # set true by practice launch to log once
 
@@ -420,16 +419,11 @@ func update_ai_indicators() -> void:
 	var target_marker_goal: Vector3 = Vector3(_player.ai_brain.ai_target_position.x, AI_MARKER_HEIGHT, _player.ai_brain.ai_target_position.z)
 	var bounce_marker_goal: Vector3 = Vector3(_player.ai_brain.ai_predicted_bounce_position.x, 0.082 + AI_MARKER_HEIGHT, _player.ai_brain.ai_predicted_bounce_position.z)
 	var contact_marker_goal: Vector3 = _player.ai_brain.ai_predicted_contact_position
-	if ai_target_indicator_position == Vector3.ZERO:
-		ai_target_indicator_position = target_marker_goal
-	if ai_bounce_indicator_position == Vector3.ZERO:
-		ai_bounce_indicator_position = bounce_marker_goal
-	if ai_contact_indicator_position == Vector3.ZERO:
-		ai_contact_indicator_position = contact_marker_goal
-	var target_smoothing: float = AI_POST_BOUNCE_MARKER_SMOOTHING
-	ai_target_indicator_position = ai_target_indicator_position.lerp(target_marker_goal, target_smoothing)
-	ai_bounce_indicator_position = ai_bounce_indicator_position.lerp(bounce_marker_goal, AI_MARKER_SMOOTHING)
-	ai_contact_indicator_position = ai_contact_indicator_position.lerp(contact_marker_goal, AI_POST_BOUNCE_MARKER_SMOOTHING)
+	# These markers describe the current decision. Smoothing used to leave the
+	# contact dot more than a metre behind a fast ball and hid the actual aim.
+	ai_target_indicator_position = target_marker_goal
+	ai_bounce_indicator_position = bounce_marker_goal
+	ai_contact_indicator_position = contact_marker_goal
 
 	# Clamp all AI indicators to stay within the AI's own court half
 	ai_target_indicator.global_position = _player._clamp_to_court(ai_target_indicator_position)
@@ -505,112 +499,27 @@ func predict_human_intercept_points(ball: RigidBody3D) -> Dictionary:
 
 func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 	var points: Array[Vector3] = []
-	if ball == null or incoming_traj_mesh == null:
+	_last_flight = {}
+	if incoming_traj_mesh: incoming_traj_mesh.clear_surfaces()
+	if ball == null or not ball.is_in_play or ball.linear_velocity.length() < 0.5:
+		if incoming_traj_instance: incoming_traj_instance.hide()
 		return points
-
-	incoming_traj_mesh.clear_surfaces()
-
-	if ball.linear_velocity.length() < 0.5:
-		incoming_traj_instance.visible = false
-		return points
-
-	var gravity: float = _Ball.get_effective_gravity()
-	var pos: Vector3 = ball.global_position
-	var vel: Vector3 = ball.linear_velocity
-	var omega: Vector3 = ball.angular_velocity
-	var has_bounced: bool = false
-	var step_time: float = 0.04
-	var max_steps: int = 80
-	var dash_on: float = 0.15
-	var dash_off: float = 0.10
-	var accum: float = 0.0
-	var drawing: bool = true
-	var prev_pos: Vector3 = pos
-
-	var should_draw: bool = _trajectory_visible
-
-	if should_draw:
+	_last_flight = BallFlightPredictor.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity)
+	var samples: Array = _last_flight.samples
+	for sample in samples: points.append(sample.pos)
+	# The drawing lift is visual only. Prediction receives the unmodified positions.
+	if incoming_traj_mesh and _trajectory_visible and points.size() > 1:
 		incoming_traj_mesh.surface_begin(Mesh.PRIMITIVE_LINES, incoming_traj_material)
-
-	for _step in range(max_steps):
-		var stepped: Array = _Ball.predict_aero_step(pos, vel, omega, gravity, step_time)
-		if stepped.is_empty():
-			break
-		pos = stepped[0]
-		vel = stepped[1]
-		omega = stepped[2]
-
-		if pos.y <= 0.08:
-			pos.y = 0.08
-			if not has_bounced:
-				has_bounced = true
-				var bounced: Array = _Ball.predict_bounce_spin(vel, omega)
-				if bounced.is_empty():
-					break
-				vel = bounced[0]
-				omega = bounced[1]
-			else:
-				points.append(pos + Vector3(0, 0.03, 0))
-				break
-
-		points.append(pos + Vector3(0, 0.03, 0))
-
-		if should_draw:
-			var seg_len: float = prev_pos.distance_to(pos)
-			accum += seg_len
-			var threshold: float = dash_on if drawing else dash_off
-			if accum >= threshold:
-				accum = 0.0
-				drawing = not drawing
-
-			if drawing:
-				incoming_traj_mesh.surface_add_vertex(prev_pos + Vector3(0, 0.03, 0))
-				incoming_traj_mesh.surface_add_vertex(pos + Vector3(0, 0.03, 0))
-
-		prev_pos = pos
-
-	if should_draw:
+		for i in range(points.size() - 1):
+			if i % 6 < 4:
+				incoming_traj_mesh.surface_add_vertex(points[i] + Vector3.UP * 0.03)
+				incoming_traj_mesh.surface_add_vertex(points[i + 1] + Vector3.UP * 0.03)
 		incoming_traj_mesh.surface_end()
-		incoming_traj_instance.visible = true
-	else:
-		incoming_traj_instance.visible = false
-
-	# One-shot trajectory trace log (triggered by practice ball launch)
-	if _traj_log_pending and not points.is_empty():
-		_traj_log_pending = false
-		var player_pos: Vector3 = _player.global_position
-		var paddle_pos: Vector3 = _player.global_position
-		if _player.has_method("get_paddle_position"):
-			paddle_pos = _player.get_paddle_position()
-		var fwd: Vector3 = _player._get_forward_axis()
-		var last_logged_dist: float = -1.0
-		print("[TRAJ] %d pts | player=(%.1f,%.1f,%.1f) paddle=(%.1f,%.1f,%.1f) dir=(%.2f,%.2f)" % [points.size(), player_pos.x, player_pos.y, player_pos.z, paddle_pos.x, paddle_pos.y, paddle_pos.z, fwd.x, fwd.z])
-		# Find nearest green ghost for each trajectory zone
-		for i in range(points.size()):
-			var pt: Vector3 = points[i]
-			var d_player: float = Vector2(pt.x - player_pos.x, pt.z - player_pos.z).length()
-			var bucket: float = snappedf(d_player, 0.5)
-			if bucket != last_logged_dist and d_player <= 8.0:
-				last_logged_dist = bucket
-				var d_paddle: float = paddle_pos.distance_to(pt)
-				# Find nearest ghost to this trajectory point
-				var nearest_ghost: String = "-"
-				var nearest_ghost_d: float = INF
-				if _player.posture:
-					var resolver = _player.posture.get_node_or_null("OffsetResolver")
-					if resolver == null and _player.posture.has_method("get_posture_offset_for"):
-						resolver = _player.posture
-					for posture in _player.posture.posture_ghosts.keys():
-						var gw: Vector3 = player_pos + (resolver.get_posture_offset_for(posture) if resolver else Vector3.ZERO)
-						var gd: float = gw.distance_to(pt)
-						if gd < nearest_ghost_d:
-							nearest_ghost_d = gd
-							nearest_ghost = _player.DEBUG_POSTURE_NAMES[posture] if posture < _player.DEBUG_POSTURE_NAMES.size() else "?"
-				print("  d=%.1f pos=(%.2f,%.2f,%.2f) paddle=%.2f ghost=%s(%.2f)" % [d_player, pt.x, pt.y, pt.z, d_paddle, nearest_ghost, nearest_ghost_d])
-
+	if incoming_traj_instance: incoming_traj_instance.visible = _trajectory_visible
 	return points
 
 func clear_incoming_trajectory() -> void:
+	_last_flight = {}
 	_last_trajectory_points.clear()
 	if incoming_traj_mesh:
 		incoming_traj_mesh.clear_surfaces()
@@ -618,199 +527,11 @@ func clear_incoming_trajectory() -> void:
 		incoming_traj_instance.visible = false
 
 func update_human_intercept_pools(ball: RigidBody3D) -> void:
-	# Always compute trajectory (posture system needs it even when visuals are off)
 	_last_trajectory_points = draw_incoming_trajectory(ball)
-	if not _trajectory_visible:
-		# Hide the visual mesh but keep the points
-		if incoming_traj_instance:
-			incoming_traj_instance.visible = false
-	# Commit when the OPPONENT hits the ball (not self)
-	var opponent_num = 1 - _player.player_num
-	var current_hit_by: int = -1
-	if ball.has_method("get_last_hit_by"):
-		current_hit_by = int(ball.get_last_hit_by())
-	var opponent_just_hit = (current_hit_by == opponent_num and human_last_hit_by_seen != opponent_num)
-	human_last_hit_by_seen = current_hit_by
-
-	# Fallback: detect velocity direction toward our court
-	var ball_vel_sign: float = sign(ball.linear_velocity.z)
-	# For player 0 (+Z court), ball coming toward us = positive Z vel
-	# For player 1 (-Z court), ball coming toward us = negative Z vel
-	var toward_us = (_player.player_num == 0 and ball_vel_sign > 0) or (_player.player_num == 1 and ball_vel_sign < 0)
-	var vel_flipped = (ball_vel_sign != human_last_ball_vel_sign and toward_us)
-	human_last_ball_vel_sign = ball_vel_sign
-
-	# Recompute on new opponent hit, velocity flip inbound, or first time
-	var needs_commit = opponent_just_hit or vel_flipped or human_committed_pre_intercepts.is_empty()
-
-	if needs_commit:
-		var result = predict_human_intercept_points(ball)
-		var pre: Array[Vector3] = result["pre"]
-		var post: Array[Vector3] = result["post"]
-
-		# Pick one best point per shot tier so all three can show simultaneously
-		human_committed_pre_intercepts.clear()
-		if pre.size() > 0:
-			# Tier 1: VOLLEY  (0.18m - MEDIUM_OVERHEAD_TRIGGER_HEIGHT)
-			var best_volley = Vector3.ZERO
-			var best_volley_score = INF
-			# Tier 2: SEMI-SMASH (MEDIUM -> HIGH threshold)
-			var best_semi = Vector3.ZERO
-			var best_semi_score = INF
-			# Tier 3: FULL SMASH (>= HIGH threshold)
-			var best_smash = Vector3.ZERO
-			var best_smash_score = INF
-			for pt in pre:
-				var dist = _player.global_position.distance_to(pt)
-				if pt.y < MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-					var score = abs(pt.y - 0.5) + dist * 0.2
-					if score < best_volley_score:
-						best_volley_score = score
-						best_volley = pt
-				elif pt.y < HIGH_OVERHEAD_TRIGGER_HEIGHT:
-					var score = abs(pt.y - 0.9) + dist * 0.2
-					if score < best_semi_score:
-						best_semi_score = score
-						best_semi = pt
-				else:
-					var score = dist * 0.2
-					if score < best_smash_score:
-						best_smash_score = score
-						best_smash = pt
-			# Add in order: volley first (lowest), then semi, then smash (highest)
-			if best_volley != Vector3.ZERO:
-				human_committed_pre_intercepts.append(best_volley)
-			if best_semi != Vector3.ZERO:
-				human_committed_pre_intercepts.append(best_semi)
-			if best_smash != Vector3.ZERO:
-				human_committed_pre_intercepts.append(best_smash)
-
-		# Pick optimal post-bounce: low (easy return) + medium (ideal)
-		human_committed_post_intercepts.clear()
-		if post.is_empty():
-			return
-		var best_mid = post[0]
-		var best_mid_score = INF
-		var best_low = Vector3.ZERO
-		var best_low_score = INF
-		for pt in post:
-			var med_err = abs(pt.y - 0.85)
-			var low_err = abs(pt.y - 0.35)
-			var dist = _player.global_position.distance_to(pt)
-			if med_err + dist * 0.2 < best_mid_score:
-				best_mid_score = med_err + dist * 0.2
-				best_mid = pt
-			if low_err + dist * 0.2 < best_low_score:
-				best_low_score = low_err + dist * 0.2
-				best_low = pt
-		human_committed_post_intercepts.append(best_mid)
-		if best_low != Vector3.ZERO and best_low.distance_to(best_mid) > 0.4:
-			human_committed_post_intercepts.append(best_low)
-
-	# --- Intent-indicator visibility gate ---
-	# Hide when any of these is true:
-	#   1. N key has toggled them off (_intent_hidden)
-	#   2. Ball isn't moving toward THIS player (serving it themselves, or they
-	#      just struck it and it's leaving)
-	#   3. Ball is nearly stationary (toss / sitting on paddle / reset / roll)
-	# NOTE: deliberately NOT checking ball.is_in_play — it's only set for
-	# practice launches, real serves never set it (game.gd uses linear_velocity
-	# direct-set instead of ball.serve()), so relying on it would hide the
-	# indicators for the entire rally. Velocity + direction are sufficient.
-	# 1.5 m/s threshold catches toss jitter and residual post-point rolling.
-	var ball_incoming: bool = toward_us and ball.linear_velocity.length() > 1.5
-	if _intent_hidden or not ball_incoming or not _intercept_visible:
-		for node in human_prebounce_indicators:
+	# The selected pose provides the one timed contact indicator; stale alternative pools are hidden.
+	for nodes in [human_prebounce_indicators, human_postbounce_indicators, human_prebounce_dashlines, human_prebounce_labels, human_postbounce_labels]:
+		for node in nodes:
 			if node: node.visible = false
-		for dl in human_prebounce_dashlines:
-			if dl: dl.visible = false
-		for lbl in human_prebounce_labels:
-			if lbl: lbl.visible = false
-		for node in human_postbounce_indicators:
-			if node: node.visible = false
-		for lbl in human_postbounce_labels:
-			if lbl: lbl.visible = false
-		return
-
-	var player_z_abs: float = abs(_player.global_position.z)
-
-	# --- Update pre-bounce indicator visuals ---
-	for i in range(human_prebounce_indicators.size()):
-		var node = human_prebounce_indicators[i]
-		var dl = human_prebounce_dashlines[i] if i < human_prebounce_dashlines.size() else null
-		var lbl = human_prebounce_labels[i] if i < human_prebounce_labels.size() else null
-		if i < human_committed_pre_intercepts.size():
-			var target_pt: Vector3 = human_committed_pre_intercepts[i]
-			if node.global_position == Vector3.ZERO:
-				node.global_position = target_pt
-			else:
-				node.global_position = node.global_position.lerp(target_pt, 0.06)
-			node.visible = true
-
-			var cls: Dictionary = _classify_pre_bounce_shot(target_pt.y, player_z_abs, abs(target_pt.z))
-			var dot_color: Color = cls["dot_color"]
-			var mat: StandardMaterial3D = node.material_override as StandardMaterial3D
-			if mat:
-				mat.albedo_color = dot_color
-				mat.emission = Color(dot_color.r, dot_color.g * 0.7, dot_color.b, 1.0)
-				mat.emission_energy_multiplier = cls["energy"]
-			node.scale = node.scale.lerp(Vector3.ONE * float(cls["scale"]), 0.15)
-
-			if dl:
-				var floor_pt: Vector3 = Vector3(node.global_position.x, 0.08, node.global_position.z)
-				draw_dash_line(dl, floor_pt, node.global_position)
-				dl.visible = true
-				var dl_mat: StandardMaterial3D = dl.material_override as StandardMaterial3D
-				if dl_mat:
-					dl_mat.albedo_color = Color(dot_color.r, dot_color.g, dot_color.b, 0.7)
-					dl_mat.emission = Color(dot_color.r, dot_color.g * 0.6, dot_color.b, 1.0)
-			if lbl:
-				lbl.text = cls["label"]
-				lbl.modulate = cls["label_color"]
-				lbl.global_position = node.global_position + Vector3(0.0, 0.18, 0.0)
-				lbl.visible = true
-		else:
-			node.visible = false
-			node.scale = Vector3.ONE
-			if dl: dl.visible = false
-			if lbl: lbl.visible = false
-
-	# --- Update post-bounce indicator visuals ---
-	for i in range(human_postbounce_indicators.size()):
-		var node = human_postbounce_indicators[i]
-		var lbl = human_postbounce_labels[i] if i < human_postbounce_labels.size() else null
-		if i < human_committed_post_intercepts.size():
-			var target_pt: Vector3 = human_committed_post_intercepts[i]
-			if node.global_position == Vector3.ZERO:
-				node.global_position = target_pt
-			else:
-				node.global_position = node.global_position.lerp(target_pt, 0.06)
-			node.visible = true
-
-			var cls: Dictionary = _classify_post_bounce_shot(target_pt.y, player_z_abs, abs(target_pt.z))
-			var dot_color: Color = cls["dot_color"]
-			var mat: StandardMaterial3D = node.material_override as StandardMaterial3D
-			if mat:
-				mat.albedo_color = dot_color
-				mat.emission = Color(dot_color.r, dot_color.g * 0.75, dot_color.b, 1.0)
-				mat.emission_energy_multiplier = cls["energy"]
-			node.scale = node.scale.lerp(Vector3.ONE * float(cls["scale"]), 0.15)
-
-			if lbl:
-				lbl.text = cls["label"]
-				lbl.modulate = cls["label_color"]
-				lbl.global_position = node.global_position + Vector3(0.0, 0.16, 0.0)
-				lbl.visible = true
-		else:
-			node.visible = false
-			node.scale = Vector3.ONE
-			if lbl: lbl.visible = false
-
-# ──────────────────────────────────────────────────────────────────────────
-# Shot classifiers — decide what label + color to attach to a predicted
-# intercept point based on ball height, player court position, and whether
-# it's a pre-bounce (in the air) or post-bounce (after first bounce) hit.
-# ──────────────────────────────────────────────────────────────────────────
 
 func _classify_pre_bounce_shot(hit_h: float, player_z_abs: float, _pt_z_abs: float) -> Dictionary:
 	if _player and _player.pose_controller:

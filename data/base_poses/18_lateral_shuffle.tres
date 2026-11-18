@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 18
+display_name = "Lateral Shuffle"
+stroke_overlay_mix = 0.84
+left_hand_mode = 1
+stance_width = 0.52
+front_foot_forward = 0.06
+back_foot_back = -0.06
+crouch_amount = 0.12
+torso_pitch_deg = 4.0
+body_roll_deg = 3.0

@@ -67,13 +67,14 @@ class_name PostureDefinition extends Resource
 
 # ── Right arm IK (paddle hand) — Phase 3 wiring ─────────────────────
 @export_group("Right Arm IK")
+@export_enum("Right", "Left") var paddle_hand: int = 0
 @export var right_hand_offset: Vector3 = Vector3.ZERO
 @export var right_elbow_pole: Vector3 = Vector3.ZERO
 @export var right_shoulder_rotation_deg: Vector3 = Vector3.ZERO
 
 # ── Left arm IK (two-handed grip / guard hand) — Phase 3 wiring ─────
 @export_group("Left Arm IK")
-@export_enum("Free", "PaddleNeck", "AcrossChest", "OverheadLift") var left_hand_mode: int = 0
+@export_enum("Auto", "PaddleNeck", "AcrossChest", "OverheadLift", "Free") var left_hand_mode: int = 0
 @export var left_hand_offset: Vector3 = Vector3.ZERO
 @export var left_elbow_pole: Vector3 = Vector3.ZERO
 @export var left_shoulder_rotation_deg: Vector3 = Vector3.ZERO
@@ -132,6 +133,10 @@ class_name PostureDefinition extends Resource
 @export var ft_duration_settle: float = 0.15
 @export var ft_duration_hold: float = 0.12
 @export_enum("ExpoOut", "QuadOut", "SineInOut") var ft_ease_curve: int = 0
+@export_range(0.0, 1.0) var swing_path_blend: float = 1.0
+@export var windup_body: Resource
+@export var follow_through_body: Resource
+@export var charge_duration: float = 0.30
 
 # ── Metadata ────────────────────────────────────────────────────────
 @export_group("Metadata")
@@ -187,6 +192,7 @@ func lerp_with(other, w: float):
 	o.zone_y_max = lerpf(zone_y_max, other.zone_y_max, t)
 	o.zone_forward_offset = lerpf(zone_forward_offset, other.zone_forward_offset, t)
 	o.right_hand_offset = right_hand_offset.lerp(other.right_hand_offset, t)
+	o.paddle_hand = paddle_hand if t < 0.5 else other.paddle_hand
 	o.right_elbow_pole = right_elbow_pole.lerp(other.right_elbow_pole, t)
 	o.right_shoulder_rotation_deg = right_shoulder_rotation_deg.lerp(other.right_shoulder_rotation_deg, t)
 	o.left_hand_mode = left_hand_mode if t < 0.5 else other.left_hand_mode
@@ -230,6 +236,10 @@ func lerp_with(other, w: float):
 	o.ft_duration_settle = lerpf(ft_duration_settle, other.ft_duration_settle, t)
 	o.ft_duration_hold = lerpf(ft_duration_hold, other.ft_duration_hold, t)
 	o.ft_ease_curve = ft_ease_curve if t < 0.5 else other.ft_ease_curve
+	o.swing_path_blend = lerpf(swing_path_blend, other.swing_path_blend, t)
+	o.windup_body = windup_body
+	o.follow_through_body = follow_through_body
+	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)
 	o.schema_version = schema_version
 	o.notes = notes
 	o.last_tuned_by = last_tuned_by

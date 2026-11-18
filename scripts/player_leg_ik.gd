@@ -83,11 +83,34 @@ var _debug_frame_count: int = 0
 # Parent player reference
 var _player
 
+func _update_authored_stance(def) -> void:
+	var fh: Vector3 = _player._get_forehand_axis()
+	var fwd: Vector3 = _player._get_forward_axis()
+	var base := Vector3(_player.global_position.x, COURT_FLOOR_Y + 0.04, _player.global_position.z)
+	for side in [1, -1]:
+		var right: bool = side == 1
+		var leg = _player.right_leg_node if right else _player.left_leg_node
+		var lead: bool = (right and def.lead_foot == 0) or (not right and def.lead_foot == 1)
+		var forward: float = def.front_foot_forward if lead else def.back_foot_back
+		var offset: Vector3 = def.right_foot_offset if right else def.left_foot_offset
+		var foot: Vector3 = base + fh * side * def.stance_width * 0.5 + fwd * forward + _PostureSkeletonApplier.stance_offset(offset, fh, fwd)
+		if right: right_foot_smooth = foot
+		else: left_foot_smooth = foot
+		var pole: Vector3 = def.right_knee_pole if right else def.left_knee_pole
+		if pole.length_squared() < 0.0001: pole = Vector3(0, 0.5, 1)
+		leg.solve_ik(foot, foot + _PostureSkeletonApplier.stance_offset(pole, fh, fwd), 0.0)
+		var yaw: float = def.right_foot_yaw_deg if right else def.left_foot_yaw_deg
+		leg.foot_pivot.global_rotation = Vector3(0, atan2(-fwd.x, -fwd.z) + deg_to_rad(yaw) * _player._get_swing_sign(), 0)
+
 func _ready() -> void:
 	_player = get_parent() as CharacterBody3D
 
 func update_leg_ik(delta: float, def_override = null) -> void:
 	if not _player.right_leg_node or not _player.left_leg_node:
+		return
+	if def_override != null:
+		_update_authored_stance(def_override)
+		feet_initialized = false
 		return
 
 	var fh_axis: Vector3 = _player._get_forehand_axis()

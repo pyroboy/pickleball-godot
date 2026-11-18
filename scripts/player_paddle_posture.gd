@@ -1,6 +1,8 @@
 class_name PlayerPaddlePosture extends Node
 
 const _PostureColors = preload("res://scripts/posture_colors.gd")
+const HumanContact = preload("res://scripts/human_contact_controller.gd")
+var human_contact = null
 const _BallInfo = preload("res://scripts/ball.gd")
 ## PostureLibrary singleton for Phase 2+ wiring.
 var _posture_lib
@@ -66,31 +68,18 @@ const ZONE_EXIT_MARGIN := _PC.ZONE_EXIT_MARGIN  # margin before triggering zone-
 var POSTURE_ZONES: Dictionary = {}
 
 func _init_posture_zones() -> void:
-	var PP = _player.PaddlePosture
-	POSTURE_ZONES = {
-		# ── Normal tier (ghost handle local_ht ≈ 0.55) ───────────────────────────
-		PP.FOREHAND:        {"x_min": 0.30, "x_max": 0.80,  "y_min": 0.30, "y_max": 0.80},
-		PP.BACKHAND:        {"x_min": -0.80, "x_max": -0.30, "y_min": 0.30, "y_max": 0.80},
-		PP.WIDE_FOREHAND:   {"x_min": 0.70,  "x_max": 1.20,  "y_min": 0.30, "y_max": 0.80},
-		PP.WIDE_BACKHAND:   {"x_min": -1.20, "x_max": -0.70,  "y_min": 0.30, "y_max": 0.80},
-		PP.FORWARD:         {"x_min": -0.30, "x_max": 0.30,  "y_min": 0.30, "y_max": 0.80},
-		PP.VOLLEY_READY:    {"x_min": -0.30, "x_max": 0.30,  "y_min": 0.45, "y_max": 0.90},
-		# ── Overhead tier (ghost head local_ht ≈ 1.52 / 2.02) ────────────────────
-		PP.MEDIUM_OVERHEAD: {"x_min": -0.40, "x_max": 0.40,  "y_min": 1.20, "y_max": 1.80},
-		PP.HIGH_OVERHEAD:   {"x_min": -0.40, "x_max": 0.40,  "y_min": 1.70, "y_max": 2.30},
-		# ── Mid-low tier (ghost handle local_ht ≈ 0.35) ──────────────────────────
-		PP.MID_LOW_FOREHAND:       {"x_min": 0.30, "x_max": 0.80,  "y_min": 0.10, "y_max": 0.55},
-		PP.MID_LOW_BACKHAND:       {"x_min": -0.80, "x_max": -0.30, "y_min": 0.10, "y_max": 0.55},
-		PP.MID_LOW_FORWARD:        {"x_min": -0.30, "x_max": 0.30,  "y_min": 0.10, "y_max": 0.55},
-		PP.MID_LOW_WIDE_FOREHAND:  {"x_min": 0.70,  "x_max": 1.20,  "y_min": 0.10, "y_max": 0.55},
-		PP.MID_LOW_WIDE_BACKHAND:  {"x_min": -1.20, "x_max": -0.70,  "y_min": 0.10, "y_max": 0.55},
-		# ── Low tier (ghost handle local_ht ≈ -0.05) ─────────────────────────────
-		PP.LOW_FOREHAND:      {"x_min": 0.30, "x_max": 0.80,  "y_min": -0.30, "y_max": 0.20},
-		PP.LOW_BACKHAND:      {"x_min": -0.80, "x_max": -0.30, "y_min": -0.30, "y_max": 0.20},
-		PP.LOW_FORWARD:       {"x_min": -0.30, "x_max": 0.30,  "y_min": -0.30, "y_max": 0.20},
-		PP.LOW_WIDE_FOREHAND: {"x_min": 0.70,  "x_max": 1.20,  "y_min": -0.30, "y_max": 0.20},
-		PP.LOW_WIDE_BACKHAND: {"x_min": -1.20, "x_max": -0.70,  "y_min": -0.30, "y_max": 0.20},
-	}
+	POSTURE_ZONES.clear()
+	if _posture_lib == null:
+		return
+	for def in _posture_lib.all_definitions():
+		if def is PostureDefinition and def.has_zone:
+			POSTURE_ZONES[def.posture_id] = {
+				"x_min": def.zone_x_min, "x_max": def.zone_x_max,
+				"y_min": def.zone_y_min, "y_max": def.zone_y_max,
+			}
+
+func refresh_posture_zones() -> void:
+	_init_posture_zones()
 
 # ── Posture ghost constants ───────────────────────────────────────────────────
 const POSTURE_GHOST_ALPHA := _PC.POSTURE_GHOST_ALPHA
@@ -214,6 +203,10 @@ func update_paddle_tracking(force: bool = false) -> void:
 		return
 	if not _player._ensure_paddle_ready():
 		return
+	if _player is CharacterBody3D and not _player.is_ai:
+		if human_contact == null: human_contact = HumanContact.new(_player, self)
+		human_contact.update(0.0 if force else get_physics_process_delta_time())
+		return
 	if _player.hitting.charge_visual_active and not force:
 		return
 	# Safety: auto-clear stuck follow-through flag if the tween was killed/finished
@@ -247,95 +240,7 @@ func update_paddle_tracking(force: bool = false) -> void:
 		elif _player.is_ai:
 			# AI always uses its brain's chosen posture — never auto-overhead-override
 			paddle_posture = _player.ai_desired_posture
-		else:
-			if _player.player_num == 0 and Engine.get_physics_frames() % 30 == 0:
-				var _pname: String = _player.PaddlePosture.keys()[paddle_posture] if paddle_posture >= 0 and paddle_posture < _player.PaddlePosture.size() else "?"
-				var _green_names: String = ""
-				for gp in _green_lit_postures:
-					if gp >= 0 and gp < _player.DEBUG_POSTURE_NAMES.size():
-						_green_names += _player.DEBUG_POSTURE_NAMES[gp] + " "
-				var _grid_info: String = ""
-				if _player.awareness_grid:
-					var info: Dictionary = _player.awareness_grid.get_approach_info()
-					_grid_info = "gh=%.2f gl=%.2f gu=%.1f gc=%d" % [info.height, info.lateral, info.urgency, info.confidence]
-				var _dbg_ball_d: float = ball.global_position.distance_to(_player.global_position) if ball else -1.0
-	
-			# ── GRID-EARLY FIRST COMMIT ──────────────────────────────────────────
-			# Commit as soon as the trajectory enters the volumetric grid, even before
-			# the ball's instantaneous velocity crosses the incoming threshold.
-			if _committed_incoming_posture < 0 and not _trajectory_points.is_empty() and ball != null:
-				var grid_has_data: bool = false
-				if _player.awareness_grid:
-					var posture_scores: Dictionary = _player.awareness_grid.get_posture_zone_scores()
-					for p in posture_scores:
-						if posture_scores[p] > 0.3:
-							grid_has_data = true
-							break
-				if grid_has_data:
-					var contact_pt: Vector3 = _commit_selector.compute_expected_contact_point(_player.global_position, _player.COURT_FLOOR_Y, ball.is_in_play and ball.linear_velocity.y < -1.0)
-					var best_ghost: int = _find_closest_ghost_to_point(contact_pt)
-					var to_ball_fwd: float = (ball.global_position - _player.global_position).dot(_player._get_forward_axis())
-					if best_ghost >= 0 and to_ball_fwd > 0.0:
-						_committed_incoming_posture = best_ghost
-						_last_commit_player_pos = _player.global_position
-						_ball_incoming = true
-						_incoming_timer = 0.0
-						_incoming_expired = false
-						_commit_count += 1
-						var new_name: String = _player.DEBUG_POSTURE_NAMES[best_ghost] if best_ghost < _player.DEBUG_POSTURE_NAMES.size() else "?"
-						print("[GRID_COMMIT P%d] %s contact=(%.1f,%.1f,%.1f)" % [_player.player_num, new_name, contact_pt.x, contact_pt.y, contact_pt.z])
 
-			if _ball_incoming and not _trajectory_points.is_empty():
-				# ── GREEN POOL SYSTEM: trajectory is the single source of truth ──
-				# The green set (ghosts near trajectory) determines valid postures.
-				# Commit = best green ghost. Recommit when committed ghost leaves green set.
-				var contact_pt: Vector3 = _commit_selector.compute_expected_contact_point(_player.global_position, _player.COURT_FLOOR_Y, ball != null and ball.is_in_play and ball.linear_velocity.y < -1.0)
-				var ball_d: float = Vector2(ball.global_position.x - _player.global_position.x, ball.global_position.z - _player.global_position.z).length()
-
-				var reason: String = ""
-				# Lock awareness grid when TTC is small (GAP-38: was distance-based, now TTC-based)
-				if _player.awareness_grid:
-					var player_ttc: float = _player.awareness_grid.get_ttc_at_world_point(_player.global_position, 0.45)
-					_player.awareness_grid.set_locked(player_ttc < 0.35)
-				var best_ghost: int = _find_closest_ghost_to_point(contact_pt)
-				var to_ball_fwd: float = (ball.global_position - _player.global_position).dot(_player._get_forward_axis())
-
-				if _committed_incoming_posture < 0 and best_ghost >= 0 and to_ball_fwd > 0.0:
-					# First commit — only when ball is in front of player
-					_committed_incoming_posture = best_ghost
-					_last_commit_player_pos = _player.global_position
-					reason = "FIRST"
-
-				if reason != "":
-					_commit_count += 1
-					var new_name: String = _player.DEBUG_POSTURE_NAMES[_committed_incoming_posture] if _committed_incoming_posture < _player.DEBUG_POSTURE_NAMES.size() else "?"
-					var gw: Vector3 = _player.global_position + _offset_resolver.get_posture_offset_for(_committed_incoming_posture)
-					var ghost_to_contact: float = gw.distance_to(contact_pt)
-					print("[COMMIT P%d] %s d=%.1f -> %s g2c=%.2f contact=(%.1f,%.1f,%.1f) pos=(%.1f,%.1f) spd=%.1f" % [_player.player_num, reason, ball_d, new_name, ghost_to_contact, contact_pt.x, contact_pt.y, contact_pt.z, _player.global_position.x, _player.global_position.z, _player.current_velocity.length()])
-
-				paddle_posture = _committed_incoming_posture if _committed_incoming_posture >= 0 else _player.PaddlePosture.READY
-
-				# ── Movement-triggered recommit ──────────────────────────────────────
-				# If player shuffles laterally after commit, re-evaluate immediately
-				# instead of waiting for zone-exit cooldown/margin.
-				if _committed_incoming_posture >= 0 and _last_commit_stage < 2:
-					var move_d: float = Vector2(
-						_player.global_position.x - _last_commit_player_pos.x,
-						_player.global_position.z - _last_commit_player_pos.z
-					).length()
-					if move_d > 0.15:
-						var new_best: int = _find_closest_ghost_to_point(contact_pt)
-						if new_best >= 0 and new_best != _committed_incoming_posture:
-							var old_n: String = _player.DEBUG_POSTURE_NAMES[_committed_incoming_posture] if _committed_incoming_posture < _player.DEBUG_POSTURE_NAMES.size() else "?"
-							var new_n: String = _player.DEBUG_POSTURE_NAMES[new_best] if new_best < _player.DEBUG_POSTURE_NAMES.size() else "?"
-							_committed_incoming_posture = new_best
-							_last_commit_player_pos = _player.global_position
-							paddle_posture = new_best
-							print("[MOVE_COMMIT P%d] %s -> %s (move=%.2f)" % [_player.player_num, old_n, new_n, move_d])
-
-			elif _committed_incoming_posture >= 0:
-				# Keep committed posture while ball is near
-				paddle_posture = _committed_incoming_posture
 	else:
 		if not ball_is_near:
 			paddle_posture = _player.PaddlePosture.READY
@@ -380,7 +285,8 @@ func update_paddle_tracking(force: bool = false) -> void:
 	var target_pos: Vector3 = _get_posture_offset()
 	# Floor clamp — paddle head center must never go below clearance.
 	# Now that target_pos represents the HEAD center, clearance is simplified (0.06m).
-	var clearance: float = 0.06
+	var active_def = _posture_lib.get_def(paddle_posture) if _posture_lib else null
+	var clearance: float = active_def.paddle_floor_clearance if active_def else 0.06
 	var pivot_y: float = _player.body_pivot.position.y if _player.body_pivot else 0.0
 	var floor_local_y: float = _player.COURT_FLOOR_Y - _player.global_position.y - pivot_y + clearance
 	target_pos.y = maxf(target_pos.y, floor_local_y)
@@ -462,6 +368,14 @@ func force_posture_update(def) -> void:
 		_player._cache_paddle_rest_transform()
 
 	_apply_full_body_posture(def)
+	# Authored offsets are in court axes. Body rotation must not rotate the
+	# contact/path a second time through the paddle's BodyPivot parent.
+	if _player.paddle_node:
+		var world_basis := _get_basis_from_rotation(_posture_lerp_rot)
+		var head: Vector3 = _player.global_position + _posture_lerp_pos
+		head = PaddleReach.clamp_head_with_floor(head, PaddleReach.shoulder_world(_player), _player.COURT_FLOOR_Y + def.paddle_floor_clearance)
+		_player.paddle_node.global_transform = Transform3D(world_basis, head - world_basis.y * 0.4)
+		_player._cache_paddle_rest_transform()
 
 func place_paddle_at_side() -> void:
 	if _player.paddle_node == null:
@@ -530,6 +444,11 @@ func _find_closest_ghost_to_point(ref: Vector3) -> int:
 func force_paddle_head_to_ghost() -> void:
 	if editor_preview_mode:
 		return
+	if human_contact != null:
+		human_contact._apply_visual()
+		return
+	if _player.hitting and (_player.hitting.charge_visual_active or _player.hitting.is_in_follow_through):
+		return
 	## GAP-4: framerate-independent spring chase via _damp_v3.
 	## GAP-45: halflife is now Fitts-law-derived (scales with reach distance)
 	## and then compressed by commit stage. A ghost 5 cm away snaps tight; a
@@ -542,7 +461,8 @@ func force_paddle_head_to_ghost() -> void:
 	var ghost_world: Vector3 = ghost.global_position
 	# Ghost position is handle-bottom (same as paddle origin). Align paddle head
 	# with ghost head by offsetting from ghost handle → ghost head → paddle handle.
-	var ghost_head: Vector3 = ghost_world + ghost.global_transform.basis.y * 0.4 * POSTURE_GHOST_SCALE.y
+	# NOTE: basis.y already includes node scale; normalize first to avoid double-scaling.
+	var ghost_head: Vector3 = ghost_world + ghost.global_transform.basis.y.normalized() * 0.4 * POSTURE_GHOST_SCALE.y
 	var target: Vector3 = ghost_head - _player.paddle_node.global_transform.basis.y * 0.4
 
 	# Fitts' law: MT = a + b * log2(D/W + 1). Paddle head target width W ≈ 8 cm.
@@ -568,6 +488,8 @@ func force_paddle_head_to_ghost() -> void:
 	)
 
 func reset_incoming_highlight() -> void:
+	if human_contact:
+		human_contact.contact = {}
 	# Safety net: if the ball was ever committed but BLUE never latched (e.g. ball left play
 	# before reaching the ghost), still emit a grade using the closest approach. This preserves
 	# invariant #1 (exactly one [SCORE] per ball) for every ball that produced a commit.
@@ -749,8 +671,59 @@ func _create_posture_zone_bounds() -> void:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 		mi.material_override = mat
 		mi.visible = false
+		# Color-coded face planes for visual debugging (RGB = XYZ axis)
+		var face_configs := [
+			{"name": "FaceLeft",   "color": Color(1.0, 0.2, 0.2, 0.30)},  # X- = Red
+			{"name": "FaceRight",  "color": Color(1.0, 0.2, 0.2, 0.30)},  # X+ = Red
+			{"name": "FaceBottom", "color": Color(0.2, 1.0, 0.2, 0.30)},  # Y- = Green
+			{"name": "FaceTop",    "color": Color(0.2, 1.0, 0.2, 0.30)},  # Y+ = Green
+			{"name": "FaceFront",  "color": Color(0.2, 0.2, 1.0, 0.30)},  # Z- = Blue
+			{"name": "FaceBack",   "color": Color(0.2, 0.2, 1.0, 0.30)},  # Z+ = Blue
+		]
+		for cfg in face_configs:
+			var face_mi := MeshInstance3D.new()
+			face_mi.name = cfg["name"]
+			var fmat := StandardMaterial3D.new()
+			fmat.albedo_color = cfg["color"]
+			fmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			fmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			fmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+			face_mi.material_override = fmat
+			face_mi.visible = false
+			mi.add_child(face_mi)
+		_update_zone_face_planes(mi)
 		_player.add_child(mi)
 		_posture_zone_bounds[def.posture_id] = mi
+
+func _update_zone_face_planes(zone_mi: MeshInstance3D) -> void:
+	var mesh: BoxMesh = zone_mi.mesh as BoxMesh
+	if mesh == null:
+		return
+	var half_size := mesh.size / 2.0
+	var thin := 0.001
+	var configs := [
+		{"name": "FaceLeft",   "size": Vector3(thin, mesh.size.y, mesh.size.z), "pos": Vector3(-half_size.x, 0, 0)},
+		{"name": "FaceRight",  "size": Vector3(thin, mesh.size.y, mesh.size.z), "pos": Vector3( half_size.x, 0, 0)},
+		{"name": "FaceBottom", "size": Vector3(mesh.size.x, thin, mesh.size.z), "pos": Vector3(0, -half_size.y, 0)},
+		{"name": "FaceTop",    "size": Vector3(mesh.size.x, thin, mesh.size.z), "pos": Vector3(0,  half_size.y, 0)},
+		{"name": "FaceFront",  "size": Vector3(mesh.size.x, mesh.size.y, thin), "pos": Vector3(0, 0, -half_size.z)},
+		{"name": "FaceBack",   "size": Vector3(mesh.size.x, mesh.size.y, thin), "pos": Vector3(0, 0,  half_size.z)},
+	]
+	for cfg in configs:
+		var face_mi = zone_mi.get_node_or_null(cfg["name"])
+		if face_mi == null:
+			continue
+		var fm := BoxMesh.new()
+		fm.size = cfg["size"]
+		face_mi.mesh = fm
+		face_mi.position = cfg["pos"]
+
+func _set_zone_visibility(zone_mi: MeshInstance3D, visible: bool) -> void:
+	zone_mi.visible = visible
+	for face_name in ["FaceLeft", "FaceRight", "FaceBottom", "FaceTop", "FaceFront", "FaceBack"]:
+		var face_mi = zone_mi.get_node_or_null(face_name)
+		if face_mi:
+			face_mi.visible = visible
 
 func _create_follow_through_ghosts() -> void:
 	if posture_ghost_root == null or not _player.hitting:
@@ -826,6 +799,11 @@ func set_charge_highlight_active(v: bool) -> void:
 func _any_ghosts_visible() -> bool:
 	return _posture_ghosts_visible or _charge_ghosts_visible or _follow_through_visible
 
+## True when ghost visuals are on screen (debug toggle or posture editor).
+func _ghost_visuals_needed() -> bool:
+	return editor_preview_mode or _editor_solo_posture_id >= 0 \
+			or (posture_ghost_root != null and posture_ghost_root.visible)
+
 func _apply_ghost_separation() -> void:
 	var keys := posture_ghosts.keys()
 	for i in range(keys.size()):
@@ -843,6 +821,11 @@ func _apply_ghost_separation() -> void:
 
 func update_posture_ghosts() -> void:
 	if posture_ghost_root == null:
+		return
+	if human_contact != null and not editor_preview_mode:
+		# Human ghosts are purely visual; nothing reads their transforms back.
+		if _ghost_visuals_needed():
+			human_contact.draw_ghosts()
 		return
 	var ball: RigidBody3D = _player._get_ball_ref()
 
@@ -965,6 +948,12 @@ func update_posture_ghosts() -> void:
 			_green_lit_postures.clear()
 	_first_green_posture = -1
 
+	# Everything below only positions/colors ghosts. Skip it while they are
+	# hidden, but keep the zone boxes (not under the ghost root) running.
+	if not _ghost_visuals_needed():
+		_update_posture_zone_bounds()
+		return
+
 	var _frame_lit_postures: Array = []
 	# Pre-compute contact point once for committed-ghost zone clamping
 	var contact_local: Vector3 = Vector3.ZERO
@@ -981,35 +970,25 @@ func update_posture_ghosts() -> void:
 			var rot_deg: Vector3 = _offset_resolver.get_posture_rotation_offset_for(posture)
 			var b: Basis = _get_basis_from_rotation(rot_deg)
 			var head_offset: Vector3 = b.y * 0.4 * POSTURE_GHOST_SCALE.y
-			var target_pos: Vector3 = base_pos - head_offset
+			var head_world: Vector3 = PaddleReach.clamp_for_player(_player, _player.body_pivot.to_global(base_pos))
+			var target_pos: Vector3 = _player.body_pivot.to_local(head_world) - head_offset
 
 			# Committed ghost: lerp within posture zone to intercept the ball
+			# Ghost continues tracking the ball even after BLUE latch — _ghost_frozen_at
+			# is captured for reference but the visual ghost keeps moving.
 			if _ball_incoming and posture == _committed_incoming_posture:
-				if _blue_latched and _ghost_frozen_at != Vector3.ZERO:
-					# BLUE latched — freeze ghost for grade window
-					# _ghost_frozen_at is handle-bottom world pos; to_local → handle-bottom local
-					target_pos = _player.to_local(_ghost_frozen_at)
-				elif contact_local != Vector3.ZERO:
+				if contact_local != Vector3.ZERO:
 					var zone_def = _posture_lib.get_def(posture) if _posture_lib else null
-					if zone_def != null and zone_def.has_zone:
-						var fh_axis: Vector3 = _player._get_forehand_axis()
-						var fwd_axis: Vector3 = _player._get_forward_axis()
-						var contact_lat: float = contact_local.dot(fh_axis)
-						var contact_ht_rel: float = contact_local.y
-						# Zone height bounds are local_ht (world_y - COURT_FLOOR_Y).
-						# Convert to player-relative Y for clamping.
-						var zone_y_min_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_min - _player.global_position.y
-						var zone_y_max_rel: float = _player.COURT_FLOOR_Y + zone_def.zone_y_max - _player.global_position.y
-						var clamped_lat: float = clampf(contact_lat, zone_def.zone_x_min, zone_def.zone_x_max)
-						var clamped_ht: float = clampf(contact_ht_rel, zone_y_min_rel, zone_y_max_rel)
-						var zone_fwd: float = zone_def.zone_forward_offset if zone_def != null else GHOST_FORWARD_PLANE
-						var clamped_head_pos: Vector3 = fh_axis * clamped_lat + Vector3.UP * clamped_ht + fwd_axis * zone_fwd
-						target_pos = clamped_head_pos - head_offset
-					else:
-						target_pos = contact_local - head_offset
-				# Smooth lerp toward zone-clamped target
-				var dt: float = get_process_delta_time()
-				ghost.position = ghost.position.lerp(target_pos, minf(dt * 10.0, 1.0))
+					target_pos = _compute_committed_ghost_target(
+						contact_local, zone_def, head_offset,
+						_player._get_forehand_axis(), _player._get_forward_axis(),
+						_player.COURT_FLOOR_Y, _player.global_position.y
+					)
+					var contact_head_world: Vector3 = _player.body_pivot.to_global(target_pos + head_offset)
+					target_pos = _player.body_pivot.to_local(PaddleReach.clamp_for_player(_player, contact_head_world)) - head_offset
+					# Smooth lerp toward zone-clamped target
+					var dt: float = get_process_delta_time()
+					ghost.position = ghost.position.lerp(target_pos, minf(dt * 10.0, 1.0))
 			else:
 				# Non-committed ghosts stay static
 				ghost.position = target_pos
@@ -1019,7 +998,7 @@ func update_posture_ghosts() -> void:
 		var is_charge: bool = posture in [_player.PaddlePosture.CHARGE_FOREHAND, _player.PaddlePosture.CHARGE_BACKHAND]
 		var debug_overrides_solo: bool = _any_ghosts_visible()
 		if _editor_solo_posture_id >= 0:
-			ghost.visible = true  # Show every ghost in editor
+			ghost.visible = _ghost_matches_editor_solo(posture, _editor_solo_posture_id)
 		elif solo_mode and not debug_overrides_solo:
 			ghost.visible = (posture == selected_posture_id)
 		else:
@@ -1196,6 +1175,14 @@ func update_posture_ghosts() -> void:
 	elif not _ball_incoming:
 		_last_lit_postures.clear()
 
+	_update_posture_zone_bounds()
+
+	_apply_ghost_separation()
+
+
+## Positions the per-posture zone boxes (children of the player, not the ghost
+## root) and decides their runtime visibility.
+func _update_posture_zone_bounds() -> void:
 	# Update adaptive per-posture zone bounds — centered on ghost, sized to zone
 	var fh: Vector3 = _player._get_forehand_axis()
 	var fwd: Vector3 = _player._get_forward_axis()
@@ -1221,32 +1208,28 @@ func update_posture_ghosts() -> void:
 		# In editor preview mode the editor controls position/size directly;
 		# physics should not overwrite it (avoids snap-back while dragging handles).
 		if not editor_preview_mode:
-			# Center the box on the zone (lateral/forward snap to ghost for crisp alignment)
-			var cx: float = zone_cx if absf(zone_cx - ghost_x) < 0.3 else ghost_x
+			var is_committed: bool = (posture == _committed_incoming_posture)
+			var cx: float = _compute_zone_center(ghost_x, zone_cx, _ball_incoming, is_committed)
 			var cy: float = zone_cy
-			var cz: float = zone_cz if absf(zone_cz - ghost_z) < 0.3 else ghost_z
+			var cz: float = _compute_zone_center(ghost_z, zone_cz, _ball_incoming, is_committed)
 			mi.position = fh * cx + Vector3.UP * cy + fwd * cz
 			var mesh: BoxMesh = mi.mesh as BoxMesh
 			if mesh:
 				mesh.size = Vector3(zone_def.zone_x_max - zone_def.zone_x_min, zone_y_max_rel - zone_y_min_rel, 0.15)
 			mi.look_at(mi.global_position + fwd, Vector3.UP, true)
 		var mat: StandardMaterial3D = mi.material_override as StandardMaterial3D
-		# Editor mode: show all zone bounds; selected is bright, others dim
+		# Editor mode: keep the selected contact area readable.
 		if _editor_solo_posture_id >= 0:
-			mi.visible = true
-			if posture == _editor_solo_posture_id:
-				mat.emission_energy_multiplier = 0.65
-				mat.albedo_color.a = 0.28
-			else:
-				mat.emission_energy_multiplier = 0.20
-				mat.albedo_color.a = 0.10
+			_set_zone_visibility(mi, posture == _editor_solo_posture_id)
+			mat.emission_energy_multiplier = 0.65
+			mat.albedo_color.a = 0.28
 		else:
 			# Runtime visibility rules
 			var is_imminent: bool = (posture == _committed_incoming_posture
 									 or posture in _green_lit_postures
 									 or (posture == paddle_posture and _ball_incoming))
 			if is_imminent and _ball_incoming:
-				mi.visible = true
+				_set_zone_visibility(mi, true)
 				if posture == _committed_incoming_posture:
 					mat.emission_energy_multiplier = 0.65
 					mat.albedo_color.a = 0.28
@@ -1254,11 +1237,43 @@ func update_posture_ghosts() -> void:
 					mat.emission_energy_multiplier = 0.35
 					mat.albedo_color.a = 0.18
 			else:
-				mi.visible = false
+				_set_zone_visibility(mi, false)
 				mat.emission_energy_multiplier = 0.3
 				mat.albedo_color.a = 0.15
 
-	_apply_ghost_separation()
+
+## Pure helper: decide whether the zone should track the ghost or snap to definition center.
+## When ball is incoming and this is the committed posture, zone always tracks ghost.
+## Otherwise, use a 0.3m snap threshold for crisp resting alignment.
+static func _compute_zone_center(ghost_coord: float, zone_coord: float, ball_incoming: bool, is_committed: bool) -> float:
+	if ball_incoming and is_committed:
+		return ghost_coord
+	return zone_coord if absf(zone_coord - ghost_coord) < 0.3 else ghost_coord
+
+
+## Compute the committed ghost's target local position from the contact point.
+## Clamps the contact point to the posture zone bounds. Pure helper for testability.
+static func _compute_committed_ghost_target(
+	contact_local: Vector3,
+	zone_def,
+	head_offset: Vector3,
+	fh_axis: Vector3,
+	fwd_axis: Vector3,
+	court_floor_y: float,
+	player_y: float
+) -> Vector3:
+	if zone_def != null and zone_def.has_zone:
+		var contact_lat: float = contact_local.dot(fh_axis)
+		var contact_ht_rel: float = contact_local.y
+		var zone_y_min_rel: float = court_floor_y + zone_def.zone_y_min - player_y
+		var zone_y_max_rel: float = court_floor_y + zone_def.zone_y_max - player_y
+		var clamped_lat: float = clampf(contact_lat, zone_def.zone_x_min, zone_def.zone_x_max)
+		var clamped_ht: float = clampf(contact_ht_rel, zone_y_min_rel, zone_y_max_rel)
+		var zone_fwd: float = zone_def.zone_forward_offset
+		var clamped_head_pos: Vector3 = fh_axis * clamped_lat + Vector3.UP * clamped_ht + fwd_axis * zone_fwd
+		return clamped_head_pos - head_offset
+	return contact_local - head_offset
+
 
 func _ghost_matches_editor_solo(ghost_posture: int, solo_posture: int) -> bool:
 	if ghost_posture == solo_posture:

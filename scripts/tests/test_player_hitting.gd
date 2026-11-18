@@ -1,4 +1,4 @@
-class_name TestPlayerHitting extends RefCounted
+class_name TestPlayerHitting extends TestBase
 ## Unit tests for PlayerHitting — paddle velocity EMA tracking (GAP-X).
 ## Tests the damping/EMA formula that smooths paddle velocity.
 ## Uses a minimal FakePlayerHitting that mirrors the actual _process update loop.
@@ -8,9 +8,6 @@ class_name TestPlayerHitting extends RefCounted
 const _PhysicsUtils := preload("res://scripts/physics.gd")
 const _PADDLE_VEL_SMOOTH_HALFLIFE: float = 0.08
 const _PADDLE_VEL_TRANSFER: float = 0.40
-
-var _current_failures: Array[String] = []
-var _current_test_name: String = ""
 
 
 func run_all(totals: Dictionary) -> void:
@@ -22,27 +19,11 @@ func run_all(totals: Dictionary) -> void:
 		test_transfer_scalar_bounds,
 		# Smooth halflife is reasonable (1)
 		test_halflife_reasonable_range,
+		# Charge visual state (2)
+		test_charge_visual_sets_active,
+		test_charge_visual_clears_on_abort,
 	]
-	for t in tests:
-		_current_test_name = t.get_method()
-		_current_failures = []
-		t.call()
-		if _current_failures.is_empty():
-			totals.pass += 1
-		else:
-			totals.fail += 1
-			for f in _current_failures:
-				totals.errors.append("%s: %s" % [_current_test_name, f])
-
-
-func _assert_true(cond: bool, msg: String = "") -> void:
-	if not cond:
-		_current_failures.append("expected true: %s" % msg)
-
-
-func _assert_eq_f(a: float, b: float, tol: float, msg: String = "") -> void:
-	if absf(a - b) > tol:
-		_current_failures.append("expected %g, got %g (tol=%g): %s" % [b, a, tol, msg])
+	_run_test_list(totals, tests)
 
 
 ## Simulates the EMA update from PlayerHitting._process().
@@ -116,3 +97,79 @@ func test_halflife_reasonable_range() -> void:
 	# At this halflife, 95% convergence takes ~5 * halflife = 0.4s = 25 frames
 	var frames_to_95: float = -_PADDLE_VEL_SMOOTH_HALFLIFE / dt * log(0.05) / 0.693
 	_assert_true(frames_to_95 < 40.0, "95% convergence in < 40 frames (~0.64s)")
+
+
+## ── Charge visual state ─────────────────────────────────────────────────────
+
+class _FakePlayerForHitting extends Node:
+	enum PaddlePosture {
+		FOREHAND, FORWARD, BACKHAND,
+		MEDIUM_OVERHEAD, HIGH_OVERHEAD,
+		LOW_FOREHAND, LOW_FORWARD, LOW_BACKHAND,
+		CHARGE_FOREHAND, CHARGE_BACKHAND,
+		WIDE_FOREHAND, WIDE_BACKHAND,
+		VOLLEY_READY,
+		MID_LOW_FOREHAND, MID_LOW_BACKHAND, MID_LOW_FORWARD,
+		MID_LOW_WIDE_FOREHAND, MID_LOW_WIDE_BACKHAND,
+		LOW_WIDE_FOREHAND, LOW_WIDE_BACKHAND,
+		READY,
+	}
+	const FOREHAND_POSTURES := [PaddlePosture.FOREHAND, PaddlePosture.LOW_FOREHAND, PaddlePosture.WIDE_FOREHAND, PaddlePosture.MID_LOW_FOREHAND, PaddlePosture.MID_LOW_WIDE_FOREHAND, PaddlePosture.LOW_WIDE_FOREHAND]
+	const BACKHAND_POSTURES := [PaddlePosture.BACKHAND, PaddlePosture.LOW_BACKHAND, PaddlePosture.WIDE_BACKHAND, PaddlePosture.MID_LOW_BACKHAND, PaddlePosture.MID_LOW_WIDE_BACKHAND, PaddlePosture.LOW_WIDE_BACKHAND]
+	const CENTER_POSTURES := [PaddlePosture.FORWARD, PaddlePosture.LOW_FORWARD, PaddlePosture.MID_LOW_FORWARD, PaddlePosture.VOLLEY_READY]
+	const FT_FOREHAND := -1
+	const FT_BACKHAND := -2
+	const FT_CENTER := -3
+	const FT_OVERHEAD := -4
+
+	var paddle_node: Node3D = Node3D.new()
+	var body_pivot: Node3D = Node3D.new()
+	var posture = self  # exposes FT_* constants
+	var transition_pose_blend = null
+	var is_ai: bool = false
+	var paddle_posture: int = PaddlePosture.READY
+	var paddle_rest_position: Vector3 = Vector3.ZERO
+	var paddle_rest_rotation: Vector3 = Vector3.ZERO
+
+	func _ensure_paddle_ready() -> bool:
+		return true
+	func _get_posture_charge_sign() -> float:
+		return 1.0
+	func _get_forward_axis() -> Vector3:
+		return Vector3(0.0, 0.0, -1.0)
+	func _get_forehand_axis() -> Vector3:
+		return Vector3(1.0, 0.0, 0.0)
+	func _get_swing_sign() -> float:
+		return 1.0
+	func _get_posture_offset_for(_p: int) -> Vector3:
+		return Vector3.ZERO
+	func _get_posture_rotation_offset_for(_p: int) -> Vector3:
+		return Vector3.ZERO
+
+func test_charge_visual_sets_active() -> void:
+	# Verify set_serve_charge_visual sets charge_visual_active = true
+	var hitting := preload("res://scripts/player_hitting.gd").new()
+	var fake_player := _FakePlayerForHitting.new()
+	hitting._player = fake_player
+
+	_assert_true(not hitting.charge_visual_active, "charge_visual_active starts false")
+	hitting.set_serve_charge_visual(0.5)
+	_assert_true(hitting.charge_visual_active, "set_serve_charge_visual sets charge_visual_active true")
+
+	fake_player.queue_free()
+	hitting.queue_free()
+
+func test_charge_visual_clears_on_abort() -> void:
+	# Verify clear_charge_visual explicitly resets charge_visual_active
+	var hitting := preload("res://scripts/player_hitting.gd").new()
+	var fake_player := _FakePlayerForHitting.new()
+	hitting._player = fake_player
+
+	hitting.set_serve_charge_visual(0.5)
+	_assert_true(hitting.charge_visual_active, "charge is active before abort")
+	hitting.clear_charge_visual()
+	_assert_true(not hitting.charge_visual_active, "clear_charge_visual resets charge_visual_active")
+	_assert_true(not hitting.is_in_follow_through, "clear_charge_visual resets is_in_follow_through")
+
+	fake_player.queue_free()
+	hitting.queue_free()

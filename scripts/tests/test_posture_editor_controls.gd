@@ -20,6 +20,10 @@ const FOLLOW_THROUGH_TAB_PATH := "res://scripts/posture_editor/tabs/follow_throu
 var _captured_fields: Array = []
 
 func run_all(totals: Dictionary) -> void:
+	# UI controls are instantiated inside _ready() which requires a display server.
+	if DisplayServer.get_name() == "headless":
+		print("[TESTS] ⊘ posture editor controls skipped (headless — needs display server)")
+		return
 	_captured_fields.clear()
 	_test_paddle_tab_fields(totals)
 	_test_legs_tab_fields(totals)
@@ -245,7 +249,8 @@ func _test_vector3_field(tab, editor_var: String, expected_field: String, test_v
 		return
 	editor.set_value(test_value)
 	var found := _captured_fields.filter(func(f):
-		return f[0] == expected_field and f[1] is Vector3 and is_equal_approx(f[1], test_value))
+		var v: Vector3 = f[1] as Vector3
+		return f[0] == expected_field and is_equal_approx(v.x, test_value.x) and is_equal_approx(v.y, test_value.y) and is_equal_approx(v.z, test_value.z))
 	_assert(found.size() == 1, "%s Vector3Editor emits field_changed('%s', %s)" % [editor_var, expected_field, test_value], totals)
 
 

@@ -58,22 +58,25 @@ func _test_base_pose_to_preview_posture(totals: Dictionary) -> void:
 ## _editor_restore_posture_id is -1, meaning a posture was explicitly selected
 ## and should NOT be restored when the editor closes.
 func _test_restore_returns_early_when_restore_id_is_minus_one(totals: Dictionary) -> void:
-	var editor = PostureEditorUI.new()
+	# restore_live_posture_from_editor lives on PostureEditorPreview, not PostureEditorUI
+	var preview = load("res://scripts/posture_editor/posture_editor_preview.gd").new()
+	var StateClass = load("res://scripts/posture_editor/posture_editor_state.gd")
+	preview._state = StateClass.new()
 	# Simulate: a posture was selected while editor was open → restore ID cleared
-	editor._editor_restore_posture_id = -1
+	preview._state.set_editor_restore_posture_id(-1)
 
 	var player = PlayerController.new()
 	player.paddle_posture = player.PaddlePosture.FOREHAND
-	editor._player = player
+	preview._player = player
 
 	# Capture posture before the "close editor" call
 	var posture_before = player.paddle_posture
 
 	# Call the restore function (simulates editor close)
-	editor._restore_live_posture_from_editor()
+	preview.restore_live_posture_from_editor()
 
 	# Should have returned early: restore_id was -1
-	_assert(editor._editor_restore_posture_id < 0,
+	_assert(preview._state.get_editor_restore_posture_id() < 0,
 		"restore returns early when _editor_restore_posture_id is -1", totals)
 	# Posture should be unchanged (not restored to READY)
 	_assert(player.paddle_posture == posture_before,

@@ -28,13 +28,6 @@ const PP_READY: int = _PC.PaddlePosture.READY
 # ── AI constants ──────────────────────────────────────────────────────────────
 const AI_RECEIVE_X_TOLERANCE := 0.25
 const AI_RECEIVE_Z_TOLERANCE := 0.20
-const AI_LANDING_PREDICTION_STEP := 0.08
-const AI_LANDING_PREDICTION_STEPS := 14  # Mobile: reduced from 28
-const AI_CONTACT_PREDICTION_STEP := 0.06
-const AI_CONTACT_PREDICTION_STEPS := 44
-const AI_INTERCEPT_MARKER_MIN_HEIGHT := 0.28
-const AI_INTERCEPT_MARKER_MAX_HEIGHT := 1.45
-const AI_RECEIVE_BEHIND_BOUNCE_OFFSET := 0.32
 const AI_WEAK_SERVE_SPEED_THRESHOLD := 7.2
 const AI_STRONG_SERVE_SPEED_THRESHOLD := 11.2
 const AI_WEAK_SERVE_FORWARD_BIAS := 0.55
@@ -67,17 +60,14 @@ const OVERHEAD_RELEASE_RADIUS := 2.0
 const JUMP_VELOCITY := PickleballConstants.JUMP_VELOCITY
 const JUMP_GRAVITY := PickleballConstants.JUMP_GRAVITY
 const _Ball := preload("res://scripts/ball.gd")
+const _Flight := preload("res://scripts/ball_flight_predictor.gd")
 const SMASH_FORCE_BONUS := 1.35
 const SMASH_DOWNWARD_BIAS := 0.22
 const AI_MARKER_HEIGHT := 0.09
-const AI_MARKER_SMOOTHING := 0.08
-const AI_POST_BOUNCE_MARKER_SMOOTHING := 0.12
 const AI_TARGET_RECOMMIT_DISTANCE := 0.55
-const AI_TARGET_RECOMMIT_BOUNCE_DISTANCE := 0.55
 const AI_TARGET_POST_BOUNCE_RECOMMIT_DISTANCE := 0.45
 const AI_RECEIVE_MARKER_LANE_OFFSET := 0.16
 const AI_RECEIVE_MARKER_BOUNCE_PULL := 0.72
-const AI_HIT_REACH_DISTANCE := 1.1
 const AI_HIT_COOLDOWN := 0.16
 const AI_HIT_CONTACT_WINDOW := 0.34
 const AI_CHARGE_DURATION := 0.32        # balanced — AI can hit medium shots but not always max power
@@ -97,12 +87,23 @@ var ai_desired_posture: int = 0  # PP_FOREHAND
 var ai_target_position: Vector3 = Vector3.ZERO
 var ai_predicted_bounce_position: Vector3 = Vector3.ZERO
 var ai_predicted_contact_position: Vector3 = Vector3.ZERO
+var ai_selected_contact_reachable: bool = false
+var ai_selected_contact_time: float = -1.0
+var _charge_contact_position: Vector3 = Vector3.ZERO
+var _charge_target_position: Vector3 = Vector3.ZERO
+var _charge_posture: int = PP_READY
+var last_ai_contact_correction: float = 0.0
 
 # GAP-47: visuomotor latency ring buffer. The AI "sees" ball state from N
 # physics frames ago, matching human sensorimotor delay (~180-220 ms). Without
 # this, the AI reacts to trajectory changes the same frame they happen, which
 # is superhuman and asymmetric vs. the human player. Tunable per difficulty.
 var _ball_history: Array = []
+var _observed_flight_id: int = -1
+var _perception_ready: bool = false
+var _perceived_state: Dictionary = {}
+var _predicted_flight: Dictionary = {}
+var _predicted_flight_frame: int = -1
 const REACTION_LATENCY_FRAMES_EASY := 18   # 300 ms at 60 Hz
 const REACTION_LATENCY_FRAMES_MED := 12    # 200 ms at 60 Hz
 const REACTION_LATENCY_FRAMES_HARD := 8    # 133 ms at 60 Hz
@@ -115,14 +116,9 @@ var ai_is_charging: bool = false
 var ai_swing_threshold: float = 0.20
 var ai_difficulty: int = 0  # 0=Easy, 1=Medium, 2=Hard — set by game.gd via X key
 var ai_ball_bounced_on_side: bool = false
-var _game_node: Node = null  # set by game.gd for compute_shot_velocity access
+var _game_node = null  # set by game.gd for compute_shot_velocity access; untyped to allow test injection of FakeGame/RefCounted
 var ai_trajectory_mesh_instance: MeshInstance3D = null
 # Cache for prediction optimization
-var _last_ball_pos_cached: Vector3 = Vector3.INF
-var _last_ball_vel_cached: Vector3 = Vector3.INF
-var _prediction_cache_valid: bool = false
-var _cached_predicted_bounce: Vector3 = Vector3.ZERO
-var _cached_contact_candidates: Array[Vector3] = []
 var ai_trajectory_mesh: ImmediateMesh = null
 var ai_trajectory_material: StandardMaterial3D = null
 var ai_trajectory_timer: float = 0.0
@@ -134,14 +130,6 @@ var _ai_last_state: int = -1
 var ai_target_indicator_position: Vector3 = Vector3.ZERO
 var ai_bounce_indicator_position: Vector3 = Vector3.ZERO
 var ai_contact_indicator_position: Vector3 = Vector3.ZERO
-
-# Human intercept pool data — used by AI to decide positioning
-var human_committed_pre_intercepts: Array[Vector3] = []
-var human_committed_post_intercepts: Array[Vector3] = []
-var human_committed_contact_position: Vector3 = Vector3.ZERO
-var human_committed_target_position: Vector3 = Vector3.ZERO
-var human_last_hit_by_seen: int = -1
-var human_last_ball_vel_sign: float = 0.0
 
 var _player  # set in _ready
 
@@ -168,6 +156,8 @@ func get_ai_input() -> Vector3:
 
 	# After AI hits, return to ready position (center of its side) instead of chasing
 	if ball.has_method("get_last_hit_by") and ball.get_last_hit_by() == _player.player_num:
+		ai_selected_contact_reachable = false
+		ai_selected_contact_time = -1.0
 		var ready_z: float = (_player.min_z + _player.max_z) * 0.6  # slightly behind center
 		var ready_x: float = 0.0
 		target_x = ready_x
@@ -185,37 +175,22 @@ func get_ai_input() -> Vector3:
 		elif my_pos.z < target_z - ready_z_tol:
 			input_dir.z = 1
 		return input_dir
+	if not _perception_ready:
+		return input_dir
 
 	var predicted_landing: Vector3 = _predict_first_bounce_position(ball)
-	_commit_ai_bounce_prediction(predicted_landing)
-	var proactive_contact_point: Vector3 = _predict_ai_contact_point(ball)
-	var intercept_marker_point: Vector3 = _predict_ai_intercept_marker_point(ball)
-	_commit_ai_contact_prediction(intercept_marker_point)
-	var intercept_solution: Dictionary = _get_ai_intercept_solution(proactive_contact_point)
+	var intercept_solution: Dictionary = _get_ai_intercept_solution(predicted_landing)
 	var intercept_target: Vector3 = intercept_solution["target"] as Vector3
 	ai_desired_posture = int(intercept_solution["posture"])
-	if intercept_solution.has("contact"):
-		ai_predicted_contact_position = intercept_solution["contact"]
-
-	# --- Smart positioning from intercept pool dots ---
-	# Before two-bounce rule: go to RETURN (post-bounce) dot for legal play
-	# After two-bounce rule: prioritize VOLLEY/SMASH (pre-bounce) dots for aggression
-	if _player.is_ai and not human_committed_post_intercepts.is_empty() and not human_committed_pre_intercepts.is_empty():
-		var two_bounce_done: bool = ball.both_bounces_complete
-		if not two_bounce_done:
-			# Must let ball bounce — go to the RETURN position (first post-bounce dot)
-			var return_pt = human_committed_post_intercepts[0]
-			var body_offset = _player._get_posture_offset_for(ai_desired_posture)
-			intercept_target = Vector3(return_pt.x - body_offset.x, _player.ground_y, return_pt.z - body_offset.z)
-			ai_predicted_contact_position = return_pt
-		else:
-			# Two-bounce rule cleared — aggressively intercept pre-bounce (volley/smash)
-			if not human_committed_pre_intercepts.is_empty():
-				# Prefer highest tier: smash > semi-smash > volley (last element = highest)
-				var best_pre = human_committed_pre_intercepts[human_committed_pre_intercepts.size() - 1]
-				var body_offset = _player._get_posture_offset_for(ai_desired_posture)
-				intercept_target = Vector3(best_pre.x - body_offset.x, _player.ground_y, best_pre.z - body_offset.z)
-				ai_predicted_contact_position = best_pre
+	var selected_contact: Vector3 = intercept_solution["contact"]
+	ai_selected_contact_reachable = bool(intercept_solution["reachable"])
+	ai_selected_contact_time = float(intercept_solution["time"])
+	if ai_is_charging and ai_state == AIState.CHARGING and _charge_contact_position != Vector3.ZERO:
+		selected_contact = _charge_contact_position
+		intercept_target = _charge_target_position
+		ai_desired_posture = _charge_posture
+		ai_selected_contact_reachable = true
+		ai_selected_contact_time = 0.0
 
 	# Clamp intercept target to court bounds so AI never chases out-of-bounds predictions
 	intercept_target.x = clamp(intercept_target.x, _player.min_x, _player.max_x)
@@ -240,18 +215,18 @@ func get_ai_input() -> Vector3:
 
 	# Don't override CHARGING state — AI is committed to swinging
 	if ai_state != AIState.CHARGING:
-		if paddle_target_position.distance_to(proactive_contact_point) <= 0.5:
+		if bool(intercept_solution["reachable"]) and paddle_target_position.distance_to(selected_contact) <= 0.5:
 			ai_state = AIState.HIT_BALL
 		else:
 			ai_state = AIState.INTERCEPT_POSITION
 	target_x = intercept_target.x
 	target_z = intercept_target.z
-	_commit_ai_target_position(Vector3(target_x, _player.ground_y, target_z))
+	ai_committed_target_position = Vector3(target_x, _player.ground_y, target_z)
+	ai_committed_bounce_position = predicted_landing
+	ai_committed_contact_position = selected_contact
 	ai_target_position = ai_committed_target_position
-	ai_predicted_bounce_position = ai_committed_bounce_position
-	ai_predicted_contact_position = ai_committed_contact_position
-	target_x = ai_committed_target_position.x
-	target_z = ai_committed_target_position.z
+	ai_predicted_bounce_position = predicted_landing
+	ai_predicted_contact_position = selected_contact
 
 	# When charging, use tighter deadzone and don't oscillate
 	var x_tol: float = AI_RECEIVE_X_TOLERANCE
@@ -307,39 +282,86 @@ func _get_posture_for_height(rel_height: float) -> Array[int]:
 # ── Intercept solution ────────────────────────────────────────────────────────
 func _get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 	var ball: RigidBody3D = _player._get_ball_ref()
-	var contact_candidates: Array[Vector3] = [predicted_ball_pos]
-	if ball != null:
-		contact_candidates = _predict_ai_contact_candidates(ball)
-
 	var best_target: Vector3 = _player.global_position
 	var best_score: float = INF
-	var best_posture: int = PP_FOREHAND
+	var best_posture: int = PP_READY
 	var best_contact: Vector3 = predicted_ball_pos
+	var best_time: float = -1.0
+	var flight: Dictionary = _get_predicted_flight(ball)
+	var samples: Array = flight.get("samples", [])
+	var zone_library: PostureLibrary = PostureLibrary.instance()
+	var forehand_axis: Vector3 = _player._get_forehand_axis()
+	var forward_axis: Vector3 = _player._get_forward_axis()
+	var shoulder_offset: Vector3 = PaddleReach.shoulder_world(_player) - _player.global_position
+	var move_speed: float = _player.move_speed
+	var legal_after: float = 0.0
+	if not ball.both_bounces_complete and not ai_ball_bounced_on_side:
+		legal_after = INF
+		for bounce in flight.get("bounce_events", []):
+			if bounce["pos"].z < 0.0:
+				legal_after = bounce["time"]
+				break
 
-	for contact_point in contact_candidates:
-		var rel_height: float = contact_point.y - COURT_FLOOR_Y  # from floor, not player origin
+	for sample_index in range(1, samples.size(), 3):
+		var sample: Dictionary = samples[sample_index]
+		var contact_point: Vector3 = sample["pos"]
+		var contact_time: float = sample["time"]
+		if contact_time < legal_after or contact_point.z < _player.min_z or contact_point.z > _player.max_z:
+			continue
+		if contact_point.x < _player.min_x or contact_point.x > _player.max_x:
+			continue
+		if contact_point.y < _Flight.FLOOR_REST_Y + 0.12:
+			continue
+		var rel_height: float = contact_point.y - COURT_FLOOR_Y
 		var height_postures: Array[int] = _get_posture_for_height(rel_height)
 		for posture in height_postures:
+			var def: PostureDefinition = zone_library.get_def(posture)
+			if def == null or not def.has_zone:
+				continue
 			var posture_offset: Vector3 = _player._get_posture_offset_for(posture)
 			var candidate_target: Vector3 = contact_point - posture_offset
 			candidate_target.y = _player.ground_y
-
-			var reposition_cost: float = _player.global_position.distance_to(candidate_target)
-			var posture_preference: float = _get_ai_posture_preference(posture)
-			var paddle_world_pos: Vector3 = candidate_target + posture_offset
-			var paddle_error: float = paddle_world_pos.distance_to(contact_point) * 2.1
-			var body_cost: float = candidate_target.distance_to(contact_point) * 0.24
-			var score: float = reposition_cost + paddle_error + body_cost - posture_preference
+			candidate_target.x = clampf(candidate_target.x, _player.min_x, _player.max_x)
+			candidate_target.z = clampf(candidate_target.z, _player.min_z, _player.max_z)
+			if int(sample["bounces"]) == 0 and absf(candidate_target.z) < PickleballConstants.NON_VOLLEY_ZONE:
+				continue
+			var travel_distance: float = Vector2(candidate_target.x - _player.global_position.x,
+				candidate_target.z - _player.global_position.z).length()
+			if travel_distance > move_speed * contact_time + 0.12:
+				continue
+			var local: Vector3 = contact_point - candidate_target
+			var lateral: float = local.dot(forehand_axis)
+			var forward: float = local.dot(forward_axis)
+			if lateral < def.zone_x_min - 0.06 or lateral > def.zone_x_max + 0.06:
+				continue
+			if rel_height < def.zone_y_min - 0.06 or rel_height > def.zone_y_max + 0.06:
+				continue
+			if absf(forward - def.zone_forward_offset) > 0.25:
+				continue
+			if contact_point.distance_to(candidate_target + shoulder_offset) > PaddleReach.MAX_HEAD_DISTANCE + 0.03:
+				continue
+			# Take the first legal contact the AI can reach. A later, easier point
+			# often leaves no swing window after the bounce.
+			var travel_fraction: float = travel_distance / maxf(move_speed * contact_time, 0.1)
+			var score: float = contact_time + travel_fraction * 0.15 - _get_ai_posture_preference(posture) * 0.03
 			if score < best_score:
 				best_score = score
 				best_target = candidate_target
 				best_posture = posture
 				best_contact = contact_point
+				best_time = contact_time
 
+	if best_score == INF:
+		best_target = predicted_ball_pos - _player._get_posture_offset_for(PP_READY)
+		best_target.y = _player.ground_y
+		best_target.x = clampf(best_target.x, _player.min_x, _player.max_x)
+		best_target.z = clampf(best_target.z, _player.min_z, _player.max_z)
 	return {
 		"target": best_target,
 		"posture": best_posture,
 		"contact": best_contact,
+		"time": best_time,
+		"reachable": best_score != INF,
 	}
 
 # ── Posture preference ────────────────────────────────────────────────────────
@@ -382,215 +404,56 @@ func _get_latency_frames() -> int:
 func _sample_ball_history(ball: RigidBody3D) -> void:
 	if ball == null or not is_instance_valid(ball):
 		return
-	
-	# Use fixed-size ring buffer to avoid O(n) pop_front()
-	var max_frames: int = _get_latency_frames() + 2
-	
-	# Grow array only if not at max size (avoid recreating every frame)
-	if _ball_history.size() < max_frames:
-		_ball_history.append({
-			"pos": ball.global_position,
-			"vel": ball.linear_velocity,
-			"omega": ball.angular_velocity,
-		})
-	else:
-		# Ring buffer: shift elements manually (cheaper than pop_front when full)
-		for i in range(max_frames - 1):
-			_ball_history[i] = _ball_history[i + 1]
-		_ball_history[max_frames - 1] = {
-			"pos": ball.global_position,
-			"vel": ball.linear_velocity,
-			"omega": ball.angular_velocity,
-		}
+	var flight_id: int = ball.flight_id if ball is Ball else 0
+	if flight_id != _observed_flight_id:
+		_observed_flight_id = flight_id
+		_ball_history.clear()
+		_predicted_flight.clear()
+		_predicted_flight_frame = -1
+		ai_is_charging = false
+		ai_charge_time = 0.0
+		ai_selected_contact_reachable = false
+		ai_selected_contact_time = -1.0
+		_charge_contact_position = Vector3.ZERO
+		_charge_target_position = Vector3.ZERO
+	var max_frames: int = _get_latency_frames() + 1
+	_ball_history.append({"pos": ball.global_position, "vel": ball.linear_velocity, "omega": ball.angular_velocity})
+	if _ball_history.size() > max_frames:
+		_ball_history.pop_front()
+	_perception_ready = _ball_history.size() >= max_frames
+	if not _perception_ready:
+		return
+	var oldest: Dictionary = _ball_history.front()
+	var delay: float = (_ball_history.size() - 1) / float(Engine.physics_ticks_per_second)
+	_perceived_state = _Flight.advance(oldest["pos"], oldest["vel"], oldest["omega"], delay)
+	_predicted_flight_frame = -1
 
 func _perceived_ball_pos(ball: RigidBody3D) -> Vector3:
-	# Guard against empty array - return live state as fallback
-	if _ball_history.is_empty() or ball == null:
-		return ball.global_position if ball else Vector3.ZERO
-	if _ball_history.size() >= _get_latency_frames() and _ball_history.size() > 0:
-		return _ball_history[0]["pos"]
-	return ball.global_position  # buffer warming up, use live state
+	return _perceived_state.get("pos", ball.global_position if ball else Vector3.ZERO)
 
 func _perceived_ball_vel(ball: RigidBody3D) -> Vector3:
-	if _ball_history.is_empty() or ball == null:
-		return ball.linear_velocity if ball else Vector3.ZERO
-	if _ball_history.size() >= _get_latency_frames() and _ball_history.size() > 0:
-		return _ball_history[0]["vel"]
-	return ball.linear_velocity
+	return _perceived_state.get("vel", ball.linear_velocity if ball else Vector3.ZERO)
 
 func _perceived_ball_omega(ball: RigidBody3D) -> Vector3:
-	if _ball_history.is_empty() or ball == null:
-		return ball.angular_velocity if ball else Vector3.ZERO
-	if _ball_history.size() >= _get_latency_frames() and _ball_history.size() > 0:
-		return _ball_history[0]["omega"]
-	return ball.angular_velocity
+	return _perceived_state.get("omega", ball.angular_velocity if ball else Vector3.ZERO)
+
+func _get_predicted_flight(ball: RigidBody3D) -> Dictionary:
+	if ball == null:
+		return {}
+	var frame: int = Engine.get_physics_frames()
+	if _predicted_flight_frame != frame or _predicted_flight.is_empty():
+		_predicted_flight = _Flight.trace(_perceived_ball_pos(ball), _perceived_ball_vel(ball),
+			_perceived_ball_omega(ball), 3.0, 2, true)
+		_predicted_flight_frame = frame
+	return _predicted_flight
 
 func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
-	# Use cached result if ball state hasn't changed significantly
-	var perceived_pos: Vector3 = _perceived_ball_pos(ball)
-	var perceived_vel: Vector3 = _perceived_ball_vel(ball)
-	var _cache_key: String = "%v_%v" % [perceived_pos, perceived_vel]
-	
-	if _prediction_cache_valid and _last_ball_pos_cached == perceived_pos and _last_ball_vel_cached == perceived_vel:
-		return _cached_predicted_bounce
-	
-	# Invalidate cache if ball state changed significantly
-	if _last_ball_pos_cached != Vector3.INF and perceived_pos.distance_squared_to(_last_ball_pos_cached) > 0.01:
-		_prediction_cache_valid = false
-	
-	_last_ball_pos_cached = perceived_pos
-	_last_ball_vel_cached = perceived_vel
-	
-	var gravity: float = _Ball.get_effective_gravity()
-	var predicted_position: Vector3 = perceived_pos
-	var predicted_velocity: Vector3 = perceived_vel
-	var predicted_omega: Vector3 = _perceived_ball_omega(ball)
-	var floor_height: float = 0.08
-
-	for _step in range(AI_LANDING_PREDICTION_STEPS):
-		var stepped: Array = _Ball.predict_aero_step(
-			predicted_position, predicted_velocity, predicted_omega,
-			gravity, AI_LANDING_PREDICTION_STEP
-		)
-		predicted_position = stepped[0]
-		predicted_velocity = stepped[1]
-		predicted_omega = stepped[2]
-		if predicted_position.y <= floor_height:
-			predicted_position.y = floor_height
-			_cached_predicted_bounce = predicted_position
-			_prediction_cache_valid = true
-			return predicted_position
-
-	_cached_predicted_bounce = predicted_position
-	_prediction_cache_valid = true
-	return predicted_position
-
-func _predict_ball_position(ball: RigidBody3D, time_ahead: float) -> Vector3:
-	var gravity: float = _Ball.get_effective_gravity()
-	# GAP-47: perceived state seeds the prediction.
-	var predicted_position: Vector3 = _perceived_ball_pos(ball) + _perceived_ball_vel(ball) * time_ahead
-	predicted_position.y += -0.5 * gravity * time_ahead * time_ahead
-	return predicted_position
-
-func _predict_ai_contact_candidates(ball: RigidBody3D) -> Array[Vector3]:
-	# Check cache - reuse if ball state hasn't changed significantly
-	var perceived_pos: Vector3 = _perceived_ball_pos(ball)
-	var perceived_vel: Vector3 = _perceived_ball_vel(ball)
-	
-	if _prediction_cache_valid and _last_ball_pos_cached.distance_squared_to(perceived_pos) < 0.005:
-		return _cached_contact_candidates
-	
-	var gravity: float = _Ball.get_effective_gravity()
-	var predicted_position: Vector3 = perceived_pos
-	var predicted_velocity: Vector3 = perceived_vel
-	var predicted_omega: Vector3 = _perceived_ball_omega(ball)
-	var floor_height: float = 0.08
-	var has_bounced: bool = false
-	var candidates: Array[Vector3] = []
-	var last_valid: Vector3 = predicted_position
-	var z_limit_min: float = _player.min_z
-	var z_limit_max: float = _player.max_z
-	var _has_entered_ai_side: bool = predicted_position.z <= z_limit_max
-
-	for _step in range(AI_CONTACT_PREDICTION_STEPS):
-		var stepped: Array = _Ball.predict_aero_step(
-			predicted_position, predicted_velocity, predicted_omega,
-			gravity, AI_CONTACT_PREDICTION_STEP
-		)
-		predicted_position = stepped[0]
-		predicted_velocity = stepped[1]
-		predicted_omega = stepped[2]
-		if not _has_entered_ai_side:
-			_has_entered_ai_side = predicted_position.z <= z_limit_max
-		if _has_entered_ai_side and (predicted_position.z < z_limit_min or predicted_position.z > z_limit_max):
-			break
-		if predicted_position.y <= floor_height:
-			predicted_position.y = floor_height
-			if not has_bounced:
-				has_bounced = true
-				var bounced: Array = _Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
-				predicted_velocity = bounced[0]
-				predicted_omega = bounced[1]
-			else:
-				break
-		if has_bounced and _is_ball_hittable_for_ai(predicted_position):
-			if candidates.size() == 0 and predicted_position.y > floor_height + 0.1:
-				candidates.append(predicted_position)
-			elif candidates.size() == 1 and predicted_position.y > 0.5:
-				candidates.append(predicted_position)
-			elif candidates.size() == 2 and predicted_position.y > 0.85:
-				candidates.append(predicted_position)
-				break
-			last_valid = predicted_position
-
-	if candidates.is_empty():
-		if last_valid != ball.global_position:
-			candidates.append(last_valid)
-		else:
-			candidates.append(ball.global_position)
-	
-	_cached_contact_candidates = candidates
-	return candidates
-
-func _predict_ai_contact_point(ball: RigidBody3D) -> Vector3:
-	var candidates := _predict_ai_contact_candidates(ball)
-	if candidates.is_empty():
-		return ball.global_position if ball else Vector3.ZERO
-	return candidates[0]
-
-func _predict_ai_intercept_marker_point(ball: RigidBody3D) -> Vector3:
-	var gravity: float = _Ball.get_effective_gravity()
-	# GAP-47: perceived state seeds the prediction.
-	var predicted_position: Vector3 = _perceived_ball_pos(ball)
-	var predicted_velocity: Vector3 = _perceived_ball_vel(ball)
-	var predicted_omega: Vector3 = _perceived_ball_omega(ball)
-	var floor_height: float = 0.08
-	var has_bounced: bool = false
-	# Tight limits — don't predict targets the AI can't reach
-	var z_limit_min: float = _player.min_z
-	var z_limit_max: float = _player.max_z
-	var fallback_contact: Vector3 = predicted_position
-	var _has_entered_ai_side: bool = predicted_position.z <= z_limit_max
-
-	for _step in range(AI_CONTACT_PREDICTION_STEPS):
-		var stepped: Array = _Ball.predict_aero_step(
-			predicted_position, predicted_velocity, predicted_omega,
-			gravity, AI_CONTACT_PREDICTION_STEP
-		)
-		predicted_position = stepped[0]
-		predicted_velocity = stepped[1]
-		predicted_omega = stepped[2]
-		if not _has_entered_ai_side:
-			_has_entered_ai_side = predicted_position.z <= z_limit_max
-		if _has_entered_ai_side and (predicted_position.z < z_limit_min or predicted_position.z > z_limit_max):
-			break
-		if predicted_position.y <= floor_height:
-			predicted_position.y = floor_height
-			if not has_bounced:
-				has_bounced = true
-				var bounced: Array = _Ball.predict_bounce_spin(predicted_velocity, predicted_omega)
-				predicted_velocity = bounced[0]
-				predicted_omega = bounced[1]
-				continue
-			return Vector3(
-				clamp(fallback_contact.x, _player.min_x, _player.max_x),
-				fallback_contact.y,
-				clamp(fallback_contact.z, _player.min_z, _player.max_z))
-
-		if has_bounced:
-			fallback_contact = predicted_position
-			if predicted_position.y >= AI_INTERCEPT_MARKER_MIN_HEIGHT and predicted_position.y <= AI_INTERCEPT_MARKER_MAX_HEIGHT and _is_ball_hittable_for_ai(predicted_position):
-				return predicted_position
-
-	return Vector3(
-		clamp(fallback_contact.x, _player.min_x, _player.max_x),
-		fallback_contact.y,
-		clamp(fallback_contact.z, _player.min_z, _player.max_z))
-
-func _is_ball_hittable_for_ai(predicted_position: Vector3) -> bool:
-	if _player.player_num == 0:
-		return predicted_position.z >= _player.min_z - 1.0
-	return predicted_position.z <= _player.max_z + 1.2
+	var flight: Dictionary = _get_predicted_flight(ball)
+	var bounce: Vector3 = flight.get("first_bounce", Vector3.ZERO)
+	if bounce != Vector3.ZERO:
+		return bounce
+	var samples: Array = flight.get("samples", [])
+	return samples.back()["pos"] if not samples.is_empty() else ball.global_position
 
 # ── Commit functions (smoothed position updates) ─────────────────────────────
 func _commit_ai_target_position(new_target: Vector3) -> void:
@@ -600,19 +463,45 @@ func _commit_ai_target_position(new_target: Vector3) -> void:
 	else:
 		ai_committed_target_position = ai_committed_target_position.lerp(new_target, 0.1)
 
-func _commit_ai_bounce_prediction(new_bounce_position: Vector3) -> void:
-	if ai_committed_bounce_position == Vector3.ZERO or ai_committed_bounce_position.distance_to(new_bounce_position) >= AI_TARGET_RECOMMIT_BOUNCE_DISTANCE:
-		ai_committed_bounce_position = new_bounce_position
-	else:
-		ai_committed_bounce_position = ai_committed_bounce_position.lerp(new_bounce_position, 0.12)
-
-func _commit_ai_contact_prediction(new_contact_position: Vector3) -> void:
-	if ai_committed_contact_position == Vector3.ZERO or ai_committed_contact_position.distance_to(new_contact_position) >= AI_TARGET_RECOMMIT_BOUNCE_DISTANCE:
-		ai_committed_contact_position = new_contact_position
-	else:
-		ai_committed_contact_position = ai_committed_contact_position.lerp(new_contact_position, 0.08)
-
 # ── AI hitting ────────────────────────────────────────────────────────────────
+func align_paddle_to_contact(delta: float) -> void:
+	if not _player.is_ai or not ai_selected_contact_reachable or _player.paddle_node == null:
+		return
+	var ball: RigidBody3D = _player._get_ball_ref()
+	if ball == null or ball.get_last_hit_by() == _player.player_num or ball.global_position.z >= 0.0:
+		return
+	var contact: Vector3 = ai_predicted_contact_position
+	if ai_selected_contact_time > 0.35 and ball.global_position.distance_to(contact) > 0.75:
+		return
+	# Lead with the timed indicator, then follow the live ball through contact.
+	if ball.global_position.distance_to(contact) < 0.55:
+		contact = ball.global_position
+	var shoulder: Vector3 = PaddleReach.shoulder_world(_player)
+	if shoulder.distance_to(contact) > PaddleReach.MAX_HEAD_DISTANCE + 0.05:
+		return
+	var head: Vector3 = PaddleReach.head_world(_player)
+	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact, shoulder,
+		_player.COURT_FLOOR_Y + 0.06)
+	var rate: float = 42.0 if ball.global_position.distance_to(contact) < 0.55 else 22.0
+	var blend: float = 1.0 - exp(-maxf(delta, 0.0) * rate)
+	_player.paddle_node.global_position = head.lerp(target_head, blend) - _player.paddle_node.global_transform.basis.y * 0.4
+
+func _ball_at_reachable_indicator(ball: RigidBody3D) -> bool:
+	if not ai_selected_contact_reachable or ball.global_position.z >= 0.0:
+		return false
+	if ball.global_position.y < _Flight.FLOOR_REST_Y + 0.015:
+		return false
+	if ball.global_position.distance_to(ai_predicted_contact_position) > AI_HIT_CONTACT_WINDOW:
+		return false
+	return PaddleReach.shoulder_world(_player).distance_to(ball.global_position) <= PaddleReach.MAX_HEAD_DISTANCE + 0.03
+
+func _place_paddle_head_at_ball(ball: RigidBody3D) -> void:
+	last_ai_contact_correction = PaddleReach.head_world(_player).distance_to(ball.global_position)
+	var offset: Vector3 = _player.paddle_node.global_transform.basis.y * 0.4
+	var contact: Vector3 = PaddleReach.clamp_head_with_floor(ball.global_position,
+		PaddleReach.shoulder_world(_player), _player.COURT_FLOOR_Y + 0.06)
+	_player.paddle_node.global_position = contact - offset
+
 func _on_hitbox_body_entered(_body: Node3D, _paddle: StaticBody3D) -> void:
 	# AI hitting is fully controlled by _try_ai_hit_ball (charge system).
 	# Hitbox auto-hit was firing prematurely, resetting ball_bounced_since_last_hit
@@ -620,7 +509,7 @@ func _on_hitbox_body_entered(_body: Node3D, _paddle: StaticBody3D) -> void:
 	pass
 
 func _try_ai_hit_ball() -> void:
-	if not _player.is_ai or _player.paddle_hitbox == null or ai_hit_cooldown > 0.0:
+	if not _player.is_ai or not _perception_ready or _player.paddle_hitbox == null or ai_hit_cooldown > 0.0:
 		return
 	var ball: RigidBody3D = _player._get_ball_ref()
 	if ball == null:
@@ -642,15 +531,19 @@ func _try_ai_hit_ball() -> void:
 	if abs(_player.global_position.z) < PickleballConstants.NON_VOLLEY_ZONE and not ball.ball_bounced_since_last_hit:
 		return
 
-	var paddle_distance: float = _player.get_paddle_position().distance_to(ball.global_position)
+	var paddle_distance: float = PaddleReach.head_world(_player).distance_to(ball.global_position)
 
 	# Phase 1: Begin charging when close enough
 	# Don't charge while ball is still on opponent's side — paddle distance may be
 	# artificially short when AI reaches up toward a ball still past the net.
-	if not ai_is_charging and paddle_distance <= AI_CHARGE_START_DISTANCE and ball.global_position.z < 0.0:
+	if not ai_is_charging and ball.global_position.z < 0.0 and (paddle_distance <= AI_CHARGE_START_DISTANCE
+			or ai_selected_contact_reachable and ball.global_position.distance_to(ai_predicted_contact_position) < 1.2):
 		ai_is_charging = true
 		ai_charge_time = 0.0
 		ai_state = AIState.CHARGING
+		_charge_contact_position = ai_predicted_contact_position
+		_charge_target_position = ai_committed_target_position
+		_charge_posture = ai_desired_posture
 		# Shot power varies by difficulty
 		match ai_difficulty:
 			0:  # EASY — mostly dinks, rare medium shots
@@ -701,14 +594,21 @@ func _try_ai_hit_ball() -> void:
 		var delta: float = get_physics_process_delta_time()
 		ai_charge_time += delta
 		var charge_ratio: float = clamp(ai_charge_time / AI_CHARGE_DURATION, 0.0, 1.0)
-		_player.set_serve_charge_visual(charge_ratio)
+		# Finish the pullback before the contact window. Reapplying it every
+		# frame near the ball used to yank the head away from the indicator.
+		if ai_selected_contact_time > 0.30 and ball.global_position.distance_to(ai_predicted_contact_position) > 0.75:
+			_player.set_serve_charge_visual(charge_ratio)
+		align_paddle_to_contact(delta)
 
 		# Phase 3: Charge complete or ball is right at paddle — swing!
 		var ready_to_swing: bool = charge_ratio >= ai_swing_threshold
-		var close_enough: bool = paddle_distance <= AI_HIT_REACH_DISTANCE * 1.2
-		var ball_very_close: bool = paddle_distance <= AI_HIT_REACH_DISTANCE * 0.8
+		var close_enough: bool = paddle_distance <= 0.30
+		var ball_very_close: bool = paddle_distance <= 0.18
 
-		if (ready_to_swing and close_enough) or ball_very_close:
+		var at_indicator: bool = _ball_at_reachable_indicator(ball)
+		if (ready_to_swing and close_enough) or ball_very_close or at_indicator:
+			if at_indicator:
+				_place_paddle_head_at_ball(ball)
 			_apply_ai_hit(ball, charge_ratio)
 			return
 
@@ -717,6 +617,8 @@ func _try_ai_hit_ball() -> void:
 			ai_is_charging = false
 			ai_charge_time = 0.0
 			ai_state = AIState.INTERCEPT_POSITION
+			_charge_contact_position = Vector3.ZERO
+			_charge_target_position = Vector3.ZERO
 
 	# Fallback: paddle hitbox overlap (ball flew right into paddle)
 	if ai_ball_bounced_on_side or can_volley_now:
@@ -741,33 +643,17 @@ func _apply_ai_hit(body: Node3D, charge_ratio: float = 0.55) -> void:
 	if _player.posture:
 		_player.posture.notify_ball_hit()
 
-	# AI uses shared velocity targeting — same ballistic math as human swing
+	# Evaluate the complete launch, including paddle motion and contact offset.
 	var charge: float = clamp(ai_charge_time / AI_CHARGE_DURATION, 0.05, 1.0)
-	var shot_velocity: Vector3 = _game_node.compute_shot_velocity(body.global_position, charge, 1, "")
-	# GAP-X: paddle velocity at impact contributes to ball speed (same as human swing).
-	var ai_paddle_vel: Vector3 = _player.hitting.get_paddle_velocity()
-	var ai_shot_dir: Vector3 = shot_velocity.normalized()
-	var ai_paddle_comp: float = ai_paddle_vel.dot(ai_shot_dir)
-	var ai_vel_transfer: float = _player.hitting.PADDLE_VEL_TRANSFER
-	if absf(ai_paddle_comp) > 0.5:
-		shot_velocity += ai_shot_dir * ai_paddle_comp * ai_vel_transfer
-	# GAP-15: sweet-spot speed reduction — off-center hits lose up to 40% speed
+	var ai_paddle_vel: Vector3 = _player.hitting.get_paddle_velocity().limit_length(15.0)
 	var paddle_pos: Vector3 = _player.global_position + _player._get_posture_offset_for(_player.ai_desired_posture)
-	var speed_factor: float = _game_node.compute_sweet_spot_speed(body.global_position, paddle_pos, shot_velocity)
-	shot_velocity = shot_velocity * speed_factor
-	# Compensate for drag losses the solver doesn't fully recover in 6 iterations
-	var ai_power_boost: float = 1.0
-	match ai_difficulty:
-		0: ai_power_boost = 1.12
-		1: ai_power_boost = 1.08
-		2: ai_power_boost = 1.04
-	shot_velocity *= ai_power_boost
+	var launch: Dictionary = _game_node.solve_ai_launch(body.global_position, charge,
+		_player.ai_desired_posture, paddle_pos, ai_paddle_vel, _player.hitting.PADDLE_VEL_TRANSFER)
+	if launch.is_empty():
+		return
+	var shot_velocity: Vector3 = launch["velocity"]
 	body.linear_velocity = shot_velocity
-	# Step 2 spin coupling — AI inherits the same shot_type → ω model as human.
-	var _ai_shot_spin: Vector3 = _game_node.compute_shot_spin("", shot_velocity, charge, 1, _player.paddle_posture)
-	# Step 3 sweet-spot injection — off-center contact adds rim-strike torque.
-	var _ai_sweet_spin: Vector3 = _game_node.compute_sweet_spot_spin(body.global_position, paddle_pos, shot_velocity)
-	body.angular_velocity = _ai_shot_spin + _ai_sweet_spin
+	body.angular_velocity = launch["omega"]
 	var shot_impulse: Vector3 = shot_velocity.normalized()
 	if body.has_method("hit_by_player"):
 		body.hit_by_player(_player.player_num)
@@ -777,13 +663,13 @@ func _apply_ai_hit(body: Node3D, charge_ratio: float = 0.55) -> void:
 	# Reset charge state
 	ai_is_charging = false
 	ai_charge_time = 0.0
+	_charge_contact_position = Vector3.ZERO
+	_charge_target_position = Vector3.ZERO
 	ai_ball_bounced_on_side = false
 	ai_state = AIState.INTERCEPT_POSITION
 	print("[BOS] reset by _apply_ai_hit")
 
-	# Draw AI trajectory line (estimate post-impulse velocity)
-	var post_hit_vel: Vector3 = body.linear_velocity + (shot_impulse / body.mass)
-	_draw_ai_trajectory(body.global_position, post_hit_vel)
+	_draw_ai_trajectory(body.global_position, body.linear_velocity, body.angular_velocity)
 
 # ── AI trajectory visualization ───────────────────────────────────────────────
 func _setup_ai_trajectory() -> void:
@@ -802,7 +688,7 @@ func _setup_ai_trajectory() -> void:
 	ai_trajectory_mesh_instance.visible = false
 	get_tree().root.call_deferred("add_child", ai_trajectory_mesh_instance)
 
-func _draw_ai_trajectory(ball_pos: Vector3, ball_vel: Vector3) -> void:
+func _draw_ai_trajectory(ball_pos: Vector3, ball_vel: Vector3, spin: Vector3) -> void:
 	if _game_node and not _game_node.debug_visuals_visible:
 		if ai_trajectory_mesh_instance:
 			ai_trajectory_mesh_instance.visible = false
@@ -811,17 +697,9 @@ func _draw_ai_trajectory(ball_pos: Vector3, ball_vel: Vector3) -> void:
 		_setup_ai_trajectory()
 	ai_trajectory_mesh.clear_surfaces()
 	ai_trajectory_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, ai_trajectory_material)
-	var gravity: float = _Ball.get_effective_gravity()
-	var pos: Vector3 = ball_pos
-	var vel: Vector3 = ball_vel
-	for step in range(28):
-		ai_trajectory_mesh.surface_add_vertex(pos + Vector3(0.0, 0.03, 0.0))
-		vel.y -= gravity * 0.08
-		pos += vel * 0.08
-		if pos.y <= 0.08:
-			pos.y = 0.08
-			ai_trajectory_mesh.surface_add_vertex(pos + Vector3(0.0, 0.03, 0.0))
-			break
+	var flight: Dictionary = _Flight.trace(ball_pos, ball_vel, spin, 3.0, 1, true)
+	for sample in flight["samples"]:
+		ai_trajectory_mesh.surface_add_vertex(sample["pos"] + Vector3(0.0, 0.03, 0.0))
 	ai_trajectory_mesh.surface_end()
 	ai_trajectory_mesh_instance.visible = true
 	ai_trajectory_timer = AI_TRAJECTORY_DURATION
@@ -831,3 +709,206 @@ func _update_ai_trajectory_fade(delta: float) -> void:
 		ai_trajectory_timer -= delta
 		if ai_trajectory_timer <= 0.0 and ai_trajectory_mesh_instance != null:
 			ai_trajectory_mesh_instance.visible = false
+
+## ─── Trajectory helpers used by test_ai_trajectory.gd ───────────────────────
+
+## Simulate a shot trajectory and return where it lands (court floor contact
+## or net-crossing point). Uses Ball.predict_aero_step() for physics.
+func _simulate_landing(pos: Vector3, vel: Vector3, omega: Vector3, detect_net: bool = true) -> Vector3:
+	var grav: float = _Ball.get_effective_gravity()
+	var p: Vector3 = pos
+	var v: Vector3 = vel
+	var o: Vector3 = omega
+	var net_z: float = 0.0
+	var net_h: float = 1.0
+	var _local_floor_y: float = 0.075
+	for _step in range(400):
+		var prev_p: Vector3 = p
+		var stepped: Array = _Ball.predict_aero_step(p, v, o, grav, 0.02)
+		p = stepped[0]
+		v = stepped[1]
+		o = stepped[2]
+		if detect_net:
+			if (prev_p.z < net_z and p.z >= net_z) or (prev_p.z > net_z and p.z <= net_z):
+				var t: float = absf(prev_p.z) / maxf(absf(p.z - prev_p.z), 0.001)
+				var hit_y: float = lerpf(prev_p.y, p.y, t)
+				if hit_y < net_h:
+					return Vector3(lerpf(prev_p.x, p.x, t), hit_y, net_z)
+		if p.y <= _local_floor_y + 0.05:
+			return p
+	return p
+
+## Return the height of the ball when it crosses the net Z plane.
+func _simulate_apex_height(pos: Vector3, vel: Vector3, omega: Vector3) -> float:
+	var grav: float = _Ball.get_effective_gravity()
+	var p: Vector3 = pos
+	var v: Vector3 = vel
+	var o: Vector3 = omega
+	var apex_y: float = pos.y
+	for _step in range(400):
+		var stepped: Array = _Ball.predict_aero_step(p, v, o, grav, 0.02)
+		p = stepped[0]
+		v = stepped[1]
+		o = stepped[2]
+		apex_y = maxf(apex_y, p.y)
+		if p.y <= 0.1:
+			break
+	return apex_y
+
+func _simulate_net_height(pos: Vector3, vel: Vector3, omega: Vector3, net_z: float) -> float:
+	var grav: float = _Ball.get_effective_gravity()
+	var p: Vector3 = pos
+	var v: Vector3 = vel
+	var o: Vector3 = omega
+	# If the ball is already past the net and moving away from it, no crossing occurs.
+	var moving_toward_net: bool = (pos.z < net_z and vel.z > 0.0) or (pos.z > net_z and vel.z < 0.0)
+	if not moving_toward_net:
+		return INF
+	for _step in range(400):
+		var prev_p: Vector3 = p
+		var stepped: Array = _Ball.predict_aero_step(p, v, o, grav, 0.02)
+		p = stepped[0]
+		v = stepped[1]
+		o = stepped[2]
+		if (prev_p.z < net_z and p.z >= net_z) or (prev_p.z > net_z and p.z <= net_z):
+			var t: float = absf(prev_p.z) / maxf(absf(p.z - prev_p.z), 0.001)
+			return lerpf(prev_p.y, p.y, t)
+		if p.y <= 0.1:
+			return p.y
+	return p.y
+
+## Pick a random landing target inside the service box on the AI's side (z > 0).
+## difficulty 0=EASY, 1=MEDIUM, 2=HARD
+func _pick_ai_target_in_service_box(difficulty: int, _charge: float) -> Vector2:
+	var NON_VOLLEY_ZONE: float = 2.134
+	var COURT_WIDTH_HALF: float = 3.05
+	var COURT_LENGTH_HALF: float = 6.7
+	var min_z: float = NON_VOLLEY_ZONE + 0.3
+	var max_z: float = COURT_LENGTH_HALF - 0.3
+	var lateral_range: float = COURT_WIDTH_HALF * 0.8
+	var tx: float = randf_range(-lateral_range, lateral_range)
+	var tz: float = randf_range(min_z, max_z)
+	# HARD: pull targets toward corners
+	if difficulty == 2:
+		tx = signf(tx) * (COURT_WIDTH_HALF * 0.7)
+		tz = randf_range(min_z + 1.0, max_z - 0.5)
+	# EASY: center bias
+	elif difficulty == 0:
+		tx *= 0.4
+		tz = lerpf(min_z + 0.5, max_z - 0.5, 0.5)
+	return Vector2(tx, tz)
+
+## Compute shot velocity toward the picked target, with arc for net clearance.
+## Returns velocity vector (m/s). Public wrapper for tests.
+func compute_ai_shot_velocity(ball_pos: Vector3, charge: float, difficulty: int, override_target: Vector2 = Vector2(-INF, -INF)) -> Vector3:
+	return _compute_ai_shot_velocity(ball_pos, charge, difficulty, override_target)
+
+## Internal shot velocity computation.
+func _compute_ai_shot_velocity(ball_pos: Vector3, charge: float, difficulty: int, override_target: Vector2 = Vector2(-INF, -INF)) -> Vector3:
+	var target: Vector2
+	if override_target.x > -INF:
+		target = override_target
+	else:
+		target = _pick_ai_target_in_service_box(difficulty, charge)
+	var tx: float = target.x
+	var tz: float = target.y
+	var dx: float = tx - ball_pos.x
+	var dz: float = tz - ball_pos.z
+	var horizontal_dist: float = sqrt(dx * dx + dz * dz)
+	if horizontal_dist < 0.1:
+		horizontal_dist = 0.1
+
+	var grav: float = _Ball.get_effective_gravity()
+	var speed: float = 8.0 + charge * 8.0
+	var t_est: float = horizontal_dist / maxf(speed * 0.7, 0.1)
+
+	# Initial velocity estimate (parabolic, no drag)
+	var vy: float = (0.5 * grav * t_est * t_est + 1.0) / maxf(t_est, 0.01)
+	var vx: float = dx / maxf(t_est, 0.01)
+	var vz: float = dz / maxf(t_est, 0.01)
+	var vel: Vector3 = Vector3(vx, vy, vz)
+
+	# Iteratively refine velocity using actual physics simulation
+	for _iter in range(30):
+		# Recompute spin each iteration (spin depends on velocity)
+		var spin: Vector3 = Vector3.ZERO
+		if _game_node and _game_node.has_method("compute_shot_spin"):
+			spin = _game_node.compute_shot_spin("", vel, charge, 1, 0)
+
+		var landing: Vector3 = _simulate_landing(ball_pos, vel, spin, true)
+		var err_x: float = tx - landing.x
+		var err_z: float = tz - landing.z
+		var err_y: float = 0.08 - landing.y
+
+		# Check net clearance
+		var net_h: float = _simulate_net_height(ball_pos, vel, spin, 0.0)
+		var net_ok: bool = net_h >= 1.0 or net_h == INF
+
+		# Close enough — stop iterating
+		if absf(err_x) < 0.06 and absf(err_z) < 0.06 and absf(err_y) < 0.02 and net_ok:
+			break
+
+		# If net is too low, boost vy first (highest priority)
+		if not net_ok and net_h != INF:
+			var t_net: float = maxf(absf(ball_pos.z) / maxf(absf(vel.z), 0.1), 0.1)
+			var vy_needed: float = (1.2 - ball_pos.y + 0.5 * grav * t_net * t_net) / t_net
+			vel.y = maxf(vel.y, vy_needed * 1.3)
+			# Also boost horizontal speed slightly so higher arc doesn't overshoot
+			vel.x *= 0.98
+			vel.z *= 0.98
+		else:
+			# Adjust horizontal velocity to correct landing position
+			var actual_dx: float = landing.x - ball_pos.x
+			var actual_dz: float = landing.z - ball_pos.z
+			if absf(actual_dz) > 0.03:
+				var scale_z: float = dz / actual_dz
+				vel.z *= clampf(lerpf(1.0, scale_z, 0.75), 0.5, 2.0)
+			if absf(actual_dx) > 0.03:
+				var scale_x: float = dx / actual_dx
+				vel.x *= clampf(lerpf(1.0, scale_x, 0.75), 0.5, 2.0)
+
+			# Adjust vertical velocity for landing height
+			var t_flight: float = maxf(t_est, 0.1)
+			vel.y += err_y / t_flight * 0.7
+
+	# ── Ensure sufficient arc height (apex ≥ 2.0 m) ──────────────────────────────
+	var spin_final: Vector3 = Vector3.ZERO
+	if _game_node and _game_node.has_method("compute_shot_spin"):
+		spin_final = _game_node.compute_shot_spin("", vel, charge, 1, 0)
+	var apex: float = _simulate_apex_height(ball_pos, vel, spin_final)
+	var target_apex: float = 2.0
+	if apex < target_apex:
+		# Boost vy to reach target apex, then re-converge landing
+		var vy_min: float = sqrt(2.0 * grav * maxf(target_apex - ball_pos.y, 0.01))
+		vel.y = maxf(vel.y, vy_min * 1.6)
+		# Shrink horizontal speed so higher arc doesn't overshoot
+		vel.x *= 0.88
+		vel.z *= 0.88
+		# Re-convergence with y-locked (only adjust horizontal)
+		for _reconverge in range(20):
+			if _game_node and _game_node.has_method("compute_shot_spin"):
+				spin_final = _game_node.compute_shot_spin("", vel, charge, 1, 0)
+			var landing2: Vector3 = _simulate_landing(ball_pos, vel, spin_final, true)
+			var err_x2: float = tx - landing2.x
+			var err_z2: float = tz - landing2.z
+			if absf(err_x2) < 0.10 and absf(err_z2) < 0.10:
+				break
+			var actual_dx2: float = landing2.x - ball_pos.x
+			var actual_dz2: float = landing2.z - ball_pos.z
+			if absf(actual_dz2) > 0.03:
+				var scale_z2: float = dz / actual_dz2
+				vel.z *= clampf(scale_z2, 0.5, 2.0)
+			if absf(actual_dx2) > 0.03:
+				var scale_x2: float = dx / actual_dx2
+				vel.x *= clampf(scale_x2, 0.5, 2.0)
+
+	# Clamp to reasonable speed range
+	var min_speed: float = 4.0
+	var max_speed: float = 22.0
+	var cur_speed: float = vel.length()
+	if cur_speed < min_speed:
+		vel = vel.normalized() * min_speed
+	elif cur_speed > max_speed:
+		vel = vel.normalized() * max_speed
+
+	return vel

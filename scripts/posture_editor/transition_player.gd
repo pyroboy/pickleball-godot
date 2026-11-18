@@ -1,4 +1,5 @@
 class_name TransitionPlayer extends Node
+const SwingPath = preload("res://scripts/stroke_swing_path.gd")
 
 ## Plays through charge→contact→follow-through→settle sequence
 
@@ -44,6 +45,7 @@ func setup(player, ready_def,
 	_follow_through_defs = ft_defs
 
 	if _contact_def != null:
+		phase_durations[Phase.CHARGE] = maxf(0.01, _contact_def.charge_duration)
 		phase_durations[Phase.CONTACT] = maxf(0.04, _contact_def.ft_duration_strike)
 		phase_durations[Phase.FOLLOW_THROUGH] = maxf(0.08, _contact_def.ft_duration_sweep)
 		phase_durations[Phase.SETTLE] = maxf(0.06, _contact_def.ft_duration_settle + _contact_def.ft_duration_hold)
@@ -144,13 +146,15 @@ func _advance_phase() -> void:
 		Phase.CHARGE:
 			_current_phase = Phase.CONTACT
 			_phase_time = 0.0
-			_apply_posture(_contact_def)
+			_apply_posture(_charge_def)
 			
 		Phase.CONTACT:
+			_apply_posture(_contact_def)
 			_current_phase = Phase.FOLLOW_THROUGH
 			_phase_time = 0.0
 			
 		Phase.FOLLOW_THROUGH:
+			_apply_posture(SwingPath.endpoint(_contact_def, 2))
 			_current_phase = Phase.SETTLE
 			_phase_time = 0.0
 			
@@ -174,18 +178,11 @@ func _apply_phase_pose() -> void:
 			_lerp_postures(_ready_def, _charge_def, factor)
 			
 		Phase.CONTACT:
-			# Instant contact
-			_apply_posture(_contact_def)
+			_apply_posture(SwingPath.sample(_contact_def, SwingPath.release_progress(_contact_def, 0, get_phase_progress())))
 			
 		Phase.FOLLOW_THROUGH:
 			var factor := get_phase_progress()
-			if _follow_through_defs.size() >= 2:
-				var idx := int(factor * (_follow_through_defs.size() - 1))
-				var local_t := fmod(factor * (_follow_through_defs.size() - 1), 1.0)
-				idx = clamp(idx, 0, _follow_through_defs.size() - 2)
-				_lerp_postures(_follow_through_defs[idx], _follow_through_defs[idx + 1], local_t)
-			elif _follow_through_defs.size() == 1:
-				_apply_posture(_follow_through_defs[0])
+			_apply_posture(SwingPath.sample(_contact_def, SwingPath.release_progress(_contact_def, 1, factor)))
 				
 		Phase.SETTLE:
 			var factor := get_phase_progress()

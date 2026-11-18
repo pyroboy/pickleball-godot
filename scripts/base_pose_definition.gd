@@ -30,7 +30,7 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 
 # ── Left arm IK / support posture ───────────────────────────────────────────
 @export_group("Left Arm IK")
-@export_enum("Free", "PaddleNeck", "AcrossChest", "OverheadLift") var left_hand_mode: int = 0
+@export_enum("Auto", "PaddleNeck", "AcrossChest", "OverheadLift", "Free") var left_hand_mode: int = 0
 @export var left_hand_offset: Vector3 = Vector3.ZERO
 @export var left_elbow_pole: Vector3 = Vector3.ZERO
 @export var left_shoulder_rotation_deg: Vector3 = Vector3.ZERO
@@ -149,7 +149,8 @@ func _apply_body_fields(target, source, mix: float) -> void:
 	target.right_hand_offset = source.right_hand_offset.lerp(right_hand_offset, mix)
 	target.right_elbow_pole = source.right_elbow_pole.lerp(right_elbow_pole, mix)
 	target.right_shoulder_rotation_deg = source.right_shoulder_rotation_deg.lerp(right_shoulder_rotation_deg, mix)
-	target.left_hand_mode = source.left_hand_mode if mix < 0.5 else left_hand_mode
+	# Explicit stroke grip choices take precedence over the underlying body stance.
+	target.left_hand_mode = source.left_hand_mode if source.left_hand_mode != 0 or mix < 0.5 else left_hand_mode
 	target.left_hand_offset = source.left_hand_offset.lerp(left_hand_offset, mix)
 	target.left_elbow_pole = source.left_elbow_pole.lerp(left_elbow_pole, mix)
 	target.left_shoulder_rotation_deg = source.left_shoulder_rotation_deg.lerp(left_shoulder_rotation_deg, mix)

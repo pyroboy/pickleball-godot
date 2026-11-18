@@ -13,6 +13,7 @@ var _label_text: String = ""
 var _step: float = 0.01
 var _min_val: float = -10.0
 var _max_val: float = 10.0
+var _updating: bool = false
 
 func _ready() -> void:
 	size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -21,7 +22,7 @@ func _ready() -> void:
 	# Label
 	_label = Label.new()
 	_label.text = _label_text
-	_label.add_theme_font_size_override("font_size", 13)
+	_label.add_theme_font_size_override("font_size", 20)
 	_label.modulate = Color(0.88, 0.92, 0.98)
 	add_child(_label)
 
@@ -38,6 +39,7 @@ func _ready() -> void:
 	
 	# Z component
 	_z_spin = _create_spin(row, "Z", Color(0.3, 0.3, 1), _step, _min_val, _max_val)
+	set_value(_current_value)
 
 func setup(label_text: String, step: float, min_val: float, max_val: float) -> void:
 	_label_text = label_text
@@ -62,6 +64,8 @@ func _create_spin(parent_row: HBoxContainer, label: String, color: Color, step: 
 	spin.step = step
 	spin.value = 0.0
 	spin.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	spin.custom_minimum_size = Vector2(100, 38)
 	container.add_child(spin)
 	
 	parent_row.add_child(container)
@@ -71,14 +75,21 @@ func _create_spin(parent_row: HBoxContainer, label: String, color: Color, step: 
 	return spin
 
 func _on_value_changed(_val: float) -> void:
+	if _updating:
+		return
 	_current_value = Vector3(_x_spin.value, _y_spin.value, _z_spin.value)
 	value_changed.emit(_current_value)
 
 func set_value(val: Vector3) -> void:
+	_updating = true
 	_current_value = val
+	if _x_spin == null or _y_spin == null or _z_spin == null:
+		_updating = false
+		return
 	_x_spin.value = val.x
 	_y_spin.value = val.y
 	_z_spin.value = val.z
+	_updating = false
 
 func get_value() -> Vector3:
 	return _current_value

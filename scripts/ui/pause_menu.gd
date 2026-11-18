@@ -7,6 +7,7 @@ extends CanvasLayer
 
 const SettingsPanelScript = preload("res://scripts/ui/settings_panel.gd")
 
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 var _panel: Panel
 var _settings_overlay: Node = null
 
@@ -30,10 +31,11 @@ func _build() -> void:
 	_panel.anchor_top = 0.5
 	_panel.anchor_right = 0.5
 	_panel.anchor_bottom = 0.5
-	_panel.offset_left = -280
-	_panel.offset_top = -340
-	_panel.offset_right = 280
-	_panel.offset_bottom = 340
+	_panel.theme = UiTheme.create()
+	_panel.offset_left = -240
+	_panel.offset_top = -230
+	_panel.offset_right = 240
+	_panel.offset_bottom = 230
 	_panel.add_theme_stylebox_override("panel", _panel_stylebox())
 	add_child(_panel)
 
@@ -44,13 +46,13 @@ func _build() -> void:
 	vbox.offset_top = 36
 	vbox.offset_right = -36
 	vbox.offset_bottom = -36
-	vbox.add_theme_constant_override("separation", 24)
+	vbox.add_theme_constant_override("separation", 16)
 	_panel.add_child(vbox)
 
 	var title: Label = Label.new()
 	title.text = "PAUSED"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 56)
+	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", Color.WHITE)
 	title.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
 	title.add_theme_constant_override("shadow_offset_x", 3)
@@ -59,7 +61,7 @@ func _build() -> void:
 	vbox.add_child(title)
 
 	var spacer: Control = Control.new()
-	spacer.custom_minimum_size = Vector2(0, 20)
+	spacer.custom_minimum_size = Vector2(0, 8)
 	vbox.add_child(spacer)
 
 	_add_button(vbox, "Resume", Callable(self, "_on_resume"))
@@ -98,8 +100,8 @@ func _button_style(bg: Color) -> StyleBoxFlat:
 func _add_button(parent: Node, text: String, cb: Callable) -> Button:
 	var b: Button = Button.new()
 	b.text = text
-	b.custom_minimum_size = Vector2(0, 80)
-	b.add_theme_font_size_override("font_size", 34)
+	b.custom_minimum_size = Vector2(0, 58)
+	b.add_theme_font_size_override("font_size", 24)
 	b.add_theme_color_override("font_color", Color(1, 1, 1, 0.95))
 	b.add_theme_color_override("font_hover_color", Color(1, 1, 1, 1))
 	b.add_theme_color_override("font_pressed_color", Color(0.85, 0.92, 1.0, 1.0))
@@ -129,12 +131,20 @@ func _on_resume() -> void:
 func _on_settings() -> void:
 	if _settings_overlay != null and is_instance_valid(_settings_overlay):
 		return
+	_panel.hide()
 	_settings_overlay = SettingsPanelScript.new()
 	_settings_overlay.set_meta("on_close", Callable(self, "_on_settings_closed"))
 	add_child(_settings_overlay)
 
 func _on_settings_closed() -> void:
 	_settings_overlay = null
+	_panel.show()
 
 func _on_quit() -> void:
 	get_tree().quit()
+
+func close_settings() -> bool:
+	if is_instance_valid(_settings_overlay):
+		_settings_overlay._on_close()
+		return true
+	return false

@@ -36,6 +36,7 @@ func build(paddle_color: Color) -> void:
 
 	# Chest
 	var chest_inst: MeshInstance3D = MeshInstance3D.new()
+	chest_inst.name = "TorsoMesh"
 	var chest_mesh: BoxMesh = BoxMesh.new()
 	chest_mesh.size = Vector3(0.36, 0.32, 0.2)
 	chest_inst.mesh = chest_mesh
@@ -46,6 +47,7 @@ func build(paddle_color: Color) -> void:
 
 	# Head
 	var head_inst: MeshInstance3D = MeshInstance3D.new()
+	head_inst.name = "HeadMesh"
 	var head_mesh: SphereMesh = SphereMesh.new()
 	head_mesh.radius = 0.12
 	head_mesh.height = 0.24
@@ -55,6 +57,18 @@ func build(paddle_color: Color) -> void:
 	head_inst.material_override = skin_mat
 	head_inst.position = Vector3(0.0, head_y - chest_y, 0.0)
 	chest_inst.add_child(head_inst)
+	# Eyes make the authored head direction readable while scrubbing.
+	var eye_material := StandardMaterial3D.new()
+	eye_material.albedo_color = Color(0.08, 0.09, 0.12)
+	for side in [-1.0, 1.0]:
+		var eye := MeshInstance3D.new()
+		var eye_mesh := SphereMesh.new()
+		eye_mesh.radius = 0.017
+		eye_mesh.height = 0.034
+		eye.mesh = eye_mesh
+		eye.material_override = eye_material
+		eye.position = Vector3(side * 0.042, 0.018, -0.105 * _player._get_swing_sign())
+		head_inst.add_child(eye)
 
 	# Paddle
 	var paddle_scene = preload("res://scenes/paddle.tscn")
@@ -83,6 +97,7 @@ func build(paddle_color: Color) -> void:
 
 	# Hips
 	var hips_inst: MeshInstance3D = MeshInstance3D.new()
+	hips_inst.name = "HipsMesh"
 	var hips_mesh: BoxMesh = BoxMesh.new()
 	hips_mesh.size = Vector3(0.30, 0.14, 0.18)
 	hips_inst.mesh = hips_mesh

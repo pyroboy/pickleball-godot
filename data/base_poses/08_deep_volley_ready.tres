@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 8
+display_name = "Deep Volley Ready"
+canonical_intent = 5
+stroke_overlay_mix = 0.76
+left_hand_mode = 1
+stance_width = 0.44
+front_foot_forward = 0.1
+back_foot_back = -0.08
+crouch_amount = 0.14
+torso_pitch_deg = 5.0

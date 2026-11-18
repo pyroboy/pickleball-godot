@@ -62,55 +62,60 @@ func setup(ball_audio_synth: Node, scoreboard_ui: Node, hud: CanvasLayer) -> voi
 	_hud = hud
 
 
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+
 func _create_sound_tune_panel(canvas: CanvasLayer) -> void:
 	sound_tune_panel = PanelContainer.new()
-	sound_tune_panel.anchor_left = 0.5
-	sound_tune_panel.anchor_right = 0.5
-	sound_tune_panel.anchor_top = 0.5
-	sound_tune_panel.anchor_bottom = 0.5
-	sound_tune_panel.offset_left = -260.0
-	sound_tune_panel.offset_top = -430.0
-	sound_tune_panel.offset_right = 260.0
-	sound_tune_panel.offset_bottom = 430.0
-	sound_tune_panel.focus_mode = Control.FOCUS_NONE
+	sound_tune_panel.theme = UiTheme.create()
+	sound_tune_panel.anchor_left = 1.0
+	sound_tune_panel.anchor_right = 1.0
+	sound_tune_panel.anchor_bottom = 1.0
+	sound_tune_panel.offset_left = -580
+	sound_tune_panel.offset_right = -12
+	sound_tune_panel.offset_top = 12
+	sound_tune_panel.offset_bottom = -12
+	sound_tune_panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
 	sound_tune_panel.visible = false
 	canvas.add_child(sound_tune_panel)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 10)
-	margin.add_theme_constant_override("margin_right", 10)
-	margin.add_theme_constant_override("margin_top", 10)
-	margin.add_theme_constant_override("margin_bottom", 10)
-	sound_tune_panel.add_child(margin)
-
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 4)
-	vb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	margin.add_child(vb)
-
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 12)
+	sound_tune_panel.add_child(content)
+	var header := HBoxContainer.new()
+	content.add_child(header)
 	var title := Label.new()
-	title.text = "Sound Signature  P: Toggle  Arrows: Select/Adjust"
-	title.add_theme_font_size_override("font_size", 14)
-	title.focus_mode = Control.FOCUS_NONE
-	vb.add_child(title)
-
+	title.text = "Sound tuning"
+	title.add_theme_font_size_override("font_size", 28)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(title)
+	var close := Button.new()
+	close.text = "Close"
+	close.pressed.connect(func(): get_parent()._toggle_sound_panel())
+	header.add_child(close)
+	var help := Label.new()
+	help.text = "Drag sliders to adjust. M / Esc closes.\nTest paddle: 6 / 7 / 8 · Test bounce: Y / U / I"
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	content.add_child(help)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	content.add_child(scroll)
+	var rows := VBoxContainer.new()
+	rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rows.add_theme_constant_override("separation", 8)
+	scroll.add_child(rows)
 	for i in range(sound_tune_settings.size()):
 		var row := Label.new()
-		row.add_theme_font_size_override("font_size", 12)
-		row.focus_mode = Control.FOCUS_NONE
-		vb.add_child(row)
+		row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		rows.add_child(row)
 		sound_tune_rows.append(row)
-
 		var slider := HSlider.new()
 		slider.min_value = -1.0
 		slider.max_value = 1.0
 		slider.step = 0.05
-		slider.editable = false
-		slider.focus_mode = Control.FOCUS_NONE
+		slider.custom_minimum_size.y = 36
 		slider.value_changed.connect(_on_slider_changed.bind(i))
-		vb.add_child(slider)
+		rows.add_child(slider)
 		sound_tune_sliders.append(slider)
-
 	_refresh_sound_tune_panel()
 
 
@@ -130,7 +135,7 @@ func _refresh_sound_tune_panel() -> void:
 			sound_tune_rows[i].text = label_text
 			sound_tune_rows[i].modulate = Color(1.0, 0.95, 0.55, 1.0) if i == sound_tune_selected else Color(0.88, 0.88, 0.88, 1.0)
 		if i < sound_tune_sliders.size():
-			sound_tune_sliders[i].value = value
+			sound_tune_sliders[i].set_value_no_signal(value)
 			sound_tune_sliders[i].modulate = Color(1.0, 0.85, 0.35, 1.0) if i == sound_tune_selected else Color(0.7, 0.7, 0.7, 1.0)
 
 

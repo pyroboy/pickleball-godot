@@ -1,4 +1,4 @@
-class_name TestShotPhysicsShallow extends RefCounted
+class_name TestShotPhysicsShallow extends TestBase
 ## L1 shallow tests for shot physics — speed curve formula, lerp bounds, spin axis.
 ## No scene, no Ball class, no ShotPhysics instantiation.
 ## These test only the PURE MATH that compute_shot_velocity is built on.
@@ -7,9 +7,6 @@ class_name TestShotPhysicsShallow extends RefCounted
 
 const MIN_SWING_SPEED_MS := 7.0
 const MAX_SWING_SPEED_MS := 22.35
-
-var _current_failures: Array[String] = []
-var _current_test_name: String = ""
 
 
 func run_all(totals: Dictionary) -> void:
@@ -24,46 +21,7 @@ func run_all(totals: Dictionary) -> void:
 		test_spin_side_axis_aligned_with_up,
 		test_spin_zero_when_stationary,
 	]
-	for t in tests:
-		_current_test_name = t.get_method()
-		_current_failures = []
-		t.call()
-		if _current_failures.is_empty():
-			totals.pass += 1
-		else:
-			totals.fail += 1
-			for f in _current_failures:
-				totals.errors.append("%s: %s" % [_current_test_name, f])
-
-
-func _assert_true(cond: bool, msg: String = "") -> void:
-	if not cond:
-		_current_failures.append("expected true: %s" % msg)
-
-
-func _assert_ge(a: float, b: float, msg: String = "") -> void:
-	if a < b:
-		_current_failures.append("expected %g >= %g: %s" % [a, b, msg])
-
-
-func _assert_le(a: float, b: float, msg: String = "") -> void:
-	if a > b:
-		_current_failures.append("expected %g <= %g: %s" % [a, b, msg])
-
-
-func _assert_gt(a: float, b: float, msg: String = "") -> void:
-	if not (a > b):
-		_current_failures.append("expected %g > %g: %s" % [a, b, msg])
-
-
-func _assert_lt(a: float, b: float, msg: String = "") -> void:
-	if not (a < b):
-		_current_failures.append("expected %g < %g: %s" % [a, b, msg])
-
-
-func _assert_eq_f(a: float, b: float, tol: float, msg: String = "") -> void:
-	if absf(a - b) > tol:
-		_current_failures.append("expected %g, got %g (tol=%g): %s" % [b, a, tol, msg])
+	_run_test_list(totals, tests)
 
 
 ## Speed curve formula (mirrors compute_shot_velocity line 20)

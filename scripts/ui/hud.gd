@@ -57,6 +57,8 @@ func _ready() -> void:
 	_build_fonts()
 	_build_panels()
 	_build_labels()
+	_layout_desktop()
+	_build_toolbar()
 
 # ── Fonts ────────────────────────────────────────────────────────────────────
 
@@ -353,5 +355,122 @@ func set_gameplay_elements_visible(p_visible: bool) -> void:
 	difficulty.visible = p_visible
 	_score_panel.visible = p_visible
 	_status_panel.visible = p_visible
-	# We don't necessarily hide the others as they are transient/debug,
-	# but we could if needed. ScoreboardUI might manage those better.
+	if _toolbar:
+		_toolbar.visible = p_visible
+	if not p_visible and _guide:
+		_guide.hide()
+	for label in [fault, out_text, zone, speed, shot_type, posture_debug, debug, freeze_indicator]:
+		if not p_visible:
+			label.hide()
+		elif label not in [zone, posture_debug, debug, freeze_indicator]:
+			label.show()
+
+
+signal pose_editor_requested
+signal pause_requested
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+var _toolbar: HBoxContainer
+var _guide: PanelContainer
+
+func _build_toolbar() -> void:
+	_toolbar = HBoxContainer.new()
+	_toolbar.theme = UiTheme.create()
+	_toolbar.anchor_left = 1.0
+	_toolbar.anchor_right = 1.0
+	_toolbar.offset_left = -360
+	_toolbar.offset_right = -16
+	_toolbar.offset_top = 16
+	_toolbar.offset_bottom = 60
+	add_child(_toolbar)
+	for text in ["Edit poses", "Guide", "Pause"]:
+		var button := Button.new()
+		button.text = text
+		_toolbar.add_child(button)
+		match text:
+			"Edit poses": button.pressed.connect(func(): pose_editor_requested.emit())
+			"Guide": button.pressed.connect(func(): _guide.visible = not _guide.visible)
+			"Pause": button.pressed.connect(func(): pause_requested.emit())
+	_guide = PanelContainer.new()
+	_guide.theme = UiTheme.create()
+	_guide.anchor_left = 1.0
+	_guide.anchor_right = 1.0
+	_guide.offset_left = -480
+	_guide.offset_right = -16
+	_guide.offset_top = 76
+	_guide.add_theme_stylebox_override("panel", UiTheme.panel_style())
+	_guide.visible = false
+	add_child(_guide)
+	var content := VBoxContainer.new()
+	content.add_theme_constant_override("separation", 12)
+	_guide.add_child(content)
+	var title := Label.new()
+	title.text = "Playing & indicators"
+	title.add_theme_font_size_override("font_size", 24)
+	content.add_child(title)
+	var instructions := Label.new()
+	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instructions.custom_minimum_size.x = 420
+	instructions.text = "Move: WASD / arrow keys\nHold Space to charge, release to hit.\nServe aim: [ and ] · Arc: R / F while charging\nCamera: P · Difficulty: X · Indicators: N\n\nColored paddle ghost: the selected impact point.\nPink: move into reach. Purple: load your swing.\nBlue: impact is near; release Space to swing.\nThe pose and impact point update as you move.\n\nIn Easy mode, the HIT ring shrinks toward the button. Aim to release when the ring meets it. You must still move within paddle reach and let the serve bounce.\n\nEdit poses: E / Q · Sound tuning: M\nEscape closes the active panel, then pauses."
+	content.add_child(instructions)
+	var close := Button.new()
+	close.text = "Back to game"
+	close.pressed.connect(func(): _guide.hide())
+	content.add_child(close)
+
+func _layout_desktop() -> void:
+	_score_panel.offset_left = -130
+	_score_panel.offset_right = 130
+	_score_panel.offset_top = 16
+	_score_panel.offset_bottom = 76
+	score.offset_left = -130
+	score.offset_right = 130
+	score.offset_top = 20
+	score.offset_bottom = 72
+	score.add_theme_font_size_override("font_size", 42)
+	difficulty.add_theme_font_size_override("font_size", 22)
+	difficulty.offset_left = 20
+	difficulty.offset_top = 25
+	for node in [_status_panel, state]:
+		node.anchor_left = 0.0
+		node.anchor_right = 1.0
+		node.anchor_top = 1.0
+		node.anchor_bottom = 1.0
+		node.offset_left = 16
+		node.offset_right = -290
+		node.offset_top = -110
+		node.offset_bottom = -16
+	state.offset_left = 32
+	state.offset_right = -306
+	state.add_theme_font_size_override("font_size", 22)
+	shot_type.anchor_left = 0.5
+	shot_type.anchor_right = 0.5
+	shot_type.offset_left = -180
+	shot_type.offset_right = 180
+	shot_type.offset_top = 84
+	shot_type.offset_bottom = 124
+	shot_type.add_theme_font_size_override("font_size", 28)
+	speed.anchor_left = 1.0
+	speed.offset_left = -250
+	speed.offset_top = 80
+	speed.offset_bottom = 118
+	speed.add_theme_font_size_override("font_size", 26)
+	freeze_indicator.anchor_left = 0.0
+	freeze_indicator.anchor_right = 0.0
+	freeze_indicator.offset_left = 20
+	freeze_indicator.offset_right = 320
+	freeze_indicator.offset_top = 78
+	freeze_indicator.offset_bottom = 110
+	freeze_indicator.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	freeze_indicator.add_theme_font_size_override("font_size", 20)
+	fault.add_theme_font_size_override("font_size", 48)
+	fault.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	out_text.add_theme_font_size_override("font_size", 72)
+	zone.anchor_top = 1.0
+	zone.anchor_bottom = 1.0
+	zone.offset_top = -160
+	zone.offset_bottom = -120
+	zone.add_theme_font_size_override("font_size", 24)
+	posture_debug.add_theme_font_size_override("font_size", 18)
+	debug.add_theme_font_size_override("font_size", 18)
+	for label in [score, state, difficulty, debug, fault, out_text, zone, speed, shot_type, posture_debug, freeze_indicator]:
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE

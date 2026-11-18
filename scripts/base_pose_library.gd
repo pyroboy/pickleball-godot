@@ -51,7 +51,7 @@ func _load_from_disk() -> void:
 	var file_name: String = dir.get_next()
 	while file_name != "":
 		if not dir.current_is_dir() and file_name.ends_with(".tres"):
-			var res: Resource = load(DATA_DIR + file_name)
+			var res: Resource = ResourceLoader.load(DATA_DIR + file_name, "", ResourceLoader.CACHE_MODE_REPLACE)
 			if res != null:
 				definitions.append(res)
 		file_name = dir.get_next()

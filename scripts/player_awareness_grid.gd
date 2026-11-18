@@ -80,6 +80,12 @@ var _activation: PackedFloat32Array = PackedFloat32Array()
 var _time_to_arrival: PackedFloat32Array = PackedFloat32Array()
 var _zone_ids: PackedInt32Array = PackedInt32Array()
 
+# ── Spatial cell index (see _build_cell_index) ──
+var _cell_origin: Vector3 = Vector3.ZERO
+var _cell_dims: Vector3i = Vector3i.ONE
+var _cell_start: PackedInt32Array = PackedInt32Array([0, 0])
+var _cell_items: PackedInt32Array = PackedInt32Array()
+
 # ── State ──
 var _grid_root: Node3D = null
 var _shared_mesh: SphereMesh = null
@@ -137,13 +143,19 @@ func _build_grid() -> void:
 	# Floor-forward boost: extra density at low Y in the forward zone
 	_generate_floor_forward(positions)
 
-	# Create mesh instances
 	for pos in positions:
 		_local_positions.append(pos)
 		_activation.append(0.0)
 		_time_to_arrival.append(INF)
 		_zone_ids.append(_assign_zone(pos))
+	_build_cell_index()
 
+## Debug spheres (one per vertex) are only built the first time the grid is
+## shown, so normal play never allocates them.
+func _ensure_meshes() -> void:
+	if not _meshes.is_empty():
+		return
+	for pos in _local_positions:
 		var mat := StandardMaterial3D.new()
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -246,6 +258,8 @@ func _local_to_node_pos(local_pos: Vector3) -> Vector3:
 # ── Trajectory activation ──
 
 func set_trajectory_points(points: Array[Vector3]) -> void:
+	if not is_active():
+		return
 	if _is_locked:
 		return
 	if points.is_empty():
@@ -282,16 +296,72 @@ func _activate_vertices(pts: Array[Vector3], times: Array[float]) -> void:
 	_activation.fill(0.0)
 	_time_to_arrival.fill(INF)
 
+	# Only test vertices in the cells overlapping the activation sphere instead
+	# of every vertex. Results are identical to the brute-force scan: each
+	# vertex still sees the trajectory points in order.
+	var prefilter_r2: float = ACTIVATION_RADIUS * ACTIVATION_RADIUS * 1.0001
+	var dx: int = _cell_dims.x
+	var dxy: int = _cell_dims.x * _cell_dims.y
 	for pt_idx in range(pts.size()):
 		var pt: Vector3 = pts[pt_idx]
+		var lo: Vector3i = _cell_coord(pt - Vector3.ONE * ACTIVATION_RADIUS).max(Vector3i.ZERO)
+		var hi: Vector3i = _cell_coord(pt + Vector3.ONE * ACTIVATION_RADIUS).min(_cell_dims - Vector3i.ONE)
+		if lo.x > hi.x or lo.y > hi.y or lo.z > hi.z:
+			continue # point is outside the grid's reach
 		var time: float = times[pt_idx]
-		for v_idx in range(_local_positions.size()):
-			var d: float = _local_positions[v_idx].distance_to(pt)
-			if d < ACTIVATION_RADIUS:
-				var strength: float = 1.0 - (d / ACTIVATION_RADIUS)
-				if strength > _activation[v_idx]:
-					_activation[v_idx] = strength
-					_time_to_arrival[v_idx] = time
+		for cz in range(lo.z, hi.z + 1):
+			for cy in range(lo.y, hi.y + 1):
+				for cx in range(lo.x, hi.x + 1):
+					var cell: int = cx + cy * dx + cz * dxy
+					for k in range(_cell_start[cell], _cell_start[cell + 1]):
+						var v_idx: int = _cell_items[k]
+						var d2: float = _local_positions[v_idx].distance_squared_to(pt)
+						if d2 > prefilter_r2:
+							continue
+						var d: float = _local_positions[v_idx].distance_to(pt) # same rounding as before
+						if d < ACTIVATION_RADIUS:
+							var strength: float = 1.0 - (d / ACTIVATION_RADIUS)
+							if strength > _activation[v_idx]:
+								_activation[v_idx] = strength
+								_time_to_arrival[v_idx] = time
+
+## Builds a uniform-cell index (cell size = ACTIVATION_RADIUS) over the vertex
+## positions, stored CSR-style: vertices of cell c are
+## _cell_items[_cell_start[c] .. _cell_start[c + 1]).
+func _build_cell_index() -> void:
+	var lo := Vector3(INF, INF, INF)
+	var hi := -lo
+	for p in _local_positions:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	_cell_origin = lo
+	_cell_dims = _cell_coord(hi) + Vector3i.ONE
+	var cell_count: int = _cell_dims.x * _cell_dims.y * _cell_dims.z
+	var cell_of_vertex := PackedInt32Array()
+	cell_of_vertex.resize(_local_positions.size())
+	_cell_start = PackedInt32Array()
+	_cell_start.resize(cell_count + 1)
+	_cell_start.fill(0)
+	for v_idx in range(_local_positions.size()):
+		var c: Vector3i = _cell_coord(_local_positions[v_idx])
+		var cell: int = c.x + c.y * _cell_dims.x + c.z * _cell_dims.x * _cell_dims.y
+		cell_of_vertex[v_idx] = cell
+		_cell_start[cell + 1] += 1
+	for i in range(cell_count):
+		_cell_start[i + 1] += _cell_start[i]
+	var fill := _cell_start.duplicate()
+	_cell_items = PackedInt32Array()
+	_cell_items.resize(_local_positions.size())
+	for v_idx in range(_local_positions.size()):
+		var cell: int = cell_of_vertex[v_idx]
+		_cell_items[fill[cell]] = v_idx
+		fill[cell] += 1
+
+func _cell_coord(p: Vector3) -> Vector3i:
+	return Vector3i(
+		floori((p.x - _cell_origin.x) / ACTIVATION_RADIUS),
+		floori((p.y - _cell_origin.y) / ACTIVATION_RADIUS),
+		floori((p.z - _cell_origin.z) / ACTIVATION_RADIUS))
 
 # ── Zone & posture scoring ──
 
@@ -407,6 +477,7 @@ func reset() -> void:
 func update_grid(_delta: float) -> void:
 	if not _grid_root.visible:
 		return
+	_ensure_meshes()
 
 	var has_active: bool = false
 	for v_idx in range(_local_positions.size()):
@@ -441,7 +512,17 @@ func _get_time_color(time: float) -> Color:
 
 # ── Visibility ──
 
+## The grid's data is only consumed by debug visuals: its own spheres and the
+## AI ghost TTC coloring. Skip the work when neither is on screen.
+func is_active() -> bool:
+	if _grid_root != null and _grid_root.visible:
+		return true
+	var posture = _player.posture if _player and "posture" in _player else null
+	return posture != null and posture.has_method("_ghost_visuals_needed") and posture._ghost_visuals_needed()
+
 func set_visible(v: bool) -> void:
+	if v:
+		_ensure_meshes()
 	if _grid_root:
 		_grid_root.visible = v
 	# When debug mode activates (Z key), unlock so trajectory updates flow through.

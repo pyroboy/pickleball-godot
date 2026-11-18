@@ -1,4 +1,5 @@
 class_name PlayerHitting extends Node
+const SwingPath = preload("res://scripts/stroke_swing_path.gd")
 ## PlayerHitting — serve charge visuals, shot impulse, AI hitting & trajectory
 
 const PADDLE_CHARGE_BEHIND_OFFSET := 0.42
@@ -170,7 +171,23 @@ func _apply_hardcoded_charge(clamped_ratio: float, charge_pull_sign: float, forw
 		_player.body_pivot.rotation.y = lerpf(0.0, target_y, clamped_ratio)
 
 
+## Explicitly clear charge visual state without triggering a swing animation.
+## Used when charge is aborted (e.g., posture editor opens during charge).
+func clear_charge_visual() -> void:
+	var had_swing: bool = charge_visual_active or is_in_follow_through
+	if _player.posture and "human_contact" in _player.posture and _player.posture.human_contact:
+		_player.posture.human_contact.cancel()
+	charge_visual_active = false
+	if had_swing and _player.posture and not ("editor_preview_mode" in _player.posture and _player.posture.editor_preview_mode):
+		_player.posture.transition_pose_blend = null
+	if paddle_swing_tween != null and paddle_swing_tween.is_valid():
+		paddle_swing_tween.kill()
+		is_in_follow_through = false
+
+
 func set_serve_charge_visual(charge_ratio: float) -> void:
+	if _player.posture and "human_contact" in _player.posture and _player.posture.human_contact and _player.posture.human_contact.phase >= 1:
+		return
 	if not _player._ensure_paddle_ready():
 		return
 
@@ -180,43 +197,24 @@ func set_serve_charge_visual(charge_ratio: float) -> void:
 
 	charge_visual_active = true
 	var clamped_ratio: float = clamp(charge_ratio, 0.0, 1.0)
+	if not _player.is_ai and "human_contact" in _player.posture and _player.posture.human_contact != null:
+		var human = _player.posture.human_contact
+		var ball = _player._get_ball_ref()
+		if ball and ball.is_in_play and ball.last_hit_by != _player.player_num:
+			human.set_charge(clamped_ratio)
+			return
 	var charge_pull_sign: float = _player._get_posture_charge_sign()
 	var forward_axis: Vector3 = _player._get_forward_axis()
 	var swing_sign: float = _player._get_swing_sign()
 	var current_def = PostureLibrary.instance().get_def(_player.paddle_posture)
+	if current_def and current_def.charge_paddle_offset.length_squared() > 0.0001:
+		var windup: PostureDefinition = SwingPath.endpoint(current_def, 0)
+		_player.posture.transition_pose_blend = current_def.lerp_with(windup, clamped_ratio)
+		_player.posture.force_posture_update(_player.posture.transition_pose_blend)
+		return
 
-	# ── Per-posture authored charge data (new path) ────────────────────
-	if current_def != null and current_def.charge_paddle_offset.length_squared() > 0.0001:
-		# Use authored charge offset: paddle lerps from rest toward rest + charge_offset
-		var charge_offset: Vector3 = current_def.charge_paddle_offset
-		var charge_rot: Vector3 = current_def.charge_paddle_rotation_deg
-		# Apply swing-sign to yaw if authored value uses swing_sign convention
-		var signed_charge_rot: Vector3 = charge_rot
-		if absf(charge_rot.y) > 0.001:
-			signed_charge_rot.y = absf(charge_rot.y) * charge_pull_sign
-
-		var start_pos: Vector3 = _player.paddle_rest_position
-		var start_rot: Vector3 = _player.paddle_rest_rotation
-		# Target = rest + authored offset (scaled by charge ratio)
-		var charge_target_pos: Vector3 = start_pos + charge_offset * clamped_ratio
-		_player.paddle_node.position = charge_target_pos
-		_player.paddle_node.rotation_degrees = start_rot.lerp(signed_charge_rot, clamped_ratio)
-
-		# Body rotation from authored data
-		if _player.body_pivot and absf(current_def.charge_body_rotation_deg) > 0.001:
-			var body_sign: float = 0.0
-			if _player.paddle_posture in _player.FOREHAND_POSTURES:
-				body_sign = swing_sign
-			elif _player.paddle_posture in _player.BACKHAND_POSTURES:
-				body_sign = -swing_sign
-			elif _player.paddle_posture in [_player.PaddlePosture.MEDIUM_OVERHEAD, _player.PaddlePosture.HIGH_OVERHEAD]:
-				body_sign = swing_sign
-			var body_target: float = deg_to_rad(current_def.charge_body_rotation_deg) * body_sign
-			_player.body_pivot.rotation.y = lerpf(0.0, body_target, clamped_ratio)
-
-	# ── Fallback: hardcoded behavior for postures without authored data ──
-	else:
-		_apply_hardcoded_charge(clamped_ratio, charge_pull_sign, forward_axis)
+	# Postures without authored wind-up retain their existing fallback.
+	_apply_hardcoded_charge(clamped_ratio, charge_pull_sign, forward_axis)
 
 	# Debug: log charge state, paddle pos, FT ghost pos, and FT target preview
 	if FT_DEBUG_LOG and not _player.is_ai and int(clamped_ratio * 100) % 20 == 0 and clamped_ratio > 0.0 and clamped_ratio < 1.0:
@@ -319,6 +317,9 @@ func animate_serve_release(charge_ratio: float) -> void:
 	var follow_through_rotation: Vector3 = _player.paddle_rest_rotation
 	var release_sign: float = _player._get_posture_charge_sign()
 	var authored_ft := _authored_follow_through_data(hit_posture, clamped_ratio)
+	if not authored_ft.is_empty():
+		_animate_authored_swing(hit_posture, clamped_ratio)
+		return
 
 	# Priority: authored per-posture FT data > ghosts (family fallback) > hardcoded formula
 	var fam: String = "OVERHEAD"
@@ -419,6 +420,9 @@ func _on_paddle_release_finished() -> void:
 	is_in_follow_through = false
 	charge_visual_active = false
 	if _player.posture:
+		_player.posture.transition_pose_blend = null
+
+	if _player.posture:
 		_player.posture.reset_incoming_highlight()
 
 	if _player.body_pivot:
@@ -431,6 +435,36 @@ func _on_paddle_release_finished() -> void:
 		_player.posture_lerp_pos = _player.paddle_node.position
 		_player.posture_lerp_initialized = true
 		_player._update_paddle_tracking(true)
+
+
+func _animate_authored_swing(posture_id: int, charge_ratio: float) -> void:
+	var def: PostureDefinition = _get_posture_def(posture_id).lerp_with(_get_posture_def(posture_id), 0.0)
+
+	is_in_follow_through = true
+	charge_visual_active = false
+	_ft_debug_timer = 0.0
+	_ft_phase_times.clear()
+	paddle_swing_tween = _player.create_tween()
+	var apply := func(progress: float):
+		var pose: PostureDefinition = def.lerp_with(SwingPath.sample(def, progress), charge_ratio)
+		_player.posture.transition_pose_blend = pose
+		_player.posture.force_posture_update(pose)
+	apply.call(0.0)
+	var transition := _tween_transition_for_curve(def.ft_ease_curve)
+	var easing: Tween.EaseType = Tween.EASE_IN_OUT if def.ft_ease_curve == 2 else Tween.EASE_OUT
+	paddle_swing_tween.tween_method(apply, 0.0, 0.5, maxf(0.01, def.ft_duration_strike)).set_trans(transition).set_ease(easing)
+	paddle_swing_tween.tween_method(apply, 0.5, 1.0, maxf(0.01, def.ft_duration_sweep)).set_trans(transition).set_ease(easing)
+	# Let the finish read, then blend the full rig back to its ready stance.
+	paddle_swing_tween.tween_interval(maxf(0.0, def.ft_duration_hold))
+	var finish: PostureDefinition = def.lerp_with(SwingPath.endpoint(def, 2), charge_ratio)
+	var ready: PostureDefinition = _get_posture_def(_player.PaddlePosture.READY)
+	if ready:
+		var recover := func(factor: float):
+			var pose: PostureDefinition = finish.lerp_with(ready, factor)
+			_player.posture.transition_pose_blend = pose
+			_player.posture.force_posture_update(pose)
+		paddle_swing_tween.tween_method(recover, 0.0, 1.0, maxf(0.01, def.ft_duration_settle)).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	paddle_swing_tween.finished.connect(_on_paddle_release_finished)
 
 # ── Paddle position & shot impulse ───────────────────────────────────────────
 

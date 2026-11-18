@@ -2,13 +2,14 @@ extends RefCounted
 class_name ShotPhysics
 
 const _Ball = preload("res://scripts/ball.gd")
+const _Flight = preload("res://scripts/ball_flight_predictor.gd")
 
 ## ShotPhysics.gd - Encapsulates ball-hitting physics for pickleball.
 ## Calculates target velocities, spin injection, and iterative aero-trajectories.
 
 const MIN_SWING_SPEED_MS := 7.0
 const MAX_SWING_SPEED_MS := 22.35
-const NET_CLEAR_MIN := 1.0
+const NET_CLEAR_MIN := 1.15
 
 # Static dependencies (passed in)
 var _player_left: Node
@@ -17,6 +18,71 @@ var _player_right: Node
 func setup(_ball: Node, p_left: Node, p_right: Node) -> void:
 	_player_left = p_left
 	_player_right = p_right
+
+## Solve the AI's actual launch state, after paddle motion and off-center contact.
+## Every trial is evaluated with the same fixed-step flight used by the live ball.
+func solve_ai_launch(ball_pos: Vector3, charge: float, difficulty: int, posture: int,
+		paddle_pos: Vector3, paddle_velocity: Vector3, transfer: float) -> Dictionary:
+	var power: float = pow(clampf(charge, 0.0, 1.0), 0.7)
+	var target_speed: float = lerpf(MIN_SWING_SPEED_MS, MAX_SWING_SPEED_MS, power)
+	match difficulty:
+		0: target_speed *= 0.95
+		1: target_speed *= 0.98
+		_: target_speed *= 1.05
+	var near_z: float = 2.5 if difficulty == 0 else (3.0 if difficulty == 1 else 3.5)
+	var far_z: float = 5.5 if difficulty == 0 else 6.0
+	var target_z: float = randf_range(lerpf(near_z, far_z - 1.5, power), lerpf(4.0, far_z, power))
+	var target_x: float = randf_range(-2.0, 2.0)
+	if difficulty >= 1 and _player_left != null:
+		var opponent_x: float = _player_left.global_position.x
+		if opponent_x > 0.5:
+			target_x = randf_range(-2.5, -0.3)
+		elif opponent_x < -0.5:
+			target_x = randf_range(0.3, 2.5)
+	var target: Vector3 = Vector3(target_x, _Flight.FLOOR_REST_Y, target_z)
+	var horizontal: Vector2 = Vector2(target.x - ball_pos.x, target.z - ball_pos.z)
+	var duration: float = clampf(horizontal.length() / maxf(target_speed * 0.75, 2.0), 0.35, 1.8)
+	var base: Vector3 = Vector3(horizontal.x / duration,
+		(target.y - ball_pos.y + 0.5 * _Ball.get_effective_gravity() * duration * duration) / duration,
+		horizontal.y / duration)
+	var best: Dictionary = {}
+	var best_score: float = INF
+	for iteration in range(24):
+		var direction: Vector3 = base.normalized()
+		var paddle_component: float = paddle_velocity.dot(direction)
+		var launch: Vector3 = base
+		if absf(paddle_component) > 0.5:
+			launch += direction * paddle_component * transfer
+		launch *= compute_sweet_spot_speed(ball_pos, paddle_pos, launch)
+		launch = launch.limit_length(_Ball.MAX_SPEED)
+		var spin: Vector3 = compute_shot_spin("", launch, charge, 1, posture)
+		spin += compute_sweet_spot_spin(ball_pos, paddle_pos, launch)
+		var flight: Dictionary = _Flight.trace(ball_pos, launch, spin, 3.0, 1, false)
+		var landing: Vector3 = flight["first_bounce"]
+		var net: Dictionary = flight["net_crossing"]
+		var net_clear: bool = net.is_empty() or net["pos"].y >= _Flight.NET_CLEAR_Y + 0.05
+		var error: Vector2 = Vector2(target.x - landing.x, target.z - landing.z)
+		var score: float = error.length() + (4.0 if not net_clear else 0.0)
+		if flight["first_bounce_time"] < 0.0:
+			score = INF
+		if score < best_score:
+			best_score = score
+			best = {"velocity": launch, "omega": spin, "target": target,
+				"landing": landing, "net_crossing": net, "net_clear": net_clear}
+		if score < 0.12:
+			break
+		if not net_clear and not net.is_empty():
+			base.y += (_Flight.NET_CLEAR_Y + 0.15 - net["pos"].y) / maxf(net["time"], 0.1) * 0.85
+		if flight["first_bounce_time"] >= 0.0:
+			var flight_time: float = maxf(float(flight["first_bounce_time"]), 0.2)
+			base.x += error.x / flight_time * 0.85
+			base.z += error.y / flight_time * 0.85
+			var range_error: float = Vector2(landing.x - ball_pos.x, landing.z - ball_pos.z).length() - horizontal.length()
+			base.y -= range_error * 0.13
+		base.y = clampf(base.y, -3.0, 15.0)
+		base.x = clampf(base.x, -12.0, 12.0)
+		base.z = clampf(base.z, 2.0, 19.0)
+	return best
 
 func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: int, shot_type: String, ai_difficulty: int) -> Vector3:
 	var speed_curve: float = pow(clamp(charge_ratio, 0.0, 1.0), 0.7)
@@ -120,12 +186,12 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var best_clears_net: bool = false
 	var cur_vel: Vector3 = drag_free_vel
 
-	for _iter in range(6):
+	for _iter in range(10):
 		var sim: Dictionary = simulate_shot_trajectory(ball_pos, cur_vel, solve_omega, grav, target_z, net_sign)
 		var landing: Vector3 = sim["pos_at_target"]
 		var y_net_this: float = sim["y_at_net"]
 		var t_net_this: float = sim["t_at_net"]
-		var clears_net: bool = (not needs_net_check) or (y_net_this != -INF and y_net_this >= NET_CLEAR_MIN)
+		var clears_net: bool = (not needs_net_check) or (y_net_this == INF) or (y_net_this != -INF and y_net_this >= NET_CLEAR_MIN)
 
 		var err_x: float = target_pos_3d.x - landing.x
 		var err_y: float = target_pos_3d.y - landing.y
@@ -139,30 +205,39 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		if is_better:
 			best_err = total_err; best_vel = cur_vel; best_clears_net = clears_net
 
-		if clears_net and total_err < 0.15 and sim["crossed_target"]:
+		if clears_net and total_err < 0.12 and sim["crossed_target"]:
 			break
 
-		if needs_net_check and y_net_this != -INF and y_net_this < NET_CLEAR_MIN and t_net_this > 0.01:
-			cur_vel.y += (NET_CLEAR_MIN - y_net_this) / t_net_this
+		if needs_net_check and y_net_this != INF and y_net_this != -INF and y_net_this < NET_CLEAR_MIN and t_net_this > 0.01:
+			# Aggressive net clearance: boost vy and slightly reduce horizontal speed
+			# so higher arc doesn't overshoot
+			var vy_boost_needed: float = (NET_CLEAR_MIN - y_net_this) / t_net_this
+			cur_vel.y += vy_boost_needed * 1.3
+			cur_vel.x *= 0.98
+			cur_vel.z *= 0.98
+		else:
+			var actual_dx: float = landing.x - ball_pos.x
+			var actual_dz: float = landing.z - ball_pos.z
+			var actual_hdist: float = sqrt(actual_dx * actual_dx + actual_dz * actual_dz)
+			if actual_hdist > 0.1:
+				var h_scale: float = clampf(lerpf(1.0, hdist / actual_hdist, 0.7), 0.5, 2.0)
+				cur_vel.x *= h_scale; cur_vel.z *= h_scale
 
-		var actual_dx: float = landing.x - ball_pos.x
-		var actual_dz: float = landing.z - ball_pos.z
-		var actual_hdist: float = sqrt(actual_dx * actual_dx + actual_dz * actual_dz)
-		if actual_hdist > 0.1:
-			var h_scale: float = clampf(lerpf(1.0, hdist / actual_hdist, 0.7), 0.5, 2.0)
-			cur_vel.x *= h_scale; cur_vel.z *= h_scale
-
-		var t_flight: float = maxf(sim["t_total"], 0.1)
-		var vy_damping: float = 0.4 if is_soft_shot else 0.7
-		if not (needs_net_check and y_net_this != -INF and y_net_this < NET_CLEAR_MIN):
+			var t_flight: float = maxf(sim["t_total"], 0.1)
+			var vy_damping: float = 0.4 if is_soft_shot else 0.7
 			cur_vel.y += err_y / t_flight * vy_damping
 
 	var solved_vel: Vector3 = best_vel
 	if needs_net_check and not best_clears_net:
-		var t_net_dragfree: float = maxf(absf(ball_pos.z) / maxf(absf(drag_free_vel.z), 0.1), 0.1)
-		var vy_floor: float = (NET_CLEAR_MIN - ball_pos.y + 0.5 * grav * t_net_dragfree * t_net_dragfree) / t_net_dragfree
+		# Ball never cleared net — compute a high arc from scratch
+		var t_net_est: float = maxf(absf(ball_pos.z) / maxf(absf(drag_free_vel.z), 0.1), 0.1)
+		var vy_needed: float = (NET_CLEAR_MIN + 0.2 - ball_pos.y + 0.5 * grav * t_net_est * t_net_est) / t_net_est
 		solved_vel = drag_free_vel
-		solved_vel.y = maxf(solved_vel.y, vy_floor * 1.15)
+		solved_vel.y = maxf(solved_vel.y, vy_needed * 1.4)
+		# Reduce horizontal speed so high arc lands near target
+		if best_vel.length() > 0.1:
+			solved_vel.x = best_vel.x * 0.9
+			solved_vel.z = best_vel.z * 0.9
 	elif best_err > 1.5:
 		solved_vel = drag_free_vel
 		solved_vel.y = maxf(best_vel.y, drag_free_vel.y)
@@ -174,6 +249,10 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 
 	if solved_vel.length() > speed_cap:
 		solved_vel = solved_vel.normalized() * speed_cap
+		# Guard against floating-point overshoot from normalized()
+		var scale: float = speed_cap / solved_vel.length()
+		if scale < 1.0:
+			solved_vel *= scale
 	if solved_vel.length() < speed_floor:
 		solved_vel = solved_vel.normalized() * speed_floor
 	return solved_vel
@@ -251,6 +330,13 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 	var prev_pos: Vector3 = pos
 	var prev_z_rel: float = (start_pos.z - target_z) * net_sign
 
+	# If ball is already past the net and moving away from it, no crossing occurs.
+	# Ball at exactly z=0 is treated as needing clearance (starts at net plane).
+	var moving_toward_net: bool = (start_pos.z > 0.0 and vel.z < 0.0) or (start_pos.z < 0.0 and vel.z > 0.0)
+	if start_pos.z == 0.0:
+		moving_toward_net = true
+	if not moving_toward_net:
+		y_at_net = INF
 	for _step in range(max_steps):
 		prev_pos = pos
 		var stepped: Array = _Ball.predict_aero_step(pos, cur_vel, cur_omega, grav, dt)

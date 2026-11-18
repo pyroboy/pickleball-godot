@@ -12,17 +12,27 @@ extends SceneTree
 
 func _init() -> void:
 	print("\n━━━ Pickleball Test Suite ━━━")
+	var BYPASS_GIZMO_SAVE := OS.has_environment("GODOT_TEST_BYPASS_GIZMO_SAVE") and OS.get_environment("GODOT_TEST_BYPASS_GIZMO_SAVE") == "1"
 	var suites: Array = [
 		preload("res://scripts/tests/test_base_pose_system.gd").new(),
 		preload("res://scripts/tests/test_rally_scorer.gd").new(),
 		preload("res://scripts/tests/test_physics_utils.gd").new(),
+		preload("res://scripts/tests/test_shot_physics.gd").new(),
 		preload("res://scripts/tests/test_shot_physics_shallow.gd").new(),
 		preload("res://scripts/tests/test_player_hitting.gd").new(),
 		preload("res://scripts/tests/test_posture_zones.gd").new(),
 		preload("res://scripts/tests/test_posture_persistence.gd").new(),
 		preload("res://scripts/tests/test_posture_editor_controls.gd").new(),
 		preload("res://scripts/tests/test_posture_editor_save.gd").new(),
+		preload("res://scripts/tests/test_posture_gizmo_standard.gd").new(),
+		preload("res://scripts/tests/test_posture_editor_v2_flow.gd").new(),
+		preload("res://scripts/tests/test_paddle_reach_and_pose_data.gd").new(),
+		preload("res://scripts/tests/test_ai_trajectory.gd").new(),
 	]
+	if BYPASS_GIZMO_SAVE:
+		print("[TESTS] ⊘ test_posture_gizmo_save.gd  (bypassed via GODOT_TEST_BYPASS_GIZMO_SAVE=1)")
+	else:
+		suites.append(preload("res://scripts/tests/test_posture_gizmo_save.gd").new())
 	var totals: Dictionary = {
 		"pass": 0,
 		"fail": 0,

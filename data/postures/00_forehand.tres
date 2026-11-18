@@ -1,0 +1,95 @@
+[gd_resource type="Resource" script_class="PostureDefinition" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/posture_definition.gd" id="1_cfac3"]
+[ext_resource type="Script" path="res://scripts/stroke_body_keyframe.gd" id="2_body"]
+
+[sub_resource type="Resource" id="Windup"]
+script = ExtResource("2_body")
+values = {
+"body_yaw_deg": 18.0,
+"hip_yaw_deg": 10.0,
+"torso_yaw_deg": 16.0,
+"torso_pitch_deg": 3.0,
+"crouch_amount": 0.10,
+"weight_shift": -0.65,
+"head_yaw_deg": -40.0,
+"head_pitch_deg": -28.0,
+"left_hand_offset": Vector3(-0.08, 0.02, -0.14),
+"right_foot_yaw_deg": 25.0,
+"left_foot_yaw_deg": 5.0,
+"paddle_pitch_signed_deg": -12.0,
+"paddle_yaw_signed_deg": 35.0,
+"paddle_roll_signed_deg": 25.0
+}
+
+[sub_resource type="Resource" id="Finish"]
+script = ExtResource("2_body")
+values = {
+"body_yaw_deg": -12.0,
+"hip_yaw_deg": -12.0,
+"torso_yaw_deg": -10.0,
+"torso_pitch_deg": -3.0,
+"crouch_amount": 0.05,
+"weight_shift": 0.8,
+"head_yaw_deg": 30.0,
+"head_pitch_deg": -25.0,
+"left_hand_offset": Vector3(-0.20, -0.05, -0.34),
+"right_foot_yaw_deg": -15.0,
+"left_foot_yaw_deg": 5.0,
+"paddle_pitch_signed_deg": 12.0,
+"paddle_yaw_signed_deg": -25.0,
+"paddle_roll_signed_deg": -30.0
+}
+
+[resource]
+script = ExtResource("1_cfac3")
+posture_id = 0
+display_name = "Forehand"
+family = 0
+paddle_forehand_mul = 0.42
+paddle_forward_mul = 0.46
+paddle_y_offset = 0.08
+paddle_pitch_signed_deg = 5.0
+paddle_pitch_sign_source = 1
+paddle_yaw_sign_source = 1
+paddle_roll_signed_deg = 20.0
+paddle_roll_sign_source = 1
+paddle_hand = 0
+left_hand_mode = 4
+stance_width = 0.48
+lead_foot = 1
+front_foot_forward = 0.18
+back_foot_back = -0.15
+right_foot_yaw_deg = 5.0
+left_foot_yaw_deg = 5.0
+crouch_amount = 0.07
+weight_shift = 0.15
+hip_yaw_deg = -2.0
+torso_yaw_deg = 0.0
+torso_pitch_deg = 0.0
+head_yaw_deg = 2.0
+head_pitch_deg = -28.0
+head_track_ball_weight = 0.8
+left_hand_offset = Vector3(-0.15, 0, -0.22)
+has_zone = true
+zone_x_min = 0.22
+zone_x_max = 0.62
+zone_y_min = 0.855
+zone_y_max = 1.255
+zone_forward_offset = 0.46
+charge_paddle_offset = Vector3(0.06, 0.04, -0.78)
+charge_body_rotation_deg = 18.0
+charge_hip_coil_deg = 12.0
+charge_back_foot_load = 0.65
+charge_duration = 0.32
+ft_paddle_offset = Vector3(-0.66, 0.42, -0.06)
+ft_hip_uncoil_deg = -10.0
+ft_front_foot_load = 0.8
+ft_duration_strike = 0.12
+ft_duration_sweep = 0.28
+ft_duration_settle = 0.18
+ft_duration_hold = 0.08
+ft_ease_curve = 2
+swing_path_blend = 1.0
+windup_body = SubResource("Windup")
+follow_through_body = SubResource("Finish")

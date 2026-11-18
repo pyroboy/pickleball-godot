@@ -1,6 +1,6 @@
 class_name BallPhysicsProbe extends Node
 
-## Iterative calibration probe — same workflow as drop_test.gd.
+## Iterative calibration probe — same workflow as runtime/drop_test.gd.
 ## Press 4 to launch a practice ball, the probe captures initial state,
 ## samples the trajectory, detects the first bounce, and logs measured
 ## physics vs. real pickleball reference values.
