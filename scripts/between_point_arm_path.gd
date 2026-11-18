@@ -133,10 +133,16 @@ func _fit_cup(arm,owner)->void:
  var ideal:=2.0*atan2(Vector3(relative.x,relative.y,relative.z).dot(normal),relative.w)
  var chosen:Dictionary={}
  var chosen_step:int=0
- for sweep in ([false,true] if have_cup_step else [true]):
-  var offsets:Array=[0]
-  if sweep:
-   for step in range(1,73):offsets.append(-step);offsets.append(step)
+ # Passes: 0 = window around last grip, 1 = coarse sweep (every 4th step),
+ # 2 = refine +/-3 around the coarse winner. Was a full 145-step sweep.
+ for sweep in ([0,1,2] if have_cup_step else [1,2]):
+  var offsets:Array=[]
+  if sweep==1:
+   offsets=[0]
+   for step in range(4,73,4):offsets.append(-step);offsets.append(step)
+  elif sweep==2:
+   if chosen.is_empty():continue
+   for d in range(1,4):offsets.append(chosen_step-d);offsets.append(chosen_step+d)
   else:
    offsets=[last_cup_step]
    for d in range(1,CUP_WINDOW_STEPS+1):offsets.append(last_cup_step-d);offsets.append(last_cup_step+d)
@@ -151,7 +157,7 @@ func _fit_cup(arm,owner)->void:
     var old_error:float=chosen.basis.get_rotation_quaternion().angle_to(preferred.get_rotation_quaternion())
     better=error<old_error-.00001 or absf(error-old_error)<=.00001 and test.cost<chosen.cost
    if better:chosen=test;chosen_step=offset
-  if not chosen.is_empty():break
+  if sweep==0 and not chosen.is_empty():break
  have_cup_step=not chosen.is_empty()
  if have_cup_step:last_cup_step=chosen_step
  if chosen.is_empty():
