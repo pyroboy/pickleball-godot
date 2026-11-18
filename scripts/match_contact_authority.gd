@@ -846,10 +846,22 @@ func _hold_unresolved(remaining: float, reason: String) -> void:
 	game.ball.set_meta("contact_authority_unresolved", true)
 	game.ball.set_time_frozen(true)
 	game.ball.set_frozen_state(game.ball.global_position, game.ball.linear_velocity, game.ball.angular_velocity)
-	game.scoreboard_ui.set_state_text("Contact simulation paused · reset to retry")
-	var pause = get_node_or_null("/root/PauseController")
-	if pause != null: pause.open()
 	push_warning("Unresolved contact continuation: " + reason)
+	# Rare solver failure: replay the point (no score change) instead of stopping the
+	# match behind a pause menu whose only way out reset the whole match.
+	if not _replay_pending:
+		_replay_pending = true
+		_replay_point.call_deferred()
+
+var _replay_pending: = false
+
+func _replay_point() -> void:
+	_replay_pending = false
+	if not is_instance_valid(game) or unresolved_continuation.is_empty(): return
+	game._reset_ball()   # cancels the rally without scoring, ball back to the server
+	game.scoreboard_ui.show_fault("Replay point", "Contact couldn't be resolved · no point awarded")
+	var pause = get_node_or_null("/root/PauseController")   # drop any pause the hold caused
+	if pause != null and pause.has_method("_set_pause_state"): pause._set_pause_state()
 
 func _exit_tree() -> void:
 	if is_instance_valid(game) and is_instance_valid(game.ball):
