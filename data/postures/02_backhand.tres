@@ -8,15 +8,15 @@ script = ExtResource("1")
 values = {
 "back_foot_back": -0.13,
 "body_pitch_deg": 0,
-"body_position_offset": Vector3(0, 0, 0),
+"body_position_offset": Vector3(0.2, 0, 0.08),
 "body_roll_deg": 0,
-"body_yaw_deg": 0,
-"crouch_amount": 0.06,
+"body_yaw_deg": 15,
+"crouch_amount": 0.16,
 "front_foot_forward": 0.17,
 "head_pitch_deg": 0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 0,
-"hip_yaw_deg": 0,
+"hip_yaw_deg": 10,
 "lead_foot": 0,
 "left_elbow_pole": Vector3(0.03999999910593033, -0.25, 0.2225193977355957),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -47,7 +47,7 @@ values = {
 "support_index_closure": 0.4,
 "torso_pitch_deg": -6,
 "torso_roll_deg": 0,
-"torso_yaw_deg": 0,
+"torso_yaw_deg": 10,
 "weight_shift": 0.6
 }
 
@@ -56,10 +56,10 @@ script = ExtResource("1")
 values = {
 "back_foot_back": -0.13,
 "body_pitch_deg": 0,
-"body_position_offset": Vector3(0, 0, 0),
+"body_position_offset": Vector3(0, 0, -0.12),
 "body_roll_deg": 0,
 "body_yaw_deg": -50,
-"crouch_amount": 0.11,
+"crouch_amount": 0.18,
 "front_foot_forward": 0.17,
 "head_pitch_deg": 0,
 "head_track_ball_weight": 0.8,
@@ -113,7 +113,7 @@ charge_back_foot_load = 0.65
 charge_body_rotation_deg = -16
 charge_duration = 0.32
 charge_hip_coil_deg = -12
-charge_paddle_offset = Vector3(0.07232417166233063, -0.6632137298583984, -0.8853288888931274)
+charge_paddle_offset = Vector3(0.093, -0.45, -1.02)
 charge_paddle_rotation_deg = Vector3(-71.68744659423828, 0.3232404887676239, 240.852294921875)
 compact_finish_elbow_offset = Vector3(0, 0, 0)
 compact_finish_lateral_scale = 0.82
@@ -128,7 +128,7 @@ ft_duration_sweep = 0.28
 ft_ease_curve = 2
 ft_front_foot_load = 0.8
 ft_hip_uncoil_deg = 8
-ft_paddle_offset = Vector3(1.0700440406799316, 0.4474479556083679, 0.23202207684516907)
+ft_paddle_offset = Vector3(1.091, 0.4474, -0.018)
 ft_paddle_rotation_deg = Vector3(-12.641373634338379, -21.262840270996094, 103.062744140625)
 has_zone = true
 head_pitch_deg = 0
@@ -147,8 +147,8 @@ left_knee_pole = Vector3(-0.7699999809265137, 0.5, 0.6399999856948853)
 left_shoulder_rotation_deg = Vector3(0, 0, 0)
 main_grip_rotation_deg = -29.999999999999996
 paddle_floor_clearance = 0.06
-paddle_forehand_mul = -0.5287668704986572
-paddle_forward_mul = 0.42121776938438416
+paddle_forehand_mul = -0.55
+paddle_forward_mul = 0.67
 paddle_hand = 0
 paddle_in_hand_rotation_deg = 0
 paddle_pitch_base_deg = 3.1318309973716425
@@ -181,9 +181,9 @@ torso_pitch_deg = -6
 torso_roll_deg = 0
 torso_yaw_deg = 0
 weight_shift = 0
-zone_forward_offset = 0.4406
-zone_x_max = -0.2634
-zone_x_min = -0.6634
+zone_forward_offset = 0.69
+zone_x_max = -0.2834
+zone_x_min = -0.6834
 zone_y_max = 1.3726
 zone_y_min = 0.9726
 windup_body = SubResource("Resource_ly5iw")

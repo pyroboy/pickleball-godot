@@ -106,3 +106,15 @@ limb angles, then reach. Loop per pose: `tools/pose_review.sh s00` (sheets + met
   only moves the body 0.1 m per unit, too little to move the CoG between the feet.
 - Gameplay change: contact moved forward 0.46 → 0.78 and out 0.42 → 0.55 (zone x 0.35–0.75,
   forward 0.78); wind-up/finish offsets compensated so those ends stay put. Bench: 0 script errors.
+
+### 02 Backhand (two-handed drive, rotate through, stay low) — done 2026-11-18
+| metric | wind-up | contact | finish |
+|---|---|---|---|
+| CoG back→front (was) | 0.28 (0.25) | 0.53 (0.56) | 0.91 (0.63) |
+| hip / shoulder turn ° | 50 / 80 | 45 / 45 | −25 / −35 past square (0 / 0) |
+| hip height m | 0.68 (0.67) | 0.71 | 0.68 (0.78, stood up) |
+| elbow ° · paddle from shoulder | 86 · relaxed (10 · locked straight) | 74 · 0.78 m (107 · 0.67 m) | 98 · 0.63 m |
+- Paddle drops 0.45 m below contact (was 0.66, near knee height), rises 0.45 m.
+- Gameplay change: contact forward 0.42 → 0.67, side −0.53 → −0.55; zone x −0.68…−0.28,
+  forward 0.69. Finish end kept in place; wind-up brought closer to the body. Bench: 0 script errors.
+- Backhand side mirrors the sideways body offset: finish `body_position_offset` (0.2, 0, 0.08).

@@ -88,10 +88,11 @@ func _capture(ed, index: int, key: String, tag: String) -> void:
 	var f := FileAccess.open(out_dir.path_join("%s_%s.json" % [key, tag]), FileAccess.WRITE)
 	f.store_string(JSON.stringify(report, "  "))
 
-# Player-local frame: x = forehand side, y = up, z = toward the net. Metres and degrees.
+# Player-local frame: x = forehand side, y = height above the court floor, z = toward the net.
+# Metres and degrees.
 func _local(p: Node3D, v: Vector3) -> Vector3:
 	var d := v - p.global_position
-	return Vector3(d.dot(p._get_forehand_axis()), d.y, d.dot(p._get_forward_axis()))
+	return Vector3(d.dot(p._get_forehand_axis()), v.y - p.COURT_FLOOR_Y, d.dot(p._get_forward_axis()))
 
 func _yaw(a: Vector3, b: Vector3) -> float:
 	# Turn of the line a->b (left joint -> right joint) away from square (parallel to the net).
@@ -132,7 +133,7 @@ func _body_metrics(p) -> Dictionary:
 	var spine := torso - hips
 	return {
 		"left_ankle": _rv(la), "right_ankle": _rv(ra),
-		"feet_planted": la.y < 0.16 and ra.y < 0.16,
+		"feet_planted": la.y < 0.10 and ra.y < 0.10,  # planted ankle sits ~0.04 m up
 		"stance_width": _r(absf(la.x - ra.x)), "stance_depth": _r(absf(la.z - ra.z)),
 		"front_foot": "left" if la.z >= ra.z else "right",
 		"com": _rv(com),
