@@ -64,7 +64,7 @@ func _perf_process(delta: float) -> void:
 	var court := Layout.court_rect(size, safe) if Layout.is_portrait(size) else safe.grow(-16.0)
 	var ball_screen := Vector2.INF
 	if game.ball != null and not camera.is_position_behind(game.ball.global_position):
-		ball_screen = camera.unproject_position(game.ball.global_position)
+		ball_screen = camera.unproject_position(game.ball.get_global_transform_interpolated().origin)
 	var tool_active: bool = game._tool_state_active()
 	for i in 2:
 		var player = game.player_left if i == 0 else game.player_right
@@ -77,7 +77,7 @@ func _perf_process(delta: float) -> void:
 		if tool_active: feedback[i].reset(player.stamina.value)
 		bar.modulate.a = feedback[i].advance(player.stamina.value, delta)
 		bar.size = Vector2(88, 10) * scale
-		var anchor: Vector3 = heads[i].global_position + Vector3.UP * 0.15 if is_instance_valid(heads[i]) else player.global_position + Vector3.UP
+		var anchor: Vector3 = heads[i].get_global_transform_interpolated().origin + Vector3.UP * 0.15 if is_instance_valid(heads[i]) else player.get_global_transform_interpolated().origin + Vector3.UP
 		var local_pov: bool = i == 0 and game.camera_rig.gameplay_camera.mode == 2
 		if local_pov:
 			# Side HUD leaves the exact ball-centered POV unobstructed.

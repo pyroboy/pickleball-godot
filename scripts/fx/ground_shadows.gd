@@ -35,6 +35,7 @@ func setup(ball: Node3D, left: Node3D, right: Node3D, roster: Array = []) -> voi
 		if i == 0:
 			material.set_shader_parameter("apron_half_size", BALL_APRON_HALF_SIZE)
 		shadow.material_override = material
+		shadow.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # moved every frame
 		add_child(shadow)
 		_shadows.append(shadow)
 		_materials.append(material)
@@ -83,7 +84,7 @@ func update_shadows() -> void :
 		if not is_instance_valid(target):
 			shadow.visible = false
 			continue
-		var pos: Vector3 = target.global_position
+		var pos: Vector3 = target.get_global_transform_interpolated().origin   # drawn, not the 30 Hz tick
 
 		var half_size: Vector2 = BALL_APRON_HALF_SIZE if i == 0 else Vector2(7.7, 11.7)
 		shadow.visible = target.is_visible_in_tree() and pos.is_finite() and absf(pos.x) < half_size.x and absf(pos.z) < half_size.y

@@ -137,7 +137,7 @@ func _place() -> void :
 	var player = game.get_player_by_actor_id(speaker_actor_id) if speaker_actor_id >= 0 else game.player_left if speaker == 0 else game.player_right
 	if player == null: clear(); return
 	var camera: Camera3D = game.main_camera
-	var head: Vector3 = player.global_position + Vector3.UP * 0.92
+	var head: Vector3 = player.get_global_transform_interpolated().origin + Vector3.UP * 0.92
 	if camera == null or camera.is_position_behind(head):
 		bubble.hide()
 		return
@@ -154,7 +154,7 @@ func _place() -> void :
 	pos.y = clampf(pos.y, court.position.y + 4 * scale, maxf(court.position.y + 4 * scale, court.end.y - bubble.size.y))
 
 	if game.ball.visible and not camera.is_position_behind(game.ball.global_position):
-		var ball_point: Vector2 = camera.unproject_position(game.ball.global_position)
+		var ball_point: Vector2 = camera.unproject_position(game.ball.get_global_transform_interpolated().origin)
 		if Rect2(pos, bubble.size).grow(16 * scale).has_point(ball_point):
 			pos.x = clampf(point.x - side * 48 * scale - (bubble.size.x if side > 0 else 0.0), court.position.x + 5 * scale, maxf(court.position.x + 5 * scale, court.end.x - bubble.size.x - 5 * scale))
 	bubble.position = pos

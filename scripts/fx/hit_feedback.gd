@@ -40,8 +40,8 @@ func _on_hit(player_num: int) -> void :
 	if RuntimePolicy.developer_tools: print("[HitFeedback] hit p=", player_num, " strength=", "%.2f" % strength, " at ", pos)
 
 
-	if _camera_rig != null and _camera_rig.has_method("add_shake"):
-		_camera_rig.call("add_shake", HIT_SHAKE_BASE + HIT_SHAKE_SCALE * strength)
+	# Camera shake is by shot type in Game._on_any_paddle_hit (none for soft
+	# shots); shaking on every hit here read as camera jitter.
 
 
 	if strength > HITSTOP_THRESHOLD and _settings_hitstop_enabled():

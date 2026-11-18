@@ -60,6 +60,7 @@ func _ready() -> void :
 	_material.vertex_color_use_as_albedo = true
 	_material.disable_receive_shadows = true
 	material_override = _material
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF   # rebuilt every frame in world space
 	RenderingServer.frame_pre_draw.connect(_before_draw)
 	if RuntimePolicy.developer_tools: print("[BallTrail] ready (ribbon)")
 
@@ -92,7 +93,9 @@ func _perf_physics_process(delta: float) -> void:
 			_points.append(_ball.global_position)
 	elif _points.size() > 0:
 		_points.remove_at(0)
+	# Drawn every frame in _process (ends at the interpolated ball), not here.
 
+func _process(_delta: float) -> void:
 	_rebuild_mesh()
 
 func _exit_tree() -> void:
@@ -124,7 +127,14 @@ func _before_draw() -> void:
 
 func _rebuild_mesh() -> void :
 	_imesh.clear_surfaces()
-	var n: int = _points.size()
+	if _points.size() < 2 or not is_instance_valid(_ball):
+		return
+	# History comes from 30 Hz physics ticks; the ball is drawn interpolated,
+	# up to one tick behind the newest sample. Drop that sample and end the
+	# ribbon exactly at the drawn ball, so trail and ball move together.
+	var pts: PackedVector3Array = _points.slice(0, _points.size() - 1)
+	pts.append(_ball.get_global_transform_interpolated().origin)
+	var n: int = pts.size()
 	if n < 2:
 		return
 
@@ -135,7 +145,7 @@ func _rebuild_mesh() -> void :
 
 	if not _debug_printed:
 		_debug_printed = true
-		if RuntimePolicy.developer_tools: print("[BallTrail] first rebuild n=", n, " head=", _points[n - 1])
+		if RuntimePolicy.developer_tools: print("[BallTrail] first rebuild n=", n, " head=", pts[n - 1])
 
 	_imesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in range(n):
@@ -143,12 +153,12 @@ func _rebuild_mesh() -> void :
 		var width: float = lerpf(WIDTH_TAIL, WIDTH_HEAD, t)
 		var col: Color = COLOR_TAIL.lerp(COLOR_HEAD, t)
 
-		var p: Vector3 = _points[i]
+		var p: Vector3 = pts[i]
 		var forward: Vector3
 		if i < n - 1:
-			forward = _points[i + 1] - p
+			forward = pts[i + 1] - p
 		else:
-			forward = p - _points[i - 1]
+			forward = p - pts[i - 1]
 		if forward.length_squared() < 0.0001:
 			forward = Vector3.FORWARD
 		else:
