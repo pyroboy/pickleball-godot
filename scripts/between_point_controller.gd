@@ -75,6 +75,7 @@ var _entry_side_relaxation: Array[bool] = [false, false]
 # Who is catching the ball in the air: the server for a partner pass, or the
 # retriever when the dead ball is still catchable on its way down.
 var catcher: = 0
+var _catch_open_time: = 0.0  # PASS phase time when the catching hand opened (reach starts here)
 var _air_catch: = false
 var _run_approach: Array[bool] = [false, false]
 var _prev_ball_pos: = Vector3.INF
@@ -260,6 +261,12 @@ func _settled_for_catch(team: int) -> bool:
 	var feet = _players[team].leg_ik
 	return feet != null and _ready_to_pickup(team) and feet.right_foot_locked and feet.left_foot_locked and feet._active_side < 0 and not feet._run_active and not feet._airborne and feet.locomotion_state == "ready" and feet.locomotion_body_weight < 0.2
 
+# Looser than _settled_for_catch: both feet down and not running is enough to reach for
+# a pass (a weight shift may still be finishing), as a real receiver would.
+func _planted_for_catch(team: int) -> bool:
+	var feet = _players[team].leg_ik
+	return feet != null and feet.right_foot_locked and feet.left_foot_locked and not feet._run_active and not feet._airborne
+
 func pose_for(actor_id: int):
 	var team: int = index_for_actor_id(actor_id)
 	return _poses[team] if _active and team >= 0 and team < _players.size() else null
@@ -357,10 +364,13 @@ func _perf_physics_process(delta: float) -> void:
 				_targets[retriever] = _serve_position(retriever)
 			# An air catch is decided while the catcher is still running; the hand
 			# opens once they have stopped and planted, like a pass receiver.
-			if _air_catch and pass_catch_declined and _settled_for_catch(catcher) and phase_elapsed < _planned_catch_time - 0.12:
+			# Same for an ordinary pass: if the receiver had to shuffle to the catch spot, the
+			# hand stayed shut for the whole flight and the ball went by. Open it once planted.
+			if pass_catch_declined and _planted_for_catch(catcher) and phase_elapsed < _planned_catch_time - 0.12:
 				pass_catch_declined = false
+				_catch_open_time = phase_elapsed
 				_phase_entry_wrists[catcher] = _actual_wrist(catcher)
-			var reach_clock: float = phase_elapsed if not _air_catch else maxf(0.0, phase_elapsed - maxf(0.0, _planned_catch_time - 0.6))
+			var reach_clock: float = maxf(0.0, phase_elapsed - _catch_open_time) if not _air_catch else maxf(0.0, phase_elapsed - maxf(0.0, _planned_catch_time - 0.6))
 			if not pass_catch_declined:
 				_wrists[catcher] = Vector3(_phase_entry_wrists[catcher]).lerp(_catch_position - HAND_BALL_OFFSET, load("res://scripts/between_point_arm_path.gd").clock_weight(reach_clock / .35))
 			if retriever >= 0 and retriever != catcher: _wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(_carry_wrist(retriever), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .4))
@@ -816,6 +826,7 @@ func _perf_launch_pass(origin: Vector3) -> void:
 		_targets[server].y = receiver.ground_y
 	var settled: bool = settled_now and _settled_for_catch(server)
 	pass_catch_declined = not settled
+	_catch_open_time = 0.0
 	pass_catch_decision = {"declined": pass_catch_declined, "reason": "receiver is not settled at the actual catch target" if pass_catch_declined else "stationary supported catch may be attempted", "actor_id": receiver.get_actor_id(), "root": receiver.global_transform, "target": _targets[server], "velocity": receiver.current_velocity, "active_side": feet._active_side if feet != null else -1, "right_locked": feet.right_foot_locked if feet != null else false, "left_locked": feet.left_foot_locked if feet != null else false}
 	for index in _players.size():
 		if index != server: _targets[index] = _players[index].global_position if index == retriever else _serve_position(index)
@@ -856,6 +867,8 @@ func _perf_set_phase(value: String) -> void:
 
 func _complete(skipped: bool, result: String) -> void :
 	if not _active: return
+	# One line per between-point (not per frame): how the pre-serve pass/catch went.
+	print("[catch] result=%s missed=%d gap=%s after_bounce=%s air=%s declined=%s" % [result, missed_physical_catches, ("%.3f" % catch_contact_gap) if is_finite(catch_contact_gap) else "none", catch_after_bounce, _air_catch, pass_catch_declined])
 	last_result = result
 	cancel()
 	_game._reset_ball( not skipped)
