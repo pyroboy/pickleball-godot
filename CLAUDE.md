@@ -9,6 +9,8 @@
 
 - Keep changes small; read only the files the task needs.
 - Don't add per-frame `print()` logging — Godot output floods quickly.
+- Run on Mac: `tools/run_mac.sh` (log in `logs/game.log`), then `tools/game_errors.sh` for a deduplicated error summary.
+- iOS Simulator is not usable: Godot 4.6.3's official simulator library is x86_64-only.
 - Headless smoke check:
 
 ```bash
