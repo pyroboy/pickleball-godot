@@ -407,6 +407,8 @@ func _setup_game() -> void :
 	var ball_readability = preload("res://scripts/fx/ball_readability.gd").new()
 	ball_readability.ball_radius = Ball.BALL_RADIUS
 	ball.add_child(ball_readability)
+	# Visual only: the drawn ball meets the floor on a bounce (30 Hz interpolation skipped it).
+	preload("res://scripts/graphics/ball_bounce_snap.gd").attach(ball)
 
 	rally_scorer = _RallyScorer.new()
 	rally_scorer.name = "RallyScorer"

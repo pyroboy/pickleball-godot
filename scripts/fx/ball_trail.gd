@@ -28,7 +28,8 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
 
 const MAX_POINTS: int = 8
-const WIDTH_HEAD: float = 0.1
+const WIDTH_HEAD: float = 0.06    # narrower than the ball (0.075 m): the ribbon never sticks out of it
+const FADE_LENGTH: float = 0.8    # m behind the ball over which width and colour ramp
 const WIDTH_TAIL: float = 0.01
 const MIN_SPEED: float = 1.0
 const COLOR_HEAD: Color = Color(1.0, 0.95, 0.35, 1.0)
@@ -44,6 +45,13 @@ var _previous_delta: float = 0.0
 
 func setup(ball: RigidBody3D) -> void :
 	_ball = ball
+	if ball.has_signal("bounced") and not ball.bounced.is_connected(_on_bounced):
+		ball.bounced.connect(_on_bounced)
+
+## Restart the ribbon at the contact point: a trail through the bounce corner folds
+## back on itself (its head is wider than the ball) and reads as a blob.
+func _on_bounced(point: Vector3) -> void:
+	_points = PackedVector3Array([point])
 
 func _ready() -> void :
 	name = "BallTrail"
@@ -82,6 +90,10 @@ func _perf_physics_process(delta: float) -> void:
 		return
 
 	var speed: float = _ball.linear_velocity.length()
+	# Sharp turn (paddle hit, net, wall): restart from the turning point, same reason.
+	var count: int = _points.size()
+	if count >= 2 and (position - _points[count - 1]).dot(_points[count - 1] - _points[count - 2]) < 0.0:
+		_points = PackedVector3Array([_points[count - 1]])
 	if speed > MIN_SPEED:
 
 		if _points.size() >= MAX_POINTS:
@@ -133,7 +145,7 @@ func _rebuild_mesh() -> void :
 	# up to one tick behind the newest sample. Drop that sample and end the
 	# ribbon exactly at the drawn ball, so trail and ball move together.
 	var pts: PackedVector3Array = _points.slice(0, _points.size() - 1)
-	pts.append(_ball.get_global_transform_interpolated().origin)
+	pts.append(_ball.get_meta("render_origin", _ball.get_global_transform_interpolated().origin))   # ball_bounce_snap.gd
 	var n: int = pts.size()
 	if n < 2:
 		return
@@ -147,9 +159,15 @@ func _rebuild_mesh() -> void :
 		_debug_printed = true
 		if RuntimePolicy.developer_tools: print("[BallTrail] first rebuild n=", n, " head=", pts[n - 1])
 
+	# Width and colour follow distance behind the ball, not the sample index, and a
+	# short ribbon (just after a bounce or hit) stays thin instead of drawing a blob.
+	var along: PackedFloat32Array = PackedFloat32Array(); along.resize(n)
+	for i in range(1, n): along[i] = along[i - 1] + pts[i].distance_to(pts[i - 1])
+	var total: float = along[n - 1]
+	var grow: float = clampf(total / FADE_LENGTH, 0.0, 1.0)
 	_imesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in range(n):
-		var t: float = float(i) / float(n - 1)
+		var t: float = clampf(1.0 - (total - along[i]) / FADE_LENGTH, 0.0, 1.0) * grow
 		var width: float = lerpf(WIDTH_TAIL, WIDTH_HEAD, t)
 		var col: Color = COLOR_TAIL.lerp(COLOR_HEAD, t)
 

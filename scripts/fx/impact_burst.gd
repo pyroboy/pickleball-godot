@@ -68,10 +68,12 @@ func play(pos: Vector3, color: Color, strength: float = 1.0, upward: bool = fals
 	_particles.initial_velocity_min = BASE_SPEED_MIN * (0.6 + 0.6 * s)
 	_particles.initial_velocity_max = BASE_SPEED_MAX * (0.6 + 0.8 * s)
 	if upward:
+		# Bounce: a low dust puff that hugs the court. The old 0.6-1.6 m/s upward spray
+		# rose with the ball and read as a blob beside it.
 		_particles.direction = Vector3(0, 1, 0)
-		_particles.spread = 55.0
-		_particles.initial_velocity_min = BASE_SPEED_MIN * 0.8
-		_particles.initial_velocity_max = BASE_SPEED_MAX * 0.9
+		_particles.spread = 80.0
+		_particles.initial_velocity_min = 0.15
+		_particles.initial_velocity_max = 0.4
 	else:
 		_particles.direction = Vector3(0, 1, 0)
 		_particles.spread = 180.0

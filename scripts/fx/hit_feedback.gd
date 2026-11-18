@@ -61,7 +61,9 @@ func _on_bounce(bounce_pos: Vector3) -> void :
 		return
 	var tint: Color = _zone_tint(bounce_pos)
 	if fx.has_method("spawn_burst"):
-		fx.call("spawn_burst", Vector3(bounce_pos.x, bounce_pos.y + 0.02, bounce_pos.z), tint, 0.7, true)
+		# Low dust puff in a muted zone colour (impact_burst.gd "upward" mode). Count and
+		# strength stay the same: CPU particles draw from the global RNG the seeded AI uses.
+		fx.call("spawn_burst", Vector3(bounce_pos.x, bounce_pos.y + 0.02, bounce_pos.z), tint.lerp(Color(0.62, 0.66, 0.72), 0.55), 0.7, true)
 	if fx.has_method("spawn_decal"):
 		fx.call("spawn_decal", bounce_pos, tint)
 
