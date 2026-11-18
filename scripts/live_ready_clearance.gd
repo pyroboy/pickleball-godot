@@ -19,7 +19,7 @@ const STEP := 0.005
 # ~130 ms in one frame at point end). Now 1 cm shifts, 10 deg elbow sweep, max 12 tries.
 const SEARCH_STEP := 0.01
 const SEARCH_MAX_TRIALS := 12
-const ELBOW_STEP_DEG := 10.0
+const ELBOW_STEP_DEG := 10.0   # wide sweeps only; short precise calls (attempts <= 3) keep 5 deg
 static var _bvh_topologies: Dictionary = {}
 static var _resource_versions: Dictionary = {}
 
@@ -208,7 +208,7 @@ static func _perf_solve_arm(arm, mount: Transform3D, preferred: Vector3, geometr
 	if radial.length_squared() < 0.000001: radial = Vector3.UP - axis * axis.y
 	radial = radial.normalized()
 	# Same +/- range as before, sampled every ELBOW_STEP_DEG instead of 5 deg.
-	var stride := ELBOW_STEP_DEG / 5.0
+	var stride := ELBOW_STEP_DEG / 5.0 if attempts > 3 else 1.0
 	for index in range(ceili(attempts / stride)):
 		var step := ceili(float(index) * 0.5) * (1.0 if index % 2 else -1.0) * stride
 		var elbow := center + radial.rotated(axis, deg_to_rad(step * 5.0)) * radius
@@ -472,6 +472,11 @@ static func _perf_apply_presented_ready(player, pose) -> Dictionary:
 	var report := {"eligible": false, "active": false, "feasible": false, "offset": Vector3.ZERO}
 	if not _presented_ready(player, pose): report["reason"] = "actual presentation is not supported seated READY"; return report
 	report.eligible = true
+	# Perf: the READY pose is pre-baked to clear the torso (data/postures/20_ready.tres
+	# elbow poles), so once a tick has confirmed clearance, skip re-checking it on the
+	# other arm solves in the same tick.
+	if int(player.body_pivot.get_meta("_ready_clear_tick", -1)) == Engine.get_physics_frames():
+		report.feasible = true; report["reason"] = "clear this tick"; return report
 	var existing: Vector3 = player.body_pivot.get_meta("live_transition_arm_reach", {}).get("world_offset", Vector3.ZERO)
 	var canonical_body: Transform3D = player.body_pivot.global_transform.translated(-existing)
 	var previous: Dictionary = player.body_pivot.get_meta("live_ready_clearance", {})
@@ -521,6 +526,7 @@ static func _perf_apply_presented_ready(player, pose) -> Dictionary:
 	var geometry := body_geometry(player)
 	if not geometry.get("valid", false): report["reason"] = "missing torso triangles"; report["microseconds"] = Time.get_ticks_usec() - started; return report
 	if arm_clear(player.right_arm_node, geometry, REQUIRED_GAP) and arm_clear(player.left_arm_node, geometry, REQUIRED_GAP):
+		player.body_pivot.set_meta("_ready_clear_tick", Engine.get_physics_frames())
 		report.feasible = true; report["microseconds"] = Time.get_ticks_usec() - started; return report
 	var transaction := Transaction.new(player); var saved := transaction._snapshot(true)
 	var offset: Vector3 = target.origin - player.body_pivot.global_position
