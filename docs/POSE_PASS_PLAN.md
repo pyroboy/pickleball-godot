@@ -147,6 +147,9 @@ Serves are built in code (`drive_serve_motion.gd`); packaged tuning now lives in
 (up to 135°); on backhands that lifted the elbow up to 0.25 m above the shoulder. It now stops
 turning once the elbow would rise above max(shoulder + 0.02 m, authored elbow height). Backhand
 0.13 -> 0.02 m, Wide Backhand 0.25 -> 0.02 m; forehands and serves unchanged (already low).
+Gameplay effect (4927449 vs 0667f47, bench seed 1, 150 s): not visual-only. The arm result feeds the
+live arm-reach body offset, so BodyPivot moves up to 61 mm and the paddle up to 66 mm; the ball
+differs by at most 1.8 mm and the match outcome is identical (same 11 points, causes and rally length).
 `pose_review.sh --from-rest` traces serves from the held pose and flags "elbow UP" steps.
 - Next: Wide Backhand needs a whole-pose rework: its wind-up paddle/wrist angle demands an elbow-up
   arm, so the forearm flips (80° without the guard, 125° with it) at the start of the wind-up.
