@@ -307,6 +307,8 @@ func setup(player_id: int, bounds: Dictionary, paddle_color: Color, start_pos: V
 	body_builder._player = self
 	add_child(body_builder)
 	body_builder.build(paddle_color)
+	# 2.5D pixel cards on the posture joints (visual only; classic meshes kept for gameplay reads).
+	PixelCardRig.attach.call_deferred(self)
 
 
 	ai_brain = load("res://scripts/player_ai_brain.gd").new()

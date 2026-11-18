@@ -1,0 +1,95 @@
+{
+ "cell": [
+  40,
+  40
+ ],
+ "cols": 16,
+ "rows": 9,
+ "meters_per_texel": 0.028,
+ "elevation_deg": 44,
+ "parts": {
+  "head": {
+   "row": 0,
+   "anchor": [
+    20,
+    20
+   ]
+  },
+  "torso": {
+   "row": 1,
+   "anchor": [
+    20,
+    20
+   ]
+  },
+  "shorts": {
+   "row": 2,
+   "anchor": [
+    20,
+    20
+   ]
+  },
+  "upper_arm": {
+   "row": 3,
+   "anchor": [
+    20,
+    8
+   ],
+   "end": [
+    20.0,
+    16.99
+   ]
+  },
+  "forearm": {
+   "row": 4,
+   "anchor": [
+    20,
+    8
+   ],
+   "end": [
+    20.0,
+    16.99
+   ]
+  },
+  "hand": {
+   "row": 5,
+   "anchor": [
+    20,
+    14
+   ],
+   "end": [
+    20.0,
+    15.16
+   ]
+  },
+  "thigh": {
+   "row": 6,
+   "anchor": [
+    20,
+    8
+   ],
+   "end": [
+    20.0,
+    19.05
+   ]
+  },
+  "shin": {
+   "row": 7,
+   "anchor": [
+    20,
+    8
+   ],
+   "end": [
+    20.0,
+    18.53
+   ]
+  },
+  "shoe": {
+   "row": 8,
+   "anchor": [
+    20,
+    14
+   ]
+  }
+ }
+}

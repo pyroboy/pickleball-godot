@@ -38,6 +38,7 @@ const DEFAULTS: Dictionary = {
 	"video.focus_blur": 0.65,
 	"video.focus_preview": true,
 	"video.focus_arc_style": 0,
+	"video.character_style": 1, # 1 = 2.5D pixel cards (default), 0 = classic 3D bodies
 	"audio.master": 0.9, 
 	"audio.sfx": 1.0, 
 	"audio.music": 0.7, 
