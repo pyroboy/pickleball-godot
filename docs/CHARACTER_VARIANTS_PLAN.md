@@ -20,6 +20,19 @@ people. Visual only: gameplay, skeleton and timing stay locked (`pose_diff.py` I
   tiers, Veteran polo/shorts, Bruiser/Power socks). Review with
   `python3 tools/bake_pixel_cards.py --sheet` -> `logs/sprite_profiles_{blue,red}.png`
   (assembled standing players, on-screen colours, views 0/45/90/135/180/270).
+- [x] Fidelity pass: profiles use a 2x finer grid (0.014 m texels, 80 px cells; the rig reads
+  each profile's `grid`), pixel-exact face and detail marks (eyes with whites, brows, nose,
+  mouth, ears, blush, logo, buttons, laces, finger lines, kneecaps, elbow), hair strands,
+  collars, seams, cuffs, toe caps; heads 1.15x / hands 1.3x / shoes 1.1x and heads at a
+  30 deg view so faces read.
+- [x] Chunky pass (user: "more pixelated, higher quality"): back to 0.028 m texels / 40 px
+  cells, bold features only (1-px eyes, hairline, beard, glasses; `DETAIL = False` drops the
+  fine marks and muscle bulges), heads 1.25x, a stray-pixel cleanup pass so tone bands read
+  clean. `DETAIL = True` with `TEXEL = 0.014`, `CELL = 80` restores the fine version.
+- [x] Colour calibration: `tools/calibrate_cards.gd` measures atlas -> screen through the card
+  shader, environment and PixelPost (`assets/pixel_cards/card_tonemap_lut.json`); the baker
+  inverts it. Screen whites top out at ~218. Re-run it after tonemap or post changes.
+  The original team atlases were made for the pre-PixelPost pipeline and now show paler.
 - [ ] Not checked on iPhone. Next: shape/colour polish per profile, hand paint (step 6),
   picker UI (step 7), far-court half-size tier.
 

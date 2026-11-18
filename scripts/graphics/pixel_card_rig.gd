@@ -26,6 +26,7 @@ static var _meta: Dictionary = {}
 const PROFILE_KEY: = "video.player_profile"
 
 var profile_id: = ""  # sprite profile in use ("" = the original team atlas)
+var _grid: Dictionary = {}  # cell size, texel size and part anchors of the atlas in use
 
 var _player  # player.gd instance (untyped: uses its script members)
 var _cards: Array = []
@@ -75,6 +76,12 @@ func _ready() -> void:
 		else: profile_id = ""
 	set_meta("sprite_profile", profile_id)
 	set_meta("paddle", str(meta.profiles[profile_id].get("paddle", "")) if profile_id != "" else "")
+	# Profile atlases may use their own grid (finer texels, bigger cells, own anchors).
+	_grid = meta
+	if profile_id != "" and meta.profiles[profile_id].has("grid"):
+		_grid = meta.duplicate()
+		_grid.merge(meta.profiles[profile_id].grid, true)
+	meta = _grid
 	var torso: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var head: Node3D = torso.get_node_or_null("HeadMesh") if torso else null
 	var hips: Node3D = _player.body_pivot.get_node_or_null("HipsMesh")
@@ -163,7 +170,7 @@ func _process(delta: float) -> void:
 	if _hide_timer <= 0.0:
 		_hide_timer = 2.0
 		_hide_classic()
-	var meta: = _meta
+	var meta: = _grid
 	var s: float = float(meta.meters_per_texel)
 	var cell: Vector2 = Vector2(meta.cell[0], meta.cell[1])
 	var cols: int = int(meta.cols)

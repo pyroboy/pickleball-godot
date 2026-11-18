@@ -101,6 +101,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/ace_blue.png",
     "red": "res://assets/pixel_cards/profiles/ace_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   },
   "bruiser": {
@@ -110,6 +202,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/bruiser_blue.png",
     "red": "res://assets/pixel_cards/profiles/bruiser_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   },
   "power": {
@@ -119,6 +303,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/power_blue.png",
     "red": "res://assets/pixel_cards/profiles/power_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   },
   "rookie": {
@@ -128,6 +404,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/rookie_blue.png",
     "red": "res://assets/pixel_cards/profiles/rookie_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   },
   "speedster": {
@@ -137,6 +505,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/speedster_blue.png",
     "red": "res://assets/pixel_cards/profiles/speedster_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   },
   "veteran": {
@@ -146,6 +606,98 @@
    "textures": {
     "blue": "res://assets/pixel_cards/profiles/veteran_blue.png",
     "red": "res://assets/pixel_cards/profiles/veteran_red.png"
+   },
+   "grid": {
+    "cell": [
+     40,
+     40
+    ],
+    "meters_per_texel": 0.028,
+    "parts": {
+     "head": {
+      "row": 0,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "torso": {
+      "row": 1,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "shorts": {
+      "row": 2,
+      "anchor": [
+       20.0,
+       20.0
+      ]
+     },
+     "upper_arm": {
+      "row": 3,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "forearm": {
+      "row": 4,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       16.99
+      ]
+     },
+     "hand": {
+      "row": 5,
+      "anchor": [
+       20.0,
+       14.0
+      ],
+      "end": [
+       20.0,
+       15.16
+      ]
+     },
+     "thigh": {
+      "row": 6,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       19.05
+      ]
+     },
+     "shin": {
+      "row": 7,
+      "anchor": [
+       20.0,
+       8.0
+      ],
+      "end": [
+       20.0,
+       18.53
+      ]
+     },
+     "shoe": {
+      "row": 8,
+      "anchor": [
+       20.0,
+       14.0
+      ]
+     }
+    }
    }
   }
  }

@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Bake 2.5D pixel-card atlases for player profiles (visual only).
 
-Each profile (data/sprite_profiles/<id>.json) describes a body and outfit with a few
-parameters. This builds every card part (head, torso, shorts, upper_arm, forearm, hand,
-thigh, shin, shoe) from simple solids at real size, renders 16 views per part
-(22.5 deg steps, 44 deg elevation for head/torso/shorts/shoe, side view for limbs),
-quantises to 3 shading tones, pre-compensates colours for the game's Filmic tonemap
-and writes one atlas per team:
+Each profile (data/sprite_profiles/<id>.json) describes a body and outfit. This builds
+every card part (head, torso, shorts, upper_arm, forearm, hand, thigh, shin, shoe) from
+solids at real size, renders 16 views per part, adds pixel-exact details ("decals":
+eyes, brows, mouth, nose, ears, laces, buttons, logo, finger lines, knee caps) where
+they face the camera, quantises to 3 tones plus a selective outline, pre-compensates
+colours for the game's Filmic tonemap and writes one atlas per team:
 
   assets/pixel_cards/profiles/<id>_blue.png, <id>_red.png
-  assets/pixel_cards/cards_meta.json  ("profiles" entry; grid/anchors unchanged)
+  assets/pixel_cards/cards_meta.json  ("profiles" entry with its own grid)
 
-Usage: python3 tools/bake_pixel_cards.py [id ...]      (no ids = every profile)
-       python3 tools/bake_pixel_cards.py --sheet        (also writes a preview sheet)
+Profiles use a finer grid than the original cards (TEXEL m per texel, CELL px cells):
+near players are drawn ~2 screen pixels per original texel, so the extra detail shows.
+Heads, hands and shoes are drawn slightly larger than life (PART_SCALE) and heads at a
+lower camera angle (PART_ELEV) so faces read, like most pixel-art sports games.
+
+Usage: python3 tools/bake_pixel_cards.py [id ...] [--sheet]
+  --sheet: assembled standing players, on-screen colours -> logs/sprite_profiles_<team>.png
+Run Godot with --import afterwards so the new PNGs load.
 """
 import json, math, os, sys
 import numpy as np
@@ -23,15 +29,18 @@ META = os.path.join(ROOT, "assets/pixel_cards/cards_meta.json")
 PROFILES = os.path.join(ROOT, "data/sprite_profiles")
 OUT = os.path.join(ROOT, "assets/pixel_cards/profiles")
 
-CELL, COLS = 40, 16
+COLS = 16
+TEXEL = 0.028           # m per texel: chunky pixels, ~2x2 screen pixels each up close
+CELL = 40               # px per cell
 SS = 4                  # supersampling per texel
-STEP = 0.0045           # solid sampling step (m)
-ELEV = math.radians(44)
+STEP = 0.005            # solid sampling step (m), < TEXEL / SS
+DETAIL = False          # True: fine marks (brows, ears, laces, logo, strands...) for finer grids
+ELEV = 44.0             # game camera elevation the cards were measured at
+PART_ELEV = {"head": 30.0, "torso": 40.0, "shorts": 44.0, "shoe": 44.0}   # limbs/hand: side view
+PART_SCALE = {"head": 1.25, "hand": 1.3, "shoe": 1.15}                      # drawn larger than life
 LIGHT = np.array([-0.45, 0.75, 0.55]); LIGHT /= np.linalg.norm(LIGHT)
 OUTLINE = 0.62          # silhouette texels: colour x this
 
-# Team colours as they should look on screen (main, light, dark), read back from the
-# original atlases through the tonemap below.
 TEAMS = {
     "blue": {"T": (83, 152, 236), "T_light": (168, 208, 236), "T_dark": (35, 85, 182)},
     "red":  {"T": (236, 73, 63),  "T_light": (236, 161, 147), "T_dark": (160, 35, 50)},
@@ -39,8 +48,7 @@ TEAMS = {
 
 # ---------------------------------------------------------------- tonemap compensation
 # Card shader: ALBEDO = texel(linear) * gain, unshaded; then exposure 1.05, Filmic
-# (white 6.0, Godot 4 curve), sRGB out. Invert that per channel so the atlas shows
-# the painted colour on screen.
+# (white 6.0, Godot 4 curve), sRGB out. Inverted per channel.
 def _filmic(x):
     A, B, C, D, E, F = 0.22 * 4, 0.30 * 2, 0.10, 0.20, 0.01, 0.30
     f = lambda v: (v * (A * v + C * B) + D * E) / (v * (A * v + B) + D * F) - E / F
@@ -49,47 +57,94 @@ def _filmic(x):
 def _s2l(s): return np.where(s <= 0.04045, s / 12.92, ((s + 0.055) / 1.055) ** 2.4)
 def _l2s(l): return np.where(l <= 0.0031308, l * 12.92, 1.055 * np.clip(l, 0, None) ** (1 / 2.4) - 0.055)
 
+LUT = os.path.join(ROOT, "assets/pixel_cards/card_tonemap_lut.json")
+POST_SATURATION = 1.08   # shaders/pixel_post.gdshader `saturation`
+
 def make_compensator(gain):
+    """display colour -> atlas value. Uses the in-engine measurement from
+    tools/calibrate_cards.gd when present (card shader + environment + PixelPost),
+    else the Filmic model above."""
+    if os.path.exists(LUT):
+        with open(LUT) as f: lut = json.load(f)
+        atlas, screen = np.array(lut["atlas"], float), np.array(lut["screen"], float)
+        xs, ys = [], []
+        for a_, s_ in zip(atlas, screen):          # strictly increasing for interp
+            if not xs or s_ > xs[-1]: xs.append(s_); ys.append(a_)
+        xs, ys = np.array(xs), np.array(ys)
+        def comp(d):
+            d = np.asarray(d, float)
+            if d.ndim == 1 and d.shape[0] == 3:   # undo the post's saturation boost
+                l = d @ np.array([0.299, 0.587, 0.114])
+                d = l + (d - l) / POST_SATURATION
+            return np.interp(np.clip(d, xs[0], xs[-1]), xs, ys)
+        return comp
     atlas = np.arange(256) / 255.0
     shown = _l2s(np.clip(_filmic(_s2l(atlas) * gain * 1.05), 0, 1)) * 255.0
-    limit = 240  # the original atlases stop at 240: keeps highlights from clipping flat
-    return lambda display: np.interp(np.minimum(display, shown[limit]), shown[:limit + 1], np.arange(limit + 1))
+    limit = 240
+    return lambda d: np.interp(np.minimum(d, shown[limit]), shown[:limit + 1], np.arange(limit + 1))
 
-# ---------------------------------------------------------------- solids
-# A solid is (inside(p) -> bool mask, normal(p) -> n, colour(p) -> list of keys).
-# Coordinates: x lateral, y up, z forward (toward the camera in view 0); metres from
-# the card's joint.
+def display_of(atlas_rgb):
+    """atlas value -> on-screen colour (for previews), same source as make_compensator."""
+    a = np.asarray(atlas_rgb, float)
+    if os.path.exists(LUT):
+        with open(LUT) as f: lut = json.load(f)
+        d = np.interp(a, lut["atlas"], lut["screen"])
+        l = d @ np.array([0.299, 0.587, 0.114])
+        return np.clip(l[..., None] + (d - l[..., None]) * POST_SATURATION, 0, 255)
+    return _l2s(np.clip(_filmic(_s2l(a / 255.0) * 2.2 * 1.05), 0, 1)) * 255
+
+# ---------------------------------------------------------------- colours
+def hex_rgb(h): h = h.lstrip("#"); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+def to_hex(c): return "#%02x%02x%02x" % tuple(int(max(0, min(255, round(x)))) for x in c)
+def scale_hex(h, f): return to_hex(np.array(hex_rgb(h), float) * f)
+
+def tones(key, team):
+    """(light, main, dark) display colours for 'T', 'T_dark', 'T_light' or a hex colour."""
+    if key.startswith("T"):
+        pal = TEAMS[team]
+        if key == "T": return pal["T_light"], pal["T"], pal["T_dark"]
+        c = np.array(pal[key], float)
+        return tuple(np.minimum(c * 1.15 + 8, 255)), tuple(c), tuple(c * 0.68)
+    c = np.array(hex_rgb(key), float)
+    return tuple(np.minimum(c * 1.1 + 6, 255)), tuple(c), tuple(c * 0.7)
+
+def const(key): return lambda p: np.full(len(p), key, dtype=object)
+
+# ---------------------------------------------------------------- solids and decals
+# Part-local coordinates: x lateral, y up, z forward (toward the camera in view 0),
+# metres from the card's joint.
 
 def _grid(lo, hi):
     axes = [np.arange(a, b + STEP, STEP) for a, b in zip(lo, hi)]
-    g = np.stack(np.meshgrid(*axes, indexing="ij"), -1).reshape(-1, 3)
-    return g
+    return np.stack(np.meshgrid(*axes, indexing="ij"), -1).reshape(-1, 3)
 
 class Solid:
     def __init__(self, kind, centre, radii, paint, y0=None, y1=None, keep=None, taper=1.0, priority=0):
         self.kind, self.c, self.r = kind, np.array(centre, float), np.array(radii, float)
         self.paint, self.y0, self.y1, self.keep, self.taper, self.priority = paint, y0, y1, keep, taper, priority
+        self._pts = None
 
     def points(self):
-        if not hasattr(self, "_pts"): self._pts = self._points()
+        if self._pts is None: self._pts = self._points()
         return self._pts
 
     def _points(self):
         c, r = self.c, self.r
         if self.kind == "ell":
             p = _grid(c - r, c + r)
-            q = (p - c) / r
-            m = (q ** 2).sum(1) <= 1.0
+            m = (((p - c) / r) ** 2).sum(1) <= 1.0
             p = p[m]; n = (p - c) / r ** 2
-        elif self.kind == "cyl":   # elliptical cylinder along y, radius tapers y1 -> y0
+        elif self.kind == "cyl":   # elliptical cylinder along y; radius x taper at y0
             rr = r * max(1.0, self.taper)
             p = _grid([c[0] - rr[0], self.y0, c[2] - rr[2]], [c[0] + rr[0], self.y1, c[2] + rr[2]])
-            t = (p[:, 1] - self.y0) / max(self.y1 - self.y0, 1e-6)      # 0 bottom, 1 top
+            t = (p[:, 1] - self.y0) / max(self.y1 - self.y0, 1e-6)
             scale = self.taper + (1.0 - self.taper) * t
             q = (p[:, [0, 2]] - c[[0, 2]]) / (r[[0, 2]] * scale[:, None])
             m = (q ** 2).sum(1) <= 1.0
-            p = p[m]; d = (p - c) / (np.array([r[0], 1.0, r[2]]) * scale[m, None]) ** 2; d[:, 1] = 0.0; n = d
-        else:                       # box
+            p = p[m]; n = (p - c) / (np.array([r[0], 1.0, r[2]]) * scale[m, None]) ** 2; n[:, 1] = 0.0
+            ends = np.zeros(len(p))      # flat caps
+            n[p[:, 1] > self.y1 - STEP * 1.5] += [0, 2.0, 0]
+        else:
             p = _grid(c - r, c + r)
             n = (p - c) / r
             n = np.where(np.abs(n) == np.abs(n).max(1, keepdims=True), np.sign(n), 0.0)
@@ -102,69 +157,104 @@ def ell(c, r, paint, **kw): return Solid("ell", c, r, paint, **kw)
 def box(c, r, paint, **kw): return Solid("box", c, r, paint, **kw)
 def cyl(c, r, y0, y1, paint, **kw): return Solid("cyl", c, [r[0], 0, r[1]], paint, y0=y0, y1=y1, **kw)
 
-# ---------------------------------------------------------------- colours
-def hex_rgb(h): h = h.lstrip("#"); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
+class Decal:
+    """Pixel-exact mark at a surface point: drawn only when that point is the visible
+    surface and faces the camera. pattern: texel offsets; dx > 0 means 'outward' for
+    a mark with a side (eyes, brows), i.e. away from the face centre on screen."""
+    def __init__(self, p, n, key, pattern=((0, 0),), shade=1, side=0, facing=0.2, essential=False):
+        self.p, self.n = np.array(p, float), np.array(n, float) / np.linalg.norm(n)
+        self.key, self.pattern, self.shade, self.side, self.facing = key, pattern, shade, side, facing
+        self.essential = essential   # drawn even when DETAIL is off (eyes)
 
-def tones(key, team):
-    """(light, main, dark) display colours for a colour key: hex, 'T', 'T_dark', 'T_light'."""
-    if key.startswith("T"):
-        pal = TEAMS[team]
-        main = pal.get(key, pal["T"])
-        if key == "T": return pal["T_light"], pal["T"], pal["T_dark"]
-        c = np.array(main, float)
-        return tuple(np.minimum(c * 1.15 + 8, 255)), main, tuple(c * 0.68)
-    c = np.array(hex_rgb(key), float)
-    return tuple(np.minimum(c * 1.1 + 6, 255)), tuple(c), tuple(c * 0.7)
-
-def const(key): return lambda p: np.full(len(p), key, dtype=object)
-
-def bands(axis, edges, keys):
-    """Colour by coordinate bands: keys[i] where edges[i-1] <= p[axis] < edges[i]."""
-    def f(p):
-        idx = np.searchsorted(np.array(edges), p[:, axis], side="right")
-        return np.array(keys, dtype=object)[idx]
-    return f
+def on_ell(c, r, x, y, front=1.0):
+    """Point and normal on an ellipsoid's front (z) surface at lateral x, height y."""
+    c, r = np.array(c, float), np.array(r, float)
+    q = 1.0 - ((x - c[0]) / r[0]) ** 2 - ((y - c[1]) / r[1]) ** 2
+    z = c[2] + front * r[2] * math.sqrt(max(q, 0.0))
+    p = np.array([x, y, z]); n = (p - c) / r ** 2
+    return p, n
 
 # ---------------------------------------------------------------- body parts
 def v(d, k, default): return d.get(k, default)
 
+def hair_paint(hair):
+    """Hair with strand texture: every third band around the head is a darker strand."""
+    dark = scale_hex(hair, 0.72)
+    if not DETAIL: return const(hair)
+    def f(p):
+        k = np.full(len(p), hair, dtype=object)
+        band = np.floor(np.arctan2(p[:, 0], p[:, 2] + 0.02) * 9.0 + p[:, 1] * 30.0).astype(int)
+        k[band % 3 == 0] = dark
+        return k
+    return f
+
+HEAD_R = [0.08, 0.1, 0.088]
+
 def head_part(pr):
     h = pr["head"]; skin = pr["skin"]; hair = h.get("hair_color", "#2a1c14")
-    s = []
-    s.append(ell([0, 0, 0], [0.082, 0.1, 0.09], const(skin)))
-    # eyes and nose: a pixel each at this scale
-    for x in (-0.03, 0.03):
-        s.append(box([x, 0.01, 0.084], [0.009, 0.008, 0.008], const(h.get("eye", "#14161e")), priority=2))
-    if h.get("sunglasses"):
-        s.append(box([0, 0.012, 0.083], [0.07, 0.014, 0.012], const("#101114"), priority=3))
+    female = pr.get("sex") == "female"
+    s, d = [], []
+    s.append(ell([0, 0, 0], HEAD_R, const(skin)))
+    s.append(ell([0, -0.06, 0.02], [0.055, 0.04, 0.06], const(skin)))                   # jaw / chin
     style = h.get("hair", "crew")
-    cap = {"buzz": 0.005, "crew": 0.01, "bob": 0.014, "ponytail": 0.012, "bun": 0.012, "curly": 0.024}.get(style, 0.01)
-    line = {"buzz": 0.065, "crew": 0.065, "curly": 0.06}.get(style, 0.055)
-    def hair_keep(p, line=line, style=style):
-        front = p[:, 2] > 0.02
-        low = p[:, 1] < (-0.075 if style == "bob" else (0.0 if style in ("buzz", "crew", "curly") else -0.03))
-        return ~(front & (p[:, 1] < line)) & ~low
-    s.append(ell([0, 0.006, -0.004], [0.082 + cap, 0.1 + cap, 0.09 + cap], const(hair), keep=hair_keep, priority=1))
+    cap = {"buzz": 0.004, "crew": 0.009, "bob": 0.014, "ponytail": 0.01, "bun": 0.01, "curly": 0.018}.get(style, 0.01)
+    line = {"buzz": 0.065, "crew": 0.06, "curly": 0.058, "bob": 0.035}.get(style, 0.052)
+    low = {"bob": -0.08, "ponytail": -0.035, "bun": -0.035}.get(style, 0.0)
+    def keep(p, line=line, low=low):
+        face = (p[:, 2] > 0.02) & (p[:, 1] < line)
+        sideburn = (np.abs(p[:, 0]) > 0.07) & (p[:, 2] > 0.035) & (p[:, 1] < line + 0.01)
+        return ~(face & ~(sideburn & (style == "bob"))) & (p[:, 1] > low)
+    s.append(ell([0, 0.006, -0.004], [HEAD_R[0] + cap, HEAD_R[1] + cap, HEAD_R[2] + cap], hair_paint(hair), keep=keep, priority=1))
+    if style == "curly":
+        for x, y, z in [(-0.05, 0.08, 0.02), (0.05, 0.08, 0.02), (0, 0.1, -0.02), (-0.06, 0.05, -0.05), (0.06, 0.05, -0.05), (0, 0.07, 0.05)]:
+            s.append(ell([x, y, z], [0.035, 0.03, 0.035], hair_paint(hair), priority=1))
+    if style == "bob":   # fringe
+        s.append(ell([0, 0.045, 0.05], [0.075, 0.03, 0.05], hair_paint(hair), priority=1, keep=lambda p: p[:, 2] > 0.02))
+    tie = h.get("tie", "T")
     if style == "ponytail":
-        s.append(ell([0, 0.07, -0.11], [0.035, 0.035, 0.04], const(hair), priority=1))
-        s.append(ell([0, -0.03, -0.14], [0.03, 0.09, 0.032], const(hair), priority=1))
+        s.append(ell([0, 0.06, -0.105], [0.03, 0.03, 0.03], const(tie), priority=2))
+        s.append(ell([0, 0.0, -0.13], [0.03, 0.06, 0.03], hair_paint(hair), priority=1))
+        s.append(ell([0, -0.08, -0.135], [0.022, 0.05, 0.024], hair_paint(hair), priority=1))
     if style == "bun":
-        s.append(ell([0, 0.12, -0.03], [0.05, 0.045, 0.05], const(hair), priority=1))
+        s.append(ell([0, 0.12, -0.03], [0.048, 0.042, 0.048], hair_paint(hair), priority=1))
+        s.append(cyl([0, 0, -0.03], [0.034, 0.034], 0.085, 0.1, const(tie), priority=2))
     if h.get("beard"):
         s.append(ell([0, -0.05, 0.012], [0.079, 0.055, 0.084], const(h.get("beard_color", hair)),
-                     keep=lambda p: (p[:, 1] < -0.04) & (p[:, 2] > 0.0), priority=1))
+                     keep=lambda p: (p[:, 1] < -0.035) & (p[:, 2] > -0.01), priority=1))
+    # Face: eyes, brows, nose, mouth, ears, cheeks. Pixel-exact so they survive the bake.
+    eye = h.get("eye", "#1d1a22")
+    for sx in (-1, 1):
+        p, n = on_ell([0, 0, 0], HEAD_R, sx * 0.03, 0.006)
+        d.append(Decal(p, n, "#ece8e2", ((1, 0), (1, 1)), side=sx))      # eye white (outer side)
+        d.append(Decal(p, n, eye, (((0, 0), (0, 1)) if not female else ((0, 0), (0, 1), (1, -1))) if DETAIL else ((0, 0),),
+                       side=sx, essential=True))
+        p, n = on_ell([0, 0, 0], HEAD_R, sx * 0.032, 0.032)
+        d.append(Decal(p, n, scale_hex(hair, 0.8), ((-1, 0), (0, 0), (1, 0)) if not female else ((0, 0), (1, 0)), side=sx))
+        p, n = on_ell([0, 0, 0], HEAD_R, sx * 0.079, -0.005)
+        d.append(Decal(p, n, skin, ((0, 0), (0, 1)), shade=2, facing=-0.6))
+        if female:
+            p, n = on_ell([0, 0, 0], HEAD_R, sx * 0.048, -0.028)
+            d.append(Decal(p, n, "#e39a8a", ((0, 0),)))
+    p, n = on_ell([0, 0, 0], HEAD_R, 0.0, -0.016)
+    d.append(Decal(p, n, skin, ((0, 0), (0, 1)), shade=2))
+    p, n = on_ell([0, -0.06, 0.02], [0.055, 0.04, 0.06], 0.0, -0.05)
+    d.append(Decal(p, n, "#b4565c" if female else scale_hex(skin, 0.62), ((-1, 0), (0, 0), (1, 0)) if female else ((-1, 0), (0, 0))))
+    if h.get("sunglasses"):
+        s.append(box([0, 0.008, 0.08], [0.068, 0.013, 0.012], const("#101114"), priority=3))
+        p, n = on_ell([0, 0, 0], HEAD_R, -0.03, 0.012)
+        d.append(Decal(p + [0, 0, 0.012], [0, 0.2, 1], "#8fa8c8", ((0, 0),), shade=0))
     wear = h.get("headwear")
     col = h.get("headwear_color", "T")
     if wear == "visor":
-        s.append(cyl([0, 0, -0.004], [0.098, 0.106], 0.03, 0.06, const(col), priority=2,
-                     keep=lambda p: p[:, 2] > -0.08))
-        s.append(box([0, 0.035, 0.1], [0.07, 0.006, 0.025], const(col), priority=2))
+        s.append(cyl([0, 0, -0.004], [0.094, 0.104], 0.05, 0.072, const(col), priority=2, keep=lambda p: p[:, 2] > -0.06))
+        s.append(box([0, 0.068, 0.098], [0.068, 0.005, 0.026], const(col), priority=2))
     elif wear == "headband":
-        s.append(cyl([0, 0, -0.004], [0.099, 0.108], 0.035, 0.035 + v(h, "headband_width", 0.022), const(col), priority=2))
+        s.append(cyl([0, 0, -0.004], [0.095, 0.105], 0.04, 0.04 + v(h, "headband_width", 0.022), const(col), priority=2))
     elif wear == "bucket_hat":
-        s.append(cyl([0, 0, -0.01], [0.092, 0.1], 0.06, 0.125, const(col), priority=2, taper=1.06))
-        s.append(cyl([0, 0, -0.01], [0.122, 0.128], 0.055, 0.066, const(col), priority=2))
-    return s
+        s.append(cyl([0, 0, -0.01], [0.09, 0.098], 0.06, 0.125, const(col), priority=2, taper=1.06))
+        s.append(cyl([0, 0, -0.01], [0.09, 0.098], 0.06, 0.072, const(scale_hex(col, 0.7)), priority=3, taper=1.06))
+        s.append(cyl([0, 0, -0.01], [0.12, 0.126], 0.052, 0.062, const(col), priority=2))
+    return s, d
 
 def torso_part(pr):
     t = pr["torso"]; top = pr["top"]; skin = pr["skin"]
@@ -172,6 +262,7 @@ def torso_part(pr):
     female = pr.get("sex") == "female"
     body = top.get("color", "T")
     kind = top.get("type", "tee")
+    tank = kind in ("tank", "racerback", "muscle_tank")
 
     def paint_top(p):
         k = np.full(len(p), body, dtype=object)
@@ -180,60 +271,90 @@ def torso_part(pr):
         if "stripe" in top: k[(p[:, 1] > 0.0) & (p[:, 1] < 0.03) & (p[:, 2] > 0)] = top["stripe"]
         if "shoulders" in top: k[p[:, 1] > 0.085] = top["shoulders"]
         if "hem" in top: k[p[:, 1] < -0.22] = top["hem"]
-        if "collar" in top: k[(p[:, 1] > 0.12) & (ax < 0.08)] = top["collar"]
+        # side seam: a darker line down each side
+        if DETAIL: k[(ax > 0.125 * waist) & (ax < 0.125 * waist + 0.008) & (np.abs(p[:, 2]) < 0.02)] = \
+            "T_dark" if body == "T" else scale_hex(body, 0.8)
+        if tank:   # scoop neckline front, deeper armholes for a muscle tank
+            k[(p[:, 1] > 0.08) & (ax < 0.055) & (p[:, 2] > 0.0)] = skin
+            if kind == "muscle_tank": k[(ax > 0.105 * sh) & (p[:, 1] > -0.02)] = skin
+            if kind == "racerback": k[(p[:, 1] > 0.06) & (ax > 0.06) & (p[:, 2] < 0.0)] = skin
+        if "collar" in top: k[(p[:, 1] > 0.115) & (ax < 0.075)] = top["collar"]
         return k
 
-    s = []
-    s.append(cyl([0, 0, -0.004], [0.045, 0.045], 0.12, 0.2, const(skin)))                  # neck
-    s.append(cyl([0, 0, 0], [0.145 * sh, 0.1], -0.04, 0.13, paint_top, taper=0.95))          # chest
-    s.append(cyl([0, 0, 0], [0.13 * waist, 0.09 + belly * 0.03], -0.25, -0.03, paint_top))  # abdomen
+    s, d = [], []
+    s.append(cyl([0, 0, -0.004], [0.042, 0.042], 0.12, 0.2, const(skin)))                    # neck
+    # Silhouette: shoulders -> ribcage -> narrowest waist -> flare to the hips. The torso
+    # runs down to the shorts' waistband so the two cards overlap and never gap.
+    # Exaggerated a little: at 2.8 cm pixels a true-to-life waist is under one pixel.
+    rw = (0.088 if female else 0.1) * waist + 0.03 * belly       # waist (narrowest)
+    rh = (0.14 if female else 0.125) * v(t, "hips", 1.0)         # top of the hips, meets the waistband
+    rib = 0.135 * sh
+    s.append(cyl([0, 0, 0], [0.145 * sh, 0.1], 0.0, 0.13, paint_top, taper=rib / (0.145 * sh)))     # chest
+    s.append(cyl([0, 0, 0], [rib, 0.095], -0.16, 0.0, paint_top, taper=rw / rib))                   # ribcage -> waist
+    s.append(cyl([0, 0, 0], [rw, 0.08 + belly * 0.03], -0.36, -0.16, paint_top, taper=rh / rw))     # waist -> hips
     if belly > 0:
         s.append(ell([0, -0.14, 0.035], [0.12 * waist, 0.1, 0.06 + 0.05 * belly], paint_top))
     if female and chest > 0:
         for x in (-0.055, 0.055):
             s.append(ell([x * sh, 0.03, 0.06], [0.06, 0.055, 0.035 + 0.045 * chest], paint_top))
     elif chest > 0:
-        s.append(ell([0, 0.05, 0.05], [0.15 * sh, 0.075, 0.035 + 0.045 * chest], paint_top))
-    # Shoulder caps: sleeves for tee/polo/compression, bare for tanks.
-    cap = top.get("sleeve", body) if kind in ("tee", "polo", "compression") else skin
-    r = [0.06 * sh, 0.055, 0.07] if cap != skin else [0.045 * sh, 0.04, 0.05]
+        for x in (-0.06, 0.06):   # pecs
+            s.append(ell([x * sh, 0.05, 0.05], [0.075 * sh, 0.06, 0.03 + 0.04 * chest], paint_top))
+    cap = top.get("sleeve", body) if not tank else skin
+    r = [0.06 * sh, 0.055, 0.07] if not tank else [0.045 * sh, 0.04, 0.05]
     for x in (-1, 1):
         s.append(ell([x * 0.15 * sh, 0.085, 0], r, const(cap)))
-    return s
+    # collar band / crew neck rib
+    if kind == "polo":
+        s.append(cyl([0, 0, 0.0], [0.06, 0.055], 0.11, 0.14, const(top.get("collar", body)), priority=1))
+        for y in (0.085, 0.06):
+            d.append(Decal([0, y, 0.1], [0, 0, 1], scale_hex(top["collar"], 0.7) if top.get("collar", "T") != "T" else "T_dark"))
+    elif not tank:
+        s.append(cyl([0, 0, 0.0], [0.05, 0.048], 0.12, 0.135, const("T_dark" if body == "T" else scale_hex(body, 0.8)), priority=1))
+    # chest logo (left chest) and back number stripe
+    logo = top.get("logo", "#f4f4f2" if body == "T" else "T")
+    d.append(Decal([0.065 * sh, 0.06, 0.1 + (0.03 if female and chest > 0 else 0.0)], [0, 0, 1], logo, ((0, 0), (1, 0), (0, 1), (1, 1))))
+    return s, d
 
 def bottom_part(pr):
     b = pr["bottom"]; kind = b.get("type", "shorts"); col = b.get("color", "T")
-    w = v(pr["torso"], "hips", 1.0)
-    s = []
+    w = v(pr["torso"], "hips", 1.0) * (1.08 if pr.get("sex") == "female" else 1.0)
+    s, d = [], []
     if kind.startswith("skirt"):
         length, flare = v(b, "length", 0.17), v(b, "flare", 0.05)
         y0, y1 = 0.07 - length, 0.075
-        taper = (0.15 * w) / (0.15 * w + flare)
+        taper = (0.15 * w + flare) / (0.13 * w)          # waist-fitted top, flared hem
         def paint(p, col=col, kind=kind):
             k = np.full(len(p), col, dtype=object)
+            ang = np.arctan2(p[:, 0], p[:, 2])
             if kind == "skirt_pleated":
-                ang = np.arctan2(p[:, 0], p[:, 2])
-                k[(np.floor(ang / 0.33) % 2 == 0) & (p[:, 1] < 0.02)] = b.get("pleat", "T_dark")
-            if "hem" in b: k[p[:, 1] < y0 + 0.022] = b["hem"]
+                k[(np.floor(ang / (0.26 if DETAIL else 0.5)) % 2 == 0) & (p[:, 1] < 0.03)] = b.get("pleat", "T_dark")
+            if kind == "skirt_aline":
+                k[(np.abs(np.sin(ang * 3)) < 0.08) & (p[:, 1] < 0.04)] = scale_hex(col, 0.75) if col[0] == "#" else "T_dark"
             if kind == "skirt_ruffle":
                 tier = np.floor((y1 - p[:, 1]) / (length / 3)).astype(int)
-                k[tier % 2 == 1] = b.get("tier", "#f1efe8")
+                k[tier % 2 == 1] = b.get("tier", "T_dark")
             if "panel" in b: k[np.abs(p[:, 0]) > 0.13] = b["panel"]
+            if "hem" in b: k[p[:, 1] < y0 + 0.016] = b["hem"]
             return k
-        s.append(cyl([0, 0, 0], [0.15 * w + flare, 0.1 + flare * 0.8], y0, y1, paint, taper=taper))
+        s.append(cyl([0, 0, 0], [0.13 * w, 0.092], y0, y1, paint, taper=taper))
     else:
         def paint(p, col=col):
             k = np.full(len(p), col, dtype=object)
             if "stripe" in b: k[np.abs(p[:, 0]) > 0.14 * w] = b["stripe"]
-            if "hem" in b: k[p[:, 1] < -0.075] = b["hem"]
+            if "hem" in b: k[p[:, 1] < -0.08] = b["hem"]
+            if b.get("pockets"): k[(np.abs(p[:, 0]) > 0.11 * w) & (p[:, 1] < -0.02) & (p[:, 1] > -0.07)] = scale_hex(col, 0.82)
             return k
-        s.append(cyl([0, 0, 0], [0.155 * w, 0.105], -0.095, 0.075, paint))
-    if "waistband" in b:
-        s.append(cyl([0, 0, 0], [0.152 * w, 0.103], 0.06, 0.08, const(b["waistband"]), priority=1))
-    return s
+        s.append(cyl([0, 0, 0], [0.128 * w, 0.09], 0.0, 0.075, paint, taper=1.25))     # waist -> widest hip
+        s.append(cyl([0, 0, 0], [0.16 * w, 0.112], -0.095, 0.0, paint, taper=0.95))   # hip -> leg openings
+        d.append(Decal([0.012, 0.055, 0.094], [0, 0, 1], b.get("drawstring", "#f1efe8"), ((0, 0), (0, 1))))
+        d.append(Decal([-0.012, 0.055, 0.094], [0, 0, 1], b.get("drawstring", "#f1efe8"), ((0, 0), (0, 1))))
+    band = b.get("waistband", "T_dark" if col == "T" else scale_hex(col, 0.78))
+    s.append(cyl([0, 0, 0], [0.132 * w, 0.094], 0.058, 0.08, const(band), priority=1))
+    return s, d
 
 def limb(length, r_top, r_bot, base, covers):
-    """Vertical limb from y=0 down to -length. covers: list of (from_frac, to_frac, key, extra_r)."""
+    """Vertical limb from y=0 down to -length. covers: (from_frac, to_frac, key, extra_r)."""
     s = [cyl([0, 0, 0], [r_top, r_top * 0.9], -length, 0, const(base), taper=r_bot / r_top)]
     for a, b_, key, extra in covers:
         y1, y0 = -a * length, -b_ * length
@@ -244,204 +365,269 @@ def limb(length, r_top, r_bot, base, covers):
 
 def upper_arm_part(pr, L):
     a = pr["arms"]; g = v(a, "upper", 1.0); top = pr["top"]
-    covers = []
-    if top.get("type") in ("tee", "polo", "compression"):
-        covers.append((0.0, v(top, "sleeve_length", 0.4), top.get("sleeve", top.get("color", "T")), 0.008))
-        if "cuff" in top: covers.append((v(top, "sleeve_length", 0.4) - 0.08, v(top, "sleeve_length", 0.4), top["cuff"], 0.01))
-    if a.get("tattoo"): covers.append((0.5, 0.6, a["tattoo"], 0.002))
-    s = limb(L, 0.042 * g, 0.034 * g, pr["skin"], covers)
-    s.append(ell([0, -0.42 * L, 0.008], [0.046 * g, 0.075, 0.05 * g], const(pr["skin"])))   # biceps
     sleeved = top.get("type") in ("tee", "polo", "compression")
-    s.append(ell([0, 0, 0], [0.048 * g, 0.045, 0.048 * g], const(covers[0][2] if sleeved else pr["skin"])))
-    return s
+    covers = []
+    sl = v(top, "sleeve_length", 0.4)
+    if sleeved:
+        covers.append((0.0, sl, top.get("sleeve", top.get("color", "T")), 0.008))
+        covers.append((sl - 0.06, sl, top.get("cuff", "T_dark" if top.get("sleeve", top.get("color", "T")) == "T" else scale_hex(top.get("sleeve", "#888888"), 0.8)), 0.01))
+    if a.get("tattoo"):
+        covers.append((0.5, 0.56, a["tattoo"], 0.002)); covers.append((0.6, 0.64, a["tattoo"], 0.002))
+    s = limb(L, 0.042 * g, 0.034 * g, pr["skin"], covers)
+    if DETAIL:
+        s.append(ell([0, -0.42 * L, 0.01], [0.046 * g, 0.075, 0.052 * g], const(pr["skin"])))      # biceps
+        s.append(ell([0, -0.5 * L, -0.012], [0.04 * g, 0.08, 0.045 * g], const(pr["skin"])))      # triceps
+    s.append(ell([0, 0, 0], [0.05 * g, 0.045, 0.05 * g], const(covers[0][2] if sleeved else pr["skin"])))
+    return s, []
 
 def forearm_part(pr, L):
     a = pr["arms"]; g = v(a, "fore", 1.0); acc = a.get("forearm", {})
+    skin = a.get("forearm_skin", pr["skin"])
     covers = []
     kind, col = acc.get("type"), acc.get("color", "#1a1a1a")
-    if kind == "wristband": covers.append((0.78, 0.98, col, 0.012))
-    if kind == "watch": covers.append((0.82, 0.94, col, 0.01))
+    if kind == "wristband": covers.append((0.78, 0.97, col, 0.012))
+    if kind == "watch":
+        covers.append((0.84, 0.94, "#2a2a2e", 0.006)); covers.append((0.86, 0.92, col, 0.012))
     if kind == "elbow_sleeve": covers.append((0.0, 0.42, col, 0.006))
     if kind == "compression_sleeve": covers.append((0.0, 0.95, col, 0.004))
-    s = limb(L, 0.038 * g, 0.029 * g, a.get("forearm_skin", pr["skin"]), covers)
-    s.append(ell([0, -0.25 * L, 0.004], [0.04 * g, 0.07, 0.04 * g], const(covers[0][2] if covers and covers[0][0] == 0.0 else a.get("forearm_skin", pr["skin"]))))
-    return s
+    s = limb(L, 0.038 * g, 0.027 * g, skin, covers)
+    if DETAIL: s.append(ell([0, -0.22 * L, 0.004], [0.042 * g, 0.075, 0.04 * g], const(covers[0][2] if covers and covers[0][0] == 0.0 else skin)))
+    d = [Decal([0, -0.02, -0.036 * g], [0, 0, -1], skin if not covers or covers[0][0] > 0 else covers[0][2], ((0, 0),), shade=2)]  # elbow
+    return s, d
 
 def hand_part(pr):
     a = pr["arms"]; size = v(a, "hand", 1.0); col = a.get("glove", pr["skin"])
-    s = [ell([0, -0.035 * size, 0], [0.034 * size, 0.05 * size, 0.022 * size], const(col))]
+    s = [ell([0, -0.035 * size, 0], [0.033 * size, 0.042 * size, 0.02 * size], const(col)),
+         ell([0, -0.075 * size, 0.004], [0.03 * size, 0.03 * size, 0.017 * size], const(col)),          # fingers
+         ell([0.03 * size, -0.03 * size, 0.012], [0.012 * size, 0.026 * size, 0.012 * size], const(col))]  # thumb
+    d = []
+    for x in (-0.011, 0.0, 0.011):
+        d.append(Decal([x * size, -0.085 * size, 0.02 * size], [0, 0, 1], col, ((0, 0),), shade=2))
     if a.get("tape"):
-        s.append(box([0, -0.065 * size, 0], [0.036 * size, 0.008, 0.024 * size], const(a["tape"]), priority=1))
-    return s
+        s.append(box([0, -0.07 * size, 0], [0.032 * size, 0.006, 0.02 * size], const(a["tape"]), priority=1))
+    return s, d
 
 def thigh_part(pr, L):
     lg = pr["legs"]; g = v(lg, "thigh", 1.0); b = pr["bottom"]
     covers = []
     cov, key = v(b, "thigh_cover", 0.25), b.get("color", "T")
-    if b.get("type", "").startswith("skirt"):
-        under = b.get("under")
-        if under: covers.append((0.0, v(b, "under_length", 0.22), under, 0.004))
+    skirt = b.get("type", "").startswith("skirt")
+    if skirt:
+        if b.get("under"): covers.append((0.0, v(b, "under_length", 0.22), b["under"], 0.004))
         covers.append((0.0, cov, key, 0.012 + v(b, "flare", 0.05) * 0.2))
     elif cov > 0:
         covers.append((0.0, min(cov, 1.0), key, 0.01))
-        if "stripe" in b: covers.append((0.0, min(cov, 1.0), b["stripe"], 0.012))   # outer stripe drawn via keep below
-    if lg.get("brace") and lg["brace"].get("part") == "thigh":
-        covers.append((0.85, 1.0, lg["brace"]["color"], 0.012))
-    s = limb(L, 0.062 * g, 0.045 * g, pr["skin"], [c for c in covers if c[2] != b.get("stripe")])
-    if "stripe" in b and cov > 0 and not b.get("type", "").startswith("skirt"):
+        if "hem" in b: covers.append((min(cov, 1.0) - 0.06, min(cov, 1.0), b["hem"], 0.012))
+    s = limb(L, 0.062 * g, 0.045 * g, pr["skin"], covers)
+    if DETAIL: s.append(ell([0, -0.45 * L, 0.012], [0.058 * g, 0.12, 0.05 * g], const(covers[-1][2] if cov > 0.5 and not skirt else pr["skin"])))  # quads
+    if "stripe" in b and cov > 0 and not skirt:
         r = 0.062 * g + 0.013
         s.append(cyl([0, 0, 0], [r, r * 0.9], -min(cov, 1.0) * L, 0, const(b["stripe"]), priority=2,
                      keep=lambda p: np.abs(p[:, 0]) > r * 0.75))
-    return s
+    d = []
+    if cov < 0.85:   # kneecap highlight
+        d.append(Decal([0, -L + 0.015, 0.046 * g], [0, 0, 1], pr["skin"], ((0, 0), (1, 0)), shade=0))
+    return s, d
 
 def shin_part(pr, L):
     lg = pr["legs"]; g = v(lg, "shin", 1.0); sock = lg.get("socks", {})
     covers = []
     b = pr["bottom"]
     over = v(b, "thigh_cover", 0.25) - 1.0
-    if over > 0: covers.append((0.0, over * 1.0, b.get("color", "T"), 0.02))
+    if over > 0: covers.append((0.0, over, b.get("color", "T"), 0.02))
+    if lg.get("brace") and lg["brace"].get("part") == "shin":
+        covers.append((0.0, 0.22, lg["brace"]["color"], 0.012)); covers.append((0.06, 0.1, "#2a2a2e", 0.014))
     sh = v(sock, "height", 0.12)
-    if sh > 0: covers.append((1.0 - sh, 1.0, sock.get("color", "#f1efe8"), 0.006))
-    for st in sock.get("stripes", []):   # [from_frac, to_frac, key]
+    scol = sock.get("color", "#f1efe8")
+    if sh > 0:
+        covers.append((1.0 - sh, 1.0, scol, 0.006))
+        covers.append((1.0 - sh, 1.0 - sh + 0.04, scale_hex(scol, 0.85) if scol[0] == "#" else "T_dark", 0.008))   # cuff rib
+    for st in sock.get("stripes", []):
         covers.append((st[0], st[1], st[2], 0.008))
     if lg.get("calf_sleeve"): covers.append((0.25, 0.7, lg["calf_sleeve"], 0.006))
-    if lg.get("brace") and lg["brace"].get("part") == "shin": covers.append((0.0, 0.22, lg["brace"]["color"], 0.012))
-    if lg.get("ankle_tape"): covers.append((0.84, 0.98, lg["ankle_tape"], 0.01))
-    s = limb(L, 0.045 * g, 0.03 * g, pr["skin"], covers)
-    s.append(ell([0, -0.3 * L, -0.012], [0.045 * g, 0.08, 0.045 * g], const(pr["skin"])))   # calf
-    return s
+    if lg.get("ankle_tape"):
+        covers.append((0.84, 0.98, lg["ankle_tape"], 0.01)); covers.append((0.9, 0.92, scale_hex(lg["ankle_tape"], 0.8), 0.011))
+    s = limb(L, 0.045 * g, 0.028 * g, pr["skin"], covers)
+    if DETAIL: s.append(ell([0, -0.3 * L, -0.014], [0.045 * g, 0.085, 0.046 * g], const(pr["skin"] if not lg.get("calf_sleeve") else lg["calf_sleeve"])))   # calf
+    return s, []
 
 def shoe_part(pr):
     sh = pr["shoes"]; col, sole = sh.get("color", "#f1efe8"), sh.get("sole", "#d3d1c7")
     w = v(sh, "width", 1.0)
-    s = [box([0, -0.085, 0.045], [0.045 * w, 0.012, 0.13], const(sole)),
-         ell([0, -0.05, 0.04], [0.045 * w, 0.04, 0.125], const(col), keep=lambda p: p[:, 1] > -0.075)]
+    s = [box([0, -0.087, 0.045], [0.046 * w, 0.011, 0.13], const(sole)),
+         ell([0, -0.052, 0.04], [0.045 * w, 0.04, 0.125], const(col), keep=lambda p: p[:, 1] > -0.076),
+         ell([0, -0.06, 0.13], [0.04 * w, 0.025, 0.05], const(sh.get("toe", scale_hex(col, 0.9) if col[0] == "#" else col)), priority=1,
+             keep=lambda p: p[:, 1] > -0.076)]
     collar = 0.02 if sh.get("high") else -0.02
     s.append(cyl([0, 0, -0.03], [0.042 * w, 0.05], -0.07, collar, const(col)))
+    s.append(cyl([0, 0, -0.03], [0.043 * w, 0.051], collar - 0.012, collar, const(sh.get("collar", scale_hex(col, 0.82))), priority=1))
     if "accent" in sh:
-        s.append(box([0, -0.058, 0.02], [0.047 * w, 0.01, 0.06], const(sh["accent"]), priority=1,
+        s.append(box([0, -0.056, 0.02], [0.047 * w, 0.009, 0.06], const(sh["accent"]), priority=1,
                      keep=lambda p: np.abs(p[:, 0]) > 0.04 * w))
     if "heel" in sh:
-        s.append(box([0, -0.05, -0.075], [0.044 * w, 0.03, 0.012], const(sh["heel"]), priority=1))
-    return s
+        s.append(box([0, -0.05, -0.078], [0.03 * w, 0.028, 0.01], const(sh["heel"]), priority=1))
+    lace = sh.get("laces", "#c9c6bc" if hex_rgb(col if col[0] == "#" else "#ffffff")[0] > 200 else "#f1efe8")
+    d = [Decal([0, -0.014 - z * 0.25, z], [0, 1, 0.35], lace, ((-1, 0), (1, 0)), facing=0.1) for z in (0.02, 0.05, 0.08)]
+    return s, d
 
 # ---------------------------------------------------------------- rendering
-def render(solids, team, view, comp, anchor, elevated):
-    """One 40x40 RGBA cell: solids seen from view (0..15), joint at anchor texel."""
-    mpt = META_DATA["meters_per_texel"]
-    th = math.radians(view * 22.5)
+def render(solids, decals, view, anchor, elev_deg, mpt):
+    """One view of a part -> (code[CELL,CELL] int: key_id*3+shade or -1, keys, edge mask).
+    Joint at `anchor` texel. Front-most surface wins; accessories (priority) win ties."""
+    th, e = math.radians(view * 22.5), math.radians(elev_deg)
     ry = np.array([[math.cos(th), 0, math.sin(th)], [0, 1, 0], [-math.sin(th), 0, math.cos(th)]])
-    e = ELEV if elevated else 0.0
     rx = np.array([[1, 0, 0], [0, math.cos(e), -math.sin(e)], [0, math.sin(e), math.cos(e)]])
     rot = rx @ ry
     n_sub = CELL * SS
-    depth = np.full((n_sub, n_sub), -np.inf); prio = np.full((n_sub, n_sub), -1)
-    col = np.zeros((n_sub, n_sub, 3))
+    depth = np.full((n_sub, n_sub), -np.inf); rawz = np.full((n_sub, n_sub), -np.inf)
+    code = np.full((n_sub, n_sub), -1)
+    keys, key_id = [], {}
     for sd in solids:
         p, n = sd.points()
         if not len(p): continue
-        keys = sd.paint(p)
+        kk = sd.paint(p)
         pc, nc = p @ rot.T, n @ rot.T
         u = np.floor((anchor[0] + pc[:, 0] / mpt) * SS).astype(int)
         w = np.floor((anchor[1] - pc[:, 1] / mpt) * SS).astype(int)
         ok = (u >= 0) & (u < n_sub) & (w >= 0) & (w < n_sub)
-        u, w, z, nc, keys = u[ok], w[ok], pc[ok, 2], nc[ok], keys[ok]
+        u, w, z, nc, kk = u[ok], w[ok], pc[ok, 2], nc[ok], kk[ok]
         lit = nc @ LIGHT
         shade = np.where(lit > 0.72, 0, np.where(lit > -0.1, 1, 2))
-        # Front-most point wins; an accessory (higher priority) wins ties within 6 mm.
+        uk, inv = np.unique(kk.astype(str), return_inverse=True)
+        ids = np.array([key_id.setdefault(k, len(key_id)) for k in uk])
+        for k in uk:
+            if k not in keys: keys.append(k)
+        c = ids[inv.reshape(-1)] * 3 + shade
         score = z + sd.priority * 0.006
         order = np.argsort(score)
-        u, w, score, shade, keys = u[order], w[order], score[order], shade[order], keys[order]
-        uk, inv = np.unique(keys.astype(str), return_inverse=True)
-        table = np.array([[tones(k, team)[i] for i in range(3)] for k in uk], float)
-        rgb = table[inv.reshape(-1), shade]
+        u, w, score, z, c = u[order], w[order], score[order], z[order], c[order]
         better = score > depth[w, u]
-        u, w, score, rgb = u[better], w[better], score[better], rgb[better]
-        depth[w, u] = score
-        col[w, u] = rgb
-    # Downsample: a texel is solid when >= 40% of its subsamples are; colour = most
-    # common subsample colour (keeps flat pixel-art tones, no blending).
-    cov = np.isfinite(depth).reshape(CELL, SS, CELL, SS).mean((1, 3))
-    out = np.zeros((CELL, CELL, 4), np.uint8)
-    blocks = col.reshape(CELL, SS, CELL, SS, 3).transpose(0, 2, 1, 3, 4).reshape(CELL, CELL, SS * SS, 3)
-    fin = np.isfinite(depth).reshape(CELL, SS, CELL, SS).transpose(0, 2, 1, 3).reshape(CELL, CELL, SS * SS)
-    solid = cov >= 0.4
-    disp = np.zeros((CELL, CELL, 3))
+        u, w, score, z, c = u[better], w[better], score[better], z[better], c[better]
+        depth[w, u] = score; rawz[w, u] = z; code[w, u] = c
+    keys = sorted(key_id, key=key_id.get)
+    # Downsample: solid when >= 40% of subsamples are; value = most common subsample code.
+    blk = code.reshape(CELL, SS, CELL, SS).transpose(0, 2, 1, 3).reshape(CELL, CELL, SS * SS)
+    zb = rawz.reshape(CELL, SS, CELL, SS).max((1, 3))
+    solid = (blk >= 0).mean(2) >= 0.4
+    out = np.full((CELL, CELL), -1)
     for y, x in zip(*np.nonzero(solid)):
-        vals = blocks[y, x][fin[y, x]]
-        uniq, cnt = np.unique(vals.round().astype(int), axis=0, return_counts=True)
-        disp[y, x] = uniq[cnt.argmax()]
-    # Selective outline (pixel-art "selout"): silhouette texels darken to their own
-    # shadow tone, so players separate from the court and from each other. Tiny
-    # sprites (hands) are left alone or they would turn all dark.
+        vals = blk[y, x][blk[y, x] >= 0]
+        out[y, x] = np.bincount(vals).argmax()
+    # Cleanup: a texel matching none of its 4 neighbours, while 3+ of them agree, takes
+    # their colour. Removes speckles where shading tones meet; 1-px lines survive.
+    for _ in range(2):
+        pad = np.pad(out, 1, constant_values=-1)
+        nb = np.stack([pad[:-2, 1:-1], pad[2:, 1:-1], pad[1:-1, :-2], pad[1:-1, 2:]])
+        for y, x in zip(*np.nonzero(solid)):
+            n = nb[:, y, x]
+            if (n == out[y, x]).any(): continue
+            vals, cnt = np.unique(n[n >= 0], return_counts=True)
+            if len(cnt) and cnt.max() >= 3: out[y, x] = vals[cnt.argmax()]
+    edge = np.zeros_like(solid)
     if solid.sum() > 14:
         pad = np.pad(solid, 1)
         edge = solid & ~(pad[:-2, 1:-1] & pad[2:, 1:-1] & pad[1:-1, :-2] & pad[1:-1, 2:])
-        disp[edge] *= OUTLINE
-    for y, x in zip(*np.nonzero(solid)):
-        out[y, x, :3] = np.clip(np.round(comp(disp[y, x])), 0, 255)
-        out[y, x, 3] = 255
-    return out
+    # Decals: pixel-exact marks on visible, camera-facing surface points.
+    centre_x = anchor[0]
+    for dc in decals:
+        if not (DETAIL or dc.essential): continue
+        pc, nc = rot @ dc.p, rot @ dc.n
+        if nc[2] < dc.facing: continue
+        x = int(math.floor(anchor[0] + pc[0] / mpt)); y = int(math.floor(anchor[1] - pc[1] / mpt))
+        if not (0 <= x < CELL and 0 <= y < CELL) or not solid[y, x] or zb[y, x] > pc[2] + 0.012: continue
+        out_sign = 1 if (rot @ np.array([dc.side, 0, 0]))[0] >= 0 else -1
+        kid = key_id.setdefault(dc.key, len(key_id))
+        if kid >= len(keys): keys.append(dc.key)
+        for dx, dy in dc.pattern:
+            xx, yy = x + dx * (out_sign if dc.side else 1), y + dy
+            if 0 <= xx < CELL and 0 <= yy < CELL and solid[yy, xx]:
+                out[yy, xx] = kid * 3 + dc.shade
+                edge[yy, xx] = False
+    return out, keys, edge
 
-def build_parts(pr):
-    parts = META_DATA["parts"]
-    L = lambda name: (parts[name]["end"][1] - parts[name]["anchor"][1]) * META_DATA["meters_per_texel"]
+def colourise(out, keys, edge, team, comp):
+    img = np.zeros((CELL, CELL, 4), np.uint8)
+    table = {}
+    for y, x in zip(*np.nonzero(out >= 0)):
+        c = out[y, x]
+        if c not in table: table[c] = np.array(tones(keys[c // 3], team)[c % 3], float)
+        rgb = table[c] * (OUTLINE if edge[y, x] else 1.0)
+        img[y, x, :3] = np.clip(np.round(comp(rgb)), 0, 255)
+        img[y, x, 3] = 255
+    return img
+
+def grid_for(meta):
+    """Profile grid: same rows/parts as the original cards at TEXEL / CELL."""
+    k = meta["meters_per_texel"] / TEXEL
+    off = (CELL - meta["cell"][0] * k) / 2.0
+    parts = {}
+    for name, info in meta["parts"].items():
+        q = {"row": info["row"], "anchor": [info["anchor"][0] * k + off, info["anchor"][1] * k + off]}
+        if "end" in info: q["end"] = [info["end"][0] * k + off, info["end"][1] * k + off]
+        parts[name] = q
+    return {"cell": [CELL, CELL], "meters_per_texel": TEXEL, "parts": parts}
+
+def build_parts(pr, grid):
+    parts = grid["parts"]
+    L = lambda name: (parts[name]["end"][1] - parts[name]["anchor"][1]) * TEXEL
     return {
-        "head": (head_part(pr), True), "torso": (torso_part(pr), True), "shorts": (bottom_part(pr), True),
-        "upper_arm": (upper_arm_part(pr, L("upper_arm")), False), "forearm": (forearm_part(pr, L("forearm")), False),
-        "hand": (hand_part(pr), False), "thigh": (thigh_part(pr, L("thigh")), False),
-        "shin": (shin_part(pr, L("shin")), False), "shoe": (shoe_part(pr), True),
+        "head": head_part(pr), "torso": torso_part(pr), "shorts": bottom_part(pr),
+        "upper_arm": upper_arm_part(pr, L("upper_arm")), "forearm": forearm_part(pr, L("forearm")),
+        "hand": hand_part(pr), "thigh": thigh_part(pr, L("thigh")), "shin": shin_part(pr, L("shin")),
+        "shoe": shoe_part(pr),
     }
 
-def bake(pid):
+def bake(pid, meta):
     with open(os.path.join(PROFILES, pid + ".json")) as f: pr = json.load(f)
-    comp = make_compensator(float(META_DATA.get("gain", 1.0)))
-    parts = build_parts(pr)
-    rows = int(META_DATA["rows"])
+    comp = make_compensator(float(meta.get("gain", 1.0)))
+    grid = grid_for(meta)
+    parts = build_parts(pr, grid)
+    rows = int(meta["rows"])
+    atlases = {team: np.zeros((rows * CELL, COLS * CELL, 4), np.uint8) for team in TEAMS}
+    for name, (solids, decals) in parts.items():
+        info = grid["parts"][name]
+        mpt = TEXEL / PART_SCALE.get(name, 1.0)
+        for k in range(COLS):
+            out, keys, edge = render(solids, decals, k, info["anchor"], PART_ELEV.get(name, 0.0), mpt)
+            for team, atlas in atlases.items():
+                atlas[info["row"] * CELL:(info["row"] + 1) * CELL, k * CELL:(k + 1) * CELL] = colourise(out, keys, edge, team, comp)
     paths = {}
-    for team in TEAMS:
-        atlas = np.zeros((rows * CELL, COLS * CELL, 4), np.uint8)
-        for name, (solids, elevated) in parts.items():
-            info = META_DATA["parts"][name]
-            for k in range(COLS):
-                atlas[info["row"] * CELL:(info["row"] + 1) * CELL, k * CELL:(k + 1) * CELL] = \
-                    render(solids, team, k, comp, info["anchor"], elevated)
+    for team, atlas in atlases.items():
         rel = "profiles/%s_%s.png" % (pid, team)
         Image.fromarray(atlas).save(os.path.join(ROOT, "assets/pixel_cards", rel))
         paths[team] = "res://assets/pixel_cards/" + rel
-    return {"name": pr.get("name", pid), "sex": pr.get("sex", ""), "paddle": pr.get("paddle", ""), "textures": paths}
+    return {"name": pr.get("name", pid), "sex": pr.get("sex", ""), "paddle": pr.get("paddle", ""),
+            "textures": paths, "grid": grid}
 
-# Standing joints (m, body frame: x lateral, y up) for the assembled preview.
+# ---------------------------------------------------------------- previews
 _JOINTS = {"head": (0, 0.33), "torso": (0, 0.05), "shorts": (0, -0.37)}
-_LIMBS = [("upper_arm", 0.18, 0.15, "forearm"), ("forearm", 0.19, -0.1, "hand"), ("hand", 0.19, -0.35, None),
-          ("thigh", 0.11, -0.33, "shin"), ("shin", 0.11, -0.64, "shoe"), ("shoe", 0.11, -0.94, None)]
+_LIMBS = [("upper_arm", 0.18, 0.15), ("forearm", 0.19, -0.1), ("hand", 0.19, -0.35),
+          ("thigh", 0.11, -0.33), ("shin", 0.11, -0.64), ("shoe", 0.11, -0.94)]
 
-def _display(atlas):
-    """Atlas texels -> on-screen colours (forward tonemap), for previews."""
+def _display(atlas, gain):
     a = np.array(atlas).astype(float)
-    shown = _l2s(np.clip(_filmic(_s2l(a[..., :3] / 255.0) * float(META_DATA.get("gain", 1.0)) * 1.05), 0, 1)) * 255
-    a[..., :3] = shown
+    a[..., :3] = display_of(a[..., :3])
     return Image.fromarray(a.round().astype(np.uint8), "RGBA")
 
-def _figure(atlas, k):
+def _figure(atlas, k, grid):
     """One standing player at view k assembled from the cards, like pixel_card_rig.gd."""
-    mpt, ce = META_DATA["meters_per_texel"], math.cos(ELEV)
-    canvas = Image.new("RGBA", (64, 96), (0, 0, 0, 0))
-    ox, oy = 32, 30
+    mpt, ce = grid["meters_per_texel"], math.cos(math.radians(ELEV))
+    canvas = Image.new("RGBA", (CELL * 3 // 2, CELL * 9 // 4), (0, 0, 0, 0))
+    ox, oy = canvas.width // 2, int(CELL * 0.75)
     th = math.radians(k * 22.5)
     items = []
     def cell(name, kk):
-        r = META_DATA["parts"][name]["row"]
+        r = grid["parts"][name]["row"]
         return atlas.crop((kk * CELL, r * CELL, (kk + 1) * CELL, (r + 1) * CELL))
     for name, (x, y) in _JOINTS.items():
-        items.append((0.001 if name == "head" else 0.0, cell(name, k), x, y, META_DATA["parts"][name]["anchor"], 1.0))
-    for side in (-1, 1):   # -1 = player's right (unmirrored cards), +1 = left (mirrored)
-        for name, x, y, _ in _LIMBS:
-            info = META_DATA["parts"][name]
+        items.append((0.001 if name == "head" else 0.0, cell(name, k), x, y, grid["parts"][name]["anchor"], 1.0))
+    for side in (-1, 1):
+        for name, x, y in _LIMBS:
+            info = grid["parts"][name]
             img = cell(name, k if side < 0 else (COLS - k) % COLS)
             if side > 0: img = img.transpose(Image.FLIP_LEFT_RIGHT)
             sy = ce if "end" in info and name != "hand" else 1.0
-            items.append((-side * x * math.sin(th) * -1.0, img, side * x * -1.0, y, info["anchor"], sy))
+            items.append((side * x * math.sin(th), img, -side * x, y, info["anchor"], sy))
     for depth, img, x, y, anc, sy in sorted(items, key=lambda t: t[0]):
         if sy != 1.0: img = img.resize((CELL, max(1, round(CELL * sy))), Image.NEAREST); anc = (anc[0], anc[1] * sy)
         px = ox + x * math.cos(th) / mpt - anc[0]
@@ -449,30 +635,31 @@ def _figure(atlas, k):
         canvas.alpha_composite(img, (int(round(px)), int(round(py))))
     return canvas
 
-def sheet(ids, team="blue", views=(0, 2, 4, 6, 8, 12)):
-    """Assembled players, one row per profile, views across, on-screen colours, 4x."""
-    rows = []
+def sheet(ids, meta, team, views=(0, 2, 4, 6, 8, 12)):
+    figs = []
     for pid in ids:
-        atlas = _display(Image.open(os.path.join(OUT, "%s_%s.png" % (pid, team))).convert("RGBA"))
-        rows.append([_figure(atlas, k) for k in views])
-    w, h = 64 * len(views), 96 * len(rows)
-    out = Image.new("RGBA", (w, h), (30, 93, 167, 255))
-    for r, row in enumerate(rows):
-        for c, fig in enumerate(row): out.alpha_composite(fig, (c * 64, r * 96))
-    out.convert("RGB").resize((w * 4, h * 4), Image.NEAREST).save(os.path.join(ROOT, "logs/sprite_profiles_%s.png" % team))
+        grid = meta["profiles"][pid]["grid"]
+        atlas = _display(Image.open(os.path.join(OUT, "%s_%s.png" % (pid, team))).convert("RGBA"), float(meta.get("gain", 1.0)))
+        figs.append([_figure(atlas, k, grid) for k in views])
+    fw, fh = figs[0][0].size
+    out = Image.new("RGBA", (fw * len(views), fh * len(figs)), (30, 93, 167, 255))
+    for r, row in enumerate(figs):
+        for c, fig in enumerate(row): out.alpha_composite(fig, (c * fw, r * fh))
+    out.convert("RGB").resize((out.width * 2, out.height * 2), Image.NEAREST).save(os.path.join(ROOT, "logs/sprite_profiles_%s.png" % team))
 
 if __name__ == "__main__":
     np.seterr(all="ignore")  # numpy 2 + Accelerate raises spurious matmul warnings
-    with open(META) as f: META_DATA = json.load(f)
+    with open(META) as f: meta = json.load(f)
     os.makedirs(OUT, exist_ok=True)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     ids = args or sorted(f[:-5] for f in os.listdir(PROFILES) if f.endswith(".json") and not f.startswith("_"))
-    profiles = META_DATA.setdefault("profiles", {})
+    profiles = meta.setdefault("profiles", {})
     for pid in ids:
-        profiles[pid] = bake(pid)
-        print("baked", pid, "->", ", ".join(profiles[pid]["textures"].values()))
-    with open(META, "w") as f: json.dump(META_DATA, f, indent=1); f.write("\n")
+        profiles[pid] = bake(pid, meta)
+        print("baked", pid)
+    with open(META, "w") as f: json.dump(meta, f, indent=1); f.write("\n")
     if "--sheet" in sys.argv:
         os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
-        for team in TEAMS: sheet(ids, team)
+        all_ids = sorted(profiles)
+        for team in TEAMS: sheet(all_ids, meta, team)
         print("preview: logs/sprite_profiles_blue.png, logs/sprite_profiles_red.png")
