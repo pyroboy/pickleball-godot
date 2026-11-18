@@ -303,6 +303,11 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 	var selected_contact: Vector3 = intercept_solution["contact"]
 	ai_selected_contact_reachable = bool(intercept_solution["reachable"])
 	ai_selected_contact_time = float(intercept_solution["time"])
+	# Jump smash: a reachable High Overhead contact gets the same small jump the
+	# human uses, timed by request_contextual_jump to peak at contact.
+	if ai_selected_contact_reachable and ai_desired_posture == PP_HIGH_OVERHEAD and ai_reach_pose != null and not _player.is_jumping:
+		_player.request_contextual_jump({"posture": PP_HIGH_OVERHEAD, "def": ai_reach_pose, "point": selected_contact,
+			"time": ai_selected_contact_time, "bounces": ball.bounces_since_last_hit}, 1.0)
 	if ai_is_charging and ai_state == AIState.CHARGING and _charge_contact_position != Vector3.ZERO:
 		selected_contact = _charge_contact_position
 		intercept_target = _charge_target_position

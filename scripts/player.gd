@@ -975,8 +975,13 @@ func _update_jump_state(delta: float) -> void :
 		var human = posture.human_contact if posture else null
 		var legal_queue: bool = ball != null and ball.is_in_play and ball.flight_id == _contextual_jump.flight
 		legal_queue = legal_queue and posture != null and not posture.editor_preview_mode
-		legal_queue = legal_queue and human != null and human.phase == 0 and not human.contact.is_empty()
-		if legal_queue:
+		if is_ai and ai_brain != null:
+			# AI jump smash: keep the queued jump while the AI still plans that
+			# High Overhead contact on this flight.
+			legal_queue = legal_queue and ai_brain.ai_desired_posture == PaddlePosture.HIGH_OVERHEAD and ai_brain.ai_selected_contact_reachable
+		else:
+			legal_queue = legal_queue and human != null and human.phase == 0 and not human.contact.is_empty()
+		if legal_queue and not (is_ai and ai_brain != null):
 			legal_queue = human.contact.get("posture", -1) == PaddlePosture.HIGH_OVERHEAD
 			legal_queue = legal_queue and human.contact.point.y >= ground_y + 0.85
 			legal_queue = legal_queue and load("res://scripts/incoming_contact_planner.gd").legal_ball(self, ball, human.contact.get("bounces", 0))
