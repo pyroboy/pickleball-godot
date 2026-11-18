@@ -32,7 +32,18 @@ static func body_geometry(player) -> Dictionary:
 static func _perf_body_geometry(player) -> Dictionary:
 	var skin = player.body_pivot.get_meta("articulated_torso")
 	var inverse: Transform3D = player.body_pivot.global_transform.affine_inverse()
-	var world := Surface.world_triangles(skin.body_mesh)
+	# Perf: the torso's body-local triangles only change when the torso bones bend.
+	# Searches move the whole body many times per frame, which used to re-skin every
+	# torso triangle each time. Key the result on the body-relative bone transforms
+	# and reuse it; only `inverse` changes when the body merely translates.
+	var instance: MeshInstance3D = skin.body_mesh
+	var palette: Array[Transform3D] = Surface._skin_palette(instance)
+	var pose_key: Array[Transform3D] = [inverse * instance.global_transform]
+	for bone in palette: pose_key.append(inverse * bone)
+	var hit: Dictionary = _torso_local_cache.get(instance.get_instance_id(), {})
+	if not hit.is_empty() and _same_pose(hit.key, pose_key):
+		return {"valid": true, "points": hit.points, "bounds": hit.bounds, "inverse": inverse, "tree": hit.tree}
+	var world := Surface.posed_triangles(instance.mesh, instance.global_transform, palette)
 	var local := PackedVector3Array()
 	for point in world: local.append(inverse * point)
 	var bounds: Array[AABB] = []
@@ -46,7 +57,17 @@ static func _perf_body_geometry(player) -> Dictionary:
 	if cached.get("key", []) != key:
 		cached = {"key": key, "tree": _tree(indices, bounds)}
 		_bvh_topologies[mesh] = cached
-	return {"valid": true, "points": local, "bounds": bounds, "inverse": inverse, "tree": _refit(cached.tree, bounds)}
+	var tree: Dictionary = _refit(cached.tree, bounds)
+	_torso_local_cache[instance.get_instance_id()] = {"key": pose_key, "points": local, "bounds": bounds, "tree": tree}
+	return {"valid": true, "points": local, "bounds": bounds, "inverse": inverse, "tree": tree}
+
+static var _torso_local_cache: Dictionary = {}   # torso MeshInstance id -> body-local geometry
+
+static func _same_pose(a: Array, b: Array) -> bool:
+	if a.size() != b.size(): return false
+	for i in a.size():
+		if not (a[i] as Transform3D).is_equal_approx(b[i]): return false
+	return true
 
 static func _overlap(a: Vector3, b: Vector3, c: Vector3, d: Vector3, e: Vector3, f: Vector3) -> bool:
 	var first: Array[Vector3] = [b - a, c - b, a - c]
