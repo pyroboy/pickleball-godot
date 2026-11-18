@@ -118,6 +118,7 @@ func _process(delta: float) -> void:
 		if _capture_hide_ui:
 			for layer in get_tree().root.find_children("*", "CanvasLayer", true, false): layer.visible = false
 		get_viewport().get_texture().get_image().save_png(_capture_dir.path_join("frame_%03d.png" % int(shot_t)))
+		if _capture_times.is_empty(): get_tree().quit()   # capture runs end at their last shot
 	if frame_ms >= _spike_ms and _frames > 30:
 		_sec_spikes += 1
 		_write({"kind": "spike", "t": _t(now), "ms": snappedf(frame_ms, 0.1), "state": _state(),

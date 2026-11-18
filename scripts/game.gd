@@ -285,6 +285,10 @@ func _ready() -> void :
 
 
 func _setup_environment() -> void :
+	var pixel_post := CanvasLayer.new()
+	pixel_post.set_script(preload("res://scripts/graphics/pixel_post.gd"))
+	pixel_post.name = "PixelPost"
+	add_child(pixel_post)
 	var env: WorldEnvironment = WorldEnvironment.new()
 	env.name = "WorldEnvironment"
 	var environment: Environment = Environment.new()
@@ -302,14 +306,12 @@ func _setup_environment() -> void :
 	sky.sky_material = sky_mat
 	environment.sky = sky
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.32
+	environment.ambient_light_energy = 0.42   # was 0.32 + the CourtFill light (removed)
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.tonemap_exposure = 1.05
 	environment.tonemap_white = 6.0
-	environment.fog_enabled = true
-	environment.fog_light_color = Color(0.55, 0.62, 0.72)
-	environment.fog_density = 0.006
-	environment.fog_sun_scatter = 0.1
+	# Pixel look (VISUAL_PASS_PLAN step 2): no fog, flat gradient sky, one sun.
+	environment.fog_enabled = false
 	env.environment = environment
 	add_child(env)
 
@@ -325,16 +327,9 @@ func _setup_environment() -> void :
 	sun.shadow_normal_bias = 2.0
 	sun.shadow_blur = 1.3
 	sun.shadow_opacity = 0.85
+	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY   # no sun disc in the sky
 	add_child(sun)
 
-	var fill: OmniLight3D = OmniLight3D.new()
-	fill.name = "CourtFill"
-	fill.position = Vector3(0, 8.5, 0)
-	fill.light_energy = 0.25
-	fill.omni_range = 22.0
-	fill.light_color = Color(0.9, 0.95, 1.0)
-	fill.shadow_enabled = false
-	add_child(fill)
 
 	if RuntimePolicy.developer_tools: print("[ENV] Sun created: energy=", sun.light_energy, " shadow=", sun.shadow_enabled, 
 		" mode=ORTHOGONAL ambient=", environment.ambient_light_energy)

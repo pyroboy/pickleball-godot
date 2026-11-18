@@ -130,7 +130,7 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  sky_material.sun_angle_max=30.0;sky_material.sun_curve=.15;sky.sky_material=sky_material;env.sky=sky
  env.ambient_light_source=Environment.AMBIENT_SOURCE_SKY;env.ambient_light_energy=.32
  env.tonemap_mode=Environment.TONE_MAPPER_FILMIC;env.tonemap_exposure=1.05;env.tonemap_white=6.0
- env.fog_enabled=true;env.fog_light_color=Color(.55,.62,.72);env.fog_density=.006;env.fog_sun_scatter=.1
+ env.fog_enabled=false   # mirrors Game._setup_environment (pixel look: no fog)
  environment.environment=env
  # Exact Combined C Game._setup_environment light definitions, followed by
  # its current video.shadow_quality setting. These nodes belong only to world.
@@ -146,15 +146,8 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  sun.shadow_normal_bias=2.0
  sun.shadow_blur=1.3
  sun.shadow_opacity=.85
+ sun.sky_mode=DirectionalLight3D.SKY_MODE_LIGHT_ONLY
  world.add_child(sun)
- var fill := OmniLight3D.new()
- fill.name="CourtFill"
- fill.position=Vector3(0,8.5,0)
- fill.light_energy=.25
- fill.omni_range=22.0
- fill.light_color=Color(.9,.95,1.0)
- fill.shadow_enabled=false
- world.add_child(fill)
  var camera := Camera3D.new();world.add_child(camera)
  camera.position=Vector3(0,2.4,3.2);camera.look_at(Vector3(0,.2,0));camera.current=true
  # Use the existing private presentation class and its exact material/ribbon
@@ -219,7 +212,7 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  var samples_freed := true
  for weak_node in samples.get("weak_nodes",[]): samples_freed=samples_freed and weak_node.get_ref()==null
  var cleanup_ok := viewport_freed and weak_trail.get_ref()==null and samples_freed and bool(samples.get("ok",false))
- var result := {"status":"cancelled" if session.cancelled and cleanup_ok and unchanged_children else "completed" if cleanup_ok and unchanged_children and rendered else "render_or_cleanup_failed","cancelled":session.cancelled,"cancel_reason":session.cancel_reason,"cancel_to_return_usec":Time.get_ticks_usec()-session.cancel_usec if session.cancelled else 0,"elapsed_usec":Time.get_ticks_usec()-start,"loading_visible_usec":loading_visible_usec,"warm_finished_usec":warm_finished_usec,"warm_draw_usec":warm_finished_usec-loading_visible_usec,"stages":stages,"key":key,"extent":extent,"rendered_both_families":rendered,"shadow_quality":int(options.get("shadow_quality",1)),"private_light_definitions":"Combined C Sun + CourtFill","viewport_freed":viewport_freed,"private_trail":trail_evidence,"private_trail_freed":weak_trail.get_ref()==null,"normal_match_samples":samples.get("evidence",{}),"normal_match_samples_freed":samples_freed,"host_children_unchanged":unchanged_children,"nodes_before":before_nodes,"nodes_after":int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),"time_scale_unchanged":Engine.time_scale==scale_before,"game_absent":host.find_child("Game",true,false)==null,"scope":"Private presentation only; caller owns the loading input/lifecycle. Cached return creates no viewport. No simulation, synthetic input or RNG calls. Private viewport/resources are released before a queued quit."}
+ var result := {"status":"cancelled" if session.cancelled and cleanup_ok and unchanged_children else "completed" if cleanup_ok and unchanged_children and rendered else "render_or_cleanup_failed","cancelled":session.cancelled,"cancel_reason":session.cancel_reason,"cancel_to_return_usec":Time.get_ticks_usec()-session.cancel_usec if session.cancelled else 0,"elapsed_usec":Time.get_ticks_usec()-start,"loading_visible_usec":loading_visible_usec,"warm_finished_usec":warm_finished_usec,"warm_draw_usec":warm_finished_usec-loading_visible_usec,"stages":stages,"key":key,"extent":extent,"rendered_both_families":rendered,"shadow_quality":int(options.get("shadow_quality",1)),"private_light_definitions":"Combined C Sun (no CourtFill)","viewport_freed":viewport_freed,"private_trail":trail_evidence,"private_trail_freed":weak_trail.get_ref()==null,"normal_match_samples":samples.get("evidence",{}),"normal_match_samples_freed":samples_freed,"host_children_unchanged":unchanged_children,"nodes_before":before_nodes,"nodes_after":int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),"time_scale_unchanged":Engine.time_scale==scale_before,"game_absent":host.find_child("Game",true,false)==null,"scope":"Private presentation only; caller owns the loading input/lifecycle. Cached return creates no viewport. No simulation, synthetic input or RNG calls. Private viewport/resources are released before a queued quit."}
  _finish_session(host_id,session)
  if result.status=="completed": _completed[key]=true
  return result

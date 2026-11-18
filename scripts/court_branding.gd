@@ -29,7 +29,8 @@ func setup(game: Node3D) -> void :
   add_child(mark)
 
 
- for x in [-2.0, 0.0, 2.0]:
+ # Net tape "ARJOSTYLE" labels dropped: 0.75 mm text, unreadable at any size.
+ for x in []:
   for side in [-1.0, 1.0]:
    var label: = Label3D.new()
    label.name = "NetBrand_%s_%s" % [x, side]

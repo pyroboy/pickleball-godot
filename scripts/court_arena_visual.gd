@@ -39,7 +39,8 @@ func setup(game: Node3D) -> void :
 	mark.material_override = material
 	mark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mark)
-	for side in [-1.0, 1.0]:
+	# Small wall slogans dropped: unreadable at the pixel look's half resolution.
+	for side in ([] if true else [-1.0, 1.0]):
 		var sign: = Label3D.new()
 		sign.name = "ArenaMessage" + str(int(side))
 		sign.text = "PLAY\nPRACTICE\nIMPROVE" if side < 0 else "SMALL COURT\nBIG HABITS"

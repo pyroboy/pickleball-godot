@@ -93,35 +93,36 @@ func create_lines(parent: Node3D) -> void :
 	var nz: float = NON_VOLLEY_ZONE
 
 	var line_y: float = 0.077
-	var lines_root: Node3D = Node3D.new()
-	lines_root.name = "CourtLines"
-	parent.add_child(lines_root)
-
-	var line_mat: StandardMaterial3D = StandardMaterial3D.new()
-	line_mat.albedo_color = Color.WHITE
-	line_mat.emission_enabled = true
-	line_mat.emission = Color.WHITE
-	line_mat.emission_energy_multiplier = 0.1
-
-
-	_create_line(lines_root, Vector3( - half_width, line_y, - half_length), Vector3(half_width, line_y, - half_length), line_mat)
-	_create_line(lines_root, Vector3( - half_width, line_y, half_length), Vector3(half_width, line_y, half_length), line_mat)
-
-
-	_create_line(lines_root, Vector3( - half_width, line_y, - half_length), Vector3( - half_width, line_y, half_length), line_mat)
-	_create_line(lines_root, Vector3(half_width, line_y, - half_length), Vector3(half_width, line_y, half_length), line_mat)
-
-
-	_create_line(lines_root, Vector3( - half_width, line_y, - nz), Vector3(half_width, line_y, - nz), line_mat)
-	_create_line(lines_root, Vector3( - half_width, line_y, nz), Vector3(half_width, line_y, nz), line_mat)
-
-
-	_create_line(lines_root, Vector3(0, line_y, - nz), Vector3(0, line_y, - half_length), line_mat)
-	_create_line(lines_root, Vector3(0, line_y, nz), Vector3(0, line_y, half_length), line_mat)
-
-
-
-
+	# All 8 lines in one unshaded mesh (one draw; was 8 lit quads). Still named
+	# CourtLines: wall practice hides it by name.
+	var segments: Array = [
+		[Vector3(-half_width, line_y, -half_length), Vector3(half_width, line_y, -half_length)],
+		[Vector3(-half_width, line_y, half_length), Vector3(half_width, line_y, half_length)],
+		[Vector3(-half_width, line_y, -half_length), Vector3(-half_width, line_y, half_length)],
+		[Vector3(half_width, line_y, -half_length), Vector3(half_width, line_y, half_length)],
+		[Vector3(-half_width, line_y, -nz), Vector3(half_width, line_y, -nz)],
+		[Vector3(-half_width, line_y, nz), Vector3(half_width, line_y, nz)],
+		[Vector3(0, line_y, -nz), Vector3(0, line_y, -half_length)],
+		[Vector3(0, line_y, nz), Vector3(0, line_y, half_length)]]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for seg in segments:
+		var a: Vector3 = seg[0]; var b: Vector3 = seg[1]
+		var along: Vector3 = (b - a).normalized()
+		var side: Vector3 = along.cross(Vector3.UP).normalized() * LINE_WIDTH * 0.5
+		var lo: Vector3 = a - along * LINE_WIDTH * 0.5; var hi: Vector3 = b + along * LINE_WIDTH * 0.5
+		for v in [lo - side, hi - side, hi + side, lo - side, hi + side, lo + side]:
+			st.set_normal(Vector3.UP); st.add_vertex(v)
+	var lines := MeshInstance3D.new()
+	lines.name = "CourtLines"
+	lines.mesh = st.commit()
+	var line_mat := StandardMaterial3D.new()
+	line_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	line_mat.albedo_color = Color(0.94, 0.95, 0.97)
+	line_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	lines.material_override = line_mat
+	lines.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(lines)
 
 	if RuntimePolicy.developer_tools: print("[COURT] SHOW_DEBUG_ZONES=", SHOW_DEBUG_ZONES)
 	if SHOW_DEBUG_ZONES and RuntimePolicy.developer_tools:

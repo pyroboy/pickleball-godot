@@ -71,7 +71,7 @@ func _add_collision(net: StaticBody3D) -> void :
 func _add_posts(net: StaticBody3D) -> void :
 	var post_material: = StandardMaterial3D.new()
 	post_material.albedo_color = Color(0.18, 0.23, 0.26)
-	post_material.roughness = 0.5
+	post_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED   # pixel look: flat posts
 	for direction in [-1.0, 1.0]:
 		var post: = MeshInstance3D.new()
 		post.name = "LeftPost" if direction < 0.0 else "RightPost"
