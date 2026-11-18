@@ -471,6 +471,8 @@ static func _perf_apply_presented_ready(player, pose) -> Dictionary:
 	# Bounded post-Budget hook candidate. Never requests or resets a pose.
 	var started := Time.get_ticks_usec()
 	var report := {"eligible": false, "active": false, "feasible": false, "offset": Vector3.ZERO}
+	# Pixel cards don't draw sleeves or torso surfaces, so there is nothing to clip.
+	if load("res://scripts/graphics/pixel_card_rig.gd").enabled(): report["reason"] = "pixel cards"; return report
 	if not _presented_ready(player, pose): report["reason"] = "actual presentation is not supported seated READY"; return report
 	report.eligible = true
 	# Perf: the READY pose is pre-baked to clear the torso (data/postures/20_ready.tres

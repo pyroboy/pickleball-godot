@@ -355,8 +355,8 @@ func _apply_receiver_exit(owner,pose)->void:
  if not fit.feasible:
   actor.set_meta("between_exit_report",{"feasible":false,"weight":weight})
   return
- var geometry:Dictionary=Sleeve.body_geometry(actor)
- var clear:Dictionary=Sleeve._solve_arm(arm,mount,fit.elbow,geometry,true)
+ # Pixel cards: no sleeve/torso surfaces to clear, keep the budget elbow.
+ var clear:Dictionary={} if pixel_cards else Sleeve._solve_arm(arm,mount,fit.elbow,Sleeve.body_geometry(actor),true)
  var elbow:Vector3=clear.elbow if not clear.is_empty() else fit.elbow
  arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
  arm.solve_ik(mount.origin,elbow,null,wrist)
@@ -366,11 +366,11 @@ func _apply_receiver_exit(owner,pose)->void:
  for bone in model.skeleton.get_bone_count():goal_fingers.append(model.skeleton.get_bone_pose_rotation(bone))
  for bone in range(1,model.WRIST_BRIDGE_BONE):model.skeleton.set_bone_pose_rotation(bone,exit_fingers[bone].slerp(goal_fingers[bone],weight))
  actor.set_meta("between_exit_report",{"feasible":true,"clear":not clear.is_empty(),"weight":weight})
- if not Sleeve.clearance_report(actor).valid:
+ if not pixel_cards and not Sleeve.clearance_report(actor).valid:
   var transaction=Sleeve.Transaction.new(actor)
   var candidate:Dictionary=Sleeve.search(actor,transaction,pose)
   if not candidate.is_empty():Sleeve.apply(actor,candidate)
- if weight>=1.0:Sleeve.apply_presented_ready(actor,pose)
+ if weight>=1.0 and not pixel_cards:Sleeve.apply_presented_ready(actor,pose)
  last_basis=basis
 
 func cup_kinematic_fit(arm,center:Vector3,offset:Vector3)->bool:

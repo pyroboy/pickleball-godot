@@ -13,6 +13,8 @@ static func apply(player,hands) -> Dictionary:
  return _pr
 
 static func _perf_apply(player,hands) -> Dictionary:
+ # Pixel cards don't draw the 3D hand/cup: nothing to keep continuous.
+ if load("res://scripts/graphics/pixel_card_rig.gd").enabled():return {}
  if not player.has_meta(META):return {}
  var game=player.get_parent()
  if game==null or game.game_state!=game.GameState.WAITING or game.get_server_actor()!=player or game.ball.is_in_play or game.game_serve.is_release_pending():return {}
