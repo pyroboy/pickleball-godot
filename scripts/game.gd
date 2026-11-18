@@ -1563,7 +1563,12 @@ func _update_held_ball_position() -> void :
 		return
 	ball.linear_velocity = Vector3.ZERO
 	ball.angular_velocity = Vector3.ZERO
-	ball.global_position = game_serve.get_held_ball_position()
+	var held: Vector3 = game_serve.get_held_ball_position()
+	var jump: bool = ball.global_position.distance_to(held) > 0.5
+	ball.global_position = held
+	# A reset places the ball at its default spot first; moving it into the hand
+	# is a teleport, so don't draw it sliding across the court (visual only).
+	if jump: ball.reset_physics_interpolation()
 
 
 
