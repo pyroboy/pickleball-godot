@@ -19,7 +19,7 @@ const SEARCH_BISECTIONS := 5
 # Perf: hard cap on candidate wrist-budget checks per solve. In the between-point
 # carried-cup case each check costs ~1 ms, and uncapped searches hit ~100 checks
 # (100+ ms frames). If nothing fits within the cap the body keeps the base offset.
-const MAX_BUDGET_CHECKS := 16
+const MAX_BUDGET_CHECKS := 8
 # Between points (cut-scene) each check also tests the carried cup (~0.5 ms); cap lower.
 const MAX_BUDGET_CHECKS_BETWEEN := 4
 

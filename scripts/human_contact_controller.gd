@@ -50,6 +50,13 @@ var preparation_motion_context: Dictionary = {}
 var queued_movement_allowed: = false
 var hit: bool = false
 var _flight_id: int = -1
+# Perf: contact planning (Planner.select, with its heavy select_extended fallback)
+# ran every physics tick while a ball was incoming, up to ~170 ms in one frame.
+# Re-plan at ~15 Hz while the ball is far, and every tick in the final window.
+const PLAN_INTERVAL_TICKS := 4
+const PLAN_EVERY_TICK_TIME := 0.25
+var _plan_tick: int = -1000
+var _plan_flight: int = -1
 var _swing_is_volley: bool = false
 var _released_joint_path := false
 
@@ -126,14 +133,20 @@ func _perf_update(delta: float) -> void:
 	if Planner.should_track(player, ball):
 		var flight: Dictionary = player.debug_visual._last_flight if player.debug_visual else {}
 		if flight.is_empty(): flight = Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity)
-		contact = Planner.select(player, ball, flight, old_id)
-		if not contact.is_empty():
-			if phase < 1:
-				contact.def = _fit_planned_contact_grip(contact, ball, previous_contact_pose)
-			elif swing_def != null and contact.posture == swing_def.posture_id:
-				# The real released stroke owns its grip. A refreshed trajectory
-				# can move the contact point, never regrip at the impact frame.
-				contact.def.main_grip_rotation_deg = swing_def.main_grip_rotation_deg
+		var now: int = Engine.get_physics_frames()
+		var near_contact: bool = not contact.is_empty() and float(contact.time) <= PLAN_EVERY_TICK_TIME
+		if near_contact or phase >= 1 or _plan_flight != ball.flight_id or now - _plan_tick >= PLAN_INTERVAL_TICKS:
+			_plan_tick = now; _plan_flight = ball.flight_id
+			contact = Planner.select(player, ball, flight, old_id)
+			if not contact.is_empty():
+				if phase < 1:
+					contact.def = _fit_planned_contact_grip(contact, ball, previous_contact_pose)
+				elif swing_def != null and contact.posture == swing_def.posture_id:
+					# The real released stroke owns its grip. A refreshed trajectory
+					# can move the contact point, never regrip at the impact frame.
+					contact.def.main_grip_rotation_deg = swing_def.main_grip_rotation_deg
+		elif not contact.is_empty():
+			contact.time = maxf(0.0, float(contact.time) - delta)   # keep the reused plan's clock honest
 		_update_superblocks(delta, ball, flight)
 		_update_anticipation(delta, ball, flight)
 	else:
