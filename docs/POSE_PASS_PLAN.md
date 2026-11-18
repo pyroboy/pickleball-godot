@@ -153,3 +153,14 @@ differs by at most 1.8 mm and the match outcome is identical (same 11 points, ca
 `pose_review.sh --from-rest` traces serves from the held pose and flags "elbow UP" steps.
 - Next: Wide Backhand needs a whole-pose rework: its wind-up paddle/wrist angle demands an elbow-up
   arm, so the forearm flips (80° without the guard, 125° with it) at the start of the wind-up.
+
+### 11 Wide Backhand — whole-pose rework — 2026-11-18
+Rebuilt from the clean two-handed Backhand (02): its grip (-30°), contact paddle face (no extra
+signed roll/yaw twist), wind-up/finish face rotations and elbow guides (lowered so the elbow stays
+down), keeping the wide contact point (-0.846) and the lunge body; wind-up turn reduced
+(hips 85 -> 56°, shoulders 103 -> 76°), paddle drop 0.60 -> 0.45 m.
+Swing trace: forearm roll flip 125° -> smooth (max 6°/step where the arm is bent), elbow jump
+0.52 -> 0.07 m, elbow never inward, elbow at most 0.02 m above the shoulder. Paddle corner at contact
+33° remains (paddle rotation changes direction at contact; reach is not the cause).
+Gameplay: contact paddle face changed, so wide backhands may go elsewhere; seed-1 bench has no wide
+backhand and stays IDENTICAL.
