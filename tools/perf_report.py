@@ -44,7 +44,8 @@ for k in sorted(tot, key=tot.get, reverse=True)[:8]:
 print(f"Spikes >= {meta.get('spike_ms')}ms: {len(spikes)}")
 blame = defaultdict(int)
 for s in spikes:
-    if s["top"]: blame[next(iter(s["top"]))] += 1
+    top = {k: v for k, v in s["top"].items() if k != "player.physics"}  # container scope
+    if top: blame[max(top, key=lambda k: top[k][0])] += 1
     else: blame["(untimed: render/GC/engine)"] += 1
 for k, c in sorted(blame.items(), key=lambda kv: -kv[1])[:5]:
     print(f"  {c:4d}x  biggest = {k}")

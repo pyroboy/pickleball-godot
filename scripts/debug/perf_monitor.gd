@@ -132,7 +132,7 @@ func _t(now: int) -> float:
 
 func _write(row: Dictionary) -> void:
 	if _file == null: return
-	_file.store_line(JSON.stringify(row))
+	_file.store_line(JSON.stringify(row, "", false))
 	_file.flush()
 
 # ---- on-screen graph (F3) ----
