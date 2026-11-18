@@ -306,6 +306,8 @@ func compute_sweet_spot_spin(ball_pos: Vector3, paddle_pos: Vector3, velocity: V
 
 
 
+const MAX_OFF_CENTER_PACE_LOSS := 0.15
+
 func compute_sweet_spot_speed(ball_pos: Vector3, paddle_pos: Vector3, velocity: Vector3) -> float:
 	var offset: = paddle_pos - ball_pos
 	var travel_dir: = velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.FORWARD
@@ -315,7 +317,10 @@ func compute_sweet_spot_speed(ball_pos: Vector3, paddle_pos: Vector3, velocity: 
 	const EDGE_RADIUS: = 0.12
 	if offset_mag <= SWEET_SPOT_RADIUS:
 		return 1.0
-	var penalty: = clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 0.4)
+	# Max 15% pace loss off the sweet spot (was 40%): a 40% slower drop or
+	# reset almost always hit the net (8 of 11 AI net faults over 3 bench
+	# matches were these edge contacts at exactly 0.6 quality).
+	var penalty: = clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 1.0) * MAX_OFF_CENTER_PACE_LOSS
 	return 1.0 - penalty
 
 func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, grav: float, target_z: float, net_sign: float) -> Dictionary:

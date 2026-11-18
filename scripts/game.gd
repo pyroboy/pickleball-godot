@@ -1057,6 +1057,10 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 	actual.profile["accuracy_region_reliable"] = false
 	actual.profile["accuracy_preview_estimate_only"] = true
 	actual.velocity = result.velocity; actual.omega = result.omega
+	PerfMonitor.note("execution", {"actor": actor.get_actor_id(), "ai": actor.is_ai, "peripheral": peripheral,
+		"quality": snappedf(contact_quality, 0.01), "pitch": snappedf(float(result.pitch_deg), 0.01),
+		"speed": snappedf(float(result.speed_fraction), 0.001), "difficulty": snappedf(float(result.envelope.difficulty), 0.01),
+		"vy_plan": snappedf(launch.velocity.y, 0.01), "vy_out": snappedf(result.velocity.y, 0.01)})
 	actual["intended_landing"] = launch.get("landing", launch.get("target", Vector3.ZERO))
 	# The old solver landing no longer predicts this perturbed launch. Keep it
 	# explicitly intended; actual ball/net/floor integration decides the result.
