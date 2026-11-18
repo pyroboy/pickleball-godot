@@ -106,7 +106,6 @@ var scoreboard_ui
 var practice_launcher
 var practice_panel
 var ball_physics_probe
-var swing_e2e_probe
 var hud: CanvasLayer
 
 
@@ -427,13 +426,9 @@ func _setup_game() -> void :
 
 	if RuntimePolicy.developer_tools:
 
-		ball_physics_probe = load("res://scripts/tests/runtime/ball_physics_probe.gd").new()
+		ball_physics_probe = load("res://scripts/debug/ball_physics_probe.gd").new()
 		ball_physics_probe.name = "BallPhysicsProbe"
 		add_child(ball_physics_probe)
-
-		swing_e2e_probe = load("res://scripts/tests/runtime/swing_e2e_probe.gd").new()
-		swing_e2e_probe.name = "SwingE2EProbe"
-		add_child(swing_e2e_probe)
 	practice_launcher = _PracticeLauncher.new()
 	add_child(practice_launcher)
 	practice_launcher.setup(self, ball, player_left, player_right, ball_physics_probe)
@@ -545,7 +540,7 @@ func _setup_subsystems() -> void :
 		return
 
 
-	game_drop_test = load("res://scripts/tests/runtime/game_drop_test.gd").new()
+	game_drop_test = load("res://scripts/debug/game_drop_test.gd").new()
 	add_child(game_drop_test)
 	game_drop_test.setup(ball)
 	game_drop_test.test_complete.connect(_on_drop_test_complete)
@@ -1839,11 +1834,6 @@ func _spawn_bounce_spot(spot_pos: Vector3) -> void :
 
 func _on_drop_test_complete() -> void :
 	pass
-
-func run_swing_e2e_test() -> String:
-	if swing_e2e_probe:
-		swing_e2e_probe.begin_test(self, player_left, ball)
-	return "SwingE2EProbe started — results in ~4s via get_verdict()"
 
 func _exit_tree() -> void :
 

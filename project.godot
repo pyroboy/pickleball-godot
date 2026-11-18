@@ -23,7 +23,6 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-McpBridge="*res://mcp_bridge.gd"
 PickleballConstants="*res://scripts/constants.gd"
 Settings="*res://scripts/ui/settings.gd"
 TimeScale="*res://scripts/time/time_scale_manager.gd"
