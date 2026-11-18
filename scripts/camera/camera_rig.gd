@@ -106,6 +106,9 @@ func setup(
 
 	camera = Camera3D.new()
 	camera.name = "MainCamera"
+	# Moved every rendered frame (follow, ball framing, cinematics), so it must
+	# not be physics-interpolated: with 30 Hz interpolation on, it showed only sky.
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	camera.position = Vector3(0, 10.5, 11.0)
 	camera.rotation_degrees = Vector3(-52, 0, 0)
 	camera.fov = 60.0

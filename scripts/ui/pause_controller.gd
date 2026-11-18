@@ -94,7 +94,7 @@ func _hide_pause_menu() -> void :
 		TimeScale.release_forced_normal()
 
 func _on_window_focus_exited() -> void :
-	if _focus_paused: return
+	if _focus_paused or RuntimePolicy.autoplay: return   # benchmarks/captures run unfocused
 	_cancel_scene_input()
 	_previous_max_fps = Engine.max_fps
 	Engine.max_fps = 5

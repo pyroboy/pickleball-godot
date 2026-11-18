@@ -10,6 +10,9 @@ extends Node
 ## exported build (iPhone). Summarise with: python3 tools/perf_report.py
 
 const SPIKE_MS := 50.0          # ~3 dropped frames at 60 fps
+var _capture_times: Array[float] = []
+var _capture_dir := ""
+var _capture_hide_ui := false
 var _spike_ms: float = SPIKE_MS  # --spike-ms=N overrides (bench: SPIKE_MS=N tools/bench.sh)
 const GRAPH_SAMPLES := 240      # ~4 s of history
 const TOP_SCOPES := 6
@@ -49,6 +52,11 @@ func _ready() -> void:
 		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
 		if arg.begins_with("--spike-ms="): _spike_ms = float(arg.trim_prefix("--spike-ms="))
+		# Dev screenshots: --capture-at=20,30,40 --capture-out=/dir (seconds since start)
+		if arg.begins_with("--capture-at="):
+			for t in arg.trim_prefix("--capture-at=").split(","): _capture_times.append(float(t))
+		if arg.begins_with("--capture-out="): _capture_dir = arg.trim_prefix("--capture-out=")
+		if arg == "--capture-hide-ui": _capture_hide_ui = true
 	_file = FileAccess.open(path, FileAccess.WRITE)
 	if _pose_path != "":
 		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)
@@ -87,6 +95,11 @@ func _process(_delta: float) -> void:
 	_history.append(frame_ms)
 	if _history.size() > GRAPH_SAMPLES: _history.remove_at(0)
 
+	if not _capture_times.is_empty() and _capture_dir != "" and _t(now) >= _capture_times[0]:
+		var shot_t: float = _capture_times.pop_front()
+		if _capture_hide_ui:
+			for layer in get_tree().root.find_children("*", "CanvasLayer", true, false): layer.visible = false
+		get_viewport().get_texture().get_image().save_png(_capture_dir.path_join("frame_%03d.png" % int(shot_t)))
 	if frame_ms >= _spike_ms and _frames > 30:
 		_sec_spikes += 1
 		_write({"kind": "spike", "t": _t(now), "ms": snappedf(frame_ms, 0.1), "state": _state(),
