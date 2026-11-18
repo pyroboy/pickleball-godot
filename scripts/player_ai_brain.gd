@@ -174,6 +174,9 @@ var ai_contact_indicator_position: Vector3 = Vector3.ZERO
 
 var _player
 
+const OVERHEAD_PREFER_HEIGHT := 1.5   # m above the floor
+const OVERHEAD_PREFERENCE := 0.35     # score bonus (score is roughly seconds to contact)
+
 func _ready() -> void :
 	_player = get_parent() as CharacterBody3D
 	RuntimePolicy.seed_rng(_tactic_rng, 13)
@@ -483,6 +486,11 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 
 
 			if posture == ai_desired_posture: score -= 0.025
+			# Take a high ball in the air when the rally allows it (both bounces
+			# done): an overhead contact scores better, which opens the smash.
+			# Without this the earliest-time score always let it drop low.
+			if total_bounces == 0 and ball.both_bounces_complete and rel_height >= OVERHEAD_PREFER_HEIGHT:
+				score -= OVERHEAD_PREFERENCE
 			# Exact same ordering score; an uncompetitive candidate cannot win.
 			# The skipped checks are pure geometry/dependency-cache work.
 			if not score < best_score: continue

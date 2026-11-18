@@ -160,6 +160,12 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 		_events = []
 	_frame_file.store_line(JSON.stringify(row, "", false))
 
+# Gameplay notes from game code (one small row each, always on), e.g. each AI
+# shot plan. Read by tools/shot_report.py.
+func note(kind: String, data: Dictionary) -> void:
+	data["tick"] = Engine.get_physics_frames()
+	_write({"kind": "note", "note": kind, "t": _t(Time.get_ticks_usec()), "data": data})
+
 # ---- events (frame log only): what happened, for the debugging timeline ----
 var _events: Array = []
 var _ev_state := ""
@@ -170,7 +176,7 @@ func _event(kind: String, data: Dictionary = {}) -> void:
 	data["tick"] = Engine.get_physics_frames()
 	# Point-level events also go to perf.jsonl on every run (a few per point), so
 	# bench/phone reports can summarise gameplay; the frame log gets all of them.
-	if kind in ["state", "rally_end", "post_hit", "body_hit"]:
+	if kind in ["state", "rally_end", "post_hit", "body_hit", "hit"]:
 		_write({"kind": "event", "event": kind, "t": _t(Time.get_ticks_usec()), "data": data})
 	if _frame_file != null: _events.append(data)
 
