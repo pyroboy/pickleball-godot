@@ -14,6 +14,10 @@ const Path = preload("res://scripts/stroke_swing_path.gd")
 const ContactCurve = preload("res://scripts/contact_paddle_curve.gd")
 const PoseStore = preload("res://scripts/mobile_pose_store.gd")
 const DEFAULT_PATH := "user://mobile_serve_pose_overrides_v1.json"
+## Packaged serve tuning (tools/pose_set.py v<style> ...): per style and stage, values added
+## to ("add") or replacing ("set") the code-built serve keys. Loaded once into packaged_default().
+const TUNING_PATH := "res://data/serve_tuning.json"
+static var _tuning = null
 const MAX_FILE_BYTES := 8388608
 const MAX_EXPORT_BYTES := 2097152
 const STYLE_NAMES := ["Flat", "Topspin", "Slice", "High Soft", "Drop Drive", "Banana", "Screwball"]
@@ -89,7 +93,34 @@ static func packaged_default(style: int) -> PostureDefinition:
 	if def == null: return null
 	var result: PostureDefinition = def.duplicate(true)
 	if style == 0: PoseStore._apply_fields(result, JSON.parse_string(ApprovedFlat.JSON_TEXT).fields)
+	_apply_tuning(result, style)
 	return result
+
+static func _apply_tuning(def: PostureDefinition, style: int) -> void:
+	if _tuning == null:
+		_tuning = {}
+		var file := FileAccess.open(TUNING_PATH, FileAccess.READ)
+		if file != null:
+			var parsed = JSON.parse_string(file.get_as_text())
+			if parsed is Dictionary: _tuning = parsed
+	var entry = _tuning.get(str(style))
+	if not entry is Dictionary: return
+	for stage in ["windup", "contact", "finish"]:
+		var edits = entry.get(stage)
+		if not edits is Dictionary: continue
+		var body: Resource = def.windup_body if stage == "windup" else def.follow_through_body if stage == "finish" else null
+		if stage != "contact" and body == null: continue
+		for mode in ["set", "add"]:
+			var fields = edits.get(mode)
+			if not fields is Dictionary: continue
+			for field in fields:
+				var value = PoseStore._decode_value(field, fields[field])
+				# Paddle offsets of the wind-up/finish keys live on the contact definition.
+				var on_def: bool = stage == "contact" or field in ["charge_paddle_offset", "ft_paddle_offset", "charge_paddle_rotation_deg", "ft_paddle_rotation_deg"]
+				var old = def.get(field) if on_def else body.values.get(field, def.get(field))
+				var new_value = old + value if mode == "add" and old != null else value
+				if on_def: def.set(field, new_value)
+				else: body.values[field] = new_value
 
 static func get_default(style: int) -> PostureDefinition:
 	return packaged_default(style)

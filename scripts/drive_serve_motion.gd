@@ -581,8 +581,9 @@ static func serve_style_strike(start: PostureDefinition, progress: float, style:
 
 
 	var dip: float = -10.0 * (1.0 - q) * sin(PI * u)
-	var outside: float = 20.0 * pow(sin(PI * u), 2.0)
-	var pose: PostureDefinition = ServeJoint.blend(start, contact, u, dip, outside)
+	var outside: float = 8.0 * pow(sin(PI * u), 2.0)  # was 20: rolled the forearm and snapped the elbow mid-strike
+	var pose: PostureDefinition = ServeJoint.blend(start, contact, u, dip, outside, smoothstep(0.0, 1.0, t))
+	_smooth_through_contact(pose, start, contact, _serve_finish_key(style, q, ball_offset), u, true)
 	ServePresentation.copy_context(start, pose)
 	return ServeEdits.apply_motion(pose, style, Vector3(q * (1.0 - u), u, 0), custom, use_saved)
 
@@ -611,10 +612,41 @@ static func _legacy_serve_style_strike(start: PostureDefinition, progress: float
 static func serve_style_follow_through(style: int, charge: float, progress: float, ball_offset: Vector3 = SERVE_CONTACT, custom: PostureDefinition = null, use_saved: bool = true) -> PostureDefinition:
 	var t: float = clampf(progress, 0.0, 1.0)
 	var contact: PostureDefinition = _raw_serve_style_contact(style, ball_offset)
-	var finish: PostureDefinition = ServePresentation.finish(_legacy_serve_style_follow_through(style, charge, 1.0, ball_offset), style)
-	finish = ServeJoint.blend(contact, finish, lerpf(0.72, 1.0, clampf(charge, 0.0, 1.0)))
+	var finish: PostureDefinition = _serve_finish_key(style, charge, ball_offset)
 	var pose: PostureDefinition = ServeJoint.blend(contact, finish, t)
+	var windup: PostureDefinition = ServeEdits.raw_pose(serve_style_wait(serve_style_preparation(style, charge, Styles_hold(style), null, false), 1.0, style, ball_offset, null, false))
+	_smooth_through_contact(pose, windup, contact, finish, t, false)
 	return ServeEdits.apply_motion(pose, style, Vector3(0, 1.0 - t, t * lerpf(0.72, 1.0, clampf(charge, 0.0, 1.0))), custom, use_saved)
+
+static func _serve_finish_key(style: int, charge: float, ball_offset: Vector3) -> PostureDefinition:
+	var contact: PostureDefinition = _raw_serve_style_contact(style, ball_offset)
+	var finish: PostureDefinition = ServePresentation.finish(_legacy_serve_style_follow_through(style, charge, 1.0, ball_offset), style)
+	return ServeJoint.blend(contact, finish, lerpf(0.72, 1.0, clampf(charge, 0.0, 1.0)))
+
+static func Styles_hold(style: int) -> Vector3:
+	return load("res://scripts/serve_style.gd").hold_offset(style)
+
+## The strike (wind-up -> contact) and follow-through (contact -> finish) are separate joint
+## blends, so the paddle turned a sharp corner at contact and the elbow snapped. Bend the end
+## of the strike and the start of the follow-through toward one shared direction (wind-up ->
+## finish), Hermite-style, so the head and elbow pass through contact as one smooth curve.
+## Contact itself is unchanged (both terms are zero at u = 1 / u = 0).
+static func _smooth_through_contact(pose: PostureDefinition, windup: PostureDefinition, contact: PostureDefinition, finish: PostureDefinition, u: float, into: bool) -> void:
+	var h: float = (u * u * u - u * u) if into else (u * u * u - 2.0 * u * u + u)
+	if is_zero_approx(h): return
+	var head := func(d: PostureDefinition) -> Vector3: return Vector3(d.paddle_forehand_mul, d.paddle_y_offset, d.paddle_forward_mul)
+	for channel in ["head"]:
+		var a: Vector3 = head.call(windup) if channel == "head" else windup.right_elbow_pole
+		var c: Vector3 = head.call(contact) if channel == "head" else contact.right_elbow_pole
+		var f: Vector3 = head.call(finish) if channel == "head" else finish.right_elbow_pole
+		var through: Vector3 = f - a
+		if through.length() < 0.001: continue
+		var chord: Vector3 = (c - a) if into else (f - c)
+		var correction: Vector3 = (through.normalized() * chord.length() - chord) * h
+		if channel == "head":
+			pose.paddle_forehand_mul += correction.x; pose.paddle_y_offset += correction.y; pose.paddle_forward_mul += correction.z
+		else:
+			pose.right_elbow_pole += correction
 
 static func _legacy_serve_style_follow_through(style: int, charge: float, progress: float, ball_offset: Vector3 = SERVE_CONTACT) -> PostureDefinition:
 	var t: float = clampf(progress, 0.0, 1.0)

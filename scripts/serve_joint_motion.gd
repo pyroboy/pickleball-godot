@@ -64,7 +64,9 @@ static func _state(pose: PostureDefinition) -> Dictionary:
 	var channels: Dictionary = Anatomy.decompose(Anatomy.forearm_reference(s, e, w, Vector3.UP, false), hand * _anatomical)
 	return {"frame": frame, "bend": bend, "flex": channels.flexion_deg, "deviation": channels.radial_deviation_deg, "axial": channels.forearm_axial_deg}
 
-static func blend(start: PostureDefinition, end: PostureDefinition, progress: float, guide_pitch_deg: float = 0.0, guide_outward_deg: float = 0.0) -> PostureDefinition:
+## axial_progress (optional, 0..1) times the forearm roll separately from the arm swing, so an
+## accelerating strike does not cram the whole pronation into its last frames.
+static func blend(start: PostureDefinition, end: PostureDefinition, progress: float, guide_pitch_deg: float = 0.0, guide_outward_deg: float = 0.0, axial_progress: float = -1.0) -> PostureDefinition:
 	var t: float = clampf(progress, 0.0, 1.0)
 	if t <= 0.0: return start.lerp_with(start, 0.0)
 	if t >= 1.0: return end.lerp_with(end, 0.0)
@@ -80,7 +82,7 @@ static func blend(start: PostureDefinition, end: PostureDefinition, progress: fl
 	var w: Vector3 = e + (frame.x * cos(bend) + frame.y * sin(bend)) * LINK
 	var flex: float = deg_to_rad(lerpf(a.flex, b.flex, t))
 	var deviation: float = deg_to_rad(lerpf(a.deviation, b.deviation, t))
-	var axial: float = lerp_angle(deg_to_rad(a.axial), deg_to_rad(b.axial), t)
+	var axial: float = lerp_angle(deg_to_rad(a.axial), deg_to_rad(b.axial), t if axial_progress < 0.0 else clampf(axial_progress, 0.0, 1.0))
 	var hand: Basis = Anatomy.forearm_reference(s, e, w, Vector3.UP, false) * Basis(Vector3.RIGHT, axial) * Basis(Vector3.UP, flex) * Basis(Vector3.BACK, deviation) * _anatomical.inverse()
 	var paddle: Basis = hand * Grip.basis(Basis.IDENTITY, false, pose.main_grip_rotation_deg).inverse()
 	var head: Vector3 = w - hand * Hand.WRIST_SOCKET + paddle * (Size.HEAD_OFFSET - Size.MAIN_GRIP_OFFSET - pose.right_hand_offset)
