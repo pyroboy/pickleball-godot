@@ -176,3 +176,6 @@ contact near full extension in front of the hitting shoulder, follow-through dow
 - Gameplay: contact moved out to the hitting side and forward (Medium 0.08/0.45 -> 0.30/0.80, High
   -0.02/0.45 -> 0.22/0.55; zones moved). Seed-1 bench has no overhead: IDENTICAL, same points.
 - High overhead elbow is above the shoulder from trophy through contact: correct for a smash.
+- Reach-up (request from the AI/smash work): High Overhead contact raised to ~2.44 m standing
+  (arm straight, slight rise; was 2.04 m), zone_y_max 2.11 -> 2.5 (jump adds 0.24 m), Medium
+  Overhead top 1.70 -> 1.85 to meet it. point_fits now accepts Medium 1.6-1.8 m, High 1.8-2.4 m standing.
