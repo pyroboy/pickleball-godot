@@ -1,4 +1,5 @@
 class_name BallAudioSynth extends Node
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
 
 
@@ -90,7 +91,7 @@ var paddle_chirp_tune: = 0.15
 var paddle_helmholtz_tune: = 0.0
 
 func _ready() -> void :
-	_audio_rng.randomize()
+	RuntimePolicy.seed_rng(_audio_rng, 12)
 	_setup_audio()
 
 func _exit_tree() -> void :

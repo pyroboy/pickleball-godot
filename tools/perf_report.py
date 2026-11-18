@@ -32,13 +32,14 @@ print("By state (median fps / spikes):", ", ".join(
     f"{s} {pct([r['fps'] for r in rs],.5)}/{sum(r['spikes'] for r in rs)}" for s, rs in sorted(by_state.items())))
 
 # Systems: avg ms per frame across the session, worst single frame
-tot, worst, n = defaultdict(float), defaultdict(float), len(secs)
+tot, worst, calls, n = defaultdict(float), defaultdict(float), defaultdict(float), len(secs)
 for r in secs:
-    for k, (avg, mx) in r["scopes"].items():
-        tot[k] += avg; worst[k] = max(worst[k], mx)
-print("Systems (avg ms/frame, worst ms):")
-for k in sorted(tot, key=tot.get, reverse=True)[:8]:
-    print(f"  {k:22s} {tot[k]/n:6.2f}  {worst[k]:7.1f}")
+    for k, v in r["scopes"].items():
+        tot[k] += v[0]; worst[k] = max(worst[k], v[1])
+        if len(v) > 2: calls[k] += v[2]
+print("Systems            avg ms/frame  worst ms  calls/frame")
+for k in sorted(tot, key=tot.get, reverse=True)[:12]:
+    print(f"  {k:22s} {tot[k]/n:6.2f}  {worst[k]:8.1f}  {calls[k]/n:6.1f}")
 
 # Spikes: count and who was biggest in each
 print(f"Spikes >= {meta.get('spike_ms')}ms: {len(spikes)}")

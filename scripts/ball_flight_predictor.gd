@@ -14,6 +14,13 @@ static func net_clear_y_at(x: float) -> float:
 
 static func trace(start_pos: Vector3, start_vel: Vector3, start_omega: Vector3, 
 		max_time: float = 3.0, max_bounces: int = 2, stop_at_net: bool = true, collect_samples: bool = true) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_trace(start_pos, start_vel, start_omega, max_time, max_bounces, stop_at_net, collect_samples)
+	PerfMonitor.record("flight.trace", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_trace(start_pos: Vector3, start_vel: Vector3, start_omega: Vector3, 
+		max_time: float = 3.0, max_bounces: int = 2, stop_at_net: bool = true, collect_samples: bool = true) -> Dictionary:
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
 	var gravity: float = _Ball.get_effective_gravity()
 	var pos: Vector3 = start_pos

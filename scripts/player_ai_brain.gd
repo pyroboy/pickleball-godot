@@ -176,7 +176,7 @@ var _player
 
 func _ready() -> void :
 	_player = get_parent() as CharacterBody3D
-	_tactic_rng.randomize()
+	RuntimePolicy.seed_rng(_tactic_rng, 13)
 
 
 func ground_velocity(input_dir: Vector3, delta: float) -> Vector3:
@@ -1233,6 +1233,12 @@ func _update_ai_trajectory_fade(delta: float) -> void :
 
 
 func _simulate_landing(pos: Vector3, vel: Vector3, omega: Vector3, detect_net: bool = true) -> Vector3:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_simulate_landing(pos, vel, omega, detect_net)
+	PerfMonitor.record("ai.simulate_landing", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_simulate_landing(pos: Vector3, vel: Vector3, omega: Vector3, detect_net: bool = true) -> Vector3:
 	var grav: float = _Ball.get_effective_gravity()
 	var p: Vector3 = pos
 	var v: Vector3 = vel

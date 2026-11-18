@@ -192,7 +192,8 @@ func get_human_actor() -> CharacterBody3D:
 func actor_label(actor) -> String:
 	if actor == null: return "Player"
 	if not actor.is_ai: return "You"
-	if actor.team_id == get_human_actor().team_id: return "Partner"
+	var human = get_human_actor()
+	if human != null and actor.team_id == human.team_id: return "Partner"
 	return "Opponent %d" % (get_team_players(actor.team_id).find(actor) + 1)
 
 func human_may_serve() -> bool:
@@ -342,6 +343,10 @@ func _setup_environment() -> void :
 
 
 func _setup_game() -> void :
+	if RuntimePolicy.bench_doubles: get_tree().set_meta("local_doubles", true)
+	if RuntimePolicy.bench_seed >= 0:
+		seed(RuntimePolicy.bench_seed)
+		get_tree().set_meta("match_ai_seed", RuntimePolicy.bench_seed)
 	doubles_mode = bool(get_tree().get_meta("local_doubles", false)) and not bool(get_tree().get_meta("open_practice", false))
 	var court_script: Script = load("res://scripts/court.gd")
 	var net_script: Script = load("res://scripts/net.gd")
@@ -362,7 +367,7 @@ func _setup_game() -> void :
 
 	player_left = player_script.new()
 	add_child(player_left)
-	player_left.setup(0, bounds, Color(0.2, 0.5, 1.0), BLUE_RESET_POSITION, false)
+	player_left.setup(0, bounds, Color(0.2, 0.5, 1.0), BLUE_RESET_POSITION, RuntimePolicy.autoplay)
 
 	player_right = player_script.new()
 	add_child(player_right)

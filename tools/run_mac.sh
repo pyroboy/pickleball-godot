@@ -1,6 +1,7 @@
 #!/bin/bash
 # Run the game on this Mac in a window. Output goes to logs/game.log.
-# Usage: tools/run_mac.sh [res://scenes/some_scene.tscn]
+# Usage: tools/run_mac.sh [--phone] [res://scenes/some_scene.tscn]
+#   --phone  runs like the iPhone build (desktop-only debug systems off)
 # Then:  tools/game_errors.sh   (deduplicated error summary)
 cd "$(dirname "$0")/.."
 mkdir -p logs
@@ -11,5 +12,7 @@ if [ -z "${GODOT:-}" ]; then
   done
 fi
 [ -x "${GODOT:-}" ] || { echo "Godot not found, set GODOT=/path/to/Godot"; exit 1; }
-"$GODOT" --path . "$@" > logs/game.log 2>&1 &
+EXTRA=()
+if [ "${1:-}" = "--phone" ]; then shift; EXTRA=(-- --mobile-runtime); fi
+"$GODOT" --path . "$@" "${EXTRA[@]}" > logs/game.log 2>&1 &
 echo "running (pid $!), log: logs/game.log"

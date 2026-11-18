@@ -1,4 +1,5 @@
 extends RefCounted
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 ## Game-tuning values, not measured professional-player statistics.
 ## Center-weighted bounded ellipse: uniform angle, uniform radius. E[r^2]=1/3.
 ## Pure geometry never consumes RNG; only accepted physical contacts sample.
@@ -7,7 +8,7 @@ var rng: = RandomNumberGenerator.new()
 var samples: int = 0
 
 func _init() -> void:
-	rng.randomize()
+	RuntimePolicy.seed_rng(rng, 11)
 
 static func radii(charge: float, mode: int = 0, intent: String = "AUTO", serve: bool = false) -> Vector2:
 	var power: float = clampf(charge, 0.0, 1.0)

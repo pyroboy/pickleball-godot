@@ -33,6 +33,9 @@ var _history: PackedFloat32Array = []
 var _frames := 0
 var _graph: Control
 var _graph_layer: CanvasLayer
+var _pose_path := ""
+var _pose_file: FileAccess
+var _pose_nodes: Dictionary = {}   # player instance id -> Array[Node3D]
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -41,7 +44,15 @@ func _ready() -> void:
 	if not OS.has_feature("template"):
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://logs"))
 		path = "res://logs/perf.jsonl"
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
+		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
 	_file = FileAccess.open(path, FileAccess.WRITE)
+	if _pose_path != "":
+		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)
+		process_physics_priority = 1000000   # sample after all gameplay physics
+	else:
+		set_physics_process(false)
 	_t0 = Time.get_ticks_usec()
 	_last_usec = _t0
 	_sec_start = _t0
@@ -60,9 +71,10 @@ func _process(_delta: float) -> void:
 	_frame_costs = {}
 	for label in costs:
 		var c: Array = costs[label]
-		var s: Array = _sec_costs.get(label, [0, 0])
+		var s: Array = _sec_costs.get(label, [0, 0, 0])
 		s[0] += c[1]
 		s[1] = maxi(s[1], c[1])
+		s[2] += c[0]
 		_sec_costs[label] = s
 
 	_sec_frames.append(frame_ms)
@@ -79,6 +91,33 @@ func _process(_delta: float) -> void:
 
 	if _graph_layer.visible: _graph.queue_redraw()
 
+# ---- pose trace (--pose-trace=path): joint positions per physics tick, for before/after diffs ----
+
+func _physics_process(_delta: float) -> void:
+	var scene := get_tree().current_scene
+	if scene == null or not scene.has_method("get_players"): return
+	var row := {"tick": Engine.get_physics_frames()}
+	var ball = scene.get("ball")
+	if ball is Node3D: row["ball"] = _v(ball.global_position)
+	for p in scene.get_players():
+		var nodes: Array = _pose_nodes.get(p.get_instance_id(), [])
+		if nodes.is_empty():
+			for n in p.find_children("*", "Node3D", true, false):
+				if n.name.ends_with("Pivot") or n.name in ["LeftHand", "RightHand", "LeftFoot", "RightFoot"]: nodes.append(n)
+			_pose_nodes[p.get_instance_id()] = nodes
+		var joints := {}
+		for n in nodes: joints[n.name if not joints.has(n.name) else "%s#%d" % [n.name, joints.size()]] = _v(n.global_position)
+		if p.paddle_node:
+			var t: Transform3D = p.paddle_node.global_transform
+			joints["paddle"] = _v(t.origin)
+			joints["paddle_x"] = _v(t.origin + t.basis.x * 0.1)
+			joints["paddle_y"] = _v(t.origin + t.basis.y * 0.1)
+		row["p%d" % p.actor_id] = joints
+	_pose_file.store_line(JSON.stringify(row, "", false))
+
+func _v(v: Vector3) -> Array:
+	return [snappedf(v.x, 0.0001), snappedf(v.y, 0.0001), snappedf(v.z, 0.0001)]
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3:
 		_graph_layer.visible = not _graph_layer.visible
@@ -92,11 +131,11 @@ func _flush_second(now: int) -> void:
 	var per_frame := {}
 	for label in _sec_costs:
 		var s: Array = _sec_costs[label]
-		per_frame[label] = [snappedf(s[0] / 1000.0 / n, 0.01), snappedf(s[1] / 1000.0, 0.01)]
+		per_frame[label] = [snappedf(s[0] / 1000.0 / n, 0.01), snappedf(s[1] / 1000.0, 0.01), snappedf(float(s[2]) / n, 0.01)]
 	var top := {}
 	var labels := per_frame.keys()
 	labels.sort_custom(func(a, b): return per_frame[a][0] > per_frame[b][0])
-	for i in mini(TOP_SCOPES, labels.size()): top[labels[i]] = per_frame[labels[i]]
+	for i in labels.size(): top[labels[i]] = per_frame[labels[i]]   # all scopes, sorted by cost
 	_write({"kind": "sec", "t": _t(now), "fps": n, "state": _state(),
 		"avg_ms": snappedf(total / n, 0.1), "max_ms": snappedf(sorted[n - 1], 0.1),
 		"p95_ms": snappedf(sorted[int(n * 0.95)], 0.1), "spikes": _sec_spikes,

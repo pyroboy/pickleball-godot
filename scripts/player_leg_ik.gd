@@ -922,6 +922,11 @@ func _apply_locomotion_body(def) -> void:
 		hip_shift_applied+=landing
 
 func _solve_legs(delta: float, def, authored: bool = false) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_solve_legs(delta, def, authored)
+	PerfMonitor.record("leg.solve", Time.get_ticks_usec() - _pt)
+
+func _perf_solve_legs(delta: float, def, authored: bool = false) -> void:
 	if not authored:
 		_apply_locomotion_body(def)
 		_fit_body_to_feet(def)

@@ -371,6 +371,14 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 func solve_spin_launch(start: Vector3, baseline_velocity: Vector3, mode: int, 
 		charge: float, shot_type: String = "", baseline_omega: Vector3 = Vector3.ZERO, 
 		extra_spin: Vector3 = Vector3.ZERO) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_solve_spin_launch(start, baseline_velocity, mode, charge, shot_type, baseline_omega, extra_spin)
+	PerfMonitor.record("shot.spin_solve", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_solve_spin_launch(start: Vector3, baseline_velocity: Vector3, mode: int, 
+		charge: float, shot_type: String = "", baseline_omega: Vector3 = Vector3.ZERO, 
+		extra_spin: Vector3 = Vector3.ZERO) -> Dictionary:
 	var profiles = preload("res://scripts/shot_profile.gd")
 	var profile: Dictionary = profiles.create(mode, charge, shot_type)
 	var baseline: Vector3 = baseline_velocity.limit_length(_Ball.MAX_SPEED)
@@ -463,6 +471,12 @@ func _spin_position_after(start: Vector3, velocity: Vector3, omega: Vector3, dur
 
 
 func solve_drop_launch(start: Vector3, charge: float, player_num: int, spin_mode: int = 0, target_override: Vector3 = Vector3.INF, realized_target: bool = false) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_solve_drop_launch(start, charge, player_num, spin_mode, target_override, realized_target)
+	PerfMonitor.record("shot.drop_solve", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_solve_drop_launch(start: Vector3, charge: float, player_num: int, spin_mode: int = 0, target_override: Vector3 = Vector3.INF, realized_target: bool = false) -> Dictionary:
 	var profiles = preload("res://scripts/shot_profile.gd")
 	var profile: Dictionary = profiles.create(spin_mode, charge, "DROP")
 	var direction: float = -1.0 if player_num == 0 else 1.0
@@ -515,6 +529,14 @@ func solve_drop_launch(start: Vector3, charge: float, player_num: int, spin_mode
 
 
 func solve_aimed_launch(start: Vector3, requested_target: Vector3, charge: float, 
+		player_num: int, spin_mode: int = 0, shot_intent: String = "AUTO", 
+		shot_type: String = "", arc_intent: float = 0.0, realized_target: bool = false) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_solve_aimed_launch(start, requested_target, charge, player_num, spin_mode, shot_intent, shot_type, arc_intent, realized_target)
+	PerfMonitor.record("shot.aimed_solve", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_solve_aimed_launch(start: Vector3, requested_target: Vector3, charge: float, 
 		player_num: int, spin_mode: int = 0, shot_intent: String = "AUTO", 
 		shot_type: String = "", arc_intent: float = 0.0, realized_target: bool = false) -> Dictionary:
 	if shot_intent == "DROP":

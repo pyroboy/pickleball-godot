@@ -251,6 +251,11 @@ func _before_paddle_impl(player, evidence: Dictionary = {}) -> bool:
 	return true
 
 func _capture_current() -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_capture_current()
+	PerfMonitor.record("contact.capture", Time.get_ticks_usec() - _pt)
+
+func _perf_capture_current() -> void:
 	_frame_current.clear()
 	for player in _players():
 		var snapshot: Dictionary = Surface.snapshot(player, true)

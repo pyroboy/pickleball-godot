@@ -245,7 +245,12 @@ func _local_to_node_pos(local_pos: Vector3) -> Vector3:
 
 
 
-func set_trajectory_points(points: Array[Vector3]) -> void :
+func set_trajectory_points(points: Array[Vector3]) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_set_trajectory_points(points)
+	PerfMonitor.record("debug.awareness_grid", Time.get_ticks_usec() - _pt)
+
+func _perf_set_trajectory_points(points: Array[Vector3]) -> void:
 	if _is_locked:
 		return
 	if points.is_empty():
