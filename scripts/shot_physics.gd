@@ -2,21 +2,90 @@ extends RefCounted
 class_name ShotPhysics
 
 const _Ball = preload("res://scripts/ball.gd")
+const _NetProfile = preload("res://scripts/net_profile.gd")
+const _Flight = preload("res://scripts/ball_flight_predictor.gd")
+const Accuracy = preload("res://scripts/shot_accuracy.gd")
+var accuracy = Accuracy.new()
 
-## ShotPhysics.gd - Encapsulates ball-hitting physics for pickleball.
-## Calculates target velocities, spin injection, and iterative aero-trajectories.
 
-const MIN_SWING_SPEED_MS := 7.0
-const MAX_SWING_SPEED_MS := 22.35
-const NET_CLEAR_MIN := 1.0
 
-# Static dependencies (passed in)
+
+const MIN_SWING_SPEED_MS: = 7.0
+const MAX_SWING_SPEED_MS: = 22.35
+const NET_CLEAR_MIN: = 1.15
+
+
 var _player_left: Node
 var _player_right: Node
 
-func setup(_ball: Node, p_left: Node, p_right: Node) -> void:
+func setup(_ball: Node, p_left: Node, p_right: Node) -> void :
 	_player_left = p_left
 	_player_right = p_right
+
+
+
+func solve_ai_launch(ball_pos: Vector3, charge: float, difficulty: int, posture: int, 
+		paddle_pos: Vector3, paddle_velocity: Vector3, transfer: float) -> Dictionary:
+	var power: float = pow(clampf(charge, 0.0, 1.0), 0.7)
+	var target_speed: float = lerpf(MIN_SWING_SPEED_MS, MAX_SWING_SPEED_MS, power)
+	match difficulty:
+		0: target_speed *= 0.95
+		1: target_speed *= 0.98
+		_: target_speed *= 1.05
+	var near_z: float = 2.5 if difficulty == 0 else (3.0 if difficulty == 1 else 3.5)
+	var far_z: float = 5.5 if difficulty == 0 else 6.0
+	var target_z: float = randf_range(lerpf(near_z, far_z - 1.5, power), lerpf(4.0, far_z, power))
+	var target_x: float = randf_range(-2.0, 2.0)
+	if difficulty >= 1 and _player_left != null:
+		var opponent_x: float = _player_left.global_position.x
+		if opponent_x > 0.5:
+			target_x = randf_range(-2.5, -0.3)
+		elif opponent_x < -0.5:
+			target_x = randf_range(0.3, 2.5)
+	var target: Vector3 = Vector3(target_x, _Flight.FLOOR_REST_Y, target_z)
+	var horizontal: Vector2 = Vector2(target.x - ball_pos.x, target.z - ball_pos.z)
+	var duration: float = clampf(horizontal.length() / maxf(target_speed * 0.75, 2.0), 0.35, 1.8)
+	var base: Vector3 = Vector3(horizontal.x / duration, 
+		(target.y - ball_pos.y + 0.5 * _Ball.get_effective_gravity() * duration * duration) / duration, 
+		horizontal.y / duration)
+	var best: Dictionary = {}
+	var best_score: float = INF
+	for iteration in range(24):
+		var direction: Vector3 = base.normalized()
+		var paddle_component: float = paddle_velocity.dot(direction)
+		var launch: Vector3 = base
+		if absf(paddle_component) > 0.5:
+			launch += direction * paddle_component * transfer
+		launch *= compute_sweet_spot_speed(ball_pos, paddle_pos, launch)
+		launch = launch.limit_length(_Ball.MAX_SPEED)
+		var spin: Vector3 = compute_shot_spin("", launch, charge, 1, posture)
+		spin += compute_sweet_spot_spin(ball_pos, paddle_pos, launch)
+		var flight: Dictionary = _Flight.trace(ball_pos, launch, spin, 3.0, 1, false, false)
+		var landing: Vector3 = flight["first_bounce"]
+		var net: Dictionary = flight["net_crossing"]
+		var net_clear: bool = net.is_empty() or net["pos"].y >= _Flight.net_clear_y_at(net["pos"].x) + 0.05
+		var error: Vector2 = Vector2(target.x - landing.x, target.z - landing.z)
+		var score: float = error.length() + (4.0 if not net_clear else 0.0)
+		if flight["first_bounce_time"] < 0.0:
+			score = INF
+		if score < best_score:
+			best_score = score
+			best = {"velocity": launch, "omega": spin, "target": target, 
+				"landing": landing, "net_crossing": net, "net_clear": net_clear}
+		if score < 0.12:
+			break
+		if not net_clear and not net.is_empty():
+			base.y += (_Flight.net_clear_y_at(net["pos"].x) + 0.15 - net["pos"].y) / maxf(net["time"], 0.1) * 0.85
+		if flight["first_bounce_time"] >= 0.0:
+			var flight_time: float = maxf(float(flight["first_bounce_time"]), 0.2)
+			base.x += error.x / flight_time * 0.85
+			base.z += error.y / flight_time * 0.85
+			var range_error: float = Vector2(landing.x - ball_pos.x, landing.z - ball_pos.z).length() - horizontal.length()
+			base.y -= range_error * 0.13
+		base.y = clampf(base.y, -3.0, 15.0)
+		base.x = clampf(base.x, -12.0, 12.0)
+		base.z = clampf(base.z, 2.0, 19.0)
+	return best
 
 func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: int, shot_type: String, ai_difficulty: int) -> Vector3:
 	var speed_curve: float = pow(clamp(charge_ratio, 0.0, 1.0), 0.7)
@@ -25,7 +94,7 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 
 	var target_z: float = 0.0
 	var target_x: float = randf_range(-2.0, 2.0)
-	
+
 	if player_num == 0:
 		var d_min: float = lerp(-3.0, -5.5, speed_curve)
 		var d_max: float = lerp(-2.0, -2.5, speed_curve)
@@ -37,21 +106,21 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		var d_min_far: float = 4.5
 		var d_max_far: float = 6.0
 		match ai_difficulty:
-			0:  # EASY
+			0:
 				ai_speed_scale = 0.95
-				d_min_near = 2.5; d_max_near = 4.0
-				d_min_far = 3.5; d_max_far = 5.5
-			1:  # MEDIUM
+				d_min_near = 2.5;d_max_near = 4.0
+				d_min_far = 3.5;d_max_far = 5.5
+			1:
 				ai_speed_scale = 0.98
-				d_min_near = 3.0; d_max_near = 4.5
-				d_min_far = 4.5; d_max_far = 6.0
-			_:  # HARD
+				d_min_near = 3.0;d_max_near = 4.5
+				d_min_far = 4.5;d_max_far = 6.0
+			_:
 				ai_speed_scale = 1.05
 		target_speed *= ai_speed_scale
 		var d_min: float = lerp(d_min_near, d_min_far, speed_curve)
 		var d_max: float = lerp(d_max_near, d_max_far, speed_curve)
 		target_z = randf_range(d_min, d_max)
-		
+
 		if ai_difficulty >= 1:
 			var opp_x: float = _player_left.global_position.x
 			if opp_x > 0.5:
@@ -64,7 +133,7 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var vy_boost: float = 0.0
 	var speed_floor: float = MIN_SWING_SPEED_MS * 0.6
 	var speed_cap: float = MAX_SWING_SPEED_MS
-	
+
 	if shot_type != "":
 		var dir_sign: float = -1.0 if player_num == 0 else 1.0
 		match shot_type:
@@ -81,12 +150,12 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 				target_z = dir_sign * randf_range(3.5, 4.5)
 				vy_boost = -0.4
 			"DINK":
-				speed_cap = 6.0; speed_floor = 3.5
+				speed_cap = 6.0;speed_floor = 3.5
 				target_speed = clamp(target_speed, speed_floor, speed_cap)
 				target_z = dir_sign * randf_range(0.3, 1.2)
 				vy_boost = 0.8
 			"DROP":
-				speed_cap = 7.5; speed_floor = 4.0
+				speed_cap = 7.5;speed_floor = 4.0
 				target_speed = clamp(target_speed, speed_floor, speed_cap)
 				target_z = dir_sign * randf_range(1.0, 2.0)
 				vy_boost = 0.6
@@ -109,7 +178,7 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var net_sign: float = -1.0 if player_num == 0 else 1.0
 	var drag_free_vel: Vector3 = Vector3(vx, vy, vz)
 	var drag_free_apex_y: float = ball_pos.y + (vy * vy) / (2.0 * grav)
-	
+
 	var solve_omega: Vector3 = compute_shot_spin(shot_type, drag_free_vel, charge_ratio, player_num, -1)
 	var target_pos_3d: Vector3 = Vector3(target_x, 0.08, target_z)
 	var is_soft_shot: bool = shot_type == "DROP" or shot_type == "DINK"
@@ -120,12 +189,12 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 	var best_clears_net: bool = false
 	var cur_vel: Vector3 = drag_free_vel
 
-	for _iter in range(6):
+	for _iter in range(10):
 		var sim: Dictionary = simulate_shot_trajectory(ball_pos, cur_vel, solve_omega, grav, target_z, net_sign)
 		var landing: Vector3 = sim["pos_at_target"]
 		var y_net_this: float = sim["y_at_net"]
 		var t_net_this: float = sim["t_at_net"]
-		var clears_net: bool = (not needs_net_check) or (y_net_this != -INF and y_net_this >= NET_CLEAR_MIN)
+		var clears_net: bool = ( not needs_net_check) or (y_net_this == INF) or (y_net_this != - INF and y_net_this >= NET_CLEAR_MIN)
 
 		var err_x: float = target_pos_3d.x - landing.x
 		var err_y: float = target_pos_3d.y - landing.y
@@ -137,43 +206,56 @@ func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: i
 		elif clears_net == best_clears_net and total_err < best_err:
 			is_better = true
 		if is_better:
-			best_err = total_err; best_vel = cur_vel; best_clears_net = clears_net
+			best_err = total_err;best_vel = cur_vel;best_clears_net = clears_net
 
-		if clears_net and total_err < 0.15 and sim["crossed_target"]:
+		if clears_net and total_err < 0.12 and sim["crossed_target"]:
 			break
 
-		if needs_net_check and y_net_this != -INF and y_net_this < NET_CLEAR_MIN and t_net_this > 0.01:
-			cur_vel.y += (NET_CLEAR_MIN - y_net_this) / t_net_this
+		if needs_net_check and y_net_this != INF and y_net_this != - INF and y_net_this < NET_CLEAR_MIN and t_net_this > 0.01:
 
-		var actual_dx: float = landing.x - ball_pos.x
-		var actual_dz: float = landing.z - ball_pos.z
-		var actual_hdist: float = sqrt(actual_dx * actual_dx + actual_dz * actual_dz)
-		if actual_hdist > 0.1:
-			var h_scale: float = clampf(lerpf(1.0, hdist / actual_hdist, 0.7), 0.5, 2.0)
-			cur_vel.x *= h_scale; cur_vel.z *= h_scale
 
-		var t_flight: float = maxf(sim["t_total"], 0.1)
-		var vy_damping: float = 0.4 if is_soft_shot else 0.7
-		if not (needs_net_check and y_net_this != -INF and y_net_this < NET_CLEAR_MIN):
+			var vy_boost_needed: float = (NET_CLEAR_MIN - y_net_this) / t_net_this
+			cur_vel.y += vy_boost_needed * 1.3
+			cur_vel.x *= 0.98
+			cur_vel.z *= 0.98
+		else:
+			var actual_dx: float = landing.x - ball_pos.x
+			var actual_dz: float = landing.z - ball_pos.z
+			var actual_hdist: float = sqrt(actual_dx * actual_dx + actual_dz * actual_dz)
+			if actual_hdist > 0.1:
+				var h_scale: float = clampf(lerpf(1.0, hdist / actual_hdist, 0.7), 0.5, 2.0)
+				cur_vel.x *= h_scale;cur_vel.z *= h_scale
+
+			var t_flight: float = maxf(sim["t_total"], 0.1)
+			var vy_damping: float = 0.4 if is_soft_shot else 0.7
 			cur_vel.y += err_y / t_flight * vy_damping
 
 	var solved_vel: Vector3 = best_vel
 	if needs_net_check and not best_clears_net:
-		var t_net_dragfree: float = maxf(absf(ball_pos.z) / maxf(absf(drag_free_vel.z), 0.1), 0.1)
-		var vy_floor: float = (NET_CLEAR_MIN - ball_pos.y + 0.5 * grav * t_net_dragfree * t_net_dragfree) / t_net_dragfree
+
+		var t_net_est: float = maxf(absf(ball_pos.z) / maxf(absf(drag_free_vel.z), 0.1), 0.1)
+		var vy_needed: float = (NET_CLEAR_MIN + 0.2 - ball_pos.y + 0.5 * grav * t_net_est * t_net_est) / t_net_est
 		solved_vel = drag_free_vel
-		solved_vel.y = maxf(solved_vel.y, vy_floor * 1.15)
+		solved_vel.y = maxf(solved_vel.y, vy_needed * 1.4)
+
+		if best_vel.length() > 0.1:
+			solved_vel.x = best_vel.x * 0.9
+			solved_vel.z = best_vel.z * 0.9
 	elif best_err > 1.5:
 		solved_vel = drag_free_vel
 		solved_vel.y = maxf(best_vel.y, drag_free_vel.y)
-	
+
 	if is_soft_shot and best_clears_net:
 		var cur_apex_y: float = ball_pos.y + (solved_vel.y * solved_vel.y) / (2.0 * grav)
-		if absf(cur_apex_y - drag_free_apex_y) / maxf(drag_free_apex_y, 0.01) > 0.30:
+		if absf(cur_apex_y - drag_free_apex_y) / maxf(drag_free_apex_y, 0.01) > 0.3:
 			solved_vel.y = lerpf(drag_free_vel.y, solved_vel.y, 0.3)
 
 	if solved_vel.length() > speed_cap:
 		solved_vel = solved_vel.normalized() * speed_cap
+
+		var scale: float = speed_cap / solved_vel.length()
+		if scale < 1.0:
+			solved_vel *= scale
 	if solved_vel.length() < speed_floor:
 		solved_vel = solved_vel.normalized() * speed_floor
 	return solved_vel
@@ -182,7 +264,7 @@ func compute_shot_spin(shot_type: String, vel: Vector3, charge_ratio: float, _pl
 	var travel: Vector3 = Vector3(vel.x, 0.0, vel.z)
 	if travel.length() < 0.1:
 		return Vector3.ZERO
-	# Topspin axis = UP × travel (right-hand rule).
+
 	var topspin_axis: Vector3 = Vector3.UP.cross(travel.normalized())
 	var side_axis: Vector3 = Vector3.UP
 
@@ -202,7 +284,7 @@ func compute_shot_spin(shot_type: String, vel: Vector3, charge_ratio: float, _pl
 
 	var sidespin_mag: float = 0.0
 	if posture >= 0:
-		# BACKHAND=2, WIDE_BACKHAND=11, LOW_BACKHAND=7, MID_LOW_BACKHAND=14, LOW_WIDE_BACKHAND=19, MID_LOW_WIDE_BACKHAND=17, CHARGE_BACKHAND=9
+
 		var is_backhand: bool = posture in [2, 11, 7, 14, 19, 17, 9]
 		var lateral_sign: float = signf(vel.x)
 		sidespin_mag = lateral_sign * (8.0 if not is_backhand else -6.0) * charge_gain
@@ -222,18 +304,18 @@ func compute_sweet_spot_spin(ball_pos: Vector3, paddle_pos: Vector3, velocity: V
 	var mag: float = lever * vel_mag * 2.5
 	return torque_axis.normalized() * mag
 
-## GAP-15: off-center contact reduces ball speed.
-## Sweet spot radius ~0.04m (4cm). Edge penalty ramps from 0.04m to 0.12m (40% speed loss at edge).
+
+
 func compute_sweet_spot_speed(ball_pos: Vector3, paddle_pos: Vector3, velocity: Vector3) -> float:
-	var offset := paddle_pos - ball_pos
-	var travel_dir := velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.FORWARD
-	var offset_in_plane := offset - travel_dir * offset.dot(travel_dir)
-	var offset_mag := offset_in_plane.length()
-	const SWEET_SPOT_RADIUS := 0.04   # 4cm center zone — full speed
-	const EDGE_RADIUS := 0.12           # 12cm — 40% speed reduction at extreme edge
+	var offset: = paddle_pos - ball_pos
+	var travel_dir: = velocity.normalized() if velocity.length_squared() > 0.01 else Vector3.FORWARD
+	var offset_in_plane: = offset - travel_dir * offset.dot(travel_dir)
+	var offset_mag: = offset_in_plane.length()
+	const SWEET_SPOT_RADIUS: = 0.04
+	const EDGE_RADIUS: = 0.12
 	if offset_mag <= SWEET_SPOT_RADIUS:
-		return 1.0  # center hit — no penalty
-	var penalty := clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 0.4)
+		return 1.0
+	var penalty: = clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 0.4)
 	return 1.0 - penalty
 
 func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, grav: float, target_z: float, net_sign: float) -> Dictionary:
@@ -242,7 +324,7 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 	var cur_omega: Vector3 = omega
 	var dt: float = 1.0 / 120.0
 	var max_steps: int = 200
-	var y_at_net: float = -INF
+	var y_at_net: float = - INF
 	var t_at_net: float = -1.0
 	var apex_y: float = start_pos.y
 	var crossed_target: bool = false
@@ -251,6 +333,13 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 	var prev_pos: Vector3 = pos
 	var prev_z_rel: float = (start_pos.z - target_z) * net_sign
 
+
+
+	var moving_toward_net: bool = (start_pos.z > 0.0 and vel.z < 0.0) or (start_pos.z < 0.0 and vel.z > 0.0)
+	if start_pos.z == 0.0:
+		moving_toward_net = true
+	if not moving_toward_net:
+		y_at_net = INF
 	for _step in range(max_steps):
 		prev_pos = pos
 		var stepped: Array = _Ball.predict_aero_step(pos, cur_vel, cur_omega, grav, dt)
@@ -259,7 +348,7 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 		cur_omega = stepped[2]
 		t_total += dt
 		apex_y = maxf(apex_y, pos.y)
-		if y_at_net == -INF and ((prev_pos.z > 0.0 and pos.z <= 0.0) or (prev_pos.z < 0.0 and pos.z >= 0.0)):
+		if y_at_net == - INF and ((prev_pos.z > 0.0 and pos.z <= 0.0) or (prev_pos.z < 0.0 and pos.z >= 0.0)):
 			var t_frac: float = 0.0; var dz: float = pos.z - prev_pos.z
 			if absf(dz) > 0.0001: t_frac = (0.0 - prev_pos.z) / dz
 			y_at_net = lerpf(prev_pos.y, pos.y, clampf(t_frac, 0.0, 1.0))
@@ -267,11 +356,278 @@ func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, 
 		var z_rel: float = (pos.z - target_z) * net_sign
 		if prev_z_rel < 0.0 and z_rel >= 0.0:
 			var tz_frac: float = 0.0; var dz_target: float = z_rel - prev_z_rel
-			if absf(dz_target) > 0.0001: tz_frac = -prev_z_rel / dz_target
+			if absf(dz_target) > 0.0001: tz_frac = - prev_z_rel / dz_target
 			pos_at_target = prev_pos.lerp(pos, clampf(tz_frac, 0.0, 1.0))
-			crossed_target = true; break
+			crossed_target = true;break
 		prev_z_rel = z_rel
 		if pos.y < 0.0:
-			pos_at_target = pos; break
+			pos_at_target = pos;break
 	if not crossed_target: pos_at_target = pos
-	return { "crossed_target": crossed_target, "pos_at_target": pos_at_target, "y_at_net": y_at_net, "t_at_net": t_at_net, "t_total": t_total, "apex_y": apex_y }
+	return {"crossed_target": crossed_target, "pos_at_target": pos_at_target, "y_at_net": y_at_net, "t_at_net": t_at_net, "t_total": t_total, "apex_y": apex_y}
+
+
+
+
+func solve_spin_launch(start: Vector3, baseline_velocity: Vector3, mode: int, 
+		charge: float, shot_type: String = "", baseline_omega: Vector3 = Vector3.ZERO, 
+		extra_spin: Vector3 = Vector3.ZERO) -> Dictionary:
+	var profiles = preload("res://scripts/shot_profile.gd")
+	var profile: Dictionary = profiles.create(mode, charge, shot_type)
+	var baseline: Vector3 = baseline_velocity.limit_length(_Ball.MAX_SPEED)
+	var reference: Dictionary = _Flight.trace(start, baseline, baseline_omega, 4.0, 1, false, false)
+	var target: Vector3 = reference["first_bounce"]
+	var duration: float = float(reference["first_bounce_time"])
+	var omega: Vector3 = profiles.angular_velocity(profile, baseline, extra_spin)
+	if duration <= 0.0 or baseline.length_squared() < 0.01:
+		return {"velocity": baseline, "omega": omega, "profile": profile, 
+			"target": target, "landing": target, "net_clear": false}
+	var reference_net: Dictionary = reference["net_crossing"]
+
+	var reference_x: float = float(reference_net["pos"].x) if not reference_net.is_empty() else 0.0
+	var required_net: float = _Flight.net_clear_y_at(reference_x) + 0.025
+	if not reference_net.is_empty():
+		required_net = minf(required_net, float(reference_net["pos"].y))
+	var max_speed: float = minf(_Ball.MAX_SPEED, baseline.length() * 1.06 + 0.1)
+	if shot_type == "DINK":
+
+
+
+		var height_delta: float = maxf(0.0, _Flight.net_clear_y_at(reference_x) - (PickleballConstants.NET_HEIGHT + _Ball.BALL_RADIUS))
+		var touch_cap: float = minf(6.15, sqrt(36.0 + 2.0 * _Ball.get_effective_gravity() * height_delta))
+		max_speed = minf(max_speed, touch_cap)
+	if shot_type == "DROP": max_speed = minf(max_speed, 7.5)
+	var launch: Vector3 = baseline
+	var delta_magnus: Vector3 = (omega - baseline_omega).cross(baseline) * _Ball.MAGNUS_COEFFICIENT / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE
+	launch.y -= delta_magnus.y * duration * 0.42
+	launch = launch.limit_length(max_speed)
+	var best: Dictionary = {}
+	var best_score: float = INF
+	for iteration in range(28):
+		omega = profiles.angular_velocity(profile, launch, extra_spin)
+		var flight: Dictionary = _Flight.trace(start, launch, omega, 4.0, 1, false, false)
+		var landing: Vector3 = flight["first_bounce"]
+		var net: Dictionary = flight["net_crossing"]
+		var clears: bool = reference_net.is_empty() or ( not net.is_empty() and net["pos"].y >= required_net + _Flight.net_clear_y_at(net["pos"].x) - _Flight.net_clear_y_at(reference_x) - 0.005)
+		var error: Vector2 = Vector2(target.x - landing.x, target.z - landing.z)
+		var score: float = error.length() + (8.0 if not clears else 0.0)
+		if float(flight["first_bounce_time"]) < 0.0: score = INF
+		if score < best_score:
+			best_score = score
+			best = {"velocity": launch, "omega": omega, "profile": profile, 
+				"target": target, "landing": landing, "net_clear": clears}
+		if clears and error.length() < 0.08: break
+		if not clears and not net.is_empty():
+			launch.y += (required_net + 0.025 - net["pos"].y) / maxf(float(net["time"]), 0.1) * 0.85
+		var actual_time: float = maxf(float(flight["first_bounce_time"]), 0.2)
+		launch.x += error.x / actual_time * 0.82
+		launch.z += error.y / actual_time * 0.82
+		launch = launch.limit_length(max_speed)
+
+
+	if best_score > 0.15:
+		var time_scales: Array = [0.82, 0.92, 1.08, 1.2, 1.36]
+		if shot_type == "DINK": time_scales.append_array([0.86, 0.88, 0.9, 0.94, 0.96, 1.0])
+		for time_scale in time_scales:
+			var solve_time: float = clampf(duration * time_scale, 0.2, 3.5)
+			var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
+			solve_time = roundf(solve_time / dt) * dt
+			launch = (target - start) / solve_time
+			launch.y += 0.5 * _Ball.get_effective_gravity() * solve_time
+			for solve_iteration in range(10):
+				omega = profiles.angular_velocity(profile, launch, extra_spin)
+				var endpoint: Vector3 = _spin_position_after(start, launch, omega, solve_time)
+				launch += (target - endpoint) / solve_time * 0.86
+				launch = launch.limit_length(max_speed)
+			omega = profiles.angular_velocity(profile, launch, extra_spin)
+			var flight: Dictionary = _Flight.trace(start, launch, omega, 4.0, 1, false, false)
+			var net: Dictionary = flight["net_crossing"]
+			var clears: bool = reference_net.is_empty() or ( not net.is_empty() and net["pos"].y >= required_net + _Flight.net_clear_y_at(net["pos"].x) - _Flight.net_clear_y_at(reference_x) - 0.005)
+			var landing: Vector3 = flight["first_bounce"]
+			var score: float = landing.distance_to(target) + (8.0 if not clears else 0.0)
+			if float(flight["first_bounce_time"]) >= 0.0 and score < best_score:
+				best_score = score
+				best = {"velocity": launch, "omega": omega, "profile": profile, 
+					"target": target, "landing": landing, "net_clear": clears}
+			if best_score < 0.1: break
+	if best.is_empty():
+		return {"velocity": baseline, "omega": profiles.angular_velocity(profile, baseline, extra_spin), 
+			"profile": profile, "target": target, "landing": target, "net_clear": false}
+	return best
+
+func _spin_position_after(start: Vector3, velocity: Vector3, omega: Vector3, duration: float) -> Vector3:
+	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
+	return _Ball.predict_aero_steps(start, velocity, omega, _Ball.get_effective_gravity(), dt, roundi(duration / dt))[0]
+
+
+
+
+
+func solve_drop_launch(start: Vector3, charge: float, player_num: int, spin_mode: int = 0, target_override: Vector3 = Vector3.INF, realized_target: bool = false) -> Dictionary:
+	var profiles = preload("res://scripts/shot_profile.gd")
+	var profile: Dictionary = profiles.create(spin_mode, charge, "DROP")
+	var direction: float = -1.0 if player_num == 0 else 1.0
+	var target: Vector3 = Vector3(clampf(start.x * 0.35, -1.2, 1.2), _Flight.FLOOR_REST_Y, 
+		direction * lerpf(0.65, 1.55, clampf(charge, 0.0, 1.0)))
+	if target_override.is_finite():
+		target = target_override if realized_target else _safe_aim_target(target_override, player_num, "DROP", "")
+
+
+	var horizontal_distance: float = Vector2(target.x - start.x, target.z - start.z).length()
+	var speed_cap: float = 11.5
+	if target_override.is_finite(): speed_cap = clampf(10.0 + horizontal_distance * 0.27, 11.5, 12.5)
+	var best: Dictionary = {}
+	var best_score: float = INF
+	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
+	for candidate in range(18):
+		var duration: float = roundf((0.65 + candidate * 0.09) / dt) * dt
+		var launch: Vector3 = (target - start) / duration
+		launch.y += 0.5 * _Ball.get_effective_gravity() * duration
+		var omega: Vector3 = Vector3.ZERO
+		for iteration in range(10):
+			omega = profiles.angular_velocity(profile, launch)
+			var endpoint: Vector3 = _spin_position_after(start, launch, omega, duration)
+
+
+			launch += (target - Vector3(0, 0.0005, 0) - endpoint) / duration * 0.86
+			launch = launch.limit_length(speed_cap)
+		omega = profiles.angular_velocity(profile, launch)
+		var flight: Dictionary = _Flight.trace(start, launch, omega, 3.0, 1, false, false)
+		var net: Dictionary = flight["net_crossing"]
+		var clear: bool = not net.is_empty() and _NetProfile.crossing_clear(net.pos, _Ball.BALL_RADIUS, 0.12) and flight.get("post_hit", {}).is_empty()
+		var landing: Vector3 = flight["first_bounce"]
+		var error: float = landing.distance_to(target)
+		var peak: float = flight.peak_y
+
+		var touch_pace_weight: float = 0.06 + (clampf(charge, 0.0, 1.0) * 0.3 if target_override.is_finite() else 0.0)
+		var score: float = error * 30.0 + launch.length() * 0.18 + duration * touch_pace_weight
+		if not clear: score += 50.0
+		if peak > 4.6: score += 30.0
+		if float(flight.first_bounce_time) < 0.0: score = INF
+		if score < best_score:
+			best_score = score
+			best = {"velocity": launch, "omega": omega, "profile": profile, 
+				"target": target, "landing": landing, "net_clear": clear, 
+				"target_error": error, "duration": duration, "feasible": clear and error < 0.16}
+	return best
+
+
+
+
+
+func solve_aimed_launch(start: Vector3, requested_target: Vector3, charge: float, 
+		player_num: int, spin_mode: int = 0, shot_intent: String = "AUTO", 
+		shot_type: String = "", arc_intent: float = 0.0, realized_target: bool = false) -> Dictionary:
+	if shot_intent == "DROP":
+		return solve_drop_launch(start, charge, player_num, spin_mode, requested_target, realized_target)
+	var profiles = preload("res://scripts/shot_profile.gd")
+	var target: Vector3 = requested_target if realized_target else _safe_aim_target(requested_target, player_num, "AUTO", shot_type)
+
+	var resolved_type: String = "GROUNDSTROKE" if shot_type in ["DROP", "DINK", ""] else shot_type
+	var profile: Dictionary = profiles.create(spin_mode, charge, resolved_type)
+	var power: float = pow(clampf(charge, 0.0, 1.0), 0.7)
+	var net_margin: float = 0.14 if shot_type == "SERVE" else 0.08
+	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
+	var horizontal: float = Vector2(target.x - start.x, target.z - start.z).length()
+	var drag: float = 0.5 * _Ball.AIR_DENSITY * _Ball.DRAG_COEFFICIENT * PI * _Ball.BALL_RADIUS * _Ball.BALL_RADIUS / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE
+	var min_time: float = clampf((exp(drag * horizontal) - 1.0) / (drag * _Ball.MAX_SPEED), 0.24, 2.32)
+	var effective_gravity: float = maxf(3.0, _Ball.get_effective_gravity() + float(profile.topspin_rads) * _Ball.MAGNUS_COEFFICIENT / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE * 9.0)
+	var soft_time: float = clampf(sqrt(2.0 * Vector2(horizontal, target.y - start.y).length() / effective_gravity), min_time, 2.32)
+	var preferred_time: float = lerpf(soft_time, min_time, power)
+	var times: Array[float] = [preferred_time, preferred_time + 0.18, preferred_time + 0.4, 
+		preferred_time + 0.7, soft_time, min_time + 0.12]
+	var visited: Dictionary = {}
+	var candidates: Array[Dictionary] = []
+	var best: Dictionary = {}
+	for duration in times:
+		var time: float = roundf(clampf(duration, 0.24, 2.32) / dt) * dt
+		if visited.has(time): continue
+		visited[time] = true
+		var solved: Dictionary = _solve_aim_candidate(start, target, profile, time, power, shot_type, net_margin)
+		if solved.is_empty(): continue
+		candidates.append(solved)
+		if best.is_empty() or solved._score < best._score: best = solved
+
+
+	if not best.is_empty() and best.feasible:
+		var center: float = best.duration
+		for duration in [center - 0.08, center + 0.08]:
+			var time: float = roundf(clampf(duration, 0.24, 2.32) / dt) * dt
+			if visited.has(time): continue
+			visited[time] = true
+			var solved: Dictionary = _solve_aim_candidate(start, target, profile, time, power, shot_type, net_margin)
+			if solved.is_empty(): continue
+			candidates.append(solved)
+			if solved._score < best._score: best = solved
+	else:
+		for index in range(27):
+			var time: float = roundf((0.24 + index * 0.08) / dt) * dt
+			if visited.has(time): continue
+			var solved: Dictionary = _solve_aim_candidate(start, target, profile, time, power, shot_type, net_margin)
+			if solved.is_empty(): continue
+			candidates.append(solved)
+			if best.is_empty() or solved._score < best._score: best = solved
+
+	if not best.is_empty() and absf(arc_intent) > 0.001:
+		var wanted_duration: float = clampf(float(best.duration) + clampf(arc_intent, -0.5, 0.5) * 1.2, 0.24, 2.32)
+		var time: float = roundf(wanted_duration / dt) * dt
+		var arc_candidate: Dictionary = _solve_aim_candidate(start, target, profile, time, power, shot_type, net_margin)
+		if not arc_candidate.is_empty(): candidates.append(arc_candidate)
+		var best_arc_error: float = INF
+		for candidate in candidates:
+			if not candidate.feasible: continue
+			var arc_error: float = absf(float(candidate.duration) - wanted_duration) * 10.0 + float(candidate.target_error) * 3.0
+			if arc_error < best_arc_error:
+				best_arc_error = arc_error
+				best = candidate
+	if not best.is_empty(): best.erase("_score")
+	return best
+
+func _solve_aim_candidate(start: Vector3, target: Vector3, profile: Dictionary, duration: float, 
+		power: float, shot_type: String, net_margin: float) -> Dictionary:
+	var profiles = preload("res://scripts/shot_profile.gd")
+	var horizontal: Vector3 = Vector3(target.x - start.x, 0, target.z - start.z)
+	var distance: float = horizontal.length()
+	if distance / duration > _Ball.MAX_SPEED: return {}
+	var drag: float = 0.5 * _Ball.AIR_DENSITY * _Ball.DRAG_COEFFICIENT * PI * _Ball.BALL_RADIUS * _Ball.BALL_RADIUS / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE
+
+	var pace: float = (exp(drag * distance) - 1.0) / (drag * duration)
+	var launch: Vector3 = horizontal.normalized() * pace
+	var gravity: float = _Ball.get_effective_gravity() + float(profile.topspin_rads) * _Ball.MAGNUS_COEFFICIENT / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE * distance / duration
+	launch.y = (target.y - start.y) / duration + 0.5 * gravity * duration
+	launch = launch.limit_length(_Ball.MAX_SPEED)
+	var omega: Vector3 = Vector3.ZERO
+	for iteration in range(16):
+		omega = profiles.angular_velocity(profile, launch)
+		var endpoint: Vector3 = _spin_position_after(start, launch, omega, duration)
+
+		var residual: Vector3 = target - Vector3(0, 0.0005, 0) - endpoint
+		if residual.length_squared() < 4e-08: break
+		launch += residual / duration * 0.86
+		launch = launch.limit_length(_Ball.MAX_SPEED)
+	omega = profiles.angular_velocity(profile, launch)
+	var flight: Dictionary = _Flight.trace(start, launch, omega, 3.0, 1, false, false)
+	var net: Dictionary = flight.net_crossing
+	var needs_crossing: bool = start.z * target.z < 0.0
+	var clears: bool = (not needs_crossing or (not net.is_empty() and _NetProfile.crossing_clear(net.pos, _Ball.BALL_RADIUS, net_margin, shot_type != "SERVE"))) and flight.get("post_hit", {}).is_empty()
+	var landing: Vector3 = flight.first_bounce
+	var error: float = landing.distance_to(target)
+	var peak: float = flight.peak_y
+	var feasible: bool = clears and error <= 0.08 and peak <= 4.6 and float(flight.first_bounce_time) >= 0.0
+	var score: float = error * 3.0 + (1.0 - power) * launch.length() * 0.45 + power * duration * 5.0 + launch.length() * 0.02
+	if shot_type == "SERVE": score += maxf(0.0, launch.length() - 17.0) * 2.0
+	if shot_type == "LOB": score += maxf(0.0, 1.3 - duration) * 2.0
+	if not feasible: score += 100.0
+	if not clears: score += 50.0
+	if float(flight.first_bounce_time) < 0.0: score = INF
+	return {"velocity": launch, "omega": omega, "profile": profile, 
+		"target": target, "landing": landing, "net_clear": clears, 
+		"target_error": error, "duration": duration, "feasible": feasible, "_score": score}
+
+func _safe_aim_target(requested: Vector3, player_num: int, shot_intent: String, shot_type: String) -> Vector3:
+	var direction: float = -1.0 if player_num == 0 else 1.0
+	var target: Vector3 = requested
+	if not target.is_finite(): target = Vector3(0, _Flight.FLOOR_REST_Y, direction * 4.6)
+	var near: float = 2.6 if shot_type == "SERVE" else 0.65
+	var far: float = 1.55 if shot_intent == "DROP" else 6.1
+	return Vector3(clampf(target.x, -2.45, 2.45), _Flight.FLOOR_REST_Y, 
+		direction * clampf(target.z * direction, near, far))

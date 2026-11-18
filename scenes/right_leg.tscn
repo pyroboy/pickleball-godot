@@ -1,6 +1,6 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3]
 
-[ext_resource type="Script" path="res://scripts/leg.gd" id="1_leg"]
+[ext_resource type="Script" uid="uid://p5hl6v2vxqi8" path="res://scripts/leg.gd" id="1"]
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_thigh"]
 radius = 0.06
@@ -9,25 +9,25 @@ height = 0.38
 [sub_resource type="BoxMesh" id="BoxMesh_foot"]
 size = Vector3(0.1, 0.05, 0.16)
 
-[node name="RightLeg" type="Node3D"]
-script = ExtResource("1_leg")
+[node name="RightLeg" type="Node3D" unique_id=2082093944]
+script = ExtResource("1")
 
-[node name="ThighPivot" type="Node3D" parent="."]
+[node name="ThighPivot" type="Node3D" parent="." unique_id=1495936661]
 
-[node name="ThighMesh" type="MeshInstance3D" parent="ThighPivot"]
+[node name="ThighMesh" type="MeshInstance3D" parent="ThighPivot" unique_id=347410658]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.19)
 mesh = SubResource("CapsuleMesh_thigh")
 
-[node name="ShinPivot" type="Node3D" parent="ThighPivot"]
+[node name="ShinPivot" type="Node3D" parent="ThighPivot" unique_id=792971122]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.38)
 
-[node name="ShinMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot"]
+[node name="ShinMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot" unique_id=2044292618]
 transform = Transform3D(1, 0, 0, 0, -4.37114e-08, 1, 0, -1, -4.37114e-08, 0, 0, -0.18)
 mesh = SubResource("CapsuleMesh_thigh")
 
-[node name="FootPivot" type="Node3D" parent="ThighPivot/ShinPivot"]
+[node name="FootPivot" type="Node3D" parent="ThighPivot/ShinPivot" unique_id=1988329453]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.36)
 
-[node name="FootMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot/FootPivot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.025, -0.03)
+[node name="FootMesh" type="MeshInstance3D" parent="ThighPivot/ShinPivot/FootPivot" unique_id=2105212845]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.015, -0.03)
 mesh = SubResource("BoxMesh_foot")

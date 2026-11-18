@@ -1,11 +1,11 @@
 extends Node3D
 class_name BounceDecal
-## Pooled flat glow disc spawned at ball bounce spots.
-## Compatibility renderer has no Decal node, so we use a thin cylinder mesh
-## with an additive unshaded material and tween its alpha to fake glow.
+
+
+
 
 const DURATION: float = 0.7
-const RADIUS: float = 0.10
+const RADIUS: float = 0.1
 const HEIGHT: float = 0.004
 
 var _mesh: MeshInstance3D
@@ -13,7 +13,7 @@ var _material: StandardMaterial3D
 var _active: bool = false
 var _tween: Tween
 
-func _ready() -> void:
+func _ready() -> void :
 	name = "BounceDecal"
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "M"
@@ -21,7 +21,7 @@ func _ready() -> void:
 	cyl.top_radius = RADIUS
 	cyl.bottom_radius = RADIUS
 	cyl.height = HEIGHT
-	cyl.radial_segments = 8   # Mobile: reduced from 18
+	cyl.radial_segments = 8
 	cyl.rings = 1
 	_mesh.mesh = cyl
 
@@ -36,7 +36,7 @@ func _ready() -> void:
 	add_child(_mesh)
 	visible = false
 
-func play(pos: Vector3, color: Color) -> void:
+func play(pos: Vector3, color: Color) -> void :
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
 	global_position = Vector3(pos.x, maxf(pos.y, 0.08), pos.z)
@@ -51,7 +51,7 @@ func play(pos: Vector3, color: Color) -> void:
 	_tween.tween_property(_material, "albedo_color:a", 0.0, DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_tween.chain().tween_callback(Callable(self, "_on_fade_done"))
 
-func _on_fade_done() -> void:
+func _on_fade_done() -> void :
 	_active = false
 	visible = false
 

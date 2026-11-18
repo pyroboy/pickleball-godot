@@ -1,6 +1,6 @@
 class_name FakeBallNode extends Node
-## Node-based fake ball for tests that need a Node (e.g. ShotPhysics).
-## For RefCounted-based ball (RallyScorer tests), use FakeBall instead.
+
+
 
 var global_position: Vector3 = Vector3.ZERO
 var linear_velocity: Vector3 = Vector3.ZERO

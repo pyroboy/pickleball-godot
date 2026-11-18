@@ -1,64 +1,33 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene format=3]
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_paddle_head"]
-albedo_color = Color(1, 0.8, 0.2, 1)
-roughness = 0.4
+[ext_resource type="Script" uid="uid://cbvpidtga1i01" path="res://scripts/paddle_model.gd" id="1"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_paddle_handle"]
 albedo_color = Color(0.15, 0.15, 0.15, 1)
 roughness = 0.8
 
-[sub_resource type="BoxMesh" id="BoxMesh_head"]
-size = Vector3(0.25, 0.05, 0.03)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_paddle_head"]
+albedo_color = Color(1, 0.8, 0.2, 1)
+roughness = 0.4
 
-[sub_resource type="CylinderMesh" id="CylinderMesh_edge"]
-top_radius = 0.125
-bottom_radius = 0.125
-height = 0.03
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_handle"]
-top_radius = 0.02
-bottom_radius = 0.02
-height = 0.25
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_paddle"]
-size = Vector3(0.25, 0.55, 0.03)
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_hitbox"]
-size = Vector3(0.27, 0.57, 0.05)
-
-[node name="Paddle" type="StaticBody3D"]
+[node name="Paddle" type="StaticBody3D" unique_id=1115650862]
 collision_layer = 4
 collision_mask = 0
+script = ExtResource("1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.275, 0)
-shape = SubResource("BoxShape3D_paddle")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=303317819]
 
-[node name="Handle" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.125, 0)
-mesh = SubResource("CylinderMesh_handle")
-surface_material_override/0 = SubResource("StandardMaterial3D_paddle_handle")
+[node name="HandleCollision" type="CollisionShape3D" parent="." unique_id=1609488289]
 
-[node name="Head" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
-mesh = SubResource("BoxMesh_head")
-surface_material_override/0 = SubResource("StandardMaterial3D_paddle_head")
+[node name="Handle" type="MeshInstance3D" parent="." unique_id=1177545391]
+material_override = SubResource("StandardMaterial3D_paddle_handle")
 
-[node name="HeadTopCurve" type="MeshInstance3D" parent="Head"]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0.025, 0)
-mesh = SubResource("CylinderMesh_edge")
-surface_material_override/0 = SubResource("StandardMaterial3D_paddle_head")
+[node name="Head" type="MeshInstance3D" parent="." unique_id=131934308]
+material_override = SubResource("StandardMaterial3D_paddle_head")
 
-[node name="HeadBottomCurve" type="MeshInstance3D" parent="Head"]
-transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, -0.025, 0)
-mesh = SubResource("CylinderMesh_edge")
-surface_material_override/0 = SubResource("StandardMaterial3D_paddle_head")
-
-[node name="PaddleHitbox" type="Area3D" parent="."]
+[node name="PaddleHitbox" type="Area3D" parent="." unique_id=1944811277]
 collision_layer = 0
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="PaddleHitbox"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.275, 0)
-shape = SubResource("BoxShape3D_hitbox")
+[node name="CollisionShape3D" type="CollisionShape3D" parent="PaddleHitbox" unique_id=542009012]
 
+[node name="HandleCollision" type="CollisionShape3D" parent="PaddleHitbox" unique_id=76170940]

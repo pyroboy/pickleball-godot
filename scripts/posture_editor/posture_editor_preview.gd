@@ -1,32 +1,32 @@
-## Manages pose trigger, transition player, and preview definition building.
+
 
 var _pose_trigger = null
 var _transition_player = null
 
-## Injected
+
 var _player: Node3D
 var _library
 var _base_pose_library
-var _state  # PostureEditorState ref
+var _state
 
-const READY_POSTURE_ID := 20
-const CHARGE_FOREHAND_POSTURE_ID := 8
-const CHARGE_BACKHAND_POSTURE_ID := 9
+const READY_POSTURE_ID: = 20
+const CHARGE_FOREHAND_POSTURE_ID: = 8
+const CHARGE_BACKHAND_POSTURE_ID: = 9
 
-func init(player: Node3D, library, base_pose_library, state) -> void:
+func init(player: Node3D, library, base_pose_library, state) -> void :
 	_player = player
 	_library = library
 	_base_pose_library = base_pose_library
 	_state = state
 
-func setup_transition_player() -> void:
+func setup_transition_player() -> void :
 	if not _player or not _state.get_current_def() or _state.is_base_pose_mode():
 		return
-	
+
 	if not _transition_player:
 		_transition_player = load("res://scripts/posture_editor/transition_player.gd").new()
-		# Parent will add as child
-	
+
+
 	var ready_def = _contextualize_posture_for_preview(_library.get_def(READY_POSTURE_ID))
 	var charge_def = _contextualize_posture_for_preview(_build_charge_preview_def(_state.get_current_def()))
 	var contact_def = _contextualize_posture_for_preview(_state.get_current_def())
@@ -39,20 +39,20 @@ func setup_transition_player() -> void:
 func get_transition_player():
 	return _transition_player
 
-func set_transition_player(player) -> void:
+func set_transition_player(player) -> void :
 	_transition_player = player
 
-func on_play_transition() -> void:
+func on_play_transition() -> void :
 	if _state.is_base_pose_mode():
 		return
 	if not _transition_player:
 		setup_transition_player()
 	elif _state.get_current_def():
 		setup_transition_player()
-	
+
 	if not _transition_player:
 		return
-	
+
 	if _transition_player.is_playing():
 		_transition_player.pause()
 	else:
@@ -85,7 +85,7 @@ func _contextualize_posture_for_preview(def):
 func _preview_context_base_pose_id() -> int:
 	if not _player:
 		return -1
-	# preview context option is managed by shell
+
 	match _state.get_preview_context_option_idx():
 		1: return _player.BasePoseState.ATHLETIC_READY
 		2: return _player.BasePoseState.SPLIT_STEP
@@ -124,7 +124,7 @@ func _preview_context_stroke_posture_id() -> int:
 func _preview_context_base_pose_def():
 	if not _player:
 		return null
-	var base_pose_id := _preview_context_base_pose_id()
+	var base_pose_id: = _preview_context_base_pose_id()
 	if base_pose_id < 0:
 		return null
 	return _base_pose_library.get_def(base_pose_id)
@@ -180,13 +180,13 @@ func _copy_definition(def):
 		return null
 	return def.lerp_with(def, 0.0)
 
-func _capture_live_restore_posture() -> void:
+func _capture_live_restore_posture() -> void :
 	if _state == null or _state.get_editor_restore_posture_id() >= 0:
 		return
 	if _player and _player.posture:
 		_state.set_editor_restore_posture_id(_player.posture.paddle_posture)
 
-func restore_live_posture_from_editor() -> void:
+func restore_live_posture_from_editor() -> void :
 	if _state == null or _state.get_editor_restore_posture_id() < 0 or not _player:
 		return
 	_player.paddle_posture = _state.get_editor_restore_posture_id()
@@ -194,5 +194,5 @@ func restore_live_posture_from_editor() -> void:
 func get_pose_trigger():
 	return _pose_trigger
 
-func set_preview_context_option_idx(idx: int) -> void:
+func set_preview_context_option_idx(idx: int) -> void :
 	_state.set_preview_context_option_idx(idx)

@@ -31,7 +31,7 @@ package-lock.json
 logs/
 
 # Data (runtime)
-data/
+data/postures_backup/
 
 # MCP (session state)
 .mcp/

@@ -1,5 +1,6 @@
-## Manages interactive 3D gizmos for posture editing.
-## Handles gizmo creation, update, hover detection, procedural meshes.
+
+const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
+
 
 signal gizmo_selected(gizmo)
 signal gizmo_moved(gizmo, new_position: Vector3)
@@ -11,22 +12,22 @@ var _elbow_mesh_nodes: Dictionary = {}
 var _player: Node3D = null
 var _posture_editor_ui: Control = null
 
-## Injected
-var _state  # PostureEditorState
+
+var _state
 var _tab_container: TabContainer
 
-func init(player: Node3D, state, tab_container: TabContainer) -> void:
+func init(player: Node3D, state, tab_container: TabContainer) -> void :
 	_player = player
 	_state = state
 	_tab_container = tab_container
 
-func create_gizmo_controller() -> void:
+func create_gizmo_controller() -> void :
 	if _gizmo_controller:
 		_gizmo_controller.queue_free()
-	
+
 	_gizmo_controller = load("res://scripts/posture_editor/gizmo_controller.gd").new()
 	_gizmo_controller.name = "GizmoController"
-	
+
 	if _player == null:
 		_gizmo_controller.queue_free()
 		_gizmo_controller = null
@@ -39,36 +40,36 @@ func create_gizmo_controller() -> void:
 		_gizmo_controller = null
 		push_warning("PostureEditorGizmos: create_gizmo_controller skipped — _player has no parent")
 		return
-	
+
 	_gizmo_controller.gizmo_selected.connect(_on_gizmo_selected)
 	_gizmo_controller.gizmo_moved.connect(_on_gizmo_moved)
 	_gizmo_controller.gizmo_rotated.connect(_on_gizmo_rotated)
-	
-	# Wire UI reference so gizmo controller blocks input when mouse is over the panel.
+
+
 	if _posture_editor_ui:
 		_gizmo_controller.set_posture_editor_ui(_posture_editor_ui)
-	
-	var camera := _player.get_viewport().get_camera_3d() if _player else null
+
+	var camera: = _player.get_viewport().get_camera_3d() if _player else null
 	if camera:
 		_gizmo_controller.set_camera(camera)
-	# Set camera rig reference so gizmo dragging can cancel orbit camera drag.
-	var camera_rig := _player.get_parent().get_node_or_null("CameraRig") as CameraRig
+
+	var camera_rig: = _player.get_parent().get_node_or_null("CameraRig") as CameraRig
 	if camera_rig:
 		_gizmo_controller.set_camera_rig(camera_rig)
-	
-	var can_create_gizmos := false
+
+	var can_create_gizmos: = false
 	if _player and _player.is_inside_tree():
 		if _player.global_position.length() > 0.01:
 			can_create_gizmos = true
-	
+
 	if can_create_gizmos:
 		update_active_gizmos()
 	update_gizmo_visibility()
 
-func set_player(player: Node3D) -> void:
+func set_player(player: Node3D) -> void :
 	_player = player
 
-func set_posture_editor_ui(ui: Control) -> void:
+func set_posture_editor_ui(ui: Control) -> void :
 	_posture_editor_ui = ui
 	if _gizmo_controller:
 		_gizmo_controller.set_posture_editor_ui(ui)
@@ -81,39 +82,39 @@ func get_current_paddle_position() -> Vector3:
 func _calculate_paddle_world_position(def):
 	if not _player or not _player.is_inside_tree():
 		return Vector3.ZERO
-	
+
 	var player_pos: Vector3 = _player.global_position
 	var forward_axis: Vector3 = _player._get_forward_axis()
 	var forehand_axis: Vector3 = _player._get_forehand_axis()
-	
+
 	if forward_axis.length() < 0.01 or forehand_axis.length() < 0.01:
 		return Vector3.ZERO
-	
+
 	var offset: Vector3 = forehand_axis * def.paddle_forehand_mul + forward_axis * def.paddle_forward_mul + Vector3(0.0, def.paddle_y_offset, 0.0)
 	return player_pos + offset
 
 func _color_for_family(family: int) -> Color:
 	match family:
-		0: return Color(0.3, 0.9, 0.3)   # Forehand: green
-		1: return Color(0.9, 0.3, 0.3)   # Backhand: red
-		2: return Color(0.3, 0.3, 0.9)   # Center: blue
-		3: return Color(0.9, 0.9, 0.3)   # Overhead: yellow
-		_: return Color(0.7, 0.7, 0.7)   # Default: gray
+		0: return Color(0.3, 0.9, 0.3)
+		1: return Color(0.9, 0.3, 0.3)
+		2: return Color(0.3, 0.3, 0.9)
+		3: return Color(0.9, 0.9, 0.3)
+		_: return Color(0.7, 0.7, 0.7)
 
-func _on_gizmo_selected(gizmo) -> void:
+func _on_gizmo_selected(gizmo) -> void :
 	gizmo_selected.emit(gizmo)
 
-func _on_gizmo_moved(gizmo, new_position: Vector3) -> void:
+func _on_gizmo_moved(gizmo, new_position: Vector3) -> void :
 	gizmo_moved.emit(gizmo, new_position)
 
-func _on_gizmo_rotated(gizmo, euler_delta: Vector3) -> void:
+func _on_gizmo_rotated(gizmo, euler_delta: Vector3) -> void :
 	gizmo_rotated.emit(gizmo, euler_delta)
 
-func update_active_gizmos() -> void:
+func update_active_gizmos() -> void :
 	var body_def = _state.current_body_resource()
 	if not _gizmo_controller or body_def == null:
 		return
-	
+
 	_gizmo_controller.clear_all_gizmos()
 
 	if not _state.is_base_pose_mode():
@@ -122,17 +123,17 @@ func update_active_gizmos() -> void:
 	_create_head_gizmos()
 	_create_arm_gizmos()
 	_create_leg_gizmos()
-	
+
 	update_gizmo_visibility()
 
-func _create_paddle_gizmos() -> void:
+func _create_paddle_gizmos() -> void :
 	if _state.is_base_pose_mode() or _state.get_current_def() == null:
 		return
 	if not _player or not _player.paddle_node: return
 	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
 	var def = _state.get_current_def()
 	var pos = _calculate_paddle_world_position(def)
-	
+
 	var gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
 	gizmo.name = "PositionGizmo_Paddle"
 	gizmo.posture_id = def.posture_id
@@ -143,9 +144,9 @@ func _create_paddle_gizmos() -> void:
 	_gizmo_controller.add_gizmo_handle(gizmo)
 	gizmo.global_position = pos
 
-func _create_torso_gizmos() -> void:
+func _create_torso_gizmos() -> void :
 	if not _player or not _player.skeleton: return
-	
+
 	var hip_idx: int = _player.skeleton.find_bone("hips")
 	if hip_idx >= 0:
 		var hip_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(hip_idx).origin)
@@ -159,7 +160,7 @@ func _create_torso_gizmos() -> void:
 		gizmo.ring_radius = 0.3
 		_gizmo_controller.add_gizmo_handle(gizmo)
 		gizmo.global_position = hip_pos
-	
+
 	var chest_idx: int = _player.skeleton.find_bone("chest")
 	if chest_idx >= 0:
 		var chest_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(chest_idx).origin)
@@ -174,9 +175,9 @@ func _create_torso_gizmos() -> void:
 		_gizmo_controller.add_gizmo_handle(gizmo)
 		gizmo.global_position = chest_pos
 
-func _create_head_gizmos() -> void:
+func _create_head_gizmos() -> void :
 	if not _player or not _player.skeleton: return
-	
+
 	var head_idx: int = _player.skeleton.find_bone("head")
 	if head_idx >= 0:
 		var head_pos: Vector3 = _player.skeleton.to_global(_player.skeleton.get_bone_global_pose(head_idx).origin)
@@ -191,12 +192,12 @@ func _create_head_gizmos() -> void:
 		_gizmo_controller.add_gizmo_handle(gizmo)
 		gizmo.global_position = head_pos
 
-func _create_arm_gizmos() -> void:
+func _create_arm_gizmos() -> void :
 	if not _player or not _player.paddle_node: return
 	if not _player.is_inside_tree() or not _player.paddle_node.is_inside_tree(): return
-	
+
 	var r_hand_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
-	var r_hand_world: Vector3 = r_hand_pivot.global_position if r_hand_pivot else _player.paddle_node.to_global(Vector3(0, 0.07, 0))
+	var r_hand_world: Vector3 = r_hand_pivot.global_position if r_hand_pivot else _player.paddle_node.to_global(PaddleSize.MAIN_GRIP_OFFSET)
 	var r_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
 	r_gizmo.name = "PositionGizmo_RightHand"
 	r_gizmo.posture_id = _state.get_current_id()
@@ -206,7 +207,7 @@ func _create_arm_gizmos() -> void:
 	r_gizmo.gizmo_color = Color(1, 1, 0)
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
 	r_gizmo.global_position = r_hand_world
-	
+
 	var l_hand_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot/HandPivot")
 	var l_hand_world: Vector3 = l_hand_pivot.global_position if l_hand_pivot else Vector3.ZERO
 	var l_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -218,7 +219,7 @@ func _create_arm_gizmos() -> void:
 	l_gizmo.gizmo_color = Color(0, 1, 1)
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
 	l_gizmo.global_position = l_hand_world
-	
+
 	var r_elbow_pivot: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
 	var r_elbow_world: Vector3 = r_elbow_pivot.global_position if r_elbow_pivot else _player.global_position + _player._get_forehand_axis() * 0.5 + Vector3(0, -1.0, 0) + _player._get_forward_axis() * -0.5
 	var r_elbow_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -230,7 +231,7 @@ func _create_arm_gizmos() -> void:
 	r_elbow_gizmo.gizmo_color = Color(1, 0.5, 0)
 	_gizmo_controller.add_gizmo_handle(r_elbow_gizmo)
 	r_elbow_gizmo.global_position = r_elbow_world
-	
+
 	var l_elbow_pivot: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
 	var l_elbow_world: Vector3 = l_elbow_pivot.global_position if l_elbow_pivot else _player.global_position + _player._get_forehand_axis() * -0.5 + Vector3(0, -1.0, 0) + _player._get_forward_axis() * -0.5
 	var l_elbow_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -243,10 +244,10 @@ func _create_arm_gizmos() -> void:
 	_gizmo_controller.add_gizmo_handle(l_elbow_gizmo)
 	l_elbow_gizmo.global_position = l_elbow_world
 
-func _create_leg_gizmos() -> void:
+func _create_leg_gizmos() -> void :
 	if not _player: return
 	if not _player.is_inside_tree(): return
-	
+
 	var r_foot_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
 	var r_foot_world: Vector3 = r_foot_pivot.global_position if r_foot_pivot else Vector3.ZERO
 	var r_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -258,7 +259,7 @@ func _create_leg_gizmos() -> void:
 	r_gizmo.gizmo_color = Color(0.9, 0.3, 0.9)
 	_gizmo_controller.add_gizmo_handle(r_gizmo)
 	r_gizmo.global_position = r_foot_world
-	
+
 	var l_foot_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot")
 	var l_foot_world: Vector3 = l_foot_pivot.global_position if l_foot_pivot else Vector3.ZERO
 	var l_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -270,7 +271,7 @@ func _create_leg_gizmos() -> void:
 	l_gizmo.gizmo_color = Color(0.3, 0.3, 0.9)
 	_gizmo_controller.add_gizmo_handle(l_gizmo)
 	l_gizmo.global_position = l_foot_world
-	
+
 	var r_knee_pivot: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 	var r_knee_world: Vector3 = r_knee_pivot.global_position if r_knee_pivot else r_foot_world + Vector3(0, 0.5, 0)
 	var r_knee_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -282,7 +283,7 @@ func _create_leg_gizmos() -> void:
 	r_knee_gizmo.gizmo_color = Color(1, 0.3, 0.3)
 	_gizmo_controller.add_gizmo_handle(r_knee_gizmo)
 	r_knee_gizmo.global_position = r_knee_world
-	
+
 	var l_knee_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 	var l_knee_world: Vector3 = l_knee_pivot.global_position if l_knee_pivot else l_foot_world + Vector3(0, 0.5, 0)
 	var l_knee_gizmo = load("res://scripts/posture_editor/position_gizmo.gd").new()
@@ -295,7 +296,7 @@ func _create_leg_gizmos() -> void:
 	_gizmo_controller.add_gizmo_handle(l_knee_gizmo)
 	l_knee_gizmo.global_position = l_knee_world
 
-func refresh_live_preview() -> void:
+func refresh_live_preview() -> void :
 	var preview_def = _state.current_body_resource()
 	if preview_def == null:
 		push_warning("PostureEditorGizmos: refresh_live_preview called but no body resource selected")
@@ -309,16 +310,16 @@ func refresh_live_preview() -> void:
 	_player.posture.force_posture_update(preview_def)
 	_player.posture._apply_full_body_posture(preview_def)
 
-func update_gizmo_positions() -> void:
+func update_gizmo_positions() -> void :
 	var body_def = _state.current_body_resource()
 	if not _gizmo_controller or not _player or body_def == null:
 		return
 	if not _player.skeleton: return
-	
+
 	for gizmo in _gizmo_controller.get_children():
 		if not gizmo.has_method("get_posture_id"): continue
 		if _gizmo_controller.get_selected_gizmo() == gizmo: continue
-		
+
 		match gizmo.field_name:
 			"paddle_position":
 				if _state.get_current_def():
@@ -357,41 +358,41 @@ func update_gizmo_positions() -> void:
 				var l_knee_pivot: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 				if l_knee_pivot: gizmo.global_position = l_knee_pivot.global_position
 
-func update_gizmo_visibility() -> void:
+func update_gizmo_visibility() -> void :
 	if _gizmo_controller:
-		_gizmo_controller.visible = true  # Visibility managed by shell
-		var current_tab_name := ""
+		_gizmo_controller.visible = true
+		var current_tab_name: = ""
 		if _tab_container:
 			var current_tab_control = _tab_container.get_child(_tab_container.current_tab)
 			if current_tab_control:
 				current_tab_name = current_tab_control.name
-		
+
 		for gizmo in _gizmo_controller.get_children():
 			if not gizmo.has_method("get_posture_id"): continue
 			var gh: GizmoHandle = gizmo as GizmoHandle
 			var posture_match: bool = (_state.get_current_id() < 0) or (gh.posture_id == _state.get_current_id())
 			var tab_match: bool = (gh.tab_name == "") or (gh.tab_name == current_tab_name)
-			
-			# Body-part gizmos: show when their tab is active and posture matches,
-			# OR when they are currently selected (so drag interaction stays visible).
+
+
+
 			if gh.body_part_name != "":
 				var is_selected: bool = (_gizmo_controller.get_selected_gizmo() == gh)
 				gizmo.visible = (posture_match and tab_match) or is_selected
 				continue
-			
+
 			gizmo.visible = posture_match and tab_match
 
-func process_frame(_delta: float) -> void:
+func process_frame(_delta: float) -> void :
 	if not _gizmo_controller or not _player or not _player.is_inside_tree() or not _player.skeleton:
 		return
-	
+
 	var positions: Dictionary = {}
 	var skel = _player.skeleton
 	for bone_name in ["chest", "head", "hips"]:
 		var idx: int = skel.find_bone(bone_name)
 		if idx >= 0:
 			positions[bone_name] = skel.to_global(skel.get_bone_global_pose(idx).origin)
-	
+
 	var meshes: Dictionary = {}
 	if _player.body_pivot:
 		var chest_mesh: MeshInstance3D = _player.body_pivot.get_node_or_null("chest_inst")
@@ -414,19 +415,19 @@ func process_frame(_delta: float) -> void:
 		if _player.left_leg_node:
 			var l_foot_mesh: MeshInstance3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot/FootPivot/FootMesh")
 			if l_foot_mesh: meshes["left_foot"] = l_foot_mesh
-		
-		# Knee meshes
+
+
 		if _player.right_leg_node:
 			var r_shin: Node3D = _player.right_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 			if r_shin:
 				if not _knee_mesh_nodes.has("right_knee"):
-					var k_mesh := MeshInstance3D.new()
+					var k_mesh: = MeshInstance3D.new()
 					k_mesh.name = "KneeMesh_Right"
-					var sphere := SphereMesh.new()
+					var sphere: = SphereMesh.new()
 					sphere.radius = 0.06
 					sphere.height = 0.12
 					k_mesh.mesh = sphere
-					var mat := StandardMaterial3D.new()
+					var mat: = StandardMaterial3D.new()
 					mat.albedo_color = Color(1, 0.3, 0.3, 0.7)
 					k_mesh.material_override = mat
 					r_shin.add_child(k_mesh)
@@ -436,31 +437,31 @@ func process_frame(_delta: float) -> void:
 			var l_shin: Node3D = _player.left_leg_node.get_node_or_null("ThighPivot/ShinPivot")
 			if l_shin:
 				if not _knee_mesh_nodes.has("left_knee"):
-					var k_mesh := MeshInstance3D.new()
+					var k_mesh: = MeshInstance3D.new()
 					k_mesh.name = "KneeMesh_Left"
-					var sphere := SphereMesh.new()
+					var sphere: = SphereMesh.new()
 					sphere.radius = 0.06
 					sphere.height = 0.12
 					k_mesh.mesh = sphere
-					var mat := StandardMaterial3D.new()
+					var mat: = StandardMaterial3D.new()
 					mat.albedo_color = Color(0.3, 0.9, 0.3, 0.7)
 					k_mesh.material_override = mat
 					l_shin.add_child(k_mesh)
 					_knee_mesh_nodes["left_knee"] = k_mesh
 				meshes["left_knee"] = _knee_mesh_nodes["left_knee"]
-		
-		# Elbow meshes
+
+
 		if _player.right_arm_node:
 			var r_forearm: Node3D = _player.right_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
 			if r_forearm:
 				if not _elbow_mesh_nodes.has("right_elbow"):
-					var e_mesh := MeshInstance3D.new()
+					var e_mesh: = MeshInstance3D.new()
 					e_mesh.name = "ElbowMesh_Right"
-					var sphere := SphereMesh.new()
+					var sphere: = SphereMesh.new()
 					sphere.radius = 0.05
-					sphere.height = 0.10
+					sphere.height = 0.1
 					e_mesh.mesh = sphere
-					var mat := StandardMaterial3D.new()
+					var mat: = StandardMaterial3D.new()
 					mat.albedo_color = Color(1, 0.5, 0, 0.7)
 					e_mesh.material_override = mat
 					r_forearm.add_child(e_mesh)
@@ -470,31 +471,31 @@ func process_frame(_delta: float) -> void:
 			var l_forearm: Node3D = _player.left_arm_node.get_node_or_null("UpperArmPivot/ForearmPivot")
 			if l_forearm:
 				if not _elbow_mesh_nodes.has("left_elbow"):
-					var e_mesh := MeshInstance3D.new()
+					var e_mesh: = MeshInstance3D.new()
 					e_mesh.name = "ElbowMesh_Left"
-					var sphere := SphereMesh.new()
+					var sphere: = SphereMesh.new()
 					sphere.radius = 0.05
-					sphere.height = 0.10
+					sphere.height = 0.1
 					e_mesh.mesh = sphere
-					var mat := StandardMaterial3D.new()
+					var mat: = StandardMaterial3D.new()
 					mat.albedo_color = Color(0.5, 0.5, 1, 0.7)
 					e_mesh.material_override = mat
 					l_forearm.add_child(e_mesh)
 					_elbow_mesh_nodes["left_elbow"] = e_mesh
 				meshes["left_elbow"] = _elbow_mesh_nodes["left_elbow"]
 	_gizmo_controller.set_body_part_meshes(meshes)
-	
-	# Hand and foot positions from current posture definition
+
+
 	var def = _state.current_body_resource()
 	if def:
 		var forehand_axis: Vector3 = _player._get_forehand_axis()
 		var forward_axis: Vector3 = _player._get_forward_axis()
 		if _player.paddle_node and _player.paddle_node.is_inside_tree():
-			var r_base = _player.paddle_node.to_global(Vector3(0, 0.07, 0))
+			var r_base = _player.paddle_node.to_global(PaddleSize.MAIN_GRIP_OFFSET)
 			positions["right_hand"] = r_base + load("res://scripts/posture_skeleton_applier.gd").stance_offset(def.right_hand_offset, forehand_axis, forward_axis)
 			var l_base: Vector3
 			match def.left_hand_mode:
-				1: l_base = _player.paddle_node.to_global(Vector3(0, 0.20, 0))
+				1: l_base = _player.paddle_node.to_global(PaddleSize.SUPPORT_GRIP_OFFSET)
 				2: l_base = _player.global_position + forehand_axis * -0.2 + forward_axis * 0.2 + Vector3(0, 0.45, 0)
 				3: l_base = _player.global_position + Vector3(0, 1.05, 0) + forward_axis * 0.15
 				_: l_base = _player.global_position
@@ -503,7 +504,7 @@ func process_frame(_delta: float) -> void:
 		var base: Vector3 = Vector3(_player.global_position.x, gnd_y, _player.global_position.z)
 		var half_excess: float = (def.stance_width - 0.35) * 0.5
 		var r_lateral: Vector3 = forehand_axis * (0.14 + half_excess)
-		var l_lateral: Vector3 = forehand_axis * -(0.14 + half_excess)
+		var l_lateral: Vector3 = forehand_axis * - (0.14 + half_excess)
 		var r_fwd: float = -0.06
 		var l_fwd: float = 0.06
 		if def.lead_foot == 0:
@@ -528,7 +529,7 @@ func process_frame(_delta: float) -> void:
 		positions["left_elbow"] = l_elbow_world
 	_gizmo_controller.update_body_part_positions(positions)
 
-func teardown_mesh_nodes() -> void:
+func teardown_mesh_nodes() -> void :
 	for k_name in _knee_mesh_nodes.keys():
 		var k_mesh: MeshInstance3D = _knee_mesh_nodes[k_name]
 		k_mesh.queue_free()

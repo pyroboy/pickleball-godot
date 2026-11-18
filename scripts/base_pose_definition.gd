@@ -2,19 +2,19 @@ class_name BasePoseDefinition extends Resource
 
 const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 
-## Body-only authored pose data that layers underneath a stroke/contact posture.
-##
-## These resources do not own paddle contact geometry, charge, or follow-through.
-## They only define the player's base stance, body orientation, support-arm posture,
-## foot placement bias, and timing metadata used by PoseController.
 
-# ── Identity ────────────────────────────────────────────────────────────────
+
+
+
+
+
+
 @export var base_pose_id: int = -1
 @export var display_name: String = ""
 @export var canonical_intent: int = 0
 @export_range(0.0, 1.0) var stroke_overlay_mix: float = 0.82
 
-# ── Runtime metadata ────────────────────────────────────────────────────────
+
 @export_group("Runtime")
 @export var recovery_time: float = 0.12
 @export var landing_lockout_time: float = 0.12
@@ -22,26 +22,28 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 @export var split_step_hop_height: float = 0.0
 @export var lunge_distance: float = 0.0
 
-# ── Right arm IK / support posture ──────────────────────────────────────────
+
 @export_group("Right Arm IK")
 @export var right_hand_offset: Vector3 = Vector3.ZERO
 @export var right_elbow_pole: Vector3 = Vector3.ZERO
 @export var right_shoulder_rotation_deg: Vector3 = Vector3.ZERO
 
-# ── Left arm IK / support posture ───────────────────────────────────────────
+
 @export_group("Left Arm IK")
-@export_enum("Free", "PaddleNeck", "AcrossChest", "OverheadLift") var left_hand_mode: int = 0
+@export_enum("Auto", "PaddleNeck", "AcrossChest", "OverheadLift", "Free") var left_hand_mode: int = 0
 @export var left_hand_offset: Vector3 = Vector3.ZERO
 @export var left_elbow_pole: Vector3 = Vector3.ZERO
 @export var left_shoulder_rotation_deg: Vector3 = Vector3.ZERO
 
-# ── Legs / stance ───────────────────────────────────────────────────────────
+
 @export_group("Legs")
 @export var stance_width: float = 0.35
 @export var front_foot_forward: float = 0.12
 @export var back_foot_back: float = -0.08
 @export var right_foot_yaw_deg: float = 0.0
 @export var left_foot_yaw_deg: float = 0.0
+@export var right_foot_pitch_deg: float = 0.0
+@export var left_foot_pitch_deg: float = 0.0
 @export var right_knee_pole: Vector3 = Vector3.ZERO
 @export var left_knee_pole: Vector3 = Vector3.ZERO
 @export var right_foot_offset: Vector3 = Vector3.ZERO
@@ -50,7 +52,7 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 @export var crouch_amount: float = 0.0
 @export_range(-1.0, 1.0) var weight_shift: float = 0.0
 
-# ── Torso / body pivot ──────────────────────────────────────────────────────
+
 @export_group("Torso")
 @export var hip_yaw_deg: float = 0.0
 @export var torso_yaw_deg: float = 0.0
@@ -63,13 +65,13 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 @export var body_pitch_deg: float = 0.0
 @export var body_roll_deg: float = 0.0
 
-# ── Head ────────────────────────────────────────────────────────────────────
+
 @export_group("Head")
 @export var head_yaw_deg: float = 0.0
 @export var head_pitch_deg: float = 0.0
 @export_range(0.0, 1.0) var head_track_ball_weight: float = 1.0
 
-# ── Metadata ────────────────────────────────────────────────────────────────
+
 @export_group("Metadata")
 @export var schema_version: int = 1
 @export_multiline var notes: String = ""
@@ -99,7 +101,7 @@ func to_preview_posture(stroke_def):
 	return blend_onto_stroke(stroke_def, 1.0)
 
 
-func _copy_fields_to(other) -> void:
+func _copy_fields_to(other) -> void :
 	other.base_pose_id = base_pose_id
 	other.display_name = display_name
 	other.canonical_intent = canonical_intent
@@ -121,6 +123,8 @@ func _copy_fields_to(other) -> void:
 	other.back_foot_back = back_foot_back
 	other.right_foot_yaw_deg = right_foot_yaw_deg
 	other.left_foot_yaw_deg = left_foot_yaw_deg
+	other.right_foot_pitch_deg = right_foot_pitch_deg
+	other.left_foot_pitch_deg = left_foot_pitch_deg
 	other.right_knee_pole = right_knee_pole
 	other.left_knee_pole = left_knee_pole
 	other.right_foot_offset = right_foot_offset
@@ -145,19 +149,22 @@ func _copy_fields_to(other) -> void:
 	other.last_tuned_at = last_tuned_at
 
 
-func _apply_body_fields(target, source, mix: float) -> void:
+func _apply_body_fields(target, source, mix: float) -> void :
 	target.right_hand_offset = source.right_hand_offset.lerp(right_hand_offset, mix)
-	target.right_elbow_pole = source.right_elbow_pole.lerp(right_elbow_pole, mix)
+	target.right_elbow_pole = PostureDefinition.blend_elbow_pole(source.right_elbow_pole, right_elbow_pole, mix, true)
 	target.right_shoulder_rotation_deg = source.right_shoulder_rotation_deg.lerp(right_shoulder_rotation_deg, mix)
-	target.left_hand_mode = source.left_hand_mode if mix < 0.5 else left_hand_mode
+
+	target.left_hand_mode = source.left_hand_mode if source.left_hand_mode != 0 or mix < 0.5 else left_hand_mode
 	target.left_hand_offset = source.left_hand_offset.lerp(left_hand_offset, mix)
-	target.left_elbow_pole = source.left_elbow_pole.lerp(left_elbow_pole, mix)
+	target.left_elbow_pole = PostureDefinition.blend_elbow_pole(source.left_elbow_pole, left_elbow_pole, mix, false)
 	target.left_shoulder_rotation_deg = source.left_shoulder_rotation_deg.lerp(left_shoulder_rotation_deg, mix)
 	target.stance_width = lerpf(source.stance_width, stance_width, mix)
 	target.front_foot_forward = lerpf(source.front_foot_forward, front_foot_forward, mix)
 	target.back_foot_back = lerpf(source.back_foot_back, back_foot_back, mix)
 	target.right_foot_yaw_deg = lerpf(source.right_foot_yaw_deg, right_foot_yaw_deg, mix)
 	target.left_foot_yaw_deg = lerpf(source.left_foot_yaw_deg, left_foot_yaw_deg, mix)
+	target.right_foot_pitch_deg = lerpf(source.right_foot_pitch_deg, right_foot_pitch_deg, mix)
+	target.left_foot_pitch_deg = lerpf(source.left_foot_pitch_deg, left_foot_pitch_deg, mix)
 	target.right_knee_pole = source.right_knee_pole.lerp(right_knee_pole, mix)
 	target.left_knee_pole = source.left_knee_pole.lerp(left_knee_pole, mix)
 	target.right_foot_offset = source.right_foot_offset.lerp(right_foot_offset, mix)

@@ -1,10 +1,11 @@
 extends Node
 class_name InputHandler
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
-## InputHandler.gd - Centralizes all player input, hotkeys, and debug toggles.
-## Manages serve/swing charging, aiming, and delegation to game modules.
 
-# Dependencies
+
+
+
 var _game: Node
 var _ball: RigidBody3D
 var _player_left: CharacterBody3D
@@ -15,25 +16,31 @@ var _posture_editor: Control
 var _sound_panel: Control
 var _reaction_button: Node
 
-# Constants (mirroring PickleballConstants for local logic)
-const MAX_SERVE_CHARGE_TIME := PickleballConstants.MAX_SERVE_CHARGE_TIME
-const SERVE_AIM_STEP := PickleballConstants.SERVE_AIM_STEP
-const SERVE_AIM_MAX := PickleballConstants.SERVE_AIM_MAX
-const ARC_INTENT_STEP := PickleballConstants.ARC_INTENT_STEP
-const ARC_INTENT_MIN := PickleballConstants.ARC_INTENT_MIN
-const ARC_INTENT_MAX := PickleballConstants.ARC_INTENT_MAX
 
-# State
+const MAX_SERVE_CHARGE_TIME: = PickleballConstants.MAX_SERVE_CHARGE_TIME
+const SERVE_AIM_STEP: = PickleballConstants.SERVE_AIM_STEP
+const SERVE_AIM_MAX: = PickleballConstants.SERVE_AIM_MAX
+const ARC_INTENT_STEP: = PickleballConstants.ARC_INTENT_STEP
+const ARC_INTENT_MIN: = PickleballConstants.ARC_INTENT_MIN
+const ARC_INTENT_MAX: = PickleballConstants.ARC_INTENT_MAX
+
+
+var _swing_was_pressed: bool = false
+var _transition_release_required: bool = false
+var _last_control_usec: int = 0
+
+
+var _deferred_rally_hold: bool = false
 var serve_is_charging: bool = false
 var serve_charge_time: float = 0.0
 var serve_aim_offset_x: float = 0.0
 var trajectory_arc_offset: float = 0.0
 
-# Key tracking states
+
 var _key_states: Dictionary = {}
 var _sound_test_states: Dictionary = {}
 
-func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, camera: Node, practice: Node, editor: Control, sound_panel: Control, reaction: Node) -> void:
+func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, camera: Node, practice: Node, editor: Control, sound_panel: Control, reaction: Node) -> void :
 	_game = game
 	_ball = ball
 	_player_left = p_left
@@ -44,78 +51,141 @@ func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: Char
 	_sound_panel = sound_panel
 	_reaction_button = reaction
 
-func _process(delta: float) -> void:
+func _process(delta: float) -> void :
+	var control_delta: float = _control_delta(delta, Time.get_ticks_usec())
+	if _game != null and _game._point_transition_blocks_attempt():
+		latch_transition_input()
+		return
+	if _transition_release_required:
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		_transition_release_required = _swing_was_pressed
+		return
 	_handle_debug_toggles()
+	if _game and _game.aim_controller:
+		var mobile = _game.mobile_controls
+		var separate_aim: bool = mobile != null and mobile.uses_touch_aim()
+		var direction: Vector2 = mobile.aim_direction() if separate_aim else Input.get_vector("move_left", "move_right", "move_up", "move_down")
+		_game.aim_controller.update(control_delta, Input.is_action_pressed("ui_accept"), direction, separate_aim)
+	if _sound_panel and _sound_panel.visible:
+		_deferred_rally_hold = false
+		serve_is_charging = false
+		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		_handle_sound_controls()
+		_game.game_sound_tune._handle_sound_panel_input()
+		return
+	var editor_v2 = _game.get("posture_editor_v2") if _game else null
+	if editor_v2 and editor_v2.visible:
+		_deferred_rally_hold = false
+		serve_is_charging = false
+		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		if _player_left and _player_left.hitting:
+			_player_left.hitting.clear_charge_visual()
+		return
 	_handle_camera_and_movement_controls()
 	_handle_practice_controls()
 	_handle_sound_controls()
-	_handle_swing_charge(delta)
 	_update_aim_and_arc(delta)
+	_handle_swing_charge(control_delta)
 
-func _handle_debug_toggles() -> void:
-	if _just_pressed(KEY_T):
-		if _game.has_method("_start_drop_test"): _game._start_drop_test()
-	
+func latch_transition_input() -> void:
+	# No repeated cleanup/pose mutation: wait for release of a covered press.
+	_swing_was_pressed = Input.is_action_pressed("ui_accept")
+	_transition_release_required = _swing_was_pressed
+	_deferred_rally_hold = false
+	serve_is_charging = false
+	serve_charge_time = 0.0
+	_last_control_usec = Time.get_ticks_usec()
+
+func _control_delta(world_delta: float, now_usec: int) -> float:
+	var previous_usec: int = _last_control_usec
+	_last_control_usec = now_usec
+	if _game and _game.aim_focus and _game.aim_focus.holding and _game.aim_focus.is_solo():
+
+
+
+
+		previous_usec = maxi(previous_usec, _game.aim_focus.started_usec)
+		return maxf(0.0, float(now_usec - previous_usec) / 1000000.0)
+	return world_delta
+
+func _handle_debug_toggles() -> void :
+	if not RuntimePolicy.developer_tools: return
+
+	if _game._tool_state_active():
+		return
 	if _just_pressed(KEY_X):
-		if _game.has_method("_cycle_difficulty"): _game._cycle_difficulty()
-		
-	if _just_pressed(KEY_Z):
-		if _game.has_method("_cycle_debug_visuals"): _game._cycle_debug_visuals()
-		
-	if _just_pressed(KEY_E):
-		if _game.has_method("_toggle_posture_editor_v2"):
-			_game._toggle_posture_editor_v2()
-
-	if _just_pressed(KEY_Q):
-		if _game.has_method("_toggle_posture_editor_v2"):
-			_game._toggle_posture_editor_v2()
-
-	if _just_pressed(KEY_ESCAPE):
-		if _posture_editor and _posture_editor.visible:
-			if _game.has_method("_toggle_posture_editor"):
-				_game._toggle_posture_editor()
-		if _game.get("posture_editor_v2") and _game.posture_editor_v2.visible:
-			if _game.has_method("_toggle_posture_editor_v2"):
-				_game._toggle_posture_editor_v2()
-		
+		_game._cycle_difficulty()
 	if _just_pressed(KEY_N):
-		if _game.has_method("_toggle_intent_indicators"): _game._toggle_intent_indicators()
-
+		_game._toggle_intent_indicators()
+	if not _game.hud.debug_mode: return
+	if _just_pressed(KEY_T):
+		_game._start_drop_test()
+	if _just_pressed(KEY_Z):
+		_game._cycle_debug_visuals()
 	if _just_pressed(KEY_5):
-		if _game.has_method("_toggle_ball_freeze"): _game._toggle_ball_freeze()
+		_game._toggle_ball_freeze()
 
-func _handle_camera_and_movement_controls() -> void:
-	# O key toggles auto-orbit even in editor mode (camera still orbits in editor)
+func _unhandled_key_input(event: InputEvent) -> void :
+	if _game != null and _game._point_transition_blocks_attempt(): return
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	if event.ctrl_pressed or event.meta_pressed or event.alt_pressed:
+		return
+	if event.keycode == KEY_F3:
+		_game.hud.toggle_debug_mode()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_F2 and _game.hud.debug_available and not _game.hud._portrait and not OS.has_feature("mobile"):
+		_game.hud.set_debug_mode(true)
+		_game._toggle_posture_editor_v2()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_E:
+		if _game and not _game._tool_state_active():
+			_game.select_drop_shot()
+			get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_Q:
+
+		if _game and not _game._tool_state_active():
+			_game.cycle_spin_mode()
+			get_viewport().set_input_as_handled()
+	elif event.keycode in [KEY_BRACKETLEFT, KEY_BRACKETRIGHT]:
+		if _game and not _game._tool_state_active() and _game.game_state == 0 and _game.human_may_serve():
+			_game.aim_controller.nudge(Vector2(-1 if event.keycode == KEY_BRACKETLEFT else 1, 0), 0.035)
+			get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_M and _game.hud.debug_mode:
+		_game._toggle_sound_panel()
+		get_viewport().set_input_as_handled()
+
+func _handle_camera_and_movement_controls() -> void :
+	var editor_v2 = _game.get("posture_editor_v2") if _game else null
+	if editor_v2 and editor_v2.visible:
+		_deferred_rally_hold = false
+		return
+
 	if _just_pressed(KEY_O) and _camera_rig:
 		if _camera_rig.has_method("toggle_auto_orbit"): _camera_rig.toggle_auto_orbit()
-	
-	# P and C are gameplay-only; skip when posture editor is open
+
+
 	if _posture_editor and _posture_editor.visible:
 		return
 
 	if _just_pressed(KEY_P) and _camera_rig:
 		if _camera_rig.has_method("cycle_third_person"): _camera_rig.cycle_third_person()
-		
+
 	if _just_pressed(KEY_C) and _player_left:
 		_player_left.manual_crouch = not _player_left.manual_crouch
-		print("[CROUCH] ", "ON" if _player_left.manual_crouch else "OFF")
+		if RuntimePolicy.developer_tools: print("[CROUCH] ", "ON" if _player_left.manual_crouch else "OFF")
 
-func _handle_practice_controls() -> void:
-	if not _practice: return
+func _handle_practice_controls() -> void :
+	if not _practice or not _game.hud.debug_mode: return
 	if _just_pressed(KEY_4): _practice.launch_ball()
 	if _just_pressed(KEY_1): _practice.toggle_auto_hit()
 	if _just_pressed(KEY_2): _practice.toggle_loop()
 
-func _handle_sound_controls() -> void:
-	if _just_pressed(KEY_M):
-		if _sound_panel:
-			_sound_panel.visible = not _sound_panel.visible
-			if _sound_panel.visible and _game.has_method("_refresh_sound_tune_panel"):
-				_game._refresh_sound_tune_panel()
-		if Input.is_key_pressed(KEY_SHIFT): # Shift-M to print
-			if _game.has_method("_print_sound_tunings"): _game._print_sound_tunings()
-			
-	# Sound test triggers (6-8, Y, U, I)
+func _handle_sound_controls() -> void :
+	if not _game.hud.debug_mode: return
+
 	_test_sound(KEY_6, "6", "paddle", 0)
 	_test_sound(KEY_7, "7", "paddle", 1)
 	_test_sound(KEY_8, "8", "paddle", 2)
@@ -123,7 +193,7 @@ func _handle_sound_controls() -> void:
 	_test_sound(KEY_U, "U", "court", 1)
 	_test_sound(KEY_I, "I", "court", 2)
 
-func _test_sound(keycode: int, key_name: String, sound_type: String, idx: int) -> void:
+func _test_sound(keycode: int, key_name: String, sound_type: String, idx: int) -> void :
 	var pressed = Input.is_key_pressed(keycode)
 	var was = _sound_test_states.get(key_name, false)
 	if pressed and not was and _ball and _ball.get("audio_synth"):
@@ -131,71 +201,120 @@ func _test_sound(keycode: int, key_name: String, sound_type: String, idx: int) -
 		else: _ball.audio_synth.play_test_court_sound(idx)
 	_sound_test_states[key_name] = pressed
 
-func _handle_swing_charge(delta: float) -> void:
-	if _posture_editor and _posture_editor.visible:
+func _handle_swing_charge(delta: float) -> void :
+	var held_now: bool = Input.is_action_pressed("ui_accept")
+	if not held_now: _deferred_rally_hold = false
+
+	if _game and _game.game_state == 1:
+		_deferred_rally_hold = false
 		serve_is_charging = false
 		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		return
+	if _game and _game.game_state == 2 and _player_left and _player_left.posture:
+		var human = _player_left.posture.human_contact
+		if human != null and human.phase >= 0:
+			if held_now and not _swing_was_pressed and human.phase >= 2 and human.hit:
+				_deferred_rally_hold = true
+
+
+				if _game.aim_focus: _game.aim_focus.begin_hold()
+			serve_is_charging = false
+			serve_charge_time = 0.0
+			_swing_was_pressed = Input.is_action_pressed("ui_accept")
+			return
+	if _posture_editor and _posture_editor.visible:
+		_deferred_rally_hold = false
+		serve_is_charging = false
+		serve_charge_time = 0.0
+		_swing_was_pressed = Input.is_action_pressed("ui_accept")
+		if _player_left and _player_left.hitting:
+			_player_left.hitting.clear_charge_visual()
 		return
 
-	if Input.is_action_just_pressed("ui_accept"):
+	var swing_pressed: bool = Input.is_action_pressed("ui_accept")
+	if swing_pressed and ( not _swing_was_pressed or _deferred_rally_hold):
+		_deferred_rally_hold = false
 		serve_is_charging = true
 		serve_charge_time = 0.0
 		if _game.has_method("_on_player_swing_press"):
 			_game._on_player_swing_press()
-			
+
+	_swing_was_pressed = swing_pressed
 	if serve_is_charging:
-		if Input.is_action_pressed("ui_accept"):
+		if swing_pressed:
 			serve_charge_time = min(serve_charge_time + delta, MAX_SERVE_CHARGE_TIME)
 			var charge_ratio = serve_charge_time / MAX_SERVE_CHARGE_TIME
-			if _player_left: _player_left.set_serve_charge_visual(charge_ratio)
+			if _player_left: _player_left.set_serve_charge_visual(charge_ratio, delta)
 			if _game.has_method("_update_charge_ui"):
-				_game._update_charge_ui(charge_ratio)
+				_game._update_charge_ui(charge_ratio, _player_left != null)
 			elif _game.get("game_serve") and _game.game_serve.has_method("_update_charge_ui"):
 				_game.game_serve._update_charge_ui(charge_ratio)
 		else:
-			# Released
+
 			serve_is_charging = false
 			var ratio = serve_charge_time / MAX_SERVE_CHARGE_TIME
 			serve_charge_time = 0.0
-			
-			# Check for perfect reaction bonus (Easy mode)
-			if _reaction_button and _reaction_button.has_method("is_perfect") and _reaction_button.is_perfect():
-				ratio = 1.0
+
+
+			if _game.ai_difficulty == 0 and _reaction_button and _reaction_button.has_method("is_perfect") and _reaction_button.is_perfect():
 				if _reaction_button.has_method("trigger_perfect_flash"): _reaction_button.trigger_perfect_flash()
-				print("[INPUT] PERFECT window bonus applied")
-				
+				if RuntimePolicy.developer_tools: print("[INPUT] PERFECT timing; chosen power preserved")
+
 			if _game.has_method("_on_player_swing_release"):
 				_game._on_player_swing_release(ratio)
 			trajectory_arc_offset = 0.0
 
-func _update_aim_and_arc(delta: float) -> void:
-	# Ignore if posture editor is visible
+func _update_aim_and_arc(delta: float) -> void :
+
 	if _posture_editor and _posture_editor.visible:
 		return
-		
-	# Serve aiming (Q/E)
-	if _game.game_state == 0: # WAITING
-		if Input.is_key_pressed(KEY_Q):
-			serve_aim_offset_x = clamp(serve_aim_offset_x - SERVE_AIM_STEP * delta * 10.0, -SERVE_AIM_MAX, SERVE_AIM_MAX)
-		elif Input.is_key_pressed(KEY_E):
-			serve_aim_offset_x = clamp(serve_aim_offset_x + SERVE_AIM_STEP * delta * 10.0, -SERVE_AIM_MAX, SERVE_AIM_MAX)
+
+
+	if _game.game_state == 0 and _game.human_may_serve():
+		var lateral: float = float(Input.is_key_pressed(KEY_BRACKETRIGHT)) - float(Input.is_key_pressed(KEY_BRACKETLEFT))
+		_game.aim_controller.nudge(Vector2(lateral, 0), delta)
+		serve_aim_offset_x = _game.aim_controller.get_target().x
 		_game._update_waiting_ui()
 
-	# Arc intent (R/F)
+
 	var raise = Input.is_key_pressed(KEY_R)
 	var lower = Input.is_key_pressed(KEY_F)
-	
+
 	if serve_is_charging:
 		if raise and not _key_states.get(KEY_R, false):
 			trajectory_arc_offset = clamp(trajectory_arc_offset + ARC_INTENT_STEP, ARC_INTENT_MIN, ARC_INTENT_MAX)
 		if lower and not _key_states.get(KEY_F, false):
 			trajectory_arc_offset = clamp(trajectory_arc_offset - ARC_INTENT_STEP, ARC_INTENT_MIN, ARC_INTENT_MAX)
-	
+
 	_key_states[KEY_R] = raise
 	_key_states[KEY_F] = lower
+	if _game and _game.human_may_serve():
+		_game.serve_aim_offset_x = serve_aim_offset_x
+		_game.trajectory_arc_offset = trajectory_arc_offset
+		if _game.game_serve:
+			_game.game_serve.set_aim_offset(serve_aim_offset_x)
+			_game.game_serve.set_arc_offset(trajectory_arc_offset)
 
 func _just_pressed(keycode: int) -> bool:
 	var pressed = Input.is_key_pressed(keycode)
 	var was = _key_states.get(keycode, false)
 	_key_states[keycode] = pressed
 	return pressed and not was
+
+
+func cancel_charge_input() -> void :
+	_deferred_rally_hold = false
+
+	serve_is_charging = false
+	serve_charge_time = 0.0
+	_swing_was_pressed = Input.is_action_pressed("ui_accept")
+	trajectory_arc_offset = 0.0
+	if not is_instance_valid(_game): return
+	if _game.aim_focus: _game.aim_focus.cancel()
+	if _game.game_state == 0 and _game.game_serve: _game.game_serve.cleanup(true)
+	_game.serve_is_charging = false
+	_game.serve_charge_time = 0.0
+	if _game.aim_controller: _game.aim_controller.reset()
+	if _player_left and _player_left.hitting: _player_left.hitting.clear_charge_visual()
+	if _game.hud: _game.hud.set_charge(0.0, false)

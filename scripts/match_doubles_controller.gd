@@ -1,0 +1,122 @@
+extends RefCounted
+## Service/score adapter. Physical contact and pending momentum stay authoritative.
+const Ledger = preload("res://scripts/doubles_match_state.gd")
+var game
+var state = Ledger.new()
+var _active_token := -1
+var last_outcome: Dictionary = {}
+var score_call_facts: Dictionary = {}
+var _score_call_context: Dictionary = {}
+
+func setup(owner, starters: Array = [], target: int = 11) -> bool:
+	if owner == null or not owner.has_method("get_players"): return false
+	var roster: Array = [[], []]
+	for actor in owner.get_players():
+		if actor.actor_id < 0 or actor.team_id not in [0, 1]: return false
+		roster[actor.team_id].append(actor.actor_id)
+	if roster[0].size() != 2 or roster[1].size() != 2: return false
+	var selected: Array = starters if not starters.is_empty() else [roster[0][0], roster[1][0]]
+	var ends: Array = []
+	for team in [0, 1]:
+		var side: int = owner.get_team_court_side(team)
+		if side not in [0, 1]: return false
+		ends.append(1 if side == 0 else -1)
+	if not state.configure(roster, selected, 0, target, ends): return false
+	game = owner
+	game.doubles_state = state
+	game.doubles_mode = true
+	_active_token = -1
+	score_call_facts = {}
+	_score_call_context = {}
+	_sync_score()
+	return true
+
+func begin_service_attempt(actor, call_facts: Dictionary = {}) -> Dictionary:
+	if game == null or actor == null or actor not in game.get_players(): return {}
+	# Call at committed ball release, never at charge/animation admission.
+	# This also permits a real delivery/foot fault to settle the service attempt.
+	var facts: Dictionary = call_facts
+	if facts.is_empty():
+		if _score_call_context != state.service_context(): return {}
+		facts = score_call_facts
+	for key in ["correct_server_in_position", "correct_receiver_in_position"]:
+		if not facts.has(key) or not facts[key] is bool: return {}
+	var rally: Dictionary = state.begin_rally(actor.actor_id, facts)
+	if not rally.is_empty(): _active_token = int(rally.token)
+	return rally
+
+func record_score_call() -> Dictionary:
+	if game == null: return {}
+	var server = game.get_server_actor()
+	var receiver = game.get_receiver_actor()
+	score_call_facts = {"correct_server_in_position": _in_logical_court(server), "correct_receiver_in_position": _in_logical_court(receiver)}
+	_score_call_context = state.service_context().duplicate(true)
+	return score_call_facts.duplicate()
+
+func _in_logical_court(actor) -> bool:
+	if actor == null: return false
+	var end_sign: float = float(state.court_ends[actor.team_id])
+	var position: Vector3 = actor.global_position if actor.is_inside_tree() else actor.position
+	var local_x: float = position.x * end_sign
+	var local_z: float = position.z * end_sign
+	if local_z <= 0.0: return false
+	return local_x > 0.0 if state.logical_court(actor.actor_id) == Ledger.RIGHT else local_x < 0.0
+
+func observe_first_return(actor) -> Dictionary:
+	if game == null or actor == null or actor not in game.get_players(): return {"valid":false,"reason":"unregistered actor"}
+	return state.receiver_contact(actor.actor_id, _active_token)
+
+func settle_rally(winning_team: int, reason: String = "") -> Dictionary:
+	if game == null: return {"accepted":false,"reason":"unbound game"}
+	if game.contact_authority != null and not game.contact_authority.unresolved_continuation.is_empty():
+		return {"accepted":false,"reason":"physical contact interval unresolved"}
+	if game.rally_scorer != null and game.rally_scorer.has_pending_settlement():
+		return {"accepted":false,"reason":"volley landing or momentum unresolved"}
+	var result: Dictionary = state.complete_rally(winning_team, _active_token, reason)
+	if result.get("accepted",false):
+		_active_token = -1
+		score_call_facts = {}
+		_score_call_context = {}
+		last_outcome = result.duplicate(true)
+		_sync_score()
+	return result
+
+func cancel_rally() -> void:
+	score_call_facts = {}
+	_score_call_context = {}
+	state.cancel_rally()
+	_active_token = -1
+
+func server_logical_court() -> int:
+	return state.logical_court(state.server_actor)
+
+func reset_spawn_position(actor) -> Vector3:
+	# Initial/rematch setup only. Ordinary between-point and end changes walk.
+	var local_right := state.logical_court(actor.actor_id) == Ledger.RIGHT
+	var end_sign: float = float(state.court_ends[actor.team_id])
+	var x := (1.5 if local_right else -1.5) * end_sign
+	var depth := 7.05 if actor.team_id == state.serving_team or actor.actor_id == state.correct_receiver() else 3.0
+	return Vector3(x, actor.ground_y, depth * end_sign)
+
+func service_target() -> Vector3:
+	var side_sign: float = float(state.court_ends[state.serving_team])
+	var local_right := server_logical_court() == Ledger.RIGHT
+	return Vector3((-1.5 if local_right else 1.5) * side_sign, 0.0, -4.6 * side_sign)
+
+func restart() -> bool:
+	if game == null: return false
+	var configured: bool = state.configure(state.teams, state.starting_servers, 0, state.target_score, [1,-1])
+	if configured:
+		_active_token = -1
+		last_outcome = {}
+		score_call_facts = {}
+		_score_call_context = {}
+		_sync_score()
+	return configured
+
+func _sync_score() -> void:
+	game.score_left = int(state.scores[0])
+	game.score_right = int(state.scores[1])
+	game.serving_team = state.serving_team
+	game.match_over = state.match_over
+	game.match_winner = state.winner_team

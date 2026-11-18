@@ -1,0 +1,80 @@
+{
+  "sample_rate": 22050,
+  "channels": 1,
+  "origin": "Original deterministic procedural synthesis; no external recordings",
+  "seed": 170921,
+  "assets": [
+    {
+      "file": "outdoor_air.wav",
+      "frames": 308700,
+      "seconds": 14.0,
+      "peak": 0.160207
+    },
+    {
+      "file": "shoe_step_0.wav",
+      "frames": 2315,
+      "seconds": 0.10498866213151928,
+      "peak": 0.285822
+    },
+    {
+      "file": "shoe_step_1.wav",
+      "frames": 2315,
+      "seconds": 0.10498866213151928,
+      "peak": 0.315815
+    },
+    {
+      "file": "shoe_step_2.wav",
+      "frames": 2315,
+      "seconds": 0.10498866213151928,
+      "peak": 0.433148
+    },
+    {
+      "file": "shoe_step_3.wav",
+      "frames": 2315,
+      "seconds": 0.10498866213151928,
+      "peak": 0.385517
+    },
+    {
+      "file": "shoe_squeak_0.wav",
+      "frames": 2976,
+      "seconds": 0.1349659863945578,
+      "peak": 0.149554
+    },
+    {
+      "file": "shoe_squeak_1.wav",
+      "frames": 2976,
+      "seconds": 0.1349659863945578,
+      "peak": 0.146003
+    },
+    {
+      "file": "point_won.wav",
+      "frames": 9040,
+      "seconds": 0.40997732426303857,
+      "peak": 0.295406
+    },
+    {
+      "file": "point_lost.wav",
+      "frames": 9040,
+      "seconds": 0.40997732426303857,
+      "peak": 0.285948
+    },
+    {
+      "file": "side_out.wav",
+      "frames": 6615,
+      "seconds": 0.3,
+      "peak": 0.264754
+    },
+    {
+      "file": "match_won.wav",
+      "frames": 11466,
+      "seconds": 0.52,
+      "peak": 0.295401
+    },
+    {
+      "file": "match_lost.wav",
+      "frames": 11466,
+      "seconds": 0.52,
+      "peak": 0.295719
+    }
+  ]
+}

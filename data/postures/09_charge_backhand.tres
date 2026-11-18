@@ -1,0 +1,158 @@
+[gd_resource type="Resource" script_class="PostureDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://dcwratt6mjxjp" path="res://scripts/stroke_body_keyframe.gd" id="1"]
+[ext_resource type="Script" uid="uid://c4e2paj0madt2" path="res://scripts/posture_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_nmloc"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.13,
+"body_pitch_deg": 0.0,
+"body_roll_deg": 0.0,
+"body_yaw_deg": -50.0,
+"crouch_amount": 0.11,
+"front_foot_forward": 0.17,
+"head_pitch_deg": 0.0,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 0.0,
+"hip_yaw_deg": 0.0,
+"lead_foot": 0,
+"left_elbow_pole": Vector3(-0.34165633, 0.11872363, 0.036909103),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": -50.0,
+"left_hand_mode": 1,
+"left_hand_offset": Vector3(0, 0, 0),
+"left_knee_pole": Vector3(-0.77, 0.5, 0.64),
+"left_shoulder_rotation_deg": Vector3(0, 0, 0),
+"main_grip_rotation_deg": -29.999999999999996,
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(-0.18193507, -0.033608317, 0.0686183),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": -35.0,
+"right_hand_offset": Vector3(0, -0.05, 0),
+"right_knee_pole": Vector3(-0.57, 0.5, 0.82),
+"right_shoulder_rotation_deg": Vector3(0, 0, 0),
+"shoulder_protraction_m": 0.05,
+"spine_curve_deg": 0.0,
+"stance_width": 0.5,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.00825,
+"support_grip_style": 1.0,
+"support_index_closure": 0.4,
+"torso_pitch_deg": -6.0,
+"torso_roll_deg": 0.0,
+"torso_yaw_deg": -30.0,
+"weight_shift": -0.6
+}
+
+[sub_resource type="Resource" id="Resource_41jbr"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.13,
+"body_pitch_deg": 0.0,
+"body_roll_deg": 0.0,
+"body_yaw_deg": -50.0,
+"crouch_amount": 0.11,
+"front_foot_forward": 0.17,
+"head_pitch_deg": 0.0,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 0.0,
+"hip_yaw_deg": 0.0,
+"lead_foot": 0,
+"left_elbow_pole": Vector3(-0.34165633, 0.11872363, 0.036909103),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": -50.0,
+"left_hand_mode": 1,
+"left_hand_offset": Vector3(0, 0, 0),
+"left_knee_pole": Vector3(-0.77, 0.5, 0.64),
+"left_shoulder_rotation_deg": Vector3(0, 0, 0),
+"main_grip_rotation_deg": -29.999999999999996,
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(-0.18193507, -0.033608317, 0.0686183),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": -35.0,
+"right_hand_offset": Vector3(0, -0.05, 0),
+"right_knee_pole": Vector3(-0.57, 0.5, 0.82),
+"right_shoulder_rotation_deg": Vector3(0, 0, 0),
+"shoulder_protraction_m": 0.05,
+"spine_curve_deg": 0.0,
+"stance_width": 0.5,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.00825,
+"support_grip_style": 1.0,
+"support_index_closure": 0.4,
+"torso_pitch_deg": -6.0,
+"torso_roll_deg": 0.0,
+"torso_yaw_deg": -30.0,
+"weight_shift": -0.6
+}
+
+[resource]
+script = ExtResource("2")
+posture_id = 9
+display_name = "Charge Backhand"
+family = 1
+paddle_forehand_mul = -0.5143427258131313
+paddle_forward_mul = -0.43983329156036377
+paddle_y_offset = 0.1975699192549419
+paddle_pitch_base_deg = -47.76903851791098
+paddle_pitch_sign_source = 1
+paddle_yaw_base_deg = 77.11033972219096
+paddle_yaw_sign_source = 1
+paddle_roll_base_deg = -92.29644517288064
+paddle_roll_sign_source = 1
+zone_x_min = -0.6634
+zone_x_max = -0.2634
+zone_y_min = 0.9726
+zone_y_max = 1.3726
+zone_forward_offset = 0.4406
+right_hand_offset = Vector3(0, -0.05, 0)
+main_grip_rotation_deg = -29.999999999999996
+support_grip_slide_m = 0.00825
+support_index_closure = 0.4
+support_grip_style = 1.0
+right_elbow_path = PackedVector3Array()
+left_elbow_path = PackedVector3Array()
+right_elbow_pole = Vector3(-0.18193507, -0.033608317, 0.0686183)
+left_hand_mode = 1
+left_elbow_pole = Vector3(-0.34165633, 0.11872363, 0.036909103)
+stance_width = 0.5
+front_foot_forward = 0.17
+back_foot_back = -0.13
+right_foot_yaw_deg = -35.0
+left_foot_yaw_deg = -50.0
+right_knee_pole = Vector3(-0.57, 0.5, 0.82)
+left_knee_pole = Vector3(-0.77, 0.5, 0.64)
+crouch_amount = 0.11
+weight_shift = -0.6
+torso_yaw_deg = -30.0
+torso_pitch_deg = -6.0
+shoulder_protraction_m = 0.05
+body_yaw_deg = -50.0
+head_track_ball_weight = 0.8
+charge_body_rotation_deg = -16.0
+charge_hip_coil_deg = -12.0
+charge_back_foot_load = 0.65
+ft_hip_uncoil_deg = 8.0
+ft_front_foot_load = 0.8
+ft_duration_strike = 0.12
+ft_duration_sweep = 0.28
+ft_duration_settle = 0.18
+ft_duration_hold = 0.06
+ft_ease_curve = 2
+windup_body = SubResource("Resource_41jbr")
+follow_through_body = SubResource("Resource_nmloc")
+charge_duration = 0.32
+notes = "Right-dominant two-handed backhand. Connected leftward unit turn and outboard takeback; original front contact head and zone unchanged. Support index follows the back face. See docs/two-handed-backhand-and-ready.md for measured grip/shoulder art limits."
+last_tuned_by = "Codex"
+last_tuned_at = "2026-10-02"

@@ -1,269 +1,441 @@
 extends Node
 class_name PracticeLauncher
-const _Ball = preload("res://scripts/ball.gd")
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
-## PracticeLauncher.gd - Logic for the training/practice ball launcher.
-## Handles spawning balls from realistic court zones with USAPA-spec trajectory bundles.
 
-const PRACTICE_LOOP_INTERVAL := 1.7
-
-# Dependencies
+const PRACTICE_LOOP_INTERVAL: = 1.7
+const ATTEMPT_TIMEOUT: = 8.0
+const _Flight = preload("res://scripts/ball_flight_predictor.gd")
+const Scenarios = preload("res://scripts/kitchen_exchange_scenarios.gd")
+const Tactics = preload("res://scripts/ai_kitchen_tactics.gd")
+var wall_practice
 var _game: Node
 var _ball: RigidBody3D
 var _player_left: CharacterBody3D
 var _player_right: CharacterBody3D
 var _ball_physics_probe: Node
+var is_active: = false
+var loop_enabled: = false
+var drill_mode: = "DRIVE"
+var status_text: = ""
+var attempt_count: = 0
+var success_count: = 0
+var _loop_timer: = 0.0
+var _attempt_timer: = 0.0
+var _attempt_finished: = false
+var _match_snapshot: Dictionary = {}
+var demo_enabled: = false
+var allow_attacks: = false
+var diagonal: = 1
+var exchange_pattern: = "STANDARD"
+var _demo_receive_x: = 0.0
+var _last_launch_targets: Dictionary = {}
+var last_response_kind: = "SOFT"
+var _demo_rng: = RandomNumberGenerator.new()
+var _demo_target: = Vector3.ZERO
+var exchange_count: = 0
+var best_exchange_count: = 0
+var last_failure: = ""
+var _exchange_status_timer: = 0.0
+var _saved_ai_difficulty: = 0
+var _saved_shot_intent: = "AUTO"
+const EXCHANGE_MODES: = ["DINK", "HANDS"]
+const HANDS_SAFE_Z: = 2.72
 
-# State
-var is_active: bool = false
-var loop_enabled: bool = false
-var auto_hit_enabled: bool = true
 
-var _loop_timer: float = 0.0
-var _loop_vel: Vector3 = Vector3.ZERO
-var _loop_origin: Vector3 = Vector3.ZERO
-var _auto_hit_done: bool = false
-
-# Temporary launch parameters for spin mode selection
-var _launch_spin_min: float = 0.0
-var _launch_spin_max: float = 0.0
-var _launch_spin_mode_pref: int = -1
-
-func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, probe: Node) -> void:
+func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, probe: Node) -> void :
 	_game = game
 	_ball = ball
 	_player_left = p_left
 	_player_right = p_right
 	_ball_physics_probe = probe
+	wall_practice = preload("res://scripts/wall_practice.gd").new()
+	add_child(wall_practice)
+	wall_practice.setup(game, self)
+	_ball.bounced.connect(_on_bounced)
+	_ball.hit_by_paddle.connect(_on_exchange_hit)
+	call_deferred("_connect_serve")
 	if OS.has_environment("GODOT_TEST_AUTO_LAUNCH"):
-		launch_ball()
+		call_deferred("launch_ball")
 
-func _process(delta: float) -> void:
-	if not loop_enabled or not _ball:
+func _connect_serve() -> void :
+	_game.game_serve.serve_launched.connect(_on_serve_launched)
+
+func start_drill(mode: String, demo: bool = false, direction: int = 1, pattern: String = "STANDARD") -> void :
+	if mode not in ["SERVE", "DRIVE", "RETURN", "DINK", "HANDS", "WALL"] or _game == null:
 		return
-	if _ball.is_time_frozen():
-		return
-	
-	_loop_timer += delta
-	if _loop_timer >= PRACTICE_LOOP_INTERVAL:
-		_loop_timer = 0.0
-		_ball.global_position = _loop_origin
-		_ball.linear_velocity = _loop_vel
-		_ball.angular_velocity = Vector3.ZERO # Reset spin for loop consistency
-		_auto_hit_done = false
-		
-		if _ball_physics_probe:
-			_ball_physics_probe.begin_probe(_ball)
-
-	if auto_hit_enabled and not _auto_hit_done and _ball and _player_left:
-		# Auto-hit logic (simplified proxy for reaction testing)
-		var dist = _player_left.global_position.distance_to(_ball.global_position)
-		if dist < 1.2 and _ball.global_position.z > 0.0:
-			_auto_hit_done = true
-			# Potential signal to game.gd to perform a swing?
-			# For now just marking it done.
-
-func launch_ball() -> void:
-	if not _ball: return
-	
+	if not is_active:
+		_saved_ai_difficulty = _player_right.ai_brain.ai_difficulty
+		_saved_shot_intent = _game.selected_shot_intent
+		_match_snapshot = {"left": _game.score_left, "right": _game.score_right, 
+			"server": _game.serving_team, "over": _game.match_over, "winner": _game.match_winner}
+	if is_wall(): wall_practice.leave()
 	is_active = true
-	_ball.reset_rally_state()
-	_ball.is_in_play = true
-	_ball.last_hit_by = 1 # Red hit it
-	
-	var blue_pos = _player_left.global_position
-	var zone_roll = randf()
-	var launch_x: float; var launch_z: float; var launch_y: float; var zone_name: String
-	
-	if zone_roll < 0.50:
-		launch_x = randf_range(-2.8, 2.8); launch_z = randf_range(-6.5, -4.8); launch_y = randf_range(0.8, 1.5)
-		zone_name = "BASELINE"
-	elif zone_roll < 0.70:
-		launch_x = randf_range(-2.6, 2.6); launch_z = randf_range(-4.8, -3.0); launch_y = randf_range(0.8, 1.4)
-		zone_name = "MIDCOURT"
-	elif zone_roll < 0.90:
-		launch_x = randf_range(-2.4, 2.4); launch_z = randf_range(-2.8, -1.9); launch_y = randf_range(0.5, 1.1)
-		zone_name = "NEAR-KITCHEN"
-	else:
-		launch_x = randf_range(-2.2, 2.2); launch_z = randf_range(-1.7, -0.3); launch_y = randf_range(0.35, 0.85)
-		zone_name = "IN-KITCHEN"
-	
-	_ball.global_position = Vector3(launch_x, launch_y, launch_z)
-	
-	var target_x = clampf(blue_pos.x + randf_range(-0.8, 0.8), -2.80, 2.80)
-	var target_z = clampf(blue_pos.z + randf_range(-0.5, 0.5), 0.20, 6.45)
-	
-	var shot_type: String = "RALLY"
-	var shot_roll = randf()
-	match zone_name:
-		"BASELINE":
-			if shot_roll < 0.30: shot_type = "RALLY"
-			elif shot_roll < 0.48: shot_type = "DRIVE"
-			elif shot_roll < 0.60: shot_type = "TOPSPIN_ROLL"
-			elif shot_roll < 0.75: shot_type = "LOB_DEFENSIVE"
-			elif shot_roll < 0.85: shot_type = "LOB_OFFENSIVE"
-			elif shot_roll < 0.93: shot_type = "SLICE"
-			else: shot_type = "KICK_SERVE"
-		"MIDCOURT":
-			if shot_roll < 0.25: shot_type = "DRIVE"
-			elif shot_roll < 0.45: shot_type = "RALLY"
-			elif shot_roll < 0.60: shot_type = "TOPSPIN_ROLL"
-			elif shot_roll < 0.75: shot_type = "DROP"
-			elif shot_roll < 0.88: shot_type = "LOB_DEFENSIVE"
-			elif shot_roll < 0.96: shot_type = "SLICE"
-			else: shot_type = "POPUP"
-		"NEAR-KITCHEN":
-			if shot_roll < 0.35: shot_type = "DROP"
-			elif shot_roll < 0.55: shot_type = "DINK"
-			elif shot_roll < 0.75: shot_type = "SPEEDUP"
-			elif shot_roll < 0.85: shot_type = "LOB_OFFENSIVE"
-			elif shot_roll < 0.93: shot_type = "POPUP"
-			else: shot_type = "KICK_SERVE"
-		"IN-KITCHEN", _:
-			if shot_roll < 0.55: shot_type = "DINK"
-			elif shot_roll < 0.75: shot_type = "DROP"
-			elif shot_roll < 0.85: shot_type = "SPEEDUP"
-			elif shot_roll < 0.92: shot_type = "POPUP"
-			elif shot_roll < 0.98: shot_type = "LOB_DEFENSIVE"
-			else: shot_type = "KICK_SERVE"
+	loop_enabled = true
+	drill_mode = mode
+	demo_enabled = demo and mode in EXCHANGE_MODES
+	allow_attacks = mode == "DINK" and ( not demo or pattern == "ATTACK")
+	diagonal = 1 if direction >= 0 else -1
+	exchange_pattern = pattern if pattern in ["STANDARD", "WIDE", "ATTACK"] else "STANDARD"
+	best_exchange_count = 0
+	last_failure = ""
+	attempt_count = 0
+	success_count = 0
+	_game.match_over = false
+	_game.match_winner = -1
+	if is_wall(): wall_practice.enter()
+	repeat_drill()
 
-	match shot_type:
-		"DRIVE", "TOPSPIN_ROLL":
-			target_x = clampf(blue_pos.x + randf_range(-1.6, 1.6), -2.80, 2.80)
-			target_z = randf_range(5.2, 6.40)
-		"RALLY":
-			target_x = clampf(blue_pos.x + randf_range(-1.4, 1.4), -2.80, 2.80)
-			target_z = randf_range(4.2, 6.10)
-		"DROP", "DINK":
-			target_x = clampf(blue_pos.x + randf_range(-1.2, 1.2), -2.60, 2.60)
-			target_z = randf_range(2.10, 3.40)
-		"LOB_DEFENSIVE", "LOB_OFFENSIVE":
-			target_x = clampf(blue_pos.x + randf_range(-1.5, 1.5), -2.70, 2.70)
-			target_z = randf_range(5.5, 6.30)
-		"SPEEDUP":
-			target_x = clampf(blue_pos.x + randf_range(-0.6, 0.6), -2.70, 2.70)
-			target_z = clampf(blue_pos.z + randf_range(-0.8, 0.5), 2.20, 6.20)
-		"SLICE":
-			target_x = clampf(blue_pos.x + randf_range(-1.4, 1.4), -2.80, 2.80)
-			target_z = randf_range(3.5, 5.80)
-		"KICK_SERVE":
-			target_x = clampf(blue_pos.x + randf_range(-1.8, 1.8), -2.60, 2.60)
-			target_z = randf_range(5.4, 6.30)
+func is_wall() -> bool:
+	return is_active and drill_mode == "WALL"
 
-	var launch_angle_deg: float
-	_launch_spin_min = 10.0; _launch_spin_max = 20.0; _launch_spin_mode_pref = -1
-	match shot_type:
-		"DRIVE":
-			launch_angle_deg = randf_range(3.0, 11.0); _launch_spin_min = 18.0; _launch_spin_max = 32.0; _launch_spin_mode_pref = 0
-		"RALLY":
-			launch_angle_deg = randf_range(10.0, 20.0); _launch_spin_min = 10.0; _launch_spin_max = 22.0; _launch_spin_mode_pref = 0
-		"TOPSPIN_ROLL":
-			launch_angle_deg = randf_range(12.0, 24.0); _launch_spin_min = 28.0; _launch_spin_max = 42.0; _launch_spin_mode_pref = 0
-		"DROP":
-			launch_angle_deg = randf_range(22.0, 34.0); _launch_spin_min = 5.0; _launch_spin_max = 14.0; _launch_spin_mode_pref = 1
-		"DINK":
-			launch_angle_deg = randf_range(18.0, 30.0); _launch_spin_min = 3.0; _launch_spin_max = 10.0; _launch_spin_mode_pref = 0
-		"LOB_DEFENSIVE":
-			launch_angle_deg = randf_range(42.0, 55.0); _launch_spin_min = 4.0; _launch_spin_max = 12.0; _launch_spin_mode_pref = 0
-		"LOB_OFFENSIVE":
-			launch_angle_deg = randf_range(33.0, 45.0); _launch_spin_min = 22.0; _launch_spin_max = 38.0; _launch_spin_mode_pref = 0
-		"POPUP":
-			launch_angle_deg = randf_range(55.0, 75.0); _launch_spin_min = 2.0; _launch_spin_max = 10.0; _launch_spin_mode_pref = 1
-			target_x = blue_pos.x + randf_range(-1.2, 1.2); target_z = randf_range(1.9, 3.5)
-		"SPEEDUP":
-			launch_angle_deg = randf_range(6.0, 14.0); _launch_spin_min = 20.0; _launch_spin_max = 34.0; _launch_spin_mode_pref = 0
-		"SLICE":
-			launch_angle_deg = randf_range(8.0, 20.0); _launch_spin_min = 28.0; _launch_spin_max = 44.0; _launch_spin_mode_pref = 1
-		"KICK_SERVE":
-			launch_angle_deg = randf_range(14.0, 26.0); _launch_spin_min = 25.0; _launch_spin_max = 40.0; _launch_spin_mode_pref = 2
-		_:
-			launch_angle_deg = randf_range(10.0, 20.0)
-
-	var grav = _Ball.get_effective_gravity()
-	var dx = target_x - _ball.global_position.x; var dz = target_z - _ball.global_position.z; var hdist = sqrt(dx * dx + dz * dz)
-	
-	const MAX_LAUNCH_V: float = 18.0
-	var target_y: float = 0.5
-	var drop_D: float = launch_y - target_y
-	var angle: float; var cos_a: float; var sin_a: float; var v_sq: float; var _feasible: bool = false
-	var retries: int = 0
-	while retries < 12:
-		angle = deg_to_rad(launch_angle_deg); cos_a = cos(angle); sin_a = sin(angle); var tan_a = tan(angle)
-		var denom = cos_a * cos_a * (drop_D + hdist * tan_a)
-		if denom < 0.01: denom = 0.01
-		v_sq = 0.5 * grav * hdist * hdist / denom
-		if v_sq <= MAX_LAUNCH_V * MAX_LAUNCH_V and v_sq >= 1.0:
-			_feasible = true; break
-		if launch_angle_deg < 45.0: launch_angle_deg = minf(launch_angle_deg + 3.0, 45.0)
-		else: launch_angle_deg = minf(launch_angle_deg + 2.0, 70.0)
-		retries += 1
-	
-	var v_total = clampf(sqrt(maxf(v_sq, 1.0)), 3.0, MAX_LAUNCH_V)
-	var vx = (dx / hdist if hdist > 0.01 else 0.0) * v_total * cos_a
-	var vz = (dz / hdist if hdist > 0.01 else 0.0) * v_total * cos_a
-	var vy = v_total * sin_a
-
-	if vz > 0.01:
-		var t_net = (0.0 - _ball.global_position.z) / vz
-		if t_net > 0.0:
-			var y_at_net = launch_y + vy * t_net - 0.5 * grav * t_net * t_net
-			if y_at_net < 1.05: vy += (1.15 - y_at_net) / t_net
-
-	_ball.linear_velocity = Vector3(vx, vy, vz)
-	
-	# Spin mode selection
-	var h_vel = Vector3(vx, 0, vz)
-	var mode_roll = randf()
-	var spin_mode = 0
-	if h_vel.length() > 0.1:
-		if _launch_spin_mode_pref >= 0:
-			if mode_roll < 0.80: spin_mode = _launch_spin_mode_pref
-			elif mode_roll < 0.92: spin_mode = 3
-			else: spin_mode = (_launch_spin_mode_pref + 1 + (randi() % 2)) % 4
-		else:
-			if mode_roll < 0.5: spin_mode = 0
-			elif mode_roll < 0.8: spin_mode = 1
-			else: spin_mode = 2
-
-		var roll_axis = Vector3.UP.cross(h_vel.normalized())
-		var side_axis = Vector3.UP
-		var base_mag = randf_range(_launch_spin_min, _launch_spin_max) if _launch_spin_mode_pref >= 0 else 15.0
-		
-		match spin_mode:
-			0: _ball.angular_velocity = roll_axis * base_mag
-			1: _ball.angular_velocity = -roll_axis * base_mag
-			2: _ball.angular_velocity = side_axis * base_mag * (1.0 if randf() > 0.5 else -1.0)
-			3:
-				var topspin_sign = 1.0 if randf() > 0.2 else -1.0
-				var curl_sign = 1.0 if randf() > 0.5 else -1.0
-				_ball.angular_velocity = roll_axis * base_mag * 0.7 * topspin_sign + side_axis * base_mag * 0.5 * curl_sign
-
-	if _game.has_method("_set_game_state"):
-		_game._set_game_state(1) # GameState.PLAYING (or equivalent)
-	
-	if _player_right:
-		_player_right.ai_ball_bounced_on_side = false
-		
-	if _ball_physics_probe:
-		_ball_physics_probe.begin_probe(_ball)
-		
-	if _player_left and _player_left.posture:
-		_player_left.posture.reset_incoming_highlight()
-	if _player_left and _player_left.debug_visual:
-		_player_left.debug_visual._traj_log_pending = true
-
-	if loop_enabled:
-		_loop_origin = _ball.global_position
-		_loop_vel = _ball.linear_velocity
-		_auto_hit_done = false
-
-func toggle_loop() -> void:
-	loop_enabled = not loop_enabled
+func repeat_drill() -> void :
+	if not is_active or _game._tool_state_active(): return
 	_loop_timer = 0.0
-	if loop_enabled:
-		launch_ball()
-	print("[PRACTICE-LOOP] %s" % ("ON" if loop_enabled else "OFF"))
+	_attempt_timer = 0.0
+	_attempt_finished = false
+	exchange_count = 0
+	last_failure = ""
+	attempt_count += 1
+	_game.serving_team = 0 if drill_mode == "SERVE" else 1
+	_game._reset_ball()
+	_player_right.set_ai_movement_enabled(false)
+	_game.selected_shot_intent = _saved_shot_intent
+	_player_right.ai_brain.ai_difficulty = _saved_ai_difficulty
+	if is_wall():
+		wall_practice.feed()
+		return
+	if is_exchange():
+		_start_exchange()
+		return
+	if drill_mode == "SERVE":
+		_set_status("Hold to serve into the diagonal box")
+		return
+	if drill_mode == "RETURN":
 
-func toggle_auto_hit() -> void:
-	auto_hit_enabled = not auto_hit_enabled
-	print("[PRACTICE-AUTO-HIT] %s" % ("ON" if auto_hit_enabled else "OFF"))
+		_game._perform_serve(0.55)
+		_set_status("Let the serve bounce, then return it")
+		return
+
+
+	_player_left.global_position = Vector3(1.25, _player_left.ground_y, 5.65)
+	_player_right.global_position = Vector3(-1.25, _player_right.ground_y, -5.9)
+	var origin: = Vector3(-1.25, 0.95, -5.5)
+	var target: = Vector3(1.25, _Flight.FLOOR_REST_Y, 4.4)
+	var launch: Dictionary = _game.shot_physics.solve_aimed_launch(origin, target, 0.48, 1, 0, "AUTO", "DRIVE")
+	_ball.global_position = origin
+	_ball.suppress_paddle_collision(_player_right.paddle_node)
+	_ball.linear_velocity = launch.velocity
+	_ball.angular_velocity = launch.omega
+	_ball.last_hit_by = 1
+	_ball.serve_team = 1
+	_ball.is_in_play = true
+	_ball.both_bounces_complete = true
+	_ball.serving_side_bounced = true
+	_ball.receiving_side_bounced = true
+	_ball.flight_id += 1
+	_game._set_game_state(_game.GameState.PLAYING)
+	_game.rally_scorer._serve_was_hit = true
+	_player_right.set_ai_movement_enabled(false)
+	_set_status("Let the feed bounce, then drive it back")
+
+func _on_serve_launched(_team: int) -> void :
+	if not is_active: return
+	_player_right.set_ai_movement_enabled(false)
+	_set_status("Land in the diagonal service box" if drill_mode == "SERVE" else "Let the serve bounce, then return it")
+
+func _on_bounced(position: Vector3) -> void :
+	if is_wall():
+		wall_practice.on_floor_bounce(position)
+		return
+	if is_exchange() and not _attempt_finished:
+		if _game.game_state != _game.GameState.PLAYING: return
+		if drill_mode == "HANDS":
+			finish_attempt(1, "MISSED VOLLEY", "Keep the paddle compact and meet the ball before it bounces")
+		elif not allow_attacks and (absf(position.x) > 2.45 or absf(position.z) > PickleballConstants.NON_VOLLEY_ZONE):
+			finish_attempt(1, "DINK TOO DEEP", "Keep the exchange soft and inside the diagonal kitchen target")
+		return
+	if not is_active or _attempt_finished or _ball.last_hit_by != 0:
+		return
+
+	if _game.game_state != _game.GameState.PLAYING: return
+	if absf(position.x) > PickleballConstants.COURT_WIDTH * 0.5 or absf(position.z) > PickleballConstants.BASELINE_Z:
+		finish_attempt(1, "OUT", "Aim farther inside the sidelines and baseline")
+	elif position.z < 0.0:
+		finish_attempt(0, "GOOD SERVE" if drill_mode == "SERVE" else "IN BOUNDS", "Legal diagonal serve" if drill_mode == "SERVE" else "Your shot landed in the opponent's court")
+
+func finish_attempt(winner: int, reason: String, detail: String) -> void :
+	if not is_active or _attempt_finished: return
+	_attempt_finished = true
+	_loop_timer = 0.0
+	if winner == 0 and not is_exchange(): success_count += 1
+	last_failure = reason
+	_game._set_game_state(_game.GameState.POINT_SCORED)
+	_ball.is_in_play = false
+	_player_right.set_ai_movement_enabled(false)
+	_game.game_serve.cleanup()
+	_ball.freeze = true
+	_ball.linear_velocity = Vector3.ZERO
+	_ball.angular_velocity = Vector3.ZERO
+	_game.scoreboard_ui.show_fault(reason.replace("_", " "), detail)
+	if is_wall():
+		_set_status("%s · next ball shortly" % reason.capitalize())
+		return
+	if is_exchange():
+		_set_status("%s · %d legal hits · best %d\n%s" % [reason.replace("_", " ").capitalize(), exchange_count, best_exchange_count, "Next exchange shortly" if loop_enabled else "Repeat from Pause"])
+		return
+	_set_status("%s · %d/%d in · %s" % [reason.replace("_", " ").capitalize(), success_count, attempt_count, "Next ball shortly" if loop_enabled else "Repeat from Pause"])
+
+func _process(delta: float) -> void :
+	if not is_active or _ball == null or _ball.is_time_frozen() or _game._tool_state_active(): return
+	if _attempt_finished:
+		if loop_enabled:
+			_loop_timer += delta
+			if _loop_timer >= PRACTICE_LOOP_INTERVAL: repeat_drill()
+	elif _game.game_state == _game.GameState.PLAYING:
+		_attempt_timer += delta
+		if is_wall(): wall_practice.tick(delta)
+		if is_exchange():
+			_exchange_status_timer += delta
+			if _exchange_status_timer >= 0.25:
+				_exchange_status_timer = 0.0
+				_show_exchange_status()
+		if _attempt_timer >= ATTEMPT_TIMEOUT:
+			finish_attempt(1, "MISSED RETURN", "Move behind the bounce and release your swing in reach")
+
+func stop_practice() -> void :
+	if not is_active: return
+	if is_wall(): wall_practice.leave()
+	is_active = false
+	demo_enabled = false
+	_game.selected_shot_intent = _saved_shot_intent
+	_player_right.ai_brain.ai_difficulty = _saved_ai_difficulty
+	loop_enabled = false
+	_attempt_finished = false
+	_loop_timer = 0.0
+	_attempt_timer = 0.0
+	_game._practice_mode = false
+	_game.score_left = int(_match_snapshot.left)
+	_game.score_right = int(_match_snapshot.right)
+	_game.serving_team = int(_match_snapshot.server)
+	_game.match_over = bool(_match_snapshot.over)
+	_game.match_winner = int(_match_snapshot.winner)
+	_game.scoreboard_ui.update_score(_game.score_left, _game.score_right)
+	_game._reset_ball()
+	if _game.match_over:
+		_ball.freeze = true
+		_game._set_game_state(_game.GameState.POINT_SCORED)
+		_game.scoreboard_ui.set_state_text("%s · %d - %d\nChoose Rematch to play again" % ["You win!" if _game.match_winner == 0 else "AI wins", _game.score_left, _game.score_right])
+	_match_snapshot.clear()
+	status_text = ""
+
+func _set_status(detail: String) -> void :
+	status_text = "PRACTICE %s · NO SCORE\n%s" % [drill_mode, detail]
+	_game.scoreboard_ui.set_state_text(status_text)
+
+
+func launch_ball() -> void :
+	start_drill("DRIVE")
+	if _ball_physics_probe: _ball_physics_probe.begin_probe(_ball)
+
+func toggle_loop() -> void :
+	if not is_active:
+		start_drill("DRIVE")
+	else:
+		loop_enabled = not loop_enabled
+
+
+func toggle_auto_hit() -> void :
+	if RuntimePolicy.developer_tools: print("[PRACTICE] Manual contact drills; use Repeat to try the same feed")
+
+
+
+func is_exchange() -> bool:
+	return is_active and drill_mode in EXCHANGE_MODES
+
+func is_exchange_demo() -> bool:
+	return is_exchange() and demo_enabled and not _attempt_finished
+
+func needs_bounce() -> bool:
+	return is_exchange() and drill_mode == "DINK" and not allow_attacks
+
+func get_exchange_home(team: int) -> Vector3:
+	var side: float = 1.0 if team == 0 else -1.0
+	var p = _player_left if team == 0 else _player_right
+
+
+	if allow_attacks and demo_enabled and _game.rally_scorer._volley_momentum_watches.has(team):
+		return Vector3(p.global_position.x, p.ground_y, p.global_position.z)
+	var x: float = side * diagonal * 1.05 if drill_mode == "DINK" else 0.0
+	var z: float = 2.18 if drill_mode == "DINK" and not allow_attacks else HANDS_SAFE_Z
+	if drill_mode == "DINK" and exchange_pattern != "STANDARD" and _last_launch_targets.has(team):
+		x = Scenarios.recovery_x(_last_launch_targets[team].x, x)
+	return Vector3(x, p.ground_y, side * z)
+
+func _start_exchange() -> void :
+	_last_launch_targets.clear()
+	last_response_kind = "SOFT"
+	_demo_target = Vector3.ZERO
+	_demo_rng.seed = 1403 + diagonal
+	for team in [0, 1]:
+		var p = _player_left if team == 0 else _player_right
+		p.global_position = get_exchange_home(team)
+		p.velocity = Vector3.ZERO
+		p.current_velocity = Vector3.ZERO
+		if p.leg_ik: p.leg_ik.feet_initialized = false
+
+
+	_player_right.ai_brain.ai_difficulty = _saved_ai_difficulty if allow_attacks else 2
+	_player_right.ai_brain.set_tactic_seed(1403 + diagonal)
+	var origin: Vector3 = Vector3( - diagonal * 1.05, 0.7, -1.5) if drill_mode == "DINK" else Vector3(-0.28, 1.1, -2.05)
+	var launch: Dictionary = solve_exchange_launch(origin, 1)
+	_ball.global_position = origin
+	_ball.suppress_paddle_collision(_player_right.paddle_node)
+	_ball.linear_velocity = launch.velocity
+	_ball.angular_velocity = launch.omega
+	_ball.last_hit_by = 1
+	_ball.serve_team = 1
+	_ball.is_in_play = true
+	_ball.both_bounces_complete = true
+	_ball.serving_side_bounced = true
+	_ball.receiving_side_bounced = true
+	_ball.flight_id += 1
+	_game.selected_shot_intent = "DROP" if drill_mode == "DINK" and not allow_attacks else "AUTO"
+	_game._set_game_state(_game.GameState.PLAYING)
+	_game.rally_scorer._serve_was_hit = true
+	_player_right.set_ai_movement_enabled(true)
+	_show_exchange_status()
+
+func solve_exchange_launch(origin: Vector3, team: int) -> Dictionary:
+	var direction: float = -1.0 if team == 0 else 1.0
+	if drill_mode == "DINK":
+		var target: Vector3 = Scenarios.dink_target(exchange_pattern, exchange_count, team, diagonal)
+		if allow_attacks and demo_enabled and _ball.is_in_play:
+			var context: Dictionary = kitchen_context(origin, team)
+			var response: String = Tactics.response_kind(context, _demo_rng.randf())
+			if response in ["SPEED_UP", "SMASH"]:
+				return solve_kitchen_attack(origin, team, context)
+			if response == "RESET":
+				last_response_kind = "RESET"
+				return _remember_launch(_game.shot_physics.solve_drop_launch(origin, 0.16, team, 0, target), team)
+
+
+
+			if exchange_count >= 2 and exchange_count % 5 == 2:
+				var receiver = _player_right if team == 0 else _player_left
+				var high: bool = int(exchange_count / 5) % 2 == 1
+				var popup_target: = Vector3(clampf(receiver.global_position.x, -1.8, 1.8), 1.95 if high else 1.32, direction * 2.18)
+				last_response_kind = "HIGH_POPUP" if high else "POPUP"
+				return _remember_launch(solve_airborne_feed(origin, popup_target, 1.08 if high else 0.91), team)
+		last_response_kind = "SOFT"
+		return _remember_launch(_game.shot_physics.solve_drop_launch(origin, 0.25, team, 0, target), team)
+
+
+	var receiver_home: Vector3 = get_exchange_home(1 - team)
+	var target: = Vector3(receiver_home.x + 0.42 * direction * (1.0 if int(exchange_count / 2) % 2 == 0 else -1.0), 1.1, direction * 2.05)
+	var duration: float = maxf(0.55, 0.66 - floorf(exchange_count / 6.0) * 0.025) + _player_right.ai_brain.extra_reaction_delay * 0.7
+	var velocity: Vector3 = (target - origin) / duration
+	velocity.y += 0.5 * preload("res://scripts/ball.gd").get_effective_gravity() * duration
+	for step in range(12):
+		var end: Vector3 = _game.shot_physics._spin_position_after(origin, velocity, Vector3.ZERO, duration)
+		velocity += (target - end) / duration * 0.86
+	var profile: Dictionary = preload("res://scripts/shot_profile.gd").create(0, 0.25, "VOLLEY")
+	return {"velocity": velocity, "omega": Vector3.ZERO, "profile": profile, "target": target}
+
+func _on_exchange_hit(team: int) -> void :
+	if is_wall():
+		wall_practice.on_paddle_hit(team)
+		return
+	if not is_exchange() or _attempt_finished or _game.game_state != _game.GameState.PLAYING: return
+	if needs_bounce() and _ball.was_volley:
+		finish_attempt(1 - team, "LET IT BOUNCE", "Dink exchanges require a real floor bounce before every contact")
+		return
+	exchange_count += 1
+	best_exchange_count = maxi(best_exchange_count, exchange_count)
+	_attempt_timer = 0.0
+	_show_exchange_status()
+
+func _show_exchange_status() -> void :
+	var hint: String = ("LIVE DINK · pop-ups may be attacked" if allow_attacks else "Cooperative diagonal targets · bounce, stay low, recover") if drill_mode == "DINK" else "Compact blocks · keep both feet behind the kitchen line"
+	_set_status("%s · %d legal hits · best %d\n%s · warm-start, opening bounces complete" % ["DEMO" if demo_enabled else "YOUR TURN", exchange_count, best_exchange_count, hint])
+
+func get_demo_movement() -> Vector3:
+	if not is_exchange_demo() or _game._tool_state_active(): return Vector3.ZERO
+	var home: Vector3 = get_exchange_home(0)
+	if allow_attacks and _game.rally_scorer._volley_momentum_watches.has(0): return Vector3.ZERO
+	if drill_mode != "DINK" or exchange_pattern == "STANDARD":
+		if drill_mode == "DINK" and _ball.last_hit_by == 1: home.x = _demo_receive_x
+		var old_offset: Vector3 = home - _player_left.global_position
+		old_offset.y = 0.0
+		return old_offset.normalized() if old_offset.length() > 0.07 else Vector3.ZERO
+	if _ball.last_hit_by == 1:
+
+
+		var human = _player_left.posture.human_contact
+		var flight: Dictionary = _player_left.debug_visual._last_flight if _player_left.debug_visual and human != null and human._flight_id == _ball.flight_id else {}
+		var target: Vector3 = Scenarios.receive_target(_player_left.global_position, flight, 
+			_ball.bounces_since_last_hit, needs_bounce(), HANDS_SAFE_Z, _player_left.move_speed)
+		if target.is_finite(): home = target
+		else: home.x = _demo_receive_x
+		if human != null and human._flight_id == _ball.flight_id and not human.contact.is_empty() and human.phase in [0, 1] and float(human.contact.time) <= 0.14:
+
+
+			return Vector3.ZERO
+	_demo_target = home
+	return Scenarios.movement_input(home - _player_left.global_position, _player_left.current_velocity, 
+		_player_left.move_speed, get_physics_process_delta_time())
+
+func _physics_process(_delta: float) -> void :
+	if not is_exchange_demo() or _ball.is_time_frozen() or _game._tool_state_active() or _game.game_state != _game.GameState.PLAYING: return
+	var human = _player_left.posture.human_contact
+	if human == null: return
+	if _ball.last_hit_by == 0 or human.phase >= 0 or human.contact.is_empty(): return
+	if needs_bounce() and not _ball.ball_bounced_since_last_hit and int(human.contact.get("bounces", 0)) == 0: return
+
+
+	var charge: float = 0.25
+	if allow_attacks and float(human.contact.point.y) > _Flight.net_clear_y_at(human.contact.point.x) + 0.2:
+		charge = 0.7
+	human.request_swing(charge)
+
+func set_allow_attacks(enabled: bool) -> void :
+	if not is_exchange() or drill_mode != "DINK": return
+	allow_attacks = enabled
+	_show_exchange_status()
+
+func _remember_launch(launch: Dictionary, team: int) -> Dictionary:
+	_last_launch_targets[team] = launch.target
+	if team == 1: _demo_receive_x = launch.target.x
+	return launch
+
+func kitchen_context(origin: Vector3, team: int) -> Dictionary:
+	var player = _player_left if team == 0 else _player_right
+	var reachable: bool = not player.posture.human_contact.contact.is_empty() if team == 0 else player.ai_brain.ai_selected_contact_reachable
+	return {"near_kitchen": absf(player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 1.4, 
+		"legal_volley": _ball.both_bounces_complete and player.can_volley_from_feet() and not player.is_jumping, 
+		"reachable": reachable, "balanced": _game.rally_scorer._has_regained_balance(player), 
+		"reaction_ready": team == 0 or player.ai_brain._perception_ready, 
+		"ball_height": origin.y, "net_height": _Flight.net_clear_y_at(origin.x), 
+		"net_distance": absf(origin.z), "contact_distance": PaddleReach.shoulder_world(player).distance_to(origin), 
+		"incoming_speed": _ball.linear_velocity.length(), "difficulty": _player_right.ai_brain.ai_difficulty}
+
+func solve_kitchen_attack(origin: Vector3, team: int, context: Dictionary) -> Dictionary:
+	var receiver = _player_right if team == 0 else _player_left
+	var direction: float = -1.0 if team == 0 else 1.0
+	last_response_kind = Tactics.attack_kind(context)
+	var target: = Vector3(clampf(receiver.global_position.x, -2.0, 2.0), _Flight.FLOOR_REST_Y, 
+		direction * (3.8 if last_response_kind == "SMASH" else 4.8))
+	var launch: Dictionary = _game.shot_physics.solve_aimed_launch(origin, target, Tactics.attack_charge(context), team, 
+		0, "AUTO", "SMASH" if last_response_kind == "SMASH" else "VOLLEY")
+	if team == 1: _player_right.ai_brain.last_kitchen_tactic = "ATTACK"
+	return _remember_launch(launch, team)
+
+func solve_airborne_feed(origin: Vector3, target: Vector3, duration: float) -> Dictionary:
+
+
+	var velocity: Vector3 = (target - origin) / duration
+	velocity.y += 0.5 * preload("res://scripts/ball.gd").get_effective_gravity() * duration
+	for step in range(12):
+		velocity += (target - _game.shot_physics._spin_position_after(origin, velocity, Vector3.ZERO, duration)) / duration * 0.86
+	return {"velocity": velocity, "omega": Vector3.ZERO, "target": target, 
+		"profile": preload("res://scripts/shot_profile.gd").create(0, 0.18, "DINK")}

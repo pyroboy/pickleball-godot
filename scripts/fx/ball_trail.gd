@@ -1,33 +1,34 @@
 extends MeshInstance3D
 class_name BallTrail
-## Smooth ribbon trail for the ball.
-##
-## ARCHITECTURE:
-##   - Attached as a direct child of the Game root (not the ball).
-##     Game root transform is identity, so local space == world space and
-##     we can write vertices directly in world coordinates — no top_level
-##     hack, no inherited physics-body transforms to fight.
-##   - game.gd calls setup(ball) to bind the ball reference.
-##
-## GEOMETRY:
-##   - Ring buffer of recent ball world positions (MAX_POINTS).
-##   - Every physics tick: push current position if ball is moving; drain
-##     oldest when stationary so the trail fades away.
-##   - ImmediateMesh TRIANGLE_STRIP forms a camera-facing ribbon.
-##     For each point p:
-##       forward = direction to next point (or previous at the head)
-##       to_cam  = direction from p to the active camera
-##       side    = normalize(forward × to_cam)
-##     This makes the ribbon face the camera regardless of ball direction.
-##
-## LOOK:
-##   - Width tapers from WIDTH_HEAD at the newest point to WIDTH_TAIL at
-##     the oldest. Color fades yellow → orange with alpha to 0.
-##   - Unshaded mix-blend so it reads on the bright court.
-##   - Large custom_aabb to prevent frustum culling.
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
-const MAX_POINTS: int = 8  # Mobile: reduced from 22
-const WIDTH_HEAD: float = 0.10   # ball diameter ≈ 0.12m; trail slightly thinner
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const MAX_POINTS: int = 8
+const WIDTH_HEAD: float = 0.1
 const WIDTH_TAIL: float = 0.01
 const MIN_SPEED: float = 1.0
 const COLOR_HEAD: Color = Color(1.0, 0.95, 0.35, 1.0)
@@ -38,11 +39,13 @@ var _points: PackedVector3Array = PackedVector3Array()
 var _imesh: ImmediateMesh
 var _material: StandardMaterial3D
 var _debug_printed: bool = false
+var _previous_position: Vector3 = Vector3.INF
+var _previous_delta: float = 0.0
 
-func setup(ball: RigidBody3D) -> void:
+func setup(ball: RigidBody3D) -> void :
 	_ball = ball
 
-func _ready() -> void:
+func _ready() -> void :
 	name = "BallTrail"
 
 	_imesh = ImmediateMesh.new()
@@ -57,22 +60,26 @@ func _ready() -> void:
 	_material.vertex_color_use_as_albedo = true
 	_material.disable_receive_shadows = true
 	material_override = _material
-	print("[BallTrail] ready (ribbon)")
+	RenderingServer.frame_pre_draw.connect(_before_draw)
+	if RuntimePolicy.developer_tools: print("[BallTrail] ready (ribbon)")
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void :
 	if _ball == null:
 		return
+	var position: Vector3 = _ball.global_position
+	if _is_discontinuous(position, delta):
+		_clear_history()
+	_previous_position = position
+	_previous_delta = maxf(delta, 0.0)
 	if not _settings_allows_trail():
-		if _points.size() > 0:
-			_points.clear()
-			_imesh.clear_surfaces()
+		_clear_history()
 		return
 
 	var speed: float = _ball.linear_velocity.length()
 	if speed > MIN_SPEED:
-		# Use ring buffer pattern - overwrite oldest instead of remove
+
 		if _points.size() >= MAX_POINTS:
-			# Shift values manually (cheaper than remove_at for PackedVector3Array)
+
 			for i in range(MAX_POINTS - 1):
 				_points[i] = _points[i + 1]
 			_points[MAX_POINTS - 1] = _ball.global_position
@@ -83,7 +90,34 @@ func _physics_process(_delta: float) -> void:
 
 	_rebuild_mesh()
 
-func _rebuild_mesh() -> void:
+func _exit_tree() -> void:
+	if RenderingServer.frame_pre_draw.is_connected(_before_draw):
+		RenderingServer.frame_pre_draw.disconnect(_before_draw)
+
+func reset() -> void:
+	_clear_history()
+	_previous_position = Vector3.INF
+	_previous_delta = 0.0
+
+func _clear_history() -> void:
+	_points.clear()
+	_imesh.clear_surfaces()
+
+func _is_discontinuous(position: Vector3, delta: float) -> bool:
+	# Sampled displacement can belong to the previous tick when slow motion
+	# or the physics rate changes. Allow two of the larger adjacent ticks
+	# plus a ball diameter for collision correction.
+	var limit: float = Ball.MAX_SPEED * maxf(maxf(delta, _previous_delta), 0.0) * 2.0 + Ball.BALL_RADIUS * 2.0
+	return _previous_position.is_finite() and position.distance_to(_previous_position) > limit
+
+func _before_draw() -> void:
+	# A menu can reset/feed after the last physics callback. Clear stale
+	# geometry before rendering that frame; do not append or move the ball.
+	if _points.is_empty(): return
+	if not is_instance_valid(_ball) or not _settings_allows_trail() or _is_discontinuous(_ball.global_position, get_physics_process_delta_time()):
+		_clear_history()
+
+func _rebuild_mesh() -> void :
 	_imesh.clear_surfaces()
 	var n: int = _points.size()
 	if n < 2:
@@ -96,11 +130,11 @@ func _rebuild_mesh() -> void:
 
 	if not _debug_printed:
 		_debug_printed = true
-		print("[BallTrail] first rebuild n=", n, " head=", _points[n - 1])
+		if RuntimePolicy.developer_tools: print("[BallTrail] first rebuild n=", n, " head=", _points[n - 1])
 
 	_imesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
 	for i in range(n):
-		var t: float = float(i) / float(n - 1)  # 0 at tail, 1 at head
+		var t: float = float(i) / float(n - 1)
 		var width: float = lerpf(WIDTH_TAIL, WIDTH_HEAD, t)
 		var col: Color = COLOR_TAIL.lerp(COLOR_HEAD, t)
 

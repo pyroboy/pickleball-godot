@@ -1,6 +1,6 @@
 
 extends Node
-func _ready() -> void:
+func _ready() -> void :
 	var ts = get_node("/root/TimeScale")
 	ts.set_test_fast_forward(10.0)
 	await get_tree().create_timer(0.5).timeout

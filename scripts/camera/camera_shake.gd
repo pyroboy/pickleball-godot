@@ -1,11 +1,11 @@
 extends Node
 class_name CameraShake
-## Trauma-based camera shake. Owned by CameraRig; applies offsets on top of
-## the follow transform via Camera3D.h_offset / v_offset + a small roll on rotation.z.
-##
-## Call add_trauma(amount) to shake. Trauma decays automatically.
-## The final shake magnitude is scaled by an external intensity multiplier
-## (read from Settings autoload — falls back to 1.0 if not present).
+
+
+
+
+
+
 
 const TRAUMA_POWER: float = 2.0
 const DECAY: float = 1.8
@@ -21,16 +21,16 @@ var _time: float = 0.0
 var _base_roll: float = 0.0
 var _has_base_roll: bool = false
 
-func setup(camera: Camera3D) -> void:
+func setup(camera: Camera3D) -> void :
 	_camera = camera
 	_noise = FastNoiseLite.new()
 	_noise.seed = 1337
 	_noise.frequency = 2.0
 
-func add_trauma(amount: float) -> void:
+func add_trauma(amount: float) -> void :
 	trauma = minf(1.0, trauma + maxf(0.0, amount))
 
-func reset() -> void:
+func reset() -> void :
 	trauma = 0.0
 	if _camera != null:
 		_camera.h_offset = 0.0
@@ -38,7 +38,7 @@ func reset() -> void:
 		if _has_base_roll:
 			_camera.rotation.z = _base_roll
 
-func update(delta: float) -> void:
+func update(delta: float) -> void :
 	if _camera == null:
 		return
 	if not _has_base_roll:

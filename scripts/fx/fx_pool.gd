@@ -1,9 +1,10 @@
 extends Node3D
-## Autoload "FXPool".
-## Pre-allocates impact bursts + bounce decals so we don't instantiate/free
-## every rally hit. Pool items are direct children of this autoload node —
-## autoloads live under /root, survive scene changes, and render fine in
-## world space without any reparenting gymnastics.
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
+
+
+
+
+
 
 const ImpactBurstScript = preload("res://scripts/fx/impact_burst.gd")
 const BounceDecalScript = preload("res://scripts/fx/bounce_decal.gd")
@@ -16,13 +17,13 @@ const MAX_DECALS: int = 4
 var _bursts: Array = []
 var _decals: Array = []
 
-func _ready() -> void:
+func _ready() -> void :
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for i in range(INIT_BURSTS):
 		_add_burst()
 	for i in range(INIT_DECALS):
 		_add_decal()
-	print("[FXPool] ready — ", _bursts.size(), " bursts, ", _decals.size(), " decals")
+	if RuntimePolicy.developer_tools: print("[FXPool] ready — ", _bursts.size(), " bursts, ", _decals.size(), " decals")
 
 func _add_burst() -> Node3D:
 	var b: Node3D = ImpactBurstScript.new()
@@ -36,11 +37,11 @@ func _add_decal() -> Node3D:
 	_decals.append(d)
 	return d
 
-func spawn_burst(pos: Vector3, color: Color, strength: float = 1.0, upward: bool = false) -> void:
+func spawn_burst(pos: Vector3, color: Color, strength: float = 1.0, upward: bool = false) -> void :
 	if not _settings_particles_on():
-		print("[FXPool] burst skipped — particles off")
+		if RuntimePolicy.developer_tools: print("[FXPool] burst skipped — particles off")
 		return
-	print("[FXPool] spawn_burst at ", pos, " color=", color, " strength=", "%.2f" % strength)
+	if RuntimePolicy.developer_tools: print("[FXPool] spawn_burst at ", pos, " color=", color, " strength=", "%.2f" % strength)
 	var free_burst: Node3D = _find_free_burst()
 	if free_burst == null:
 		if _bursts.size() < MAX_BURSTS:
@@ -51,7 +52,7 @@ func spawn_burst(pos: Vector3, color: Color, strength: float = 1.0, upward: bool
 	_bursts.erase(free_burst)
 	_bursts.append(free_burst)
 
-func spawn_decal(pos: Vector3, color: Color) -> void:
+func spawn_decal(pos: Vector3, color: Color) -> void :
 	if not _settings_particles_on():
 		return
 	var free_decal: Node3D = _find_free_decal()

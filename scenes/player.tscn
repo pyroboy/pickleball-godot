@@ -1,6 +1,6 @@
-[gd_scene load_steps=8 format=3 uid="uid://player_scene"]
+[gd_scene format=3]
 
-[ext_resource type="PackedScene" path="res://scenes/paddle.tscn" id="1_paddle"]
+[ext_resource type="PackedScene" path="res://scenes/paddle.tscn" id="1"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
 radius = 0.2
@@ -13,21 +13,20 @@ height = 1.0
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_player_left"]
 albedo_color = Color(0.2, 0.6, 1, 1)
 
-[node name="Player" type="CharacterBody3D"]
+[node name="Player" type="CharacterBody3D" unique_id=940830984]
 collision_layer = 2
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1235377908]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 shape = SubResource("CapsuleShape3D_player")
 
-[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1601117229]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 mesh = SubResource("CapsuleMesh_player")
 surface_material_override/0 = SubResource("StandardMaterial3D_player_left")
 
-[node name="Paddle" parent="." instance=ExtResource("1_paddle")]
+[node name="Paddle" parent="." unique_id=1862162781 instance=ExtResource("1")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, -0.4)
 
-[node name="Camera3D" type="Camera3D" parent="."]
+[node name="Camera3D" type="Camera3D" parent="." unique_id=180135504]
 transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 3, 4)
-fov = 75.0

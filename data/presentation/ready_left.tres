@@ -1,0 +1,137 @@
+[gd_resource type="Resource" script_class="PostureDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://dcwratt6mjxjp" path="res://scripts/stroke_body_keyframe.gd" id="1"]
+[ext_resource type="Script" uid="uid://c4e2paj0madt2" path="res://scripts/posture_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_l0pf3"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.07,
+"body_pitch_deg": 0.0,
+"body_roll_deg": 0.0,
+"body_yaw_deg": 0.0,
+"crouch_amount": 0.06,
+"front_foot_forward": 0.07,
+"head_pitch_deg": -20.0,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 2.0,
+"hip_yaw_deg": -2.0,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.3656876, 0.11763084, 0.313653),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(0, 0, 0),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.58, -0.35, -0.07),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0.08, 0, -0.22),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(0, -8, 0),
+"shoulder_protraction_m": 0.05,
+"spine_curve_deg": 0.0,
+"stance_width": 0.48,
+"torso_pitch_deg": -8.0,
+"torso_roll_deg": 0.0,
+"torso_yaw_deg": 0.0,
+"weight_shift": 0.0
+}
+
+[sub_resource type="Resource" id="Resource_q22in"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.07,
+"body_pitch_deg": 0.0,
+"body_roll_deg": 0.0,
+"body_yaw_deg": 0.0,
+"crouch_amount": 0.06,
+"front_foot_forward": 0.07,
+"head_pitch_deg": -20.0,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 2.0,
+"hip_yaw_deg": -2.0,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.3656876, 0.11763084, 0.313653),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(0, 0, 0),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.58, -0.35, -0.07),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0.08, 0, -0.22),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(0, -8, 0),
+"shoulder_protraction_m": 0.05,
+"spine_curve_deg": 0.0,
+"stance_width": 0.48,
+"torso_pitch_deg": -8.0,
+"torso_roll_deg": 0.0,
+"torso_yaw_deg": 0.0,
+"weight_shift": 0.0
+}
+
+[resource]
+script = ExtResource("2")
+posture_id = 20
+display_name = "Ready Left"
+paddle_forehand_mul = 0.307614326477051
+paddle_forward_mul = 0.441230297088623
+paddle_y_offset = 0.11685836315155
+paddle_pitch_base_deg = -63.8245391845703
+paddle_pitch_sign_source = 1
+paddle_yaw_base_deg = -10.0284423828125
+paddle_yaw_sign_source = 1
+paddle_roll_base_deg = 90.169792175293
+paddle_roll_sign_source = 1
+paddle_hand = 1
+right_hand_offset = Vector3(0.08, 0, -0.22)
+right_elbow_path = null
+left_elbow_path = null
+right_elbow_pole = Vector3(0.58, -0.35, -0.07)
+right_shoulder_rotation_deg = Vector3(0, -8, 0)
+left_hand_mode = 4
+left_elbow_pole = Vector3(-0.3656876, 0.11763084, 0.313653)
+left_shoulder_rotation_deg = Vector3(0, 8, 0)
+stance_width = 0.48
+front_foot_forward = 0.07
+back_foot_back = -0.07
+right_foot_yaw_deg = 5.0
+left_foot_yaw_deg = 5.0
+lead_foot = 1
+crouch_amount = 0.06
+hip_yaw_deg = -2.0
+torso_pitch_deg = -8.0
+shoulder_protraction_m = 0.05
+head_yaw_deg = 2.0
+head_pitch_deg = -20.0
+head_track_ball_weight = 0.8
+charge_back_foot_load = 0.25
+ft_front_foot_load = 0.8
+ft_duration_strike = 0.1
+ft_duration_sweep = 0.2
+ft_duration_settle = 0.18
+ft_duration_hold = 0.06
+ft_ease_curve = 2
+windup_body = SubResource("Resource_q22in")
+follow_through_body = SubResource("Resource_l0pf3")
+charge_duration = 0.32
+notes = "One-hand continental guard with the free hand nearby. Authored hand and elbow frames keep the blade below the gaze line, clear the torso and preserve true arm lengths. Backhand preparation owns its smooth regrip."
+last_tuned_by = "Codex"
+last_tuned_at = "2026-09-30"

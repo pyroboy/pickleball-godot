@@ -1,54 +1,54 @@
 class_name GameDebugUI
 extends Node
-## Owns debug cycling, posture debug labels, and zone debug display.
-## Fully extracted from game.gd.
 
-# ── State ──────────────────────────────────────────────────────────────────────
-enum DebugPhase {
-	OFF = 0,
-	PADDLE_GEOMETRY = 1,   # posture ghosts + charge positions
-	SWING_AND_SPACE = 2,   # follow-through ghosts + volumetric grid
-	BALL_PREDICTION = 3,   # trajectory arc + intercept indicators
-	AGENT_REASONING = 4,   # AI indicators + step markers
-	FULL_HUD = 5,          # zone overlay + debug text panel
+
+
+
+enum DebugPhase{
+	OFF = 0, 
+	PADDLE_GEOMETRY = 1, 
+	SWING_AND_SPACE = 2, 
+	BALL_PREDICTION = 3, 
+	AGENT_REASONING = 4, 
+	FULL_HUD = 5, 
 }
 var _current_phase: int = DebugPhase.OFF
 var _intent_indicators_visible: bool = true
 
-# ── Injected references ───────────────────────────────────────────────────────
+
 var _player_left: CharacterBody3D
 var _player_right: CharacterBody3D
-var _scoreboard_ui: Node  # ScoreboardUI
+var _scoreboard_ui: Node
 var _rally_scorer: Node
 var _ball: RigidBody3D
 var _serve_charge_time: float = 0.0
-var _ai_difficulty: int = 0  # Reference to game.gd ai_difficulty (0=EASY, 1=MEDIUM, 2=HARD)
+var _ai_difficulty: int = 0
 var _serve_aim_offset_x: float = 0.0
 var _trajectory_arc_offset: float = 0.0
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 func setup(
-	player_left: CharacterBody3D,
-	player_right: CharacterBody3D,
-	scoreboard_ui: Node,
-	rally_scorer: Node,
-	ball: RigidBody3D,
-	_serve_charge_time_ref: float,
-	_ai_difficulty_ref: int,
-	_serve_aim_offset_x_ref: float,
+	player_left: CharacterBody3D, 
+	player_right: CharacterBody3D, 
+	scoreboard_ui: Node, 
+	rally_scorer: Node, 
+	ball: RigidBody3D, 
+	_serve_charge_time_ref: float, 
+	_ai_difficulty_ref: int, 
+	_serve_aim_offset_x_ref: float, 
 	_trajectory_arc_offset_ref: float
-) -> void:
+) -> void :
 	_player_left = player_left
 	_player_right = player_right
 	_scoreboard_ui = scoreboard_ui
 	_rally_scorer = rally_scorer
 	_ball = ball
-	# The RefCounted params are just for signature compatibility;
-	# actual values are updated via update() each frame.
 
-# ── Input handlers (called from game.gd's _input) ─────────────────────────────
 
-func cycle_difficulty() -> void:
+
+
+
+func cycle_difficulty() -> void :
 	_ai_difficulty = (_ai_difficulty + 1) % 3
 	_scoreboard_ui.update_difficulty(_ai_difficulty)
 	print("[AI DIFFICULTY] ", ["EASY", "MEDIUM", "HARD"][_ai_difficulty])
@@ -58,7 +58,7 @@ func cycle_difficulty() -> void:
 			brain.ai_difficulty = _ai_difficulty
 
 
-func cycle_debug_visuals() -> void:
+func cycle_debug_visuals() -> void :
 	_current_phase = (_current_phase + 1) % 6
 	_apply_phase(_current_phase)
 
@@ -74,38 +74,38 @@ func _phase_name(phase: int) -> String:
 		_: return "?"
 
 
-func _apply_phase(phase: int) -> void:
-	var p1 := phase >= DebugPhase.PADDLE_GEOMETRY
-	var p2 := phase >= DebugPhase.SWING_AND_SPACE
-	var p3 := phase >= DebugPhase.BALL_PREDICTION
-	var p4 := phase >= DebugPhase.AGENT_REASONING
-	var p5 := phase >= DebugPhase.FULL_HUD
+func _apply_phase(phase: int) -> void :
+	var p1: = phase >= DebugPhase.PADDLE_GEOMETRY
+	var p2: = phase >= DebugPhase.SWING_AND_SPACE
+	var p3: = phase >= DebugPhase.BALL_PREDICTION
+	var p4: = phase >= DebugPhase.AGENT_REASONING
+	var p5: = phase >= DebugPhase.FULL_HUD
 
-	# Phase 1: Paddle Geometry
+
 	_set_posture_ghosts_visible(p1)
 	_set_charge_ghosts_visible(p1)
 	_set_charge_highlight(phase == DebugPhase.PADDLE_GEOMETRY)
 
-	# Phase 2: Swing & Space
+
 	_set_follow_through_visible(p2)
 	_set_grid_visible(p2)
 
-	# Phase 3: Ball Prediction
+
 	_set_trajectory_visible(p3)
 	_set_intercept_visible(p3)
 
-	# Phase 4: Agent Reasoning
+
 	_set_ai_indicators_visible(p4)
 	_set_step_markers_visible(p4)
 
-	# Phase 5: Full HUD
+
 	_set_zones_visible(p5)
 	_set_debug_text_panel(p5)
 
 	print("[DEBUG PHASE] ", _phase_name(phase), " (", phase, ")")
 
 
-func toggle_intent_indicators() -> void:
+func toggle_intent_indicators() -> void :
 	_intent_indicators_visible = not _intent_indicators_visible
 	if _player_left and _player_left.has_method("get_debug_visual"):
 		var dv = _player_left.get_debug_visual()
@@ -117,25 +117,26 @@ func toggle_intent_indicators() -> void:
 			dv.set_intent_indicators_visible(_intent_indicators_visible)
 
 
-# ── Main update (called from game.gd's _physics_process) ──────────────────────
+
 
 func update(
-	game_state: int,
-	ball: RigidBody3D,
-	player_left: CharacterBody3D,
+	game_state: int, 
+	ball: RigidBody3D, 
+	player_left: CharacterBody3D, 
 	player_right: CharacterBody3D
-) -> void:
+) -> void :
+	if _current_phase < DebugPhase.FULL_HUD: return
 	_update_service_zone_debug(game_state, ball)
 	_update_debug_label(game_state, ball, player_left, player_right)
 
 
-# ── Posture debug ──────────────────────────────────────────────────────────────
 
-func update_posture_debug() -> void:
+
+func update_posture_debug() -> void :
 	if _scoreboard_ui == null:
 		return
-	var blue := _posture_line("BLUE", _player_left)
-	var red := _posture_line("RED", _player_right)
+	var blue: = _posture_line("BLUE", _player_left)
+	var red: = _posture_line("RED", _player_right)
 	_scoreboard_ui.update_posture_debug(blue + "\n" + red)
 
 
@@ -163,14 +164,14 @@ func _posture_line(tag: String, player: CharacterBody3D) -> String:
 	return tag + ": " + pname + " | " + stance + " | " + feet + " " + str(snapped(gap, 0.01))
 
 
-# ── Zone debug ─────────────────────────────────────────────────────────────────
 
-func update_service_zone_debug() -> void:
+
+func update_service_zone_debug() -> void :
 	_update_service_zone_debug(0, _ball)
 
 
-func _update_service_zone_debug(_game_state: int, ball: RigidBody3D) -> void:
-	if _game_state != 2 or ball == null:  # GameState.PLAYING == 2
+func _update_service_zone_debug(_game_state: int, ball: RigidBody3D) -> void :
+	if _game_state != 2 or ball == null:
 		return
 	var bpos: Vector3 = ball.global_position
 	if bpos.y > 0.4:
@@ -178,23 +179,24 @@ func _update_service_zone_debug(_game_state: int, ball: RigidBody3D) -> void:
 	_update_zone_debug(bpos)
 
 
-# Debug: Show which zone ball landed in
-func _update_zone_debug(bpos: Vector3) -> void:
-	const NON_VOLLEY_ZONE: float = 1.8
+
+func _update_zone_debug(bpos: Vector3) -> void :
+	if _current_phase < DebugPhase.FULL_HUD: return
+	const NON_VOLLEY_ZONE: float = PickleballConstants.NON_VOLLEY_ZONE
 	if _scoreboard_ui == null or _ball == null:
 		return
-	# Determine what zone ball is in
+
 	var zone: String = ""
 	if bpos.z > NON_VOLLEY_ZONE:
-		# BLUE'S SIDE (red serving, ball on blue side)
+
 		if bpos.x > 0.0:
 			zone = "BLUE RIGHT (CYAN)"
 		elif bpos.x < 0.0:
 			zone = "BLUE LEFT (LIME)"
 		else:
 			zone = "BLUE CENTER"
-	elif bpos.z < -NON_VOLLEY_ZONE:
-		# RED'S SIDE (blue serving, ball on red side)
+	elif bpos.z < - NON_VOLLEY_ZONE:
+
 		if bpos.x > 0.0:
 			zone = "RED RIGHT (MAGENTA)"
 		elif bpos.x < 0.0:
@@ -202,37 +204,37 @@ func _update_zone_debug(bpos: Vector3) -> void:
 		else:
 			zone = "RED CENTER"
 	else:
-		# KITCHEN / NVZ
+
 		zone = ("BLUE" if bpos.z > 0 else "RED") + " KITCHEN"
 	_scoreboard_ui.show_zone(zone)
 
 
-# ── Debug label ────────────────────────────────────────────────────────────────
+
 
 func _update_debug_label(
-	game_state: int,
-	ball: RigidBody3D,
-	player_left: CharacterBody3D,
+	game_state: int, 
+	ball: RigidBody3D, 
+	player_left: CharacterBody3D, 
 	player_right: CharacterBody3D
-) -> void:
+) -> void :
 	if ball == null or _scoreboard_ui == null:
 		return
 
-	if game_state != 2:  # GameState.PLAYING
+	if game_state != 2:
 		_scoreboard_ui.update_debug_content("")
 		return
 
 	var ball_y: float = ball.global_position.y
 	var ball_pos: Vector3 = ball.global_position
 
-	# Blue player (human)
+
 	var blue_paddle: Vector3 = player_left.get_paddle_position()
 	var blue_dist: float = blue_paddle.distance_to(ball_pos)
 	var blue_charge: float = clamp(_serve_charge_time / 0.8, 0.0, 1.0)
 	var blue_contact: int = player_left._get_contact_state(blue_dist, ball_y, blue_charge)
 	var blue_contact_name: String = ["CLEAN", "STRETCH", "POPUP"][blue_contact]
 
-	# Red player (AI)
+
 	var red_paddle: Vector3 = player_right.get_paddle_position()
 	var red_dist: float = red_paddle.distance_to(ball_pos)
 	var red_charge: float = 0.0
@@ -241,11 +243,11 @@ func _update_debug_label(
 	var red_contact: int = player_right._get_contact_state(red_dist, ball_y, red_charge)
 	var red_contact_name: String = ["CLEAN", "STRETCH", "POPUP"][red_contact]
 
-	# Ball info
+
 	var ball_speed: float = ball.linear_velocity.length()
 	var dist_to_net: float = absf(ball_pos.z)
 
-	# Posture names
+
 	var blue_posture_idx: int = player_left.paddle_posture
 	var blue_pname: String
 	if blue_posture_idx < player_left.DEBUG_POSTURE_NAMES.size():
@@ -260,7 +262,7 @@ func _update_debug_label(
 	else:
 		red_pname = "???"
 
-	# Serve info - serving_team is on game, not player; default to 0 (BLUE)
+
 	var serving_team_val: int = 0
 	var serving_tag: String = "BLUE" if serving_team_val == 0 else "RED"
 
@@ -272,13 +274,13 @@ func _update_debug_label(
 	debug_lines.append("--- RED ---")
 	debug_lines.append("  posture=%s contact=%s dist=%.2f" % [red_pname, red_contact_name, red_dist])
 
-	var debug_content := "\n".join(debug_lines)
+	var debug_content: = "\n".join(debug_lines)
 	_scoreboard_ui.update_debug_content(debug_content)
 
 
-# ── Granular visibility setters (per phase layer) ─────────────────────────────
 
-func _set_posture_ghosts_visible(v: bool) -> void:
+
+func _set_posture_ghosts_visible(v: bool) -> void :
 	if _player_left and _player_left.posture != null:
 		var posture = _player_left.posture
 		if posture.has_method("set_posture_ghosts_visible"):
@@ -289,7 +291,7 @@ func _set_posture_ghosts_visible(v: bool) -> void:
 			posture.set_posture_ghosts_visible(false)
 
 
-func _set_charge_ghosts_visible(v: bool) -> void:
+func _set_charge_ghosts_visible(v: bool) -> void :
 	if _player_left and _player_left.posture != null:
 		var posture = _player_left.posture
 		if posture.has_method("set_charge_ghosts_visible"):
@@ -300,7 +302,7 @@ func _set_charge_ghosts_visible(v: bool) -> void:
 			posture.set_charge_ghosts_visible(false)
 
 
-func _set_charge_highlight(v: bool) -> void:
+func _set_charge_highlight(v: bool) -> void :
 	if _player_left and _player_left.posture != null:
 		var posture = _player_left.posture
 		if posture.has_method("set_charge_highlight_active"):
@@ -311,7 +313,7 @@ func _set_charge_highlight(v: bool) -> void:
 			posture.set_charge_highlight_active(false)
 
 
-func _set_follow_through_visible(v: bool) -> void:
+func _set_follow_through_visible(v: bool) -> void :
 	if _player_left and _player_left.posture != null:
 		var posture = _player_left.posture
 		if posture.has_method("set_follow_through_visible"):
@@ -322,7 +324,7 @@ func _set_follow_through_visible(v: bool) -> void:
 			posture.set_follow_through_visible(false)
 
 
-func _set_grid_visible(v: bool) -> void:
+func _set_grid_visible(v: bool) -> void :
 	if _player_left and _player_left.has_node("AwarenessGrid"):
 		var grid = _player_left.get_node_or_null("AwarenessGrid")
 		if grid and grid.has_method("set_visible"):
@@ -333,23 +335,23 @@ func _set_grid_visible(v: bool) -> void:
 			grid.set_visible(false)
 
 
-func _set_trajectory_visible(v: bool) -> void:
+func _set_trajectory_visible(v: bool) -> void :
 	_for_both_debug_visuals("set_trajectory_visible", v)
 
 
-func _set_intercept_visible(v: bool) -> void:
+func _set_intercept_visible(v: bool) -> void :
 	_for_both_debug_visuals("set_intercept_visible", v)
 
 
-func _set_ai_indicators_visible(v: bool) -> void:
+func _set_ai_indicators_visible(v: bool) -> void :
 	_for_both_debug_visuals("set_ai_indicators_visible", v)
 
 
-func _set_step_markers_visible(v: bool) -> void:
+func _set_step_markers_visible(v: bool) -> void :
 	_for_both_debug_visuals("set_step_markers_visible", v)
 
 
-func _for_both_debug_visuals(method: String, v: bool) -> void:
+func _for_both_debug_visuals(method: String, v: bool) -> void :
 	if _player_left and _player_left.has_node("DebugVisual"):
 		var dv = _player_left.get_node_or_null("DebugVisual")
 		if dv and dv.has_method(method):
@@ -360,7 +362,7 @@ func _for_both_debug_visuals(method: String, v: bool) -> void:
 			dv.call(method, v)
 
 
-func _set_zones_visible(v: bool) -> void:
+func _set_zones_visible(v: bool) -> void :
 	var dz_node: Node = null
 	var parent = get_parent()
 	while parent:
@@ -372,41 +374,41 @@ func _set_zones_visible(v: bool) -> void:
 		dz_node.visible = v
 
 
-func _set_debug_text_panel(v: bool) -> void:
+func _set_debug_text_panel(v: bool) -> void :
 	if _scoreboard_ui:
 		_scoreboard_ui.set_debug_visuals_active(v)
 
 
-# ── Backward-compatible "all on/off" setter ───────────────────────────────────
 
-func set_debug_visible(v: bool) -> void:
-	## Backward-compatible bulk toggle. Used by game.gd legacy calls.
+
+func set_debug_visible(v: bool) -> void :
+
 	if v:
 		_apply_phase(DebugPhase.FULL_HUD)
 	else:
 		_apply_phase(DebugPhase.OFF)
 
 
-func set_debug_zones_visible(v: bool) -> void:
+func set_debug_zones_visible(v: bool) -> void :
 	_set_zones_visible(v)
 
 
-func _set_debug_visuals_visible(v: bool) -> void:
+func _set_debug_visuals_visible(v: bool) -> void :
 	set_debug_visible(v)
 
 
-func _set_debug_zones_visible(v: bool) -> void:
+func _set_debug_zones_visible(v: bool) -> void :
 	_set_zones_visible(v)
 
 
-# ── Update refs from game.gd (called each frame via update()) ─────────────────
+
 
 func update_refs(
-	serve_charge_time: float,
-	ai_difficulty: int,
-	serve_aim_offset_x: float,
+	serve_charge_time: float, 
+	ai_difficulty: int, 
+	serve_aim_offset_x: float, 
 	trajectory_arc_offset: float
-) -> void:
+) -> void :
 	_serve_charge_time = serve_charge_time
 	_ai_difficulty = ai_difficulty
 	_serve_aim_offset_x = serve_aim_offset_x
