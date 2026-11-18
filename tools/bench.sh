@@ -6,6 +6,7 @@
 #   FRAME_LOG=1   also write logs/bench_<name>.frames.jsonl (per-frame positions, events)
 #   BASE=<name>   compare poses with logs/bench_<name>.pose.jsonl (one line: IDENTICAL / DIVERGED)
 #   VERBOSE=1     full perf report instead of the short one
+#   SPIKE_MS=n   freeze threshold (default 20: the Mac runs ~2.5x the phone, so 20 ms here ~ 50 ms there)
 #   KEEP=n        keep the newest n bench runs in logs/ (default 12), delete older ones
 #   -> logs/bench_<name>.perf.jsonl, .pose.jsonl.gz (.log only if it had errors).
 #   Output is ~5 lines: errors, gameplay (points, how they ended, phase times), top systems,
@@ -22,7 +23,7 @@ if [ -z "${GODOT:-}" ]; then
 fi
 "$GODOT" --headless --path . --fixed-fps 60 --quit-after $((SECS * 60)) res://scenes/game.tscn -- \
   $([ "${DESKTOP:-0}" = 1 ] || echo --mobile-runtime) --autoplay --doubles --seed=$SEED \
-  --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --spike-ms=${SPIKE_MS:-50} --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" $([ "${FRAME_LOG:-0}" = 1 ] && echo --frame-log="$PWD/logs/bench_$NAME.frames.jsonl") \
+  --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --spike-ms=${SPIKE_MS:-20} --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" $([ "${FRAME_LOG:-0}" = 1 ] && echo --frame-log="$PWD/logs/bench_$NAME.frames.jsonl") \
   > "logs/bench_$NAME.log" 2>&1
 ERRS=$(grep -cE 'SCRIPT ERROR|Parse Error' "logs/bench_$NAME.log")
 echo "[$NAME seed $SEED] script errors: $ERRS"

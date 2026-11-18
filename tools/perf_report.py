@@ -44,13 +44,24 @@ if SHORT:
     tot = defaultdict(float)
     for r in secs:
         for k, v in r["scopes"].items(): tot[k] += v[0]
-    top = sorted((k for k in tot if not k.startswith("render.")), key=tot.get, reverse=True)[:5]
-    print("Top ms/frame: " + ", ".join(f"{k} {tot[k]/len(secs):.2f}" for k in top))
-    print(f"Spikes >= {meta.get('spike_ms')}ms: {len(spikes)}" + (f", worst {max(s['ms'] for s in spikes)}ms" if spikes else ""))
+    # Top-level = one node's whole _process/_physics_process; everything else is
+    # nested inside one of them, so the two lists must not be added together.
+    outer = lambda k: k.endswith(".physics") or k.startswith("proc.") or k == "contact.authority"
+    by = lambda keep: sorted((k for k in tot if keep(k) and not k.startswith("render.")), key=tot.get, reverse=True)
+    print("Systems ms/frame: " + ", ".join(f"{k} {tot[k]/len(secs):.2f}" for k in by(outer)[:4]) +
+          " | inside them: " + ", ".join(f"{k} {tot[k]/len(secs):.2f}" for k in by(lambda k: not outer(k))[:3]))
+    cause = defaultdict(int)
+    for sp in spikes:   # deepest-named non-container scope that took the most time
+        inner = {k: v for k, v in sp["top"].items() if not (k.endswith(".physics") or k.startswith("proc."))} or sp["top"]
+        cause[(sp["state"], max(inner, key=lambda k: inner[k][0]) if inner else "?")] += 1
+    print(f"Spikes >= {meta.get('spike_ms')}ms: {len(spikes)}" + (f", worst {max(s['ms'] for s in spikes)}ms; mostly " +
+          ", ".join(f"{k} in {st} x{n}" for (st, k), n in sorted(cause.items(), key=lambda kv: -kv[1])[:2]) if spikes else ""))
     jit = defaultdict(int); frames = defaultdict(int)
     for r in secs:
-        frames[r["state"]] += r["fps"]
-        for k, n in r.get("jitter", {}).items(): jit[(r["state"], k)] += n
+        for st, n in r.get("state_frames", {r["state"]: r["fps"]}).items(): frames[st] += n
+        for k, n in r.get("jitter", {}).items():
+            parts = k.split(":"); st = parts[3] if len(parts) > 3 else r["state"]
+            jit[(st, ":".join(parts[:3]))] += n
     worst = sorted(jit.items(), key=lambda kv: -kv[1] / max(frames[kv[0][0]], 1))[:3]
     if worst: print("Jitter /1k frames: " + ", ".join(f"{k} {st} {1000*n/max(frames[st],1):.0f}" for (st, k), n in worst))
     sys.exit(0)
@@ -95,8 +106,10 @@ for s in sorted(spikes, key=lambda s: -s["ms"])[:3]:
 # ---- motion jitter (sec rows "jitter": {"obj:kind:zone": count}) ----
 jit = defaultdict(int); state_frames = defaultdict(int)
 for r in secs:
-    state_frames[r["state"]] += r["fps"]
-    for k, n in r.get("jitter", {}).items(): jit[(r["state"],) + tuple(k.split(":"))] += n
+    for st, n in r.get("state_frames", {r["state"]: r["fps"]}).items(): state_frames[st] += n
+    for k, n in r.get("jitter", {}).items():
+        parts = k.split(":"); st = parts[3] if len(parts) > 3 else r["state"]
+        jit[(st,) + tuple(parts[:3])] += n
 bursts = [r for r in rows if r["kind"] == "jitter_burst"]
 if jit or bursts:
     print("Motion jitter (per 1000 frames of that state; obj kind zone):")

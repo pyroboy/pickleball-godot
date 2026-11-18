@@ -194,7 +194,7 @@ func _hook_events(scene: Node) -> void:
 # ---- motion jitter (always on): counts per second + burst snapshots ----
 # For every drawn object (camera, ball, players; interpolated = what is on
 # screen) compare each frame's movement with its neighbours. Counted into the
-# "jitter" field of each "sec" row as "<obj>:<kind>:<zone>"; zone is where a
+# "jitter" field of each "sec" row as "<obj>:<kind>:<zone>:<state>"; zone is where a
 # player is (behind = past the baseline). 3+ events for one object within
 # 0.5 s writes a "jitter_burst" row with the last ~2 s of positions.
 const JIT_MOVING := 0.3      # m/s: neighbours slower than this = standing
@@ -202,6 +202,7 @@ const JIT_STALL := 0.25
 const JIT_POP := 3.0
 const JIT_BUFFER := 120
 var _sec_jitter: Dictionary = {}
+var _sec_state_frames: Dictionary = {}   # state -> frames this second (exact jitter rates)
 var _jit_prev: Array = []          # last 3 frames: {t, ms, state, pos: {obj: Vector3}}
 var _jit_buffer: Array = []        # last JIT_BUFFER frames for burst snapshots
 var _jit_recent: Dictionary = {}   # obj -> Array of event times (s)
@@ -224,7 +225,8 @@ func _motion_frame(now: int, frame_ms: float, delta: float) -> void:
 	for p in scene.get_players(): pos["p%d" % p.actor_id] = p.get_global_transform_interpolated().origin
 	# Speeds use the engine frame delta (game time), not wall time: right on the
 	# phone and on --fixed-fps benches alike.
-	var frame := {"t": _t(now), "ms": frame_ms, "dt": maxf(delta, 1e-4), "state": _state(), "pos": pos}
+	var frame := {"t": _t(now), "ms": frame_ms, "dt": maxf(delta, 1e-4), "state": st, "pos": pos}
+	_sec_state_frames[st] = int(_sec_state_frames.get(st, 0)) + 1
 	_jit_prev.append(frame)
 	if _jit_prev.size() > 3: _jit_prev.pop_front()
 	_jit_buffer.append(frame)
@@ -247,7 +249,7 @@ func _motion_frame(now: int, frame_ms: float, delta: float) -> void:
 		elif d1.dot(d2) < 0.0 and _jit_prev_step.has(obj) and d1.dot(_jit_prev_step[obj]) < 0.0: kind = "reverse"
 		_jit_prev_step[obj] = d1
 		if kind == "": continue
-		var key := "%s:%s:%s" % [obj, kind, _jit_zone(obj, b.pos[obj])]
+		var key := "%s:%s:%s:%s" % [obj, kind, _jit_zone(obj, b.pos[obj]), b.state]
 		_sec_jitter[key] = int(_sec_jitter.get(key, 0)) + 1
 		var times: Array = _jit_recent.get(obj, [])
 		times.append(float(b.t))
@@ -330,11 +332,12 @@ func _flush_second(now: int) -> void:
 		"phys_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.1),
 		"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 		"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
-		"scopes": top, "jitter": _sec_jitter})
+		"scopes": top, "jitter": _sec_jitter, "state_frames": _sec_state_frames})
 	_sec_frames.clear()
 	_sec_costs.clear()
 	_sec_spikes = 0
 	_sec_jitter = {}
+	_sec_state_frames = {}
 	_sec_start = now
 
 # label -> [ms total this frame, calls], largest first
