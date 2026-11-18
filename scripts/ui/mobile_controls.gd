@@ -98,7 +98,12 @@ func _blocked() -> bool:
 	if game != null and game._point_transition_blocks_attempt(): return true
 	return game == null or get_tree().paused or game._tool_state_active() or game.hud._between_point_active or not game.hud._gameplay_visible or game.hud._guide.visible or bool(game.get("match_over")) or game.get("practice_panel") != null and game.practice_panel.visible
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.mobile_controls", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if game == null: return
 	_serve_contact_flash = maxf(0, _serve_contact_flash - delta)
 	_serve_timing = {}

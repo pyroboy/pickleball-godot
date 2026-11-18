@@ -89,7 +89,12 @@ func _authored_follow_through_data(posture_id: int, _charge_ratio: float) -> Dic
 func snapped_v3(v: Vector3) -> String:
 	return "(%s, %s, %s)" % [snapped(v.x, 0.01), snapped(v.y, 0.01), snapped(v.z, 0.01)]
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.player_hitting", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 
 
 

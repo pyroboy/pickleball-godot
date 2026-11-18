@@ -28,7 +28,12 @@ func setup(hud: CanvasLayer) -> void :
 	if _hud != null:
 		_hide_temporary_ui()
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.scoreboard_ui", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	_update_shot_type_fade(delta)
 	_update_timers(delta)
 	_sync_match_context()

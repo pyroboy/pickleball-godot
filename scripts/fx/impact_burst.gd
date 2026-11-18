@@ -87,7 +87,12 @@ func play(pos: Vector3, color: Color, strength: float = 1.0, upward: bool = fals
 func play_duration() -> float:
 	return _particles.lifetime + 0.15
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.impact_burst", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if not _active:
 		return
 	_timer -= delta

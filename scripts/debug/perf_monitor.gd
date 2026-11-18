@@ -60,6 +60,7 @@ func _ready() -> void:
 		"model": OS.get_model_name(), "renderer": RenderingServer.get_current_rendering_method(),
 		"physics_hz": Engine.physics_ticks_per_second, "spike_ms": SPIKE_MS})
 	_build_graph()
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
 func _process(_delta: float) -> void:
 	var now := Time.get_ticks_usec()
@@ -67,6 +68,9 @@ func _process(_delta: float) -> void:
 	_frames += 1
 	_last_usec = now
 
+	var vp := get_viewport().get_viewport_rid()
+	record("render.cpu", int(RenderingServer.viewport_get_measured_render_time_cpu(vp) * 1000.0))
+	record("render.gpu", int(RenderingServer.viewport_get_measured_render_time_gpu(vp) * 1000.0))
 	var costs := _frame_costs
 	_frame_costs = {}
 	for label in costs:

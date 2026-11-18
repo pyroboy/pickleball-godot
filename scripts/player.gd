@@ -517,13 +517,19 @@ func _perf_physics_process(delta: float) -> void:
 				awareness_grid.set_trajectory_points(debug_visual._last_trajectory_points)
 	if posture:
 		posture.update_paddle_tracking(false)
-	if is_ai and ai_brain:
-		ai_brain.align_paddle_to_contact(delta)
+	# Perf LOD: an AI the ball is not coming toward re-poses its arms/legs on
+	# alternate ticks (movement still runs every tick). Accumulated time is passed
+	# on the update tick so pose blends keep their speed.
+	_lod_delta += delta
+	var lod_skip: bool = _rig_lod_skip()
+	if is_ai and ai_brain and not lod_skip:
+		ai_brain.align_paddle_to_contact(_lod_delta)
 	PaddleReach.clamp_paddle_for_player(self)
 	# Body-contact authority observes the physics endpoint before render.
 	# Finish each normal owner's actual seated rig after its final clamp.
-	if posture != null and not posture.editor_preview_mode:
+	if posture != null and not posture.editor_preview_mode and not lod_skip:
 		refresh_contact_support(posture._presented_body_pose if posture._presented_body_pose != null else posture.capture_displayed_pose(), true)
+	if not lod_skip: _lod_delta = 0.0
 	_physics_human_presentation = _human_owns_physics_pose()
 	_physics_ai_presentation = _ai_owns_physics_pose()
 	if _physics_human_presentation or _physics_ai_presentation: _advance_physics_head_gaze(delta)
@@ -537,6 +543,24 @@ func _perf_physics_process(delta: float) -> void:
 		debug_visual.update_ai_indicators()
 	if ai_brain:
 		ai_brain._try_ai_hit_ball()
+
+var _lod_delta: float = 0.0
+const LOD_FAR_M := 5.0
+const LOD_NEAR_M := 2.5
+
+## True on alternate ticks for an AI that cannot be the next hitter: the ball is
+## flying to the other half, or far away and moving away.
+func _rig_lod_skip() -> bool:
+	if not is_ai or (Engine.get_physics_frames() + actor_id) % 2 == 0: return false
+	if hitting != null and (hitting.is_in_follow_through or hitting.serving_visual_active): return false
+	var b: RigidBody3D = _get_ball_ref()
+	if b == null or not b.is_in_play: return false
+	var to_me: Vector3 = global_position - b.global_position
+	to_me.y = 0.0
+	if to_me.length() < LOD_NEAR_M: return false
+	# Ball flying toward the other team's half: nobody on this side can hit it.
+	if b.linear_velocity.z * global_position.z < 0.0: return true
+	return to_me.length() > LOD_FAR_M and b.linear_velocity.dot(to_me) < 0.0
 
 func _manual_ground_velocity(target: Vector3, has_input: bool, delta: float) -> Vector3:
 	if has_input: _manual_motion_active = true
@@ -684,7 +708,12 @@ func _advance_physics_head_gaze(delta: float) -> void:
 	_physics_head_gaze_tick = tick
 	_head_gaze.update(self, _get_ball_ref(), elapsed)
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.player", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if special_reach_driver != null and special_reach_driver.owns_presentation():
 		special_reach_driver.present(delta)
 		return

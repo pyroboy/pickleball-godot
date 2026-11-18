@@ -186,7 +186,12 @@ func finish_attempt(winner: int, reason: String, detail: String) -> void :
 		return
 	_set_status("%s · %d/%d in · %s" % [reason.replace("_", " ").capitalize(), success_count, attempt_count, "Next ball shortly" if loop_enabled else "Repeat from Pause"])
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.practice_launcher", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if not is_active or _ball == null or _ball.is_time_frozen() or _game._tool_state_active(): return
 	if _attempt_finished:
 		if loop_enabled:

@@ -838,7 +838,12 @@ func _update_variant_buttons()->void:
 func _reset_preview_wall_clock()->void:
 	_last_tick=Time.get_ticks_usec()
 
-func _process(_delta:float)->void:
+func _process(_delta:float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.mobile_pose_editor", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta:float) -> void:
 	# Pause/solo-focus time scale cannot distort the private preview clock.
 	var now:=Time.get_ticks_usec();var dt:=maxf(float(now-_last_tick)/1000000.0,0.0);_last_tick=now
 	if not _playing or _dialog.visible:return

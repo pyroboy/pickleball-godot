@@ -122,6 +122,11 @@ func tick(delta: float, cached_flight: Dictionary = {}) -> void:
 	_reproject()
 
 func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.incoming_movement_guide", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	# Physics may be paused while menus/cameras still change. Never retain a
 	# positive target through a paused tick or a reset/menu transition.
 	if _observe_reset() or not _eligible():

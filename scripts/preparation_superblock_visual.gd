@@ -38,7 +38,12 @@ func configure(owner) -> void :
 			"y": rect.get_center().y, "forward": (region.forward_min + region.forward_max) * 0.5, "owners": region.owners, "id": int(region.owners[0])})
 	sync()
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.preparation_superblock_visual", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	if player == null: return
 	var game = player.get_parent()
 	visible = player.visible and not player.posture.editor_preview_mode and game.game_state != game.GameState.POINT_SCORED and not game.match_over

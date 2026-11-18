@@ -131,7 +131,12 @@ func _measure_nominal_envelope() -> void :
 					envelope_pose = pose
 	outer_radius = maxf(outer_radius, inner_radius)
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.player_reach_indicator", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	refresh()
 
 func refresh() -> void :

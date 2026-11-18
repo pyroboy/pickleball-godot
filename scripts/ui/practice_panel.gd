@@ -135,7 +135,12 @@ func _rematch() -> void :
 	_shown_result = false
 	hide()
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.practice_panel", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	if _game == null or _picker_open: return
 	var show_result: bool = _game.match_over and not get_tree().paused and not _game._tool_state_active()
 	if show_result and not _shown_result:

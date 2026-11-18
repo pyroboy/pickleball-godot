@@ -51,7 +51,12 @@ func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: Char
 	_sound_panel = sound_panel
 	_reaction_button = reaction
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.input_handler", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	var control_delta: float = _control_delta(delta, Time.get_ticks_usec())
 	if _game != null and _game._point_transition_blocks_attempt():
 		latch_transition_input()

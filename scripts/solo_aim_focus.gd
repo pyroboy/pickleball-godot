@@ -252,7 +252,12 @@ func tick(now_usec: int, held: bool) -> void :
 		else:
 			TimeScale.request_slowmo("aim_focus", scale_for_elapsed(now_usec - started_usec))
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.solo_aim_focus", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	tick(Time.get_ticks_usec(), Input.is_action_pressed("ui_accept"))
 	if not active: _hide_presentation()
 

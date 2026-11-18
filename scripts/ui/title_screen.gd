@@ -264,7 +264,12 @@ func _draw() -> void :
   var x: = size.x * 0.5 + sin(_motion * 4.0) * 30.0
   draw_circle(Vector2(x, minf(size.y - 24.0, _panel.position.y + _panel.size.y + 18.0)), 5.0, UiTheme.ACCENT)
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+ var _pt := Time.get_ticks_usec()
+ _perf_process(delta)
+ PerfMonitor.record("proc.title_screen", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
  if not _loading or _finishing or _loading_quit_requested: return
  _motion += delta
  queue_redraw()

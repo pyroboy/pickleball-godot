@@ -28,7 +28,12 @@ func _ready() -> void :
 			set_test_fast_forward(scale)
 			print("[TimeScale] test fast-forward %.0fx" % scale)
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.time_scale_manager", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if _hitstop_active:
 
 		_hitstop_timer -= delta / maxf(Engine.time_scale, 0.001) if Engine.time_scale > 0.0 else delta

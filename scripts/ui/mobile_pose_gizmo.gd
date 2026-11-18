@@ -84,6 +84,11 @@ func origin() -> Vector3:
 	return preview.joint_world_position(preview.selected_joint)
 
 func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.mobile_pose_gizmo", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	sync_scene()
 
 func sync_scene() -> void:

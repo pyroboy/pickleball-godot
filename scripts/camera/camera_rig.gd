@@ -125,6 +125,11 @@ func setup(
 
 
 func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.camera_rig", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	# Player presentation and the held ball update after the physics camera.
 	# Correct against the actual rendered target, never a one-frame-old ball.
 	if camera == null or editor_active or orbit_mode != 0 or _between_point_camera.active or get_tree().paused: return

@@ -414,7 +414,12 @@ func _perf_physics_process(delta: float) -> void:
 		if phase == "SET_SERVE": _game.game_serve.accept_handover(_game.ball.global_position)
 		if phase == "END_TURN" and phase_elapsed > .25: _try_commit_end_change()
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.between_point_controller", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 
 
 	if _active and _carry_team >= 0 and not get_tree().paused:

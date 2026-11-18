@@ -59,7 +59,12 @@ func _hide_ball_shadow() -> void :
 func _exit_tree() -> void :
 	_disconnect_ball_visibility()
 
-func _process(_delta: float) -> void :
+func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.ground_shadows", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	update_shadows()
 
 static func cue_for_height(height: float, ball: bool) -> Vector3:

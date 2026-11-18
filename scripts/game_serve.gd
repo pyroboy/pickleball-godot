@@ -120,7 +120,12 @@ func _present_service_pose(actor, pose: PostureDefinition) -> void:
 	actor.hitting._apply_motion_pose(pose)
 	_commit_physics_presentation(actor, get_physics_process_delta_time())
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.game_serve", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if _game == null: return
 	if get_tree().paused or _game._tool_state_active():
 		_physics_presentations.clear()

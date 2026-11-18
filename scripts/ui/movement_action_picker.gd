@@ -86,6 +86,11 @@ func _layout() -> void:
 	explanation.custom_minimum_size.x = width - 44
 
 func _process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.movement_action_picker", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta: float) -> void:
 	if game == null: return
 	var driver = game.player_left.special_reach_driver
 	var busy: bool = driver != null and driver.owns_presentation() or _committed_move_busy()

@@ -110,7 +110,12 @@ func reset_contacts() -> void :
 	if cue: _stop_voice(cue)
 	_last_cue_msec = -1000
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.court_audio", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 
 
 

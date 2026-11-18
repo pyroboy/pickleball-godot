@@ -79,7 +79,12 @@ func _button(parent:Node,caption:String,callback:Callable)->Button:
 func busy()->bool:
 	return is_instance_valid(service) and bool(service.busy)
 
-func _process(_delta:float)->void:
+func _process(_delta:float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(_delta)
+	PerfMonitor.record("proc.mobile_elbow_preset_panel", Time.get_ticks_usec() - _pt)
+
+func _perf_process(_delta:float) -> void:
 	var now:=busy()
 	if now!=last_busy:
 		last_busy=now;refresh_controls()

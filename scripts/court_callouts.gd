@@ -73,7 +73,12 @@ func clear() -> void :
 	_gesture_actor_id = -1
 	bubble.hide()
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.court_callouts", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if game._is_practice() or game._tool_state_active() or not game.hud._gameplay_visible:
 		clear()
 		_serve_key = ""

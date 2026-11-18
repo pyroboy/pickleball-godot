@@ -103,7 +103,12 @@ func trigger_perfect_flash() -> void :
 	var tw: = create_tween()
 	tw.tween_property(self, "_flash_t", 0.0, 0.3)
 
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.reaction_hit_button", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 
 	_pulse_phase = fmod(_pulse_phase + delta * (4.0 if _active else 2.0), TAU)
 	if _grade_flash_t > 0.0:

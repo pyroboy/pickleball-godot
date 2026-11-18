@@ -45,6 +45,11 @@ func _ready() -> void:
 		bars.append(bar)
 
 func _process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_process(delta)
+	PerfMonitor.record("proc.stamina_display", Time.get_ticks_usec() - _pt)
+
+func _perf_process(delta: float) -> void:
 	if not is_instance_valid(game) or not is_instance_valid(game.camera_rig):
 		_hide_bars()
 		return
