@@ -22,8 +22,10 @@ fps = [r["fps"] for r in secs]
 print(f"{meta.get('os')} {meta.get('model')} | {meta.get('renderer')} | {len(secs)}s played")
 print(f"FPS   median {pct(fps,.5)}  worst-5% {pct(fps,.05)}  min {min(fps)}")
 print(f"Frame p95 {pct([r['p95_ms'] for r in secs],.5):.1f}ms typical, worst frame {max(r['max_ms'] for r in secs):.1f}ms")
-print(f"CPU   process {pct([r['cpu_ms'] for r in secs],.5)}ms  physics {pct([r['phys_ms'] for r in secs],.5)}ms  "
-      f"draws {pct([r['draws'] for r in secs],.5)}  nodes {max(r['nodes'] for r in secs)}")
+print(f"Scene draws {pct([r['draws'] for r in secs],.5)}  nodes {max(r['nodes'] for r in secs)}")
+by_state_ms = defaultdict(list)
+for r in secs: by_state_ms[r["state"]].append(r["avg_ms"])
+print("Avg frame ms by state:", ", ".join(f"{s} {pct(v,.5)}" for s, v in sorted(by_state_ms.items())))
 
 # FPS by game state
 by_state = defaultdict(list)

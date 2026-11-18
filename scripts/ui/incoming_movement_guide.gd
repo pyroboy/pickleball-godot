@@ -98,6 +98,11 @@ func _notification(what: int) -> void:
 		cancel()
 
 func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("guide.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	tick(delta)
 
 ## If the integrator calls tick explicitly, disable this node's physics process.

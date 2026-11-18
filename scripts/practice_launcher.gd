@@ -385,7 +385,12 @@ func get_demo_movement() -> Vector3:
 	return Scenarios.movement_input(home - _player_left.global_position, _player_left.current_velocity, 
 		_player_left.move_speed, get_physics_process_delta_time())
 
-func _physics_process(_delta: float) -> void :
+func _physics_process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(_delta)
+	PerfMonitor.record("practice.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(_delta: float) -> void:
 	if not is_exchange_demo() or _ball.is_time_frozen() or _game._tool_state_active() or _game.game_state != _game.GameState.PLAYING: return
 	var human = _player_left.posture.human_contact
 	if human == null: return

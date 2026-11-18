@@ -310,7 +310,12 @@ var _native_interval_serial := 0
 func native_interval_sample() -> Dictionary:
 	return _native_interval_sample.duplicate(true)
 
-func _integrate_forces(state: PhysicsDirectBodyState3D) -> void :
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_integrate_forces(state)
+	PerfMonitor.record("ball.integrate", Time.get_ticks_usec() - _pt)
+
+func _perf_integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	_native_interval_serial += 1
 	_native_interval_sample = {"serial": _native_interval_serial, "frame": Engine.get_physics_frames(),
 		"seconds": float(state.step), "flight": flight_id, "frozen": _time_frozen,
@@ -344,7 +349,12 @@ var receiver_entire_ball_crossed: bool = false
 var receiver_side_bounced: bool = false
 var receiver_returned_across_net: bool = false
 
-func _physics_process(_delta: float) -> void :
+func _physics_process(_delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(_delta)
+	PerfMonitor.record("ball.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(_delta: float) -> void:
 	if _time_frozen:
 		return
 	var bounce_age_before: float = time_since_last_bounce

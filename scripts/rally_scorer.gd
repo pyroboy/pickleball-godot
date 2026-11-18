@@ -161,6 +161,11 @@ func settle_pending_rally(delta: float = -1.0) -> bool:
 	return false
 
 func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("rally_scorer.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if _contact_simulation_unresolved(): return
 	if _ball != null and _ball.has_method("deferred_scene_interval"):
 		var pending: Dictionary = _ball.deferred_scene_interval()

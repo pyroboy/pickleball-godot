@@ -63,7 +63,12 @@ func _ready() -> void :
 	RenderingServer.frame_pre_draw.connect(_before_draw)
 	if RuntimePolicy.developer_tools: print("[BallTrail] ready (ribbon)")
 
-func _physics_process(delta: float) -> void :
+func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("ball_trail.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if _ball == null:
 		return
 	var position: Vector3 = _ball.global_position

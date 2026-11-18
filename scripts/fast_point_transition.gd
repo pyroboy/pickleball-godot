@@ -163,7 +163,12 @@ func observe_reset_request(token:int)->void:
  cancel("external reset superseded transition")
 func can_reset(token:int)->bool:
  return active and _context_current() and phase=="RESETTING" and not reset_entered and token==generation and game._point_reset_generation==generation and game.game_state==game.GameState.POINT_SCORED and _settled() and _ledger()==ledger and (not game.doubles_mode or not game.doubles_state.end_change_pending)
-func _physics_process(delta:float)->void:
+func _physics_process(delta:float) -> void:
+ var _pt := Time.get_ticks_usec()
+ _perf_physics_process(delta)
+ PerfMonitor.record("fast_point.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta:float) -> void:
  _latch_movement()
  if not active:return
  if not _context_current():cancel("scene, finalized token, mode or generation superseded");return

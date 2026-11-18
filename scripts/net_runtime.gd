@@ -49,7 +49,12 @@ func register_material(material: ShaderMaterial) -> void :
 	_materials.append(material)
 	_upload_impacts()
 
-func _physics_process(delta: float) -> void :
+func _physics_process(delta: float) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_physics_process(delta)
+	PerfMonitor.record("net.physics", Time.get_ticks_usec() - _pt)
+
+func _perf_physics_process(delta: float) -> void:
 	if is_instance_valid(_ball):
 		if _ball.has_method("is_time_frozen") and _ball.is_time_frozen(): return
 		var flight: int = int(_ball.get("flight_id")) if "flight_id" in _ball else _last_flight
