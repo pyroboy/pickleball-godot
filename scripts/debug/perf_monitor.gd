@@ -150,11 +150,6 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 			var want = p.get("current_velocity")
 			if want is Vector3: drawn["v%d" % p.actor_id] = snappedf(Vector2(want.x, want.z).length(), 0.001)
 		row["drawn"] = drawn
-		_hook_events(scene)
-	var st := _state()
-	if st != _ev_state:
-		_event("state", {"from": _ev_state, "to": st})
-		_ev_state = st
 	if not _events.is_empty():
 		row["ev"] = _events
 		_events = []
@@ -168,7 +163,11 @@ var _ev_scene: Node = null
 func _event(kind: String, data: Dictionary = {}) -> void:
 	data["kind"] = kind
 	data["tick"] = Engine.get_physics_frames()
-	_events.append(data)
+	# Point-level events also go to perf.jsonl on every run (a few per point), so
+	# bench/phone reports can summarise gameplay; the frame log gets all of them.
+	if kind in ["state", "rally_end", "post_hit", "body_hit"]:
+		_write({"kind": "event", "event": kind, "t": _t(Time.get_ticks_usec()), "data": data})
+	if _frame_file != null: _events.append(data)
 
 func _hook_events(scene: Node) -> void:
 	if scene == _ev_scene: return
@@ -210,7 +209,13 @@ var _jit_last_burst: Dictionary = {}   # obj -> time of its last snapshot
 
 func _motion_frame(now: int, frame_ms: float, delta: float) -> void:
 	var scene := get_tree().current_scene
-	if scene == null or not scene.has_method("get_players") or get_tree().paused: return
+	if scene == null or not scene.has_method("get_players"): return
+	_hook_events(scene)
+	var st := _state()
+	if st != _ev_state:
+		_event("state", {"from": _ev_state, "to": st})
+		_ev_state = st
+	if get_tree().paused: return
 	var pos := {}
 	var cam := get_viewport().get_camera_3d()
 	if cam != null: pos["cam"] = cam.get_global_transform_interpolated().origin

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Summarise logs/perf.jsonl from a play session in ~20 lines.
 
-Usage: python3 tools/perf_report.py [path/to/perf.jsonl]
+Usage: python3 tools/perf_report.py [--short] [path/to/perf.jsonl]
+  --short: ~6 lines (used by tools/bench.sh) to keep output small.
 """
 import json, sys, os
 from collections import defaultdict
 
-path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "..", "logs", "perf.jsonl")
+SHORT = "--short" in sys.argv
+args = [a for a in sys.argv[1:] if a != "--short"]
+path = args[0] if args else os.path.join(os.path.dirname(__file__), "..", "logs", "perf.jsonl")
 rows = [json.loads(l) for l in open(path) if l.strip()]
 meta = next((r for r in rows if r["kind"] == "meta"), {})
 secs = [r for r in rows if r["kind"] == "sec"]
@@ -19,8 +22,42 @@ def pct(vals, p):
     return vals[min(len(vals) - 1, int(len(vals) * p))]
 
 fps = [r["fps"] for r in secs]
+def gameplay_line():
+    ev = [r for r in rows if r["kind"] == "event"]
+    ends = [r["data"] for r in ev if r["event"] == "rally_end"]
+    if not ends: return None
+    span = defaultdict(list); last = None
+    for r in ev:
+        if r["event"] != "state": continue
+        t = r["data"]["tick"] / float(meta.get("physics_hz", 30))   # game time, not wall time
+        if last: span[last[0]].append(t - last[1])
+        last = (r["data"]["to"], t)
+    reasons = defaultdict(int)
+    for e in ends: reasons[e["reason"]] += 1
+    avg = lambda k: sum(span[k]) / len(span[k]) if span[k] else 0
+    return (f"Points {len(ends)} (" + ", ".join(f"{k.lower()} {n}" for k, n in sorted(reasons.items(), key=lambda kv: -kv[1])) +
+            f") | rally {avg('PLAYING'):.1f}s, between {avg('POINT_SCORED'):.1f}s, serve wait {avg('WAITING'):.1f}s")
+
+if SHORT:
+    g = gameplay_line()
+    if g: print(g)
+    tot = defaultdict(float)
+    for r in secs:
+        for k, v in r["scopes"].items(): tot[k] += v[0]
+    top = sorted((k for k in tot if not k.startswith("render.")), key=tot.get, reverse=True)[:5]
+    print("Top ms/frame: " + ", ".join(f"{k} {tot[k]/len(secs):.2f}" for k in top))
+    print(f"Spikes >= {meta.get('spike_ms')}ms: {len(spikes)}" + (f", worst {max(s['ms'] for s in spikes)}ms" if spikes else ""))
+    jit = defaultdict(int); frames = defaultdict(int)
+    for r in secs:
+        frames[r["state"]] += r["fps"]
+        for k, n in r.get("jitter", {}).items(): jit[(r["state"], k)] += n
+    worst = sorted(jit.items(), key=lambda kv: -kv[1] / max(frames[kv[0][0]], 1))[:3]
+    if worst: print("Jitter /1k frames: " + ", ".join(f"{k} {st} {1000*n/max(frames[st],1):.0f}" for (st, k), n in worst))
+    sys.exit(0)
 print(f"{meta.get('os')} {meta.get('model')} | {meta.get('renderer')} | {len(secs)}s played")
 print(f"FPS   median {pct(fps,.5)}  worst-5% {pct(fps,.05)}  min {min(fps)}")
+g = gameplay_line()
+if g: print(g)
 print(f"Frame p95 {pct([r['p95_ms'] for r in secs],.5):.1f}ms typical, worst frame {max(r['max_ms'] for r in secs):.1f}ms")
 print(f"Scene draws {pct([r['draws'] for r in secs],.5)}  nodes {max(r['nodes'] for r in secs)}")
 by_state_ms = defaultdict(list)

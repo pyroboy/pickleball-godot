@@ -5,13 +5,15 @@ Usage: python3 tools/pose_diff.py baseline.jsonl new.jsonl [tolerance_mm=1.0]
 Prints the first tick where any joint moved more than the tolerance, and the
 max / p99 deviation per joint up to that point. Exit code 1 if it diverged.
 """
-import json, sys, math
+import json, sys, math, gzip
 from collections import defaultdict
 
 a_path, b_path = sys.argv[1], sys.argv[2]
 tol = float(sys.argv[3]) / 1000.0 if len(sys.argv) > 3 else 0.001
-A = [json.loads(l) for l in open(a_path)]
-B = [json.loads(l) for l in open(b_path)]
+opn = lambda p: gzip.open(p, "rt") if p.endswith(".gz") else open(p)
+resolve = lambda p: p if p.endswith(".gz") or not __import__("os").path.exists(p + ".gz") else p + ".gz"
+A = [json.loads(l) for l in opn(resolve(a_path))]
+B = [json.loads(l) for l in opn(resolve(b_path))]
 n = min(len(A), len(B))
 dev = defaultdict(list)
 first = None
