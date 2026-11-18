@@ -1517,6 +1517,7 @@ func _reset_player_positions() -> void :
 	if doubles_mode and doubles_controller != null:
 		for actor in get_players():
 			actor.global_position = doubles_controller.reset_spawn_position(actor)
+			actor.reset_physics_interpolation()
 			actor.velocity = Vector3.ZERO
 			actor.current_velocity = Vector3.ZERO
 			actor.cancel_contextual_jump()
@@ -1532,6 +1533,7 @@ func _reset_player_positions() -> void :
 	player_left.global_position = Vector3(blue_x, 1.0, SERVE_RESET_DEPTH)
 	var red_x: float = -1.5 if serve_from_right else 1.5
 	player_right.global_position = Vector3(red_x, 1.0, -SERVE_RESET_DEPTH)
+	player_left.reset_physics_interpolation(); player_right.reset_physics_interpolation()
 	for player in get_players():
 		player.velocity = Vector3.ZERO
 		player.current_velocity = Vector3.ZERO

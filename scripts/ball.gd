@@ -635,6 +635,7 @@ func reset() -> void :
 	_clear_paddle_collision_exception()
 	flight_id += 1
 	global_position = Vector3(-1.5, 1.5, -4)
+	reset_physics_interpolation()
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 	is_in_play = false

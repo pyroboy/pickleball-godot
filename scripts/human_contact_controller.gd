@@ -52,8 +52,9 @@ var hit: bool = false
 var _flight_id: int = -1
 # Perf: contact planning (Planner.select, with its heavy select_extended fallback)
 # ran every physics tick while a ball was incoming, up to ~170 ms in one frame.
-# Re-plan at ~15 Hz while the ball is far, and every tick in the final window.
-const PLAN_INTERVAL_TICKS := 4
+# Re-plan at ~15 Hz while the ball is far, and every tick in the final window
+# (at a 30 Hz physics tick this re-plans every other tick).
+const PLAN_INTERVAL_SECONDS := 0.066
 const PLAN_EVERY_TICK_TIME := 0.25
 var _plan_tick: int = -1000
 var _plan_flight: int = -1
@@ -135,7 +136,7 @@ func _perf_update(delta: float) -> void:
 		if flight.is_empty(): flight = Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity)
 		var now: int = Engine.get_physics_frames()
 		var near_contact: bool = not contact.is_empty() and float(contact.time) <= PLAN_EVERY_TICK_TIME
-		if near_contact or phase >= 1 or _plan_flight != ball.flight_id or now - _plan_tick >= PLAN_INTERVAL_TICKS:
+		if near_contact or phase >= 1 or _plan_flight != ball.flight_id or float(now - _plan_tick) / float(Engine.physics_ticks_per_second) >= PLAN_INTERVAL_SECONDS:
 			_plan_tick = now; _plan_flight = ball.flight_id
 			contact = Planner.select(player, ball, flight, old_id)
 			if not contact.is_empty():
