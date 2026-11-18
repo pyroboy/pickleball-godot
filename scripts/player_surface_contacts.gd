@@ -123,6 +123,12 @@ static func posed_bounds(mesh: Mesh, transform: Transform3D, skin_palette: Array
 	return AABB(minimum, maximum - minimum)
 
 static func snapshot(player, include_paddle: bool = false) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_snapshot(player, include_paddle)
+	PerfMonitor.record("surface.snapshot", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_snapshot(player, include_paddle: bool = false) -> Dictionary:
 	var parts := {}
 	for instance in meshes(player, include_paddle):
 		var palette: Array[Transform3D] = _skin_palette(instance)

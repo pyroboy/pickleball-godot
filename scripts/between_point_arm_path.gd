@@ -206,7 +206,13 @@ func _fit_open_catch(arm,transaction,saved:Dictionary,request:Transform3D,target
  model.set_mesh_world_transform(mount);model.update_wrist_bridge(arm.fore_mesh.global_basis)
  actor.set_meta("between_cup_fit",{"feasible":true,"bounded_catch":true,"progress":center.distance_to(start_center),"target_error":center.distance_to(target),"candidates":attempted,"surface_queries":used,"angle":last_basis.get_rotation_quaternion().angle_to(chosen.basis.get_rotation_quaternion())})
 
-func _cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,angle:float,cost_ceiling:float=INF,first_valid:bool=false)->Dictionary:
+func _cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,angle:float,cost_ceiling:float=INF,first_valid:bool=false) -> Dictionary:
+ var _pt := Time.get_ticks_usec()
+ var _pr = _perf_cup_candidate(arm, original, center, normal, angle, cost_ceiling, first_valid)
+ PerfMonitor.record("cup.candidate", Time.get_ticks_usec() - _pt)
+ return _pr
+
+func _perf_cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,angle:float,cost_ceiling:float=INF,first_valid:bool=false) -> Dictionary:
  var model=arm.articulated_hand
  var basis:Basis=Basis(normal,angle)*original.basis
  var allowed:float=deg_to_rad(700.0)*actor.get_physics_process_delta_time()

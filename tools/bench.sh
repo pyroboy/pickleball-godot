@@ -1,7 +1,7 @@
 #!/bin/bash
 # Deterministic headless benchmark: phone-like runtime (no desktop debug systems),
 # all four players AI-driven, fixed seed, fixed 60 fps timestep.
-# Usage: tools/bench.sh <name> [seconds=60] [seed=1]
+# Usage: tools/bench.sh <name> [seconds=60] [seed=1]   (DESKTOP=1: keep desktop-only debug systems)
 #   -> logs/bench_<name>.perf.jsonl, logs/bench_<name>.pose.jsonl, prints the report.
 # Compare poses: python3 tools/pose_diff.py logs/bench_base.pose.jsonl logs/bench_<name>.pose.jsonl
 set -uo pipefail
@@ -15,7 +15,7 @@ if [ -z "${GODOT:-}" ]; then
   done
 fi
 "$GODOT" --headless --path . --fixed-fps 60 --quit-after $((SECS * 60)) res://scenes/game.tscn -- \
-  --mobile-runtime --autoplay --doubles --seed=$SEED \
+  $([ "${DESKTOP:-0}" = 1 ] || echo --mobile-runtime) --autoplay --doubles --seed=$SEED \
   --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" \
   > "logs/bench_$NAME.log" 2>&1
 echo "script errors: $(grep -cE 'SCRIPT ERROR|Parse Error' "logs/bench_$NAME.log")"

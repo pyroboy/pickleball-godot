@@ -478,7 +478,12 @@ func _lift_direction(team: int, progress: float) -> Vector3:
 	var side: Vector3 = - _players[team]._get_forehand_axis()
 	return _grasp_direction.slerp(side, progress * 2.0) if progress < 0.5 else side.slerp(Vector3.UP, (progress - 0.5) * 2.0)
 
-func _choose_retriever() -> void :
+func _choose_retriever() -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_choose_retriever()
+	PerfMonitor.record("bp.choose_retriever", Time.get_ticks_usec() - _pt)
+
+func _perf_choose_retriever() -> void:
 	for index in _players.size():
 		if index != server: _targets[index] = _serve_position(index)
 	_targets[server] = _serve_position(server) + _players[server]._get_forward_axis() * 1.0
@@ -490,6 +495,12 @@ func _choose_retriever() -> void :
 	_set_phase("APPROACH")
 
 func _missed_collection_budget(ball, player) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_missed_collection_budget(ball, player)
+	PerfMonitor.record("bp.missed_collection_budget", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_missed_collection_budget(ball, player) -> Dictionary:
 	# Forecast the actual released ball under the same aero/bounce model and
 	# APPROACH's existing near-ground brake. This never advances the live ball.
 	var dt: float = get_physics_process_delta_time()
@@ -522,6 +533,12 @@ func _missed_collection_budget(ball, player) -> Dictionary:
 	return {"seconds": settling + approach + carry + support + braking, "actor_id": player.get_actor_id(), "ball_start": ball.global_position, "ball_velocity": ball.linear_velocity, "forecast_point": point, "forecast_settled": point.y < .22 and velocity.length() < .85, "forecast_horizon": horizon, "settling_seconds": settling, "walk_seconds": approach, "carry_seconds": carry, "support_seconds": support, "braking_seconds": braking}
 
 func _reachable_ball() -> bool:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_reachable_ball()
+	PerfMonitor.record("bp.reachable_ball", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_reachable_ball() -> bool:
 	var pos: Vector3 = _game.ball.global_position
 	if not pos.is_finite() or pos.y < -0.1: return false
 	var team: int = _nearest_retriever(pos)
@@ -535,6 +552,12 @@ func _reachable_ball() -> bool:
 	return planar.length() <= .62
 
 func _pickup_root(pos: Vector3, player) -> Vector3:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_pickup_root(pos, player)
+	PerfMonitor.record("bp.pickup_root", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_pickup_root(pos: Vector3, player) -> Vector3:
 	var result: Vector3 = pos + player._get_forehand_axis() * 0.22 - player._get_forward_axis() * 0.27
 	result.y = player.ground_y
 	result.x = clampf(result.x, player.min_x, player.max_x)
@@ -558,6 +581,12 @@ func _facing_yaw(team: int) -> float:
 	return float(_carry_heading[team])
 
 func _carry_wrist(team: int) -> Vector3:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_carry_wrist(team)
+	PerfMonitor.record("bp.carry_wrist", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_carry_wrist(team: int) -> Vector3:
 	var player = _players[team]
 	var offset: Vector3 = - player._get_forehand_axis() * 0.26 + player._get_forward_axis() * 0.32 + Vector3.UP * 0.05
 	return player.global_position + offset.rotated(Vector3.UP, deg_to_rad(-_facing_yaw(team)))
@@ -575,6 +604,12 @@ func _at_target(team: int) -> bool:
 	return _players[team].global_position.distance_to(_targets[team]) < 0.06
 
 func _make_pose(team: int, bend: float) -> PostureDefinition:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_make_pose(team, bend)
+	PerfMonitor.record("bp.make_pose", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_make_pose(team: int, bend: float) -> PostureDefinition:
 	var pose: PostureDefinition = PostureLibrary.instance().get_def(_players[team].PaddlePosture.READY).duplicate(true)
 
 
@@ -604,7 +639,12 @@ func _make_pose(team: int, bend: float) -> PostureDefinition:
 		return turned
 	return pose
 
-func _start_offscreen_return() -> void :
+func _start_offscreen_return() -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_start_offscreen_return()
+	PerfMonitor.record("bp.start_offscreen_return", Time.get_ticks_usec() - _pt)
+
+func _perf_start_offscreen_return() -> void:
 	used_offscreen_helper = true
 	_carry_team = -1
 	retriever = -1
@@ -631,7 +671,12 @@ func _await_helper_position() -> void :
 			_launch_pass(origin)
 			return
 
-func _launch_pass(origin: Vector3) -> void :
+func _launch_pass(origin: Vector3) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_launch_pass(origin)
+	PerfMonitor.record("bp.launch_pass", Time.get_ticks_usec() - _pt)
+
+func _perf_launch_pass(origin: Vector3) -> void:
 	var receiver = _players[server]
 	var ideal_catch: Vector3 = _targets[server] - receiver._get_forehand_axis() * 0.26 + receiver._get_forward_axis() * 0.32 + Vector3.UP * 0.125
 	var toward_origin: Vector3 = origin - ideal_catch
@@ -691,7 +736,12 @@ func _on_bounced(position: Vector3) -> void :
 		observed_bounces += 1
 		transfer_bounce_position = position
 
-func _set_phase(value: String) -> void :
+func _set_phase(value: String) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_set_phase(value)
+	PerfMonitor.record("bp.set_phase", Time.get_ticks_usec() - _pt)
+
+func _perf_set_phase(value: String) -> void:
 	for team in _players.size(): _phase_entry_wrists[team] = _actual_wrist(team)
 	phase = value
 	phase_elapsed = 0.0
@@ -721,6 +771,12 @@ func _catch_presentation_valid(player) -> bool:
 	return bool(report.valid)
 
 func prepare_pose_admission(player) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_prepare_pose_admission(player)
+	PerfMonitor.record("bp.prepare_pose_admission", Time.get_ticks_usec() - _pt)
+	return _pr
+
+func _perf_prepare_pose_admission(player) -> Dictionary:
 	var identity: int = player.get_actor_id()
 	if not _presentation_admission.has(identity): _presentation_admission[identity] = load("res://scripts/between_pose_admission.gd").new(player)
 	return _presentation_admission[identity].begin(self)
@@ -730,6 +786,11 @@ func finish_pose_admission(player, token: Dictionary) -> void:
 	if _presentation_admission.has(identity): _presentation_admission[identity].finish(self, token)
 
 func present_arm_path(player, pose) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_present_arm_path(player, pose)
+	PerfMonitor.record("bp.present_arm_path", Time.get_ticks_usec() - _pt)
+
+func _perf_present_arm_path(player, pose) -> void:
 	if not _active or _arm_paths.size() != _players.size(): return
 	var index: int = _players.find(player)
 	if index < 0: return

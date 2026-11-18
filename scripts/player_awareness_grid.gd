@@ -287,16 +287,40 @@ func _activate_vertices(pts: Array[Vector3], times: Array[float]) -> void :
 	_activation.fill(0.0)
 	_time_to_arrival.fill(INF)
 
+	# Only vertices within ACTIVATION_RADIUS of a point can change, so look them up
+	# in ACTIVATION_RADIUS-sized cells (27 neighbours) instead of scanning all
+	# ~2,600 vertices per point. Point order is unchanged, so results are identical
+	# to the brute-force scan (verified by scripts/debug/test_awareness_grid_buckets.gd).
+	if _buckets.is_empty(): _build_buckets()
 	for pt_idx in range(pts.size()):
 		var pt: Vector3 = pts[pt_idx]
 		var time: float = times[pt_idx]
-		for v_idx in range(_local_positions.size()):
-			var d: float = _local_positions[v_idx].distance_to(pt)
-			if d < ACTIVATION_RADIUS:
-				var strength: float = 1.0 - (d / ACTIVATION_RADIUS)
-				if strength > _activation[v_idx]:
-					_activation[v_idx] = strength
-					_time_to_arrival[v_idx] = time
+		var cell := _cell_of(pt)
+		for dx in range(-1, 2):
+			for dy in range(-1, 2):
+				for dz in range(-1, 2):
+					var bucket = _buckets.get(cell + Vector3i(dx, dy, dz))
+					if bucket == null: continue
+					for v_idx in bucket:
+						var d: float = _local_positions[v_idx].distance_to(pt)
+						if d < ACTIVATION_RADIUS:
+							var strength: float = 1.0 - (d / ACTIVATION_RADIUS)
+							if strength > _activation[v_idx]:
+								_activation[v_idx] = strength
+								_time_to_arrival[v_idx] = time
+
+var _buckets: Dictionary = {}   # Vector3i cell -> PackedInt32Array of vertex indices
+
+func _cell_of(p: Vector3) -> Vector3i:
+	return Vector3i(floori(p.x / ACTIVATION_RADIUS), floori(p.y / ACTIVATION_RADIUS), floori(p.z / ACTIVATION_RADIUS))
+
+func _build_buckets() -> void:
+	_buckets.clear()
+	for v_idx in range(_local_positions.size()):
+		var c := _cell_of(_local_positions[v_idx])
+		var b: PackedInt32Array = _buckets.get(c, PackedInt32Array())
+		b.append(v_idx)
+		_buckets[c] = b
 
 
 

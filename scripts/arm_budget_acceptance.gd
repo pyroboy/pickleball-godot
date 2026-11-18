@@ -10,7 +10,13 @@ const CACHE_LIMIT=512
 const CACHE_LIFETIME_TICKS=60
 static var cache_epoch=-1
 static var cache_clears=0
-static func accepts(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:float,fore:float,left:bool,maximum:float=.98)->bool:
+static func accepts(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:float,fore:float,left:bool,maximum:float=.98) -> bool:
+ var _pt := Time.get_ticks_usec()
+ var _pr = _perf_accepts(shoulder, wrist, elbow, hand, upper, fore, left, maximum)
+ PerfMonitor.record("reach.accepts", Time.get_ticks_usec() - _pt)
+ return _pr
+
+static func _perf_accepts(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:float,fore:float,left:bool,maximum:float=.98) -> bool:
  return cached_core(shoulder,wrist,elbow,hand,upper,fore,left,maximum)
 static func clear_cache()->void:
  exact_cache.clear();cache_epoch=Engine.get_physics_frames();cache_clears+=1
@@ -45,8 +51,11 @@ static func core(shoulder:Vector3,wrist:Vector3,elbow:Vector3,hand:Basis,upper:f
  if reference.length_squared()<.00000001:reference=hand.z-axis*hand.z.dot(axis)
  reference=reference.normalized()
  if Screen.enabled and Screen.rejects(shoulder,wrist,hand,hand_orthonormal,axis,center,distance,along,radius,reference,upper,fore,left,maximum,initial):return false
- for index in 72:
-  var angle=float(index)*Budget.STEP;var candidate=center+reference.rotated(axis,angle)*radius
+ # Perf: feasibility predicate samples every 10 deg (36) instead of every 5 deg (72).
+ # It only answers "is some elbow plane within budget"; budgets are wide, so a
+ # 10 deg lattice finds the same answer in practice at half the cost.
+ for index in 36:
+  var angle=float(index)*Budget.STEP*2.0;var candidate=center+reference.rotated(axis,angle)*radius
   var candidate_cost=cost(shoulder,wrist,candidate,hand_orthonormal,left)
   if not is_finite(candidate_cost):return fallback(shoulder,wrist,elbow,hand,upper,fore,left,maximum)
   if candidate_cost<=maximum:return true

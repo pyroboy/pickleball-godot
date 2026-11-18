@@ -18,7 +18,17 @@ static func _perf_apply(player,hands) -> Dictionary:
  if game==null or game.game_state!=game.GameState.WAITING or game.get_server_actor()!=player or game.ball.is_in_play or game.game_serve.is_release_pending():return {}
  if player._between_point_owner()!=null or hands.mode!="SERVE_CUP":return {}
  var arm=player.left_arm_node;var model=arm.articulated_hand
- var state:Dictionary=player.get_meta(META).duplicate(true)
+ # Perf: the cup search (rig snapshot, body geometry, up to 5 candidate fits) used
+ # to rerun on every arm solve, ~5-6x per tick. Search once per tick and reuse it.
+ var cached:Dictionary=player.get_meta(META)
+ if int(cached.get("tick",-1))==Engine.get_physics_frames() and cached.has("chosen"):
+  var c:Dictionary=cached.chosen
+  arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
+  arm.solve_ik(c.mount.origin,c.elbow,null,c.wrist)
+  model.set_mesh_world_transform(c.mount);model.update_wrist_bridge(arm.fore_mesh.global_basis)
+  hands._last_held_mount=c.mount;hands._held_mount_valid=true
+  return {"active":true,"feasible":true,"step_deg":0.0,"center":game.game_serve.get_held_ball_position(),"reused":true}
+ var state:Dictionary=cached.duplicate(true)
  var last:Basis=state.basis
  var center:Vector3=game.game_serve.get_held_ball_position()
  var goal:Basis=arm.hand_mesh.global_basis.orthonormalized()
@@ -59,5 +69,5 @@ static func _perf_apply(player,hands) -> Dictionary:
  arm.solve_ik(chosen.mount.origin,chosen.elbow,null,chosen.wrist)
  model.set_mesh_world_transform(chosen.mount);model.update_wrist_bridge(arm.fore_mesh.global_basis)
  hands._last_held_mount=chosen.mount;hands._held_mount_valid=true
- player.set_meta(META,{"basis":chosen.mount.basis,"elbow":chosen.elbow,"upper":arm.upper_pivot.global_basis.orthonormalized(),"fore":arm.forearm_pivot.global_basis.orthonormalized(),"body":player.body_pivot.global_transform,"frame_elbow":frame_elbow,"frame_body":frame_body,"frame_basis":frame_basis,"frame_upper":frame_upper,"frame_fore":frame_fore,"tick":Engine.get_physics_frames()})
+ player.set_meta(META,{"basis":chosen.mount.basis,"elbow":chosen.elbow,"upper":arm.upper_pivot.global_basis.orthonormalized(),"fore":arm.forearm_pivot.global_basis.orthonormalized(),"body":player.body_pivot.global_transform,"frame_elbow":frame_elbow,"frame_body":frame_body,"frame_basis":frame_basis,"frame_upper":frame_upper,"frame_fore":frame_fore,"tick":Engine.get_physics_frames(),"chosen":chosen})
  return {"active":true,"feasible":true,"step_deg":rad_to_deg(last.get_rotation_quaternion().angle_to(chosen.mount.basis.get_rotation_quaternion())),"center":center}

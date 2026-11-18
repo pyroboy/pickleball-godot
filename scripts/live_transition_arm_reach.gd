@@ -11,6 +11,15 @@ const ReachProjection = preload("res://scripts/wide_backhand_reach_profile.gd")
 const WristBudget = preload("res://scripts/live_arm_budget.gd")
 const ARM_RESERVE_M := 0.0001
 const MAX_BODY_SHIFT_M := 0.12
+# Perf: body-shift search resolution. Was 5 mm x 24 steps + 10 bisections (~0.005 mm,
+# far below anything visible) and dominated rally CPU. 1 cm x 12 + 5 bisections = ~0.3 mm.
+const SEARCH_STEP_M := 0.01
+const SEARCH_STEPS := 12
+const SEARCH_BISECTIONS := 5
+# Perf: hard cap on candidate wrist-budget checks per solve. In the between-point
+# carried-cup case each check costs ~1 ms, and uncapped searches hit ~100 checks
+# (100+ ms frames). If nothing fits within the cap the body keeps the base offset.
+const MAX_BUDGET_CHECKS := 16
 
 static func enabled(player, pose) -> bool:
 	if pose == null: return false
@@ -100,17 +109,21 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 			# entry. Lowering preserves grounded contacts and never lengthens
 			# a leg. Search is bounded by the existing body-translation cap.
 			var found := false
+			var checks := 0
 			var best := Vector3.INF
 			var directions: Array[Vector3] = [Vector3.DOWN, (Vector3.DOWN - player._get_forward_axis()).normalized(), (Vector3.DOWN + player._get_forward_axis()).normalized(),
 				(Vector3.DOWN + player._get_forehand_axis()).normalized(), (Vector3.DOWN - player._get_forehand_axis()).normalized()]
 			for direction in directions:
-				for index in range(1, 25):
-					var trial: Vector3 = offset + direction * float(index) * .005
+				if checks >= MAX_BUDGET_CHECKS: break
+				for index in range(1, SEARCH_STEPS + 1):
+					var trial: Vector3 = offset + direction * float(index) * SEARCH_STEP_M
 					if trial.length() > MAX_BODY_SHIFT_M or (found and trial.length() >= best.length()): break
 					if not release.is_empty(): report.candidate_checks += 1
+					if checks >= MAX_BUDGET_CHECKS: break
+					checks += 1
 					if not _targets_fit(player, pose, trial, centers, radii, not release.is_empty()) or not _wrist_budgets_fit(player, pose, paddle, trial): continue
-					var low := float(index - 1) * .005; var high := float(index) * .005
-					for unused in range(10):
+					var low := float(index - 1) * SEARCH_STEP_M; var high := float(index) * SEARCH_STEP_M
+					for unused in range(SEARCH_BISECTIONS):
 						var middle := (low + high) * .5
 						var candidate: Vector3 = offset + direction * middle
 						if not release.is_empty(): report.candidate_checks += 1
@@ -130,6 +143,12 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 	return report
 
 static func _wrist_budgets_fit(player, pose, paddle: Transform3D, offset: Vector3) -> bool:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_wrist_budgets_fit(player, pose, paddle, offset)
+	PerfMonitor.record("reach.wrist_budgets_fit", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_wrist_budgets_fit(player, pose, paddle: Transform3D, offset: Vector3) -> bool:
 	for side in range(2):
 		var main: bool = side == pose.paddle_hand
 		if not main and Path._support_mode(pose) != 1: continue
@@ -181,6 +200,11 @@ static func _next_carried_cup_basis(player, pose) -> Basis:
 	return previous.slerp(target.basis, minf(1.0, step / maxf(angle, .000001)))
 
 static func apply(player, pose, feet: Array) -> void:
+	var _pt := Time.get_ticks_usec()
+	_perf_apply(player, pose, feet)
+	PerfMonitor.record("leg.live_arm_reach", Time.get_ticks_usec() - _pt)
+
+static func _perf_apply(player, pose, feet: Array) -> void:
 	if player.body_pivot == null: return
 	var report: Dictionary = solve(player, pose, feet)
 	player.body_pivot.set_meta("live_transition_arm_reach", report)
@@ -190,6 +214,12 @@ static func apply(player, pose, feet: Array) -> void:
 	player.paddle_node.global_transform = paddle
 
 static func _targets_fit(player, pose, offset: Vector3, centers: Array[Vector3], radii: Array[float], release: bool) -> bool:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_targets_fit(player, pose, offset, centers, radii, release)
+	PerfMonitor.record("reach.targets_fit", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_targets_fit(player, pose, offset: Vector3, centers: Array[Vector3], radii: Array[float], release: bool) -> bool:
 	if not release: return ReachProjection._fits(offset, centers, radii)
 	var frame: Dictionary = player.arm_ik._hands.preview_serve_release(pose, offset)
 	if frame.is_empty(): return false

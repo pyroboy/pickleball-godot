@@ -14,10 +14,22 @@ const WRIST_RESERVE := 0.98
 const JointSeam := 0.12
 const MAX_SHIFT := 0.10
 const STEP := 0.005
+# Perf: coarser clearance search. Was 9 dirs x 21 shifts of 5 mm, each re-building body
+# geometry and sweeping both elbows at 5 deg with triangle-level collision tests (up to
+# ~130 ms in one frame at point end). Now 1 cm shifts, 10 deg elbow sweep, max 12 tries.
+const SEARCH_STEP := 0.01
+const SEARCH_MAX_TRIALS := 12
+const ELBOW_STEP_DEG := 10.0
 static var _bvh_topologies: Dictionary = {}
 static var _resource_versions: Dictionary = {}
 
 static func body_geometry(player) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_body_geometry(player)
+	PerfMonitor.record("geo.body_geometry", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_body_geometry(player) -> Dictionary:
 	var skin = player.body_pivot.get_meta("articulated_torso")
 	var inverse: Transform3D = player.body_pivot.global_transform.affine_inverse()
 	var world := Surface.world_triangles(skin.body_mesh)
@@ -107,6 +119,12 @@ static func _clear_triangle(a: Vector3, b: Vector3, c: Vector3, broad: AABB, geo
 	return true
 
 static func arm_clear(arm, geometry: Dictionary, required_gap: float = 0.0) -> bool:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_arm_clear(arm, geometry, required_gap)
+	PerfMonitor.record("geo.arm_clear", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_arm_clear(arm, geometry: Dictionary, required_gap: float = 0.0) -> bool:
 	if not geometry.get("valid", false): return false
 	var inverse: Transform3D = geometry.inverse
 	var shoulder: Vector3 = arm.upper_pivot.global_position
@@ -150,6 +168,12 @@ static func clearance_report(player) -> Dictionary:
 		"source": "displayed sleeve triangles vs displayed skinned torso triangles; closed-body inside test", "proximal_joint_seam_m": JointSeam}
 
 static func _solve_arm(arm, mount: Transform3D, preferred: Vector3, geometry: Dictionary, left: bool, attempts: int = 73, verify_clearance: bool = true) -> Dictionary:
+	var _pt := Time.get_ticks_usec()
+	var _pr = _perf_solve_arm(arm, mount, preferred, geometry, left, attempts, verify_clearance)
+	PerfMonitor.record("clear.solve_arm", Time.get_ticks_usec() - _pt)
+	return _pr
+
+static func _perf_solve_arm(arm, mount: Transform3D, preferred: Vector3, geometry: Dictionary, left: bool, attempts: int = 73, verify_clearance: bool = true) -> Dictionary:
 	if verify_clearance and not geometry.get("valid", false): return {}
 	var shoulder: Vector3 = arm.upper_pivot.global_position
 	var wrist: Vector3 = mount * arm.articulated_hand.wrist_socket
@@ -162,8 +186,10 @@ static func _solve_arm(arm, mount: Transform3D, preferred: Vector3, geometry: Di
 	var radial := preferred - center; radial -= axis * radial.dot(axis)
 	if radial.length_squared() < 0.000001: radial = Vector3.UP - axis * axis.y
 	radial = radial.normalized()
-	for index in range(attempts):
-		var step := ceili(float(index) * 0.5) * (1.0 if index % 2 else -1.0)
+	# Same +/- range as before, sampled every ELBOW_STEP_DEG instead of 5 deg.
+	var stride := ELBOW_STEP_DEG / 5.0
+	for index in range(ceili(attempts / stride)):
+		var step := ceili(float(index) * 0.5) * (1.0 if index % 2 else -1.0) * stride
 		var elbow := center + radial.rotated(axis, deg_to_rad(step * 5.0)) * radius
 		var reference := Anatomy.forearm_reference(shoulder, elbow, wrist, Vector3.UP, left)
 		var channels := Anatomy.decompose(reference, mount.basis * arm.articulated_hand.anatomical_basis, -1.0 if left else 1.0)
@@ -191,8 +217,10 @@ static func search(player, snapshot_owner, pose) -> Dictionary:
 	var existing: Vector3 = player.body_pivot.get_meta("live_transition_arm_reach", {}).get("world_offset", Vector3.ZERO)
 	var result := {}; var best := INF; var trials := 0
 	for direction in directions:
-		for step in range(0, ceili(MAX_SHIFT / STEP) + 1):
-			var distance := step * STEP
+		if trials >= SEARCH_MAX_TRIALS: break
+		for step in range(0, ceili(MAX_SHIFT / SEARCH_STEP) + 1):
+			if trials >= SEARCH_MAX_TRIALS: break
+			var distance := step * SEARCH_STEP
 			if distance >= best: break
 			if (existing + direction * distance).length() > load("res://scripts/live_transition_arm_reach.gd").MAX_BODY_SHIFT_M: continue
 			snapshot_owner._restore(saved)
@@ -240,6 +268,12 @@ class Transaction:
 	var actor
 	func _init(owner): actor = owner
 	func _snapshot(narrow: bool = false) -> Dictionary:
+		var _pt := Time.get_ticks_usec()
+		var _pr = _perf_snapshot(narrow)
+		PerfMonitor.record("rig.snapshot", Time.get_ticks_usec() - _pt)
+		return _pr
+
+	func _perf_snapshot(narrow: bool = false) -> Dictionary:
 		var nodes: Array = [{"node": actor, "transform": actor.transform}]
 		var bones: Array = []
 		var changed: Array = actor.find_children("*", "Node3D", true, false) if not narrow else [actor.body_pivot, actor.paddle_node]
@@ -279,6 +313,11 @@ class Transaction:
 			"right_report": actor.right_leg_node.reach_report.duplicate(true), "left_report": actor.left_leg_node.reach_report.duplicate(true)}
 	
 	func _restore(saved: Dictionary) -> void:
+		var _pt := Time.get_ticks_usec()
+		_perf_restore(saved)
+		PerfMonitor.record("rig.restore", Time.get_ticks_usec() - _pt)
+
+	func _perf_restore(saved: Dictionary) -> void:
 		for item in saved.nodes: item.node.transform = item.transform
 		for item in saved.bones:
 			for index in item.poses.size():

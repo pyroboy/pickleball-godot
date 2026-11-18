@@ -63,6 +63,9 @@ var _record_consumed_motion := false
 var _consumed_path_bounds := AABB()
 var _snapshots: Dictionary = {}
 var _frame_current: Dictionary = {}
+# Perf: _snapshots takes a shallow copy of _frame_current. _capture_current() builds
+# brand-new per-actor snapshot dictionaries every tick and never edits old ones,
+# so the previous deep duplicate(true) of all mesh arrays each tick was wasted work.
 var _contact_pose_snapshots: Dictionary = {}
 var _remainder_geometry_start := -1.0
 var _previous_ball := Vector3.ZERO
@@ -134,7 +137,7 @@ func before_serve_contact(server) -> bool:
 	if not preload("res://scripts/finite_paddle_contact.gd").touches(server.paddle_node.global_transform, game.ball.global_position, game.ball.BALL_RADIUS):
 		last_evidence = {"blocked": true, "reason": "serve_face_not_touching", "serve_admission": "miss"}
 		return false
-	_capture_current(); _contact_pose_snapshots = _frame_current.duplicate(true)
+	_capture_current(); _contact_pose_snapshots = _frame_current.duplicate()
 	_admitted_paddle_mesh = -1
 	for id in _frame_current[ActorIdentity.actor_id(server)].parts:
 		var part: Dictionary = _frame_current[ActorIdentity.actor_id(server)].parts[id]
@@ -158,7 +161,7 @@ func note_serve_contact(server) -> void:
 	_strokes[ActorIdentity.actor_id(server)] = {"serial": serial, "active": true, "head": head, "direction": direction, "hit_direction": direction, "continuous": true}
 	_last_contact = {"actor_id": ActorIdentity.actor_id(server), "team_id": ActorIdentity.team_id(server), "court_side": ActorIdentity.court_side(server), "player_num": ActorIdentity.team_id(server), "stroke_serial": serial, "mesh_id": _admitted_paddle_mesh}
 	_separated = false; _previous_ball = game.ball.global_position; _flight = game.ball.flight_id
-	_snapshots = _frame_current.duplicate(true)
+	_snapshots = _frame_current.duplicate()
 	_serve_admitted = false; _serve_history.clear()
 
 func before_paddle(player, evidence: Dictionary = {}) -> bool:
@@ -205,7 +208,7 @@ func _before_paddle_impl(player, evidence: Dictionary = {}) -> bool:
 		return false
 	_observe_stroke(player)
 	_capture_current()
-	_contact_pose_snapshots = _frame_current.duplicate(true)
+	_contact_pose_snapshots = _frame_current.duplicate()
 	var result: Dictionary = _query_range(from, ball.global_position, 0.0, 1.0, ball.flight_id)
 	if result.get("blocked", false):
 		last_evidence = result
@@ -342,7 +345,7 @@ func _process_authoritative_interval(delta: float) -> void:
 			_finish_published_intents()
 			if reset_epoch != _interval_reset_epoch: return
 			_previous_ball = ball.global_position; _flight = ball.flight_id
-			_snapshots = _frame_current.duplicate(true)
+			_snapshots = _frame_current.duplicate()
 			return
 		var from: Vector3 = _previous_ball if _flight == ball.flight_id else ball.global_position
 		if not _manifold.is_empty():
@@ -360,12 +363,12 @@ func _process_authoritative_interval(delta: float) -> void:
 			_deferred_age_fraction = -1.0
 			if reset_epoch != _interval_reset_epoch: return
 			if unresolved_continuation.is_empty(): ball.reapply_prepared_aero(held)
-			_previous_ball = ball.global_position; _flight = ball.flight_id; _snapshots = _frame_current.duplicate(true)
+			_previous_ball = ball.global_position; _flight = ball.flight_id; _snapshots = _frame_current.duplicate()
 			return
 		if not ball.deferred_scene_interval().is_empty():
 			_resolve_deferred_scene(delta)
 			if reset_epoch != _interval_reset_epoch: return
-			_previous_ball = ball.global_position; _flight = ball.flight_id; _snapshots = _frame_current.duplicate(true)
+			_previous_ball = ball.global_position; _flight = ball.flight_id; _snapshots = _frame_current.duplicate()
 			return
 		var result: Dictionary = _query_range(from, ball.global_position, 0.0, 1.0, ball.flight_id)
 		if result.get("ambiguous", false):
@@ -385,7 +388,7 @@ func _process_authoritative_interval(delta: float) -> void:
 	ball.clear_dead_scene_interval()
 	_previous_ball = ball.global_position; _flight = ball.flight_id
 	# Preserve the sampled geometry even when hit notifications changed pose.
-	_snapshots = _frame_current.duplicate(true)
+	_snapshots = _frame_current.duplicate()
 
 func owns_live_scene_motion() -> bool:
 	return game != null and game.ball != null and game.ball.is_in_play and game.game_state in [game.GameState.PLAYING, game.GameState.SERVING] and not game._tool_state_active()
@@ -519,7 +522,7 @@ func continue_paddle_remainder(_actor, elapsed: float, global_fraction: float) -
 			"geometry": _frame_current.duplicate(true), "prior_geometry": prior_geometry}
 	_previous_ball = game.ball.global_position
 	_flight = game.ball.flight_id
-	_snapshots = _frame_current.duplicate(true)
+	_snapshots = _frame_current.duplicate()
 	_update_separation()
 	_remainder_geometry_start = -1.0
 	return {"complete": unresolved_continuation.is_empty(), "blocked": not unresolved_continuation.is_empty(),
