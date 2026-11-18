@@ -20,6 +20,7 @@ const CELL_DEG: = 22.5
 const HYSTERESIS_DEG: = 4.0
 const META_PATH: = "res://assets/pixel_cards/cards_meta.json"
 const TEXTURES: = ["res://assets/pixel_cards/cards_blue.png", "res://assets/pixel_cards/cards_red.png"]
+const CARD_SHADER: = preload("res://shaders/pixel_card.gdshader")
 
 static var _meta: Dictionary = {}
 
@@ -84,14 +85,13 @@ func _ready() -> void:
 func _add(part: String, a: Node3D, b: Node3D, mirror: bool, tex: Texture2D, meta: Dictionary, facing: String, prev: Node3D = null) -> void:
 	if a == null or not meta.parts.has(part): return
 	var info: Dictionary = meta.parts[part]
-	var mat: = StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	mat.alpha_scissor_threshold = 0.5
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.albedo_texture = tex
-	mat.uv1_scale = Vector3(1.0 / float(meta.cols), 1.0 / float(meta.rows), 1.0)
+	# Unshaded, fog-free card shader; atlas colours are pre-compensated for the
+	# game's Filmic tonemap, and `gain` lets highlights reach full white.
+	var mat: = ShaderMaterial.new()
+	mat.shader = CARD_SHADER
+	mat.set_shader_parameter("atlas", tex)
+	mat.set_shader_parameter("cell_scale", Vector2(1.0 / float(meta.cols), 1.0 / float(meta.rows)))
+	mat.set_shader_parameter("gain", float(meta.get("gain", 1.0)))
 	var mesh: = MeshInstance3D.new()
 	mesh.name = "Card_%s%s" % [part, "_L" if mirror else ""]
 	var quad: = QuadMesh.new()
@@ -161,7 +161,7 @@ func _process(delta: float) -> void:
 		var origin_a: Vector3 = a + z * (mid - a).dot(z)
 		var center: Vector3 = origin_a + x * ((cell.x * 0.5 - anchor.x) * s) - up_dir * ((cell.y * 0.5 - anchor.y) * sy)
 		c.mesh.global_transform = Transform3D(Basis(x * (cell.x * s), up_dir * (cell.y * sy), z), center)
-		c.mat.uv1_offset = Vector3(float(k) / cols, float(c.row) / rows, 0.0)
+		c.mat.set_shader_parameter("cell_offset", Vector2(float(k) / cols, float(c.row) / rows))
 
 func _cell_for(key: String, node: Node3D, cam_pos: Vector3) -> int:
 	var fwd: Vector3 = node.global_basis * _player._get_forward_axis()
