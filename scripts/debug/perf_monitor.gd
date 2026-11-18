@@ -83,7 +83,7 @@ func _ready() -> void:
 	_build_graph()
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	var now := Time.get_ticks_usec()
 	var frame_ms := (now - _last_usec) / 1000.0
 	_frames += 1
@@ -103,6 +103,7 @@ func _process(_delta: float) -> void:
 		_sec_costs[label] = s
 
 	if _frame_file != null: _write_frame(now, frame_ms, costs)
+	_motion_frame(now, frame_ms, delta)
 	_sec_frames.append(frame_ms)
 	_history.append(frame_ms)
 	if _history.size() > GRAPH_SAMPLES: _history.remove_at(0)
@@ -191,6 +192,87 @@ func _hook_events(scene: Node) -> void:
 	if net != null and net.has_signal("ball_hit_post"): net.ball_hit_post.connect(func(at): _event("post_hit", {"pos": _v(at)}))
 	if scene.get("score_left") != null: _event("score", {"left": scene.score_left, "right": scene.score_right})
 
+# ---- motion jitter (always on): counts per second + burst snapshots ----
+# For every drawn object (camera, ball, players; interpolated = what is on
+# screen) compare each frame's movement with its neighbours. Counted into the
+# "jitter" field of each "sec" row as "<obj>:<kind>:<zone>"; zone is where a
+# player is (behind = past the baseline). 3+ events for one object within
+# 0.5 s writes a "jitter_burst" row with the last ~2 s of positions.
+const JIT_MOVING := 0.3      # m/s: neighbours slower than this = standing
+const JIT_STALL := 0.25
+const JIT_POP := 3.0
+const JIT_BUFFER := 120
+var _sec_jitter: Dictionary = {}
+var _jit_prev: Array = []          # last 3 frames: {t, ms, state, pos: {obj: Vector3}}
+var _jit_buffer: Array = []        # last JIT_BUFFER frames for burst snapshots
+var _jit_recent: Dictionary = {}   # obj -> Array of event times (s)
+var _jit_last_burst: Dictionary = {}   # obj -> time of its last snapshot
+
+func _motion_frame(now: int, frame_ms: float, delta: float) -> void:
+	var scene := get_tree().current_scene
+	if scene == null or not scene.has_method("get_players") or get_tree().paused: return
+	var pos := {}
+	var cam := get_viewport().get_camera_3d()
+	if cam != null: pos["cam"] = cam.get_global_transform_interpolated().origin
+	var ball = scene.get("ball")
+	if ball is Node3D: pos["ball"] = ball.get_global_transform_interpolated().origin
+	for p in scene.get_players(): pos["p%d" % p.actor_id] = p.get_global_transform_interpolated().origin
+	# Speeds use the engine frame delta (game time), not wall time: right on the
+	# phone and on --fixed-fps benches alike.
+	var frame := {"t": _t(now), "ms": frame_ms, "dt": maxf(delta, 1e-4), "state": _state(), "pos": pos}
+	_jit_prev.append(frame)
+	if _jit_prev.size() > 3: _jit_prev.pop_front()
+	_jit_buffer.append(frame)
+	if _jit_buffer.size() > JIT_BUFFER: _jit_buffer.pop_front()
+	if _jit_prev.size() < 3: return
+	var a: Dictionary = _jit_prev[0]; var b: Dictionary = _jit_prev[1]; var c: Dictionary = _jit_prev[2]
+	for obj in b.pos:
+		if not a.pos.has(obj) or not c.pos.has(obj): continue
+		var d1: Vector3 = b.pos[obj] - a.pos[obj]
+		var d2: Vector3 = c.pos[obj] - b.pos[obj]
+		var s1: float = d1.length() / float(b.dt)
+		var s2: float = d2.length() / float(c.dt)
+		# Judge frame b's step (d1) against its neighbours' speeds.
+		var around: float = (_jit_speed(obj) + s2) * 0.5
+		_jit_store_speed(obj, s1)
+		if around < JIT_MOVING: continue
+		var kind := ""
+		if s1 < JIT_STALL * around: kind = "stall"
+		elif s1 > JIT_POP * around and s1 > 1.0: kind = "pop"
+		elif d1.dot(d2) < 0.0 and _jit_prev_step.has(obj) and d1.dot(_jit_prev_step[obj]) < 0.0: kind = "reverse"
+		_jit_prev_step[obj] = d1
+		if kind == "": continue
+		var key := "%s:%s:%s" % [obj, kind, _jit_zone(obj, b.pos[obj])]
+		_sec_jitter[key] = int(_sec_jitter.get(key, 0)) + 1
+		var times: Array = _jit_recent.get(obj, [])
+		times.append(float(b.t))
+		while not times.is_empty() and float(b.t) - float(times[0]) > 0.5: times.pop_front()
+		_jit_recent[obj] = times
+		if times.size() >= 3 and float(b.t) - float(_jit_last_burst.get(obj, -10.0)) > 3.0:
+			_jit_last_burst[obj] = float(b.t)
+			_write_jitter_burst(obj, kind, b)
+
+var _jit_speeds: Dictionary = {}
+var _jit_prev_step: Dictionary = {}
+func _jit_speed(obj: String) -> float: return float(_jit_speeds.get(obj, 0.0))
+func _jit_store_speed(obj: String, v: float) -> void: _jit_speeds[obj] = v
+
+func _jit_zone(obj: String, at: Vector3) -> String:
+	if not obj.begins_with("p"): return "-"
+	var z := absf(at.z)
+	return "behind" if z > 6.7 else ("kitchen" if z < 2.13 else "court")
+
+func _write_jitter_burst(obj: String, kind: String, at: Dictionary) -> void:
+	var frames := []
+	for f in _jit_buffer:
+		var row := {"t": f.t, "ms": snappedf(f.ms, 0.01), "state": f.state}
+		for k in f.pos: row[k] = _v(f.pos[k])
+		frames.append(row)
+	var scopes := {}
+	for label in _sec_costs: scopes[label] = snappedf(_sec_costs[label][1] / 1000.0, 0.01)
+	_write({"kind": "jitter_burst", "t": at.t, "obj": obj, "last_kind": kind, "state": at.state,
+		"zone": _jit_zone(obj, at.pos[obj]), "time_scale": Engine.time_scale, "worst_scope_ms_this_sec": scopes, "frames": frames})
+
 # ---- pose trace (--pose-trace=path): joint positions per physics tick, for before/after diffs ----
 
 func _physics_process(_delta: float) -> void:
@@ -243,10 +325,11 @@ func _flush_second(now: int) -> void:
 		"phys_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.1),
 		"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 		"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
-		"scopes": top})
+		"scopes": top, "jitter": _sec_jitter})
 	_sec_frames.clear()
 	_sec_costs.clear()
 	_sec_spikes = 0
+	_sec_jitter = {}
 	_sec_start = now
 
 # label -> [ms total this frame, calls], largest first

@@ -54,3 +54,16 @@ for k, c in sorted(blame.items(), key=lambda kv: -kv[1])[:5]:
     print(f"  {c:4d}x  biggest = {k}")
 for s in sorted(spikes, key=lambda s: -s["ms"])[:3]:
     print(f"  worst: t={s['t']}s {s['ms']}ms {s['state']} {s['top']}")
+
+# ---- motion jitter (sec rows "jitter": {"obj:kind:zone": count}) ----
+jit = defaultdict(int); state_frames = defaultdict(int)
+for r in secs:
+    state_frames[r["state"]] += r["fps"]
+    for k, n in r.get("jitter", {}).items(): jit[(r["state"],) + tuple(k.split(":"))] += n
+bursts = [r for r in rows if r["kind"] == "jitter_burst"]
+if jit or bursts:
+    print("Motion jitter (per 1000 frames of that state; obj kind zone):")
+    for (st, obj, kind, zone), n in sorted(jit.items(), key=lambda kv: -kv[1] / max(state_frames[kv[0][0]], 1))[:12]:
+        print(f"  {1000 * n / max(state_frames[st], 1):6.1f}/1k  {n:5d}  {obj:5s} {kind:7s} {zone:7s} {st}")
+    print(f"  bursts (3+ in 0.5 s, snapshot in log): {len(bursts)}" +
+          "".join(f"\n    t={b['t']}s {b['obj']} {b['last_kind']} {b['zone']} {b['state']}" for b in bursts[:8]))
