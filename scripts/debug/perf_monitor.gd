@@ -128,6 +128,12 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 		var c: Array = costs[label]
 		scopes[label] = [snappedf(c[1] / 1000.0, 0.001), c[0]]
 	var row := {"f": _frames, "t": _t(now), "ms": snappedf(frame_ms, 0.01), "state": _state(), "scopes": scopes}
+	if Engine.time_scale != 1.0: row["time_scale"] = snappedf(Engine.time_scale, 0.001)
+	if get_tree().paused:
+		row["paused"] = true
+		var sc := get_tree().current_scene
+		if sc != null and "contact_authority" in sc and sc.contact_authority != null and not sc.contact_authority.unresolved_continuation.is_empty():
+			row["pause_reason"] = "contact_reset: " + str(sc.contact_authority.unresolved_continuation).left(400)
 	var scene := get_tree().current_scene
 	if scene != null and scene.has_method("get_players"):
 		for p in scene.get_players(): row["p%d" % p.actor_id] = _v(p.global_position)

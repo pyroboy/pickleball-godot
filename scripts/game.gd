@@ -809,7 +809,7 @@ func _perf_physics_process(delta: float) -> void:
 
 		if server_is_ai() and not _point_transition_blocks_attempt():
 			ai_serve_timer += delta
-			if ai_serve_timer >= 1.5:
+			if ai_serve_timer >= 0.8:
 				var ai_charge: float = randf_range(0.5, 0.8)
 				serve_aim_offset_x = randf_range(-0.3, 0.3)
 				trajectory_arc_offset = randf_range(-0.1, 0.1)

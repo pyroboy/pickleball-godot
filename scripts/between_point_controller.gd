@@ -9,14 +9,14 @@ const PixelCards = preload("res://scripts/graphics/pixel_card_rig.gd")
 signal active_changed(active: bool)
 signal phase_changed(phase: String)
 signal finished(skipped: bool)
-const WALK_SPEED: = 1.6
+const WALK_SPEED: = 2.4
 const RUN_SPEED: = 4.4
-const CARRY_SPEED: = 2.65
+const CARRY_SPEED: = 3.4
 const MOVE_ACCEL: = 9.0
 const MOVE_BRAKE: = 7.0
 const WALK_APPROACH_DISTANCE: = 0.6
 # Farther than this from the ball: run. Closer: walk the whole way.
-const RUN_DECISION_DISTANCE: = 1.8
+const RUN_DECISION_DISTANCE: = 1.2
 # Ground pickup timing (bend down, lift back up).
 const BEND_TIME: = 0.42
 const LIFT_TIME: = 0.42
