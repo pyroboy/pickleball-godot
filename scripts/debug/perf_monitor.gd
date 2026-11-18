@@ -62,6 +62,12 @@ func _ready() -> void:
 			for t in arg.trim_prefix("--capture-at=").split(","): _capture_times.append(float(t))
 		if arg.begins_with("--capture-out="): _capture_dir = arg.trim_prefix("--capture-out=")
 		if arg == "--capture-hide-ui": _capture_hide_ui = true
+		if arg.begins_with("--pose-shots="):
+			var shots: Node = load("res://scripts/debug/pose_shots.gd").new()
+			shots.out_dir = arg.trim_prefix("--pose-shots=")
+			for a in OS.get_cmdline_user_args():
+				if a.begins_with("--pose-only="): shots.only = a.trim_prefix("--pose-only=").split(",")
+			add_child(shots)
 	_file = FileAccess.open(path, FileAccess.WRITE)
 	if _pose_path != "":
 		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)

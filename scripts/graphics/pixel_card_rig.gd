@@ -110,6 +110,11 @@ func _add(part: String, a: Node3D, b: Node3D, mirror: bool, tex: Texture2D, meta
 		"anchor": Vector2(info.anchor[0], info.anchor[1]), "end": Vector2(info.end[0], info.end[1]) if info.has("end") else Vector2.ZERO,
 		"limb": info.has("end") and b != null, "facing": facing})
 
+var _raw: bool = false
+
+func _xf(n: Node3D) -> Transform3D:
+	return n.global_transform if _raw else n.get_global_transform_interpolated()
+
 func _process(delta: float) -> void:
 	if not is_instance_valid(_player) or not is_instance_valid(_player.body_pivot):
 		queue_free()
@@ -137,16 +142,19 @@ func _process(delta: float) -> void:
 	# Physics runs at 30 Hz with interpolation: read the rendered (interpolated)
 	# transforms, not the last physics tick, or the cards step at 30 Hz.
 	var cam_pos: = cam.get_global_transform_interpolated().origin
+	# Pose editors (desktop and mobile) pause physics and pose the skeleton directly,
+	# so interpolated transforms hold the last physics tick; read the live ones there.
+	_raw = get_tree().paused or (_player.posture != null and _player.posture.editor_preview_mode)
 	var body_cell: int = _cell_for("body", _player.body_pivot, cam_pos)
 	var torso_node: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var torso_cell: int = _cell_for("torso", torso_node, cam_pos) if torso_node else body_cell
 	var head_node: Node3D = torso_node.get_node_or_null("HeadMesh") if torso_node else null
 	var head_cell: int = _cell_for("head", head_node, cam_pos) if head_node else torso_cell
 	for c in _cards:
-		var a: Vector3 = c.a.get_global_transform_interpolated().origin
+		var a: Vector3 = _xf(c.a).origin
 		var b: Vector3
-		if c.limb: b = c.b.get_global_transform_interpolated().origin
-		elif c.prev != null: b = a + (a - c.prev.get_global_transform_interpolated().origin).normalized() * 0.06
+		if c.limb: b = _xf(c.b).origin
+		elif c.prev != null: b = a + (a - _xf(c.prev).origin).normalized() * 0.06
 		else: b = a
 		var mid: Vector3 = (a + b) * 0.5
 		var z: Vector3 = (cam_pos - mid).normalized()
@@ -160,7 +168,7 @@ func _process(delta: float) -> void:
 			up_dir = -dp.normalized()
 			if c.limb: sy = dp.length() / texel_len
 		else:
-			var up_hint: Vector3 = c.a.get_global_transform_interpolated().basis.y if c.facing != "body" else Vector3.UP
+			var up_hint: Vector3 = _xf(c.a).basis.y if c.facing != "body" else Vector3.UP
 			up_dir = (up_hint - z * up_hint.dot(z)).normalized()
 		var x: Vector3 = up_dir.cross(z).normalized()
 		var k: int = head_cell if c.facing == "head" else (torso_cell if c.facing == "torso" else body_cell)

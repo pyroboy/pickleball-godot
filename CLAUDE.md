@@ -24,6 +24,11 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   player's `BodyPivot`; gameplay scans every mesh there.
 - The headless smoke check below starts at the title screen, so it does not compile
   gameplay scripts; `tools/bench.sh` loads the match and catches those errors.
+- Pose work: `tools/pose_review.sh s00 [b11 ...]` captures poses in the mobile editor preview
+  (wind-up/contact/finish, paddle trace) with before/after vs `HEAD` and a metrics table (feet,
+  centre of gravity, hip/shoulder turn, knees, elbow, paddle path) in `logs/pose_review/`.
+  Edit values with `python3 tools/pose_set.py s00 windup.body_yaw_deg=32 contact.crouch_amount=0.2`.
+  Plan and per-pose log: `docs/POSE_PASS_PLAN.md`.
 - Headless smoke check:
 
 ```bash
