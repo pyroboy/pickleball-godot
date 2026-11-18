@@ -630,7 +630,9 @@ func _resolve_hand_impl(evidence: Dictionary, full_delta: float) -> Dictionary:
 	var stroke: Dictionary = _strokes.get(ActorIdentity.actor_id(player), _stroke_state(player))
 	if evidence.get("kind", "body") in ["legal_paddle", "legal_hand"]:
 		var rig: Dictionary = ArmBudget.displayed_report(player)
-		if not rig.valid:
+		# Pixel cards don't draw the 3D wrist, so an over-budget wrist pose is not
+		# visible; rejecting the contact would freeze the rally and pause the game.
+		if not rig.valid and not load("res://scripts/graphics/pixel_card_rig.gd").enabled():
 			last_evidence["rejected_rig"] = rig
 			return {"stop": false, "unresolved": true, "reason": "infeasible actual hitting-surface rig"}
 	var live_stroke: Dictionary = _stroke_state(player)
