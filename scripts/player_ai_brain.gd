@@ -177,6 +177,8 @@ var _player
 const OVERHEAD_PREFER_HEIGHT := 1.5   # m above the floor
 const OVERHEAD_PREFERENCE := 0.35     # score bonus (score is roughly seconds to contact)
 
+const LUNGE_ALLOWANCE := 0.45   # m of the final approach a lunge / reach covers
+
 func _ready() -> void :
 	_player = get_parent() as CharacterBody3D
 	RuntimePolicy.seed_rng(_tactic_rng, 13)
@@ -460,7 +462,11 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			var travel_distance: float = Vector2(candidate_target.x - _player.global_position.x, 
 				candidate_target.z - _player.global_position.z).length()
 			var travel_direction: Vector3 = candidate_target - _player.global_position
-			if travel_distance > Movement.travel_distance(_player.current_velocity, travel_direction, contact_time, ai_difficulty) + 0.12:
+			# Lunge allowance: the last ~0.45 m is covered by a lunge / arm reach,
+			# not footwork (was 0.12 m). Over 5 bench matches the AI let balls hit
+			# its body after falling short by only 0.12-0.51 m; the physical
+			# contact check still decides whether the paddle really meets the ball.
+			if travel_distance > Movement.travel_distance(_player.current_velocity, travel_direction, contact_time, ai_difficulty) + LUNGE_ALLOWANCE:
 				continue
 			var local: Vector3 = contact_point - candidate_target
 			var lateral: float = local.dot(forehand_axis)
