@@ -118,9 +118,47 @@ Status: done, in progress, next, later.
 Stance: keep the solved shot (pick a target, the game finds the swing); make skill show
 in the result. Full inventory, gaps and decisions: Part 2 of the proposal PDF, pages 32-41.
 Each package is gated on the 6-seed bench and `tools/shot_report.py`.
-- [ ] G0 Safety net (does not change play, can start now): rule tests for faults, kitchen,
-      serve and singles; a fixed-flight test; remove stale values in `scripts/constants.gd`
-      (ball radius 0.06, net 0.91, gravity scale 1.5); explain the 30 Hz BALL_IN_NET rise
+- [ ] G0 Safety net (does not change play)
+  - [x] Fault rules: `tools/fault_tests.gd` (38 checks: lines, out, serve box, server
+        position, two-bounce rule, kitchen volley, momentum, net ball, double bounce, post,
+        body hit, double contact, every fault has an explanation)
+  - [x] Fixed flight: `tools/flight_tests.gd` (22 checks on the ball predictor: bounce curve,
+        78 inch drop test = 33.6 in, flat / topspin / slice / sidespin landings, speed cap,
+        batch predictor). Golden values are 30 Hz; change them only on purpose
+  - [x] Unreferenced values removed from `scripts/constants.gd` (ball mass, radius 0.06,
+        gravity scale 1.5, max speed, serve height, hit reach). `NET_HEIGHT 0.91` stays: HUD
+        markers and the unused dink solver read it
+  - [x] 30 Hz net result explained (below)
+  - [ ] Singles scoring has no test: it is inline in `game.gd` (`_on_point_scored`), not a
+        separate ledger like doubles
+  - [ ] Known rule gap (reported by the fault test, not failed): a serve landing on the far
+        half of the painted kitchen line counts as good; only the nominal 2.134 m is compared
+  - [ ] Unused code still present: `shot_physics.compute_shot_velocity` / `solve_ai_launch`,
+        `Ball.serve()`, `game._enter_slow_mo()`, `court.create_walls()`, `MIN/MAX_SERVE_SPEED`
+
+  Run all three: `godot --headless --path . -s tools/rule_tests.gd` (then `fault_tests.gd`,
+  `flight_tests.gd`). Each exits 1 on a failure.
+
+  **30 Hz against 60 Hz, 2026-11-19** (scratch copies of the same tree, 6 seeds at 300 s):
+  the total is the same, 11.8 endings per 100 shots at both rates, but the mix differs.
+
+  | | 30 Hz | 60 Hz |
+  |---|---|---|
+  | Points / shots | 93 / 785 | 90 / 765 |
+  | Ball in net | 30 | 18 |
+  | Out of bounds | 20 | 1 |
+  | Double contact | 8 | 0 |
+  | Soft ball hit the body | 4 | 25 |
+  | Soft ball not returned | 16 | 27 |
+  | Dropped shots (`shot_dropped`) | 39 | 10 |
+  | Drive launch error, average | 7.75 m/s | 0.17 m/s |
+
+  At 30 Hz the planned shot is dropped four times as often (the ball deflects off the paddle
+  instead of taking the solved launch), which is where the extra net and out endings come
+  from; drives and lobs are worst. The 60 Hz body hits are not a fair reference: the AI was
+  tuned at 30 Hz and some windows are counted in ticks (`OWN_SHOT_LEG_TICKS 8`,
+  `RECOVERY_MAX_TICKS 24`, `READY_RECHECK_TICKS 6`), so they last half as long at 60 Hz.
+  Next target for rally quality: dropped shots at 30 Hz (about 50 of 93 endings are net or out).
 - [ ] G1 Contact skill: one measure for the on-screen grade and the execution error;
       PERFECT narrows the error (accuracy, not power); show why a shot missed
 - [ ] G2 The paddle matters: face angle and swing speed bend the solved shot inside limits;
