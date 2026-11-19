@@ -175,6 +175,10 @@ var ai_contact_indicator_position: Vector3 = Vector3.ZERO
 var _player
 
 const OVERHEAD_PREFER_HEIGHT := 1.4   # m above the floor: take it in the air from here
+const RISE_CONTACT_HEIGHT := 0.5    # m above the floor a bounced ball is ideally met at
+const RISE_CONTACT_WEIGHT := 2.5    # score (~seconds) per metre below that
+const RUN_SLACK := 0.6           # m of spare run a contact should leave
+const RUN_SLACK_WEIGHT := 1.2    # score (~seconds) per metre short of that
 const OVERHEAD_PREFERENCE := 1.0     # score bonus (~seconds): a reachable high ball beats letting it drop
 
 const LUNGE_ALLOWANCE := 0.45   # m of the final approach a lunge / reach covers
@@ -322,8 +326,14 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 	if not ai_selected_contact_reachable:
 		if _player.erne_action != null and _player.erne_action.maybe_start_ai(ball, _get_predicted_flight(ball), {"normal_reachable": false, "flight_id": ball.flight_id}):
 			return Vector3.ZERO
-		if _player.special_reach_driver != null and _player.special_reach_driver.maybe_start_ai():
-			return Vector3.ZERO
+		# The reach driver refuses a call without the AI's delayed view of the
+		# ball; it was called with none, so the AI never lunged for a ball it
+		# could not walk to.
+		if _player.special_reach_driver != null:
+			var seen: Dictionary = preload("res://scripts/special_action_identity.gd").annotate(_player,
+				{"ready": _perception_ready, "bounces": _observed_contact_bounces(), "flight_id": _observed_flight_id})
+			if _player.special_reach_driver.maybe_start_ai(_get_predicted_flight(ball), seen):
+				return Vector3.ZERO
 
 	intercept_target.x = clamp(intercept_target.x, _player.min_x, _player.max_x)
 	intercept_target.z = clamp(intercept_target.z, _player.min_z, _player.max_z)
@@ -471,7 +481,8 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			# not footwork (was 0.12 m). Over 5 bench matches the AI let balls hit
 			# its body after falling short by only 0.12-0.51 m; the physical
 			# contact check still decides whether the paddle really meets the ball.
-			if travel_distance > Movement.travel_distance(_player.current_velocity, travel_direction, contact_time, ai_difficulty) + LUNGE_ALLOWANCE:
+			var run_bound: float = Movement.travel_distance(_player.current_velocity, travel_direction, contact_time, ai_difficulty)
+			if travel_distance > run_bound + LUNGE_ALLOWANCE:
 				continue
 			var local: Vector3 = contact_point - candidate_target
 			var lateral: float = local.dot(forehand_axis)
@@ -502,6 +513,19 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			# Without this the earliest-time score always let it drop low.
 			if total_bounces == 0 and ball.both_bounces_complete and rel_height >= OVERHEAD_PREFER_HEIGHT:
 				score -= OVERHEAD_PREFERENCE
+			# Let a bounced ball come up when there is time. The earliest reachable
+			# sample is right after the bounce, 0.2-0.3 m off the floor, below the
+			# tip of a hanging blade: the ball met the tip, the planned lift was
+			# dropped and it went into the net (bench: 37 of 42 net faults).
+			if total_bounces == 1 and rel_height < RISE_CONTACT_HEIGHT:
+				score += (RISE_CONTACT_HEIGHT - rel_height) * RISE_CONTACT_WEIGHT
+			# The run bound is optimistic (no braking), so a contact that needs all of
+			# it is usually missed: bench misses on soft balls were 0.6-1.4 m short of
+			# the standing spot at contact time, on runs of 2-3 m planned for 0.77 s.
+			# Prefer a later contact the player can actually stand under.
+			var run_slack: float = run_bound - travel_distance
+			if run_slack < RUN_SLACK:
+				score += (RUN_SLACK - run_slack) * RUN_SLACK_WEIGHT
 			# Exact same ordering score; an uncompetitive candidate cannot win.
 			# The skipped checks are pure geometry/dependency-cache work.
 			if not score < best_score: continue
@@ -731,6 +755,7 @@ var coordination_forward_progress: float = 0.0
 var _pose_alignment_tick: = -1
 var _pose_alignment_flight: = -1
 
+const ALIGN_LEAD_SECONDS := 0.6
 func align_paddle_to_contact(delta: float) -> void :
 	# Receipt describes this actual presentation call, never a prior flight.
 	coordination_forward_progress = 0.0
@@ -796,7 +821,14 @@ func align_paddle_to_contact(delta: float) -> void :
 	var pose_delta: float = delta if tick != _pose_alignment_tick or ball.flight_id != _pose_alignment_flight else 0.0
 	_pose_alignment_tick = tick
 	_pose_alignment_flight = ball.flight_id
-	if ai_selected_contact_time > 0.35 and ball.global_position.distance_to(contact) > 0.75:
+	# Low and mid-low receptions turn the blade from up (ready) to down, a joined
+	# grip change of ReadyMotion.GRIP_TRANSITION_TIME (0.32 s). Starting it at
+	# 0.35 s left the paddle mid-turn, edge-on to the ball, at contact (bench: 53
+	# planned shots dropped, 51 of 57 net faults). Start those earlier.
+	# The same holds for every pose: at 0.35 s the Forward pose was still lying
+	# flat mid-turn on deep balls (29 of 30 baseline drops), so all poses lead.
+	var align_from: float = ALIGN_LEAD_SECONDS
+	if ai_selected_contact_time > align_from and ball.global_position.distance_to(contact) > 0.75:
 
 
 		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
@@ -814,7 +846,16 @@ func align_paddle_to_contact(delta: float) -> void :
 		contact = ball.global_position
 	var shoulder: Vector3 = PaddleReach.shoulder_world(_player)
 	if shoulder.distance_to(contact) > PaddleReach.MAX_HEAD_DISTANCE + 0.05:
-		return
+		# Still running to the ball: set the paddle where the contact will be
+		# relative to the body on arrival. Before, the arm only started once the
+		# ball was within arm's reach, a few ticks before contact, and the paddle
+		# arrived late (bench: the AI ran to soft middle balls and let them pass
+		# 0.7 m from the paddle).
+		var arrival: Vector3 = ai_target_position - _player.global_position
+		arrival.y = 0.0
+		contact -= arrival
+		if shoulder.distance_to(contact) > PaddleReach.MAX_HEAD_DISTANCE + 0.05:
+			return
 	var head: Vector3 = PaddleReach.head_world(_player)
 	if _exchange_align_flight != ball.flight_id:
 		_exchange_align_flight = ball.flight_id
@@ -969,7 +1010,57 @@ func _try_swept_ai_contact(ball, delta: float, charge: float) -> bool:
 		last_swept_contact_evidence["remainder"] = authority.continue_paddle_remainder(_player, delta, fraction)
 	return true
 
+# Bench diagnostic: for each incoming flight this AI planned to play, the closest
+# its paddle head came to the ball. Written as an "ai_miss" note when the flight
+# ends without this AI hitting it (tools/shot_report.py reads it).
+var _miss_flight: int = -1
+var _miss_distance: float = INF
+var _miss_state: Dictionary = {}
+var _miss_first: Dictionary = {}
+var _miss_peak_speed: float = 0.0
+var _miss_flight_tick: int = 0
+
+func _track_miss(ball) -> void:
+	if ball == null: return
+	if ball.flight_id != _miss_flight or not ball.is_in_play:
+		if _miss_flight >= 0 and not _miss_state.is_empty() and is_finite(_miss_distance):
+			_miss_state["closest"] = snappedf(_miss_distance, 0.01)
+			_miss_state["flight"] = _miss_flight
+			PerfMonitor.note("ai_miss", _miss_state)
+		_miss_flight = ball.flight_id if ball.is_in_play and ball.get_last_hit_by() != _player.player_num else -1
+		_miss_distance = INF
+		_miss_state = {}
+		_miss_first = {}
+		_miss_peak_speed = 0.0
+		_miss_flight_tick = Engine.get_physics_frames()
+		return
+	if _miss_flight < 0 or not ai_selected_contact_reachable: return
+	var run: float = Vector2(ai_target_position.x - _player.global_position.x, ai_target_position.z - _player.global_position.z).length()
+	if _miss_first.is_empty():
+		_miss_first = {"tick": Engine.get_physics_frames(), "run": run, "time": ai_selected_contact_time, "flight_tick": _miss_flight_tick, "target": ai_target_position}
+	_miss_peak_speed = maxf(_miss_peak_speed, Vector2(_player.current_velocity.x, _player.current_velocity.z).length())
+	var head: Vector3 = PaddleReach.head_world(_player)
+	var distance: float = head.distance_to(ball.global_position)
+	if distance >= _miss_distance: return
+	_miss_distance = distance
+	var coordination = _team_coordination()
+	var gap: Vector3 = ball.global_position - head
+	_miss_state = {"actor": _player.get_actor_id(), "posture": ai_desired_posture, "charging": ai_is_charging, "planned_in": snappedf(ai_selected_contact_time, 0.01),
+		"owner": coordination == null or coordination.may_begin_stroke(_player), "bounces": ball.bounces_since_last_hit, "cooldown": ai_hit_cooldown > 0.0,
+		"ball": [snappedf(ball.global_position.x, 0.01), snappedf(ball.global_position.y, 0.01), snappedf(ball.global_position.z, 0.01)],
+		"gap": [snappedf(gap.x, 0.01), snappedf(gap.y, 0.01), snappedf(gap.z, 0.01)],
+		"plan_gap": snappedf(ai_predicted_contact_position.distance_to(ball.global_position), 0.01),
+		"root_to_target": snappedf(Vector2(ai_target_position.x - _player.global_position.x, ai_target_position.z - _player.global_position.z).length(), 0.01),
+		"first_run": snappedf(float(_miss_first.run), 0.01), "first_time": snappedf(float(_miss_first.time), 0.01),
+		"since_first": snappedf(float(Engine.get_physics_frames() - int(_miss_first.tick)) / float(Engine.physics_ticks_per_second), 0.01),
+		"seen_after": snappedf(float(int(_miss_first.tick) - int(_miss_first.flight_tick)) / float(Engine.physics_ticks_per_second), 0.01),
+		"target_moved": snappedf(Vector3(_miss_first.target).distance_to(ai_target_position), 0.01),
+		"peak_speed": snappedf(_miss_peak_speed, 0.1), "move_speed": snappedf(_player.move_speed, 0.1), "state": ai_state,
+		"speed": snappedf(ball.linear_velocity.length(), 0.1), "follow_through": _player.hitting.is_in_follow_through,
+		"feet_ok": _feet_established_outside_kitchen(), "bounced_on_side": ai_ball_bounced_on_side}
+
 func _try_ai_hit_ball_owned() -> void :
+	_track_miss(_player._get_ball_ref())
 	var coordination = _team_coordination()
 	if coordination != null and not coordination.may_begin_stroke(_player): return
 	if not _player.is_ai or not _perception_ready or _player.paddle_hitbox == null or ai_hit_cooldown > 0.0:
@@ -1571,6 +1662,7 @@ func match_context(ball_pos: Vector3) -> Dictionary:
 	return {"origin": ball_pos, "player_num": _player.team_id, "actor_id": _player.get_actor_id(), "team_id": _player.team_id, "court_side": _player.court_side, "opponent": _observed_opponent,
 		"style_id": _style_for_incoming_flight(ball), "difficulty": ai_difficulty, "ball_height": ball_pos.y, "net_height": _Flight.net_clear_y_at(ball_pos.x),
 		"net_distance": absf(ball_pos.z), "contact_distance": PaddleReach.shoulder_world(_player).distance_to(ball_pos),
+		"contact_horizontal": Vector2(ball_pos.x - _player.global_position.x, ball_pos.z - _player.global_position.z).length(),
 		"incoming_speed": ball.linear_velocity.length() if ball else 0.0, "time_to_contact": ai_selected_contact_time, "movement_speed": _player.current_velocity.length(),
 		"opening_return": ball != null and not ball.both_bounces_complete, "balanced": balanced,
 		"near_kitchen": absf(ball_pos.z) <= 3.4, "legal_volley": ball != null and ball.both_bounces_complete and _feet_established_outside_kitchen(),

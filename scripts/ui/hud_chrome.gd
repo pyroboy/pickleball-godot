@@ -2,7 +2,7 @@ extends Control
 
 
 
-enum Kind{SCOREBOARD, GUIDANCE, GUIDE, PAUSE}
+enum Kind{SCOREBOARD, GUIDANCE, GUIDE, PAUSE, PILL, SKIP}
 
 const ICE: = Color("eaf4ff")
 const BLUE: = Color("4eb8ff")
@@ -13,6 +13,13 @@ var serving_team: int = -1:
 	set(value):
 		if serving_team == value: return
 		serving_team = value
+		queue_redraw()
+
+## PILL: team shown first (the server's side, drawn with a ring) and the other team after it.
+var first_team: int = 0:
+	set(value):
+		if first_team == value: return
+		first_team = value
 		queue_redraw()
 
 var guidance_details: = true:
@@ -36,7 +43,23 @@ func _draw() -> void :
 			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
 			draw_style_box(_rounded_fill(ICE, 2), Rect2(-10, -14, 6, 28))
 			draw_style_box(_rounded_fill(ICE, 2), Rect2(4, -14, 6, 28))
+		Kind.PILL: _draw_pill()
+		Kind.SKIP:
+			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
+			for dx in [-11.0, 1.0]:
+				draw_colored_polygon(PackedVector2Array([Vector2(dx, -12), Vector2(dx + 11, 0), Vector2(dx, 12)]), ICE)
 	draw_set_transform(Vector2.ZERO)
+
+func _draw_pill() -> void :
+	# Team colour dots at both ends of the score pill; the server's dot wears a ring.
+	var r: = size.y * 0.2
+	var left_color: = BLUE if first_team == 0 else RED
+	var right_color: = RED if first_team == 0 else BLUE
+	var left_at: = Vector2(size.y * 0.5, size.y * 0.5)
+	var right_at: = Vector2(size.x - size.y * 0.5, size.y * 0.5)
+	draw_circle(left_at, r + 3.0, ICE, false, 2.0, false)
+	draw_circle(left_at, r, left_color, true, -1, false)
+	draw_circle(right_at, r, right_color, true, -1, false)
 
 func _draw_scoreboard() -> void :
 	var w: = size.x

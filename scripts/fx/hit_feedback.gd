@@ -12,8 +12,7 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const HIT_SHAKE_BASE: float = 0.25
 const HIT_SHAKE_SCALE: float = 0.55
 const HITSTOP_THRESHOLD: float = 0.7
-const HITSTOP_DURATION: float = 0.06
-const HITSTOP_SCALE: float = 0.05
+const HITSTOP_DURATION: float = 0.05 # visual only: camera holds still, physics unaffected
 
 var _ball: RigidBody3D
 var _camera_rig: Node
@@ -47,7 +46,7 @@ func _on_hit(player_num: int) -> void :
 	if strength > HITSTOP_THRESHOLD and _settings_hitstop_enabled():
 		var ts: Node = get_node_or_null("/root/TimeScale")
 		if ts != null and ts.has_method("request_hitstop"):
-			ts.call("request_hitstop", HITSTOP_DURATION, HITSTOP_SCALE)
+			ts.call("request_hitstop", HITSTOP_DURATION)
 
 
 	var fx: Node = get_node_or_null("/root/FXPool")

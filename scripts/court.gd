@@ -76,6 +76,7 @@ func _create_stadium_backdrop(parent: Node3D) -> void :
 	cyl.height = 14.0
 	cyl.radial_segments = 12
 	cyl.rings = 1
+	cyl.cap_bottom = false   # under the floor, never seen
 	backdrop.mesh = cyl
 	backdrop.position = Vector3(0, 5.5, 0)
 

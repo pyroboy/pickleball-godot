@@ -566,6 +566,7 @@ func _runtime_motion_context() -> Dictionary:
 
 
 var _live_swing_presentation: Dictionary = {}
+const RECOVERY_MAX_TICKS := 24   # physics ticks (0.8 s at 30 Hz) the ready-pose recovery may own the arm
 
 func present_live_swing_physics(delta: float) -> bool:
 	if _live_swing_presentation.is_empty() or not is_in_follow_through: return false
@@ -580,9 +581,20 @@ func present_live_swing_physics(delta: float) -> bool:
 	_live_swing_presentation.presented = pose
 	_player.posture.transition_pose_blend = pose
 	_player.posture.force_posture_update(pose)
-	if bool(_live_swing_presentation.finish) and _live_recovery_converged(pose, _live_swing_presentation.desired):
-		_live_swing_presentation.clear()
-		_on_paddle_release_finished()
+	if bool(_live_swing_presentation.finish):
+		# The recovery also ends when the arm has stopped moving or after
+		# RECOVERY_MAX_TICKS. The joint path can settle a few centimetres short of
+		# the ready pose (bench: every AI swing stalled 5.9 cm / 12 degrees off),
+		# and waiting for an exact match kept the arm owned by the finished swing,
+		# so the AI could not raise its paddle for its next ball in the rally.
+		var head: Vector3 = preload("res://scripts/stroke_swing_path.gd").world_transform(_player, pose).origin - _player.global_position
+		var previous_head: Vector3 = _live_swing_presentation.get("recovery_head", Vector3.INF)
+		_live_swing_presentation["recovery_head"] = head
+		_live_swing_presentation["recovery_ticks"] = int(_live_swing_presentation.get("recovery_ticks", 0)) + 1
+		var stalled: bool = previous_head.is_finite() and previous_head.distance_to(head) < 0.0005
+		if stalled or int(_live_swing_presentation.recovery_ticks) >= RECOVERY_MAX_TICKS or _live_recovery_converged(pose, _live_swing_presentation.desired):
+			_live_swing_presentation.clear()
+			_on_paddle_release_finished()
 	return true
 
 func begin_settled_recovery(charge_ratio: float, endpoint_pose: PostureDefinition) -> void:

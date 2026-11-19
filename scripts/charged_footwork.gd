@@ -20,6 +20,13 @@ const ARRIVAL_DISTANCE: = 0.025
 const LOB_TURN_ALLOWANCE := 0.55
 const LOB_REPLANT_DISTANCE := 0.58
 const MAX_BACKWARD_TRAVEL := 2.10
+# Smash: an overhead contact at least this high above the floor (the AI's rule:
+# 0.6 m over the net). The held-HIT footwork steps under such a ball instead of
+# letting it drop, and the court marker shows the spot.
+const SMASH_MIN_HEIGHT := 1.5
+const SMASH_PLAN_BONUS := 0.9        # score units (~2 s of waiting): prefer the smash
+const SMASH_SPOT_MAX_TRAVEL := 4.5   # m the marker asks a player to run
+const SMASH_SPOT_SETTLE := 0.3       # s to stop and raise the paddle after running
 var player
 var _human: WeakRef
 var human:
@@ -140,7 +147,9 @@ func movement(delta: float, manual: Vector3) -> Vector3:
 	if not active:
 
 
-		if not human.contact.is_empty(): return Vector3.ZERO
+		# A ball already in reach starts no footwork, unless stepping under it
+		# turns the shot into a smash.
+		if not human.contact.is_empty() and not bool(human.anticipated_contact.get("smash", false)): return Vector3.ZERO
 		if suppressed or not held or not player.hitting.charge_visual_active: return Vector3.ZERO
 		_search_clock -= delta
 		if _search_clock > 0.0: return Vector3.ZERO
@@ -223,7 +232,7 @@ func activate_plan(candidate: Dictionary, ball) -> bool:
 	elapsed = 0.0
 	load_elapsed = 0.0
 	state_history.clear()
-	load_side = 1 if bool(plan.neutral) and int(plan.def.family) == 0 else (0 if int(plan.def.family) == 0 else 1)
+	load_side = _load_side_for(plan)
 	_state("split")
 	return true
 
@@ -270,7 +279,7 @@ func refresh_prediction(ball, flight: Dictionary) -> void :
 			# Replanning may refine geometry, never erase the selected shot intent.
 			if plan.has("motion_context"): revised["motion_context"] = plan.motion_context.duplicate(true)
 			plan = revised
-			load_side = 1 if bool(plan.neutral) and int(plan.def.family) == 0 else (0 if int(plan.def.family) == 0 else 1)
+			load_side = _load_side_for(plan)
 			_invalid_prediction_time = 0.0
 			return
 
@@ -279,6 +288,78 @@ func refresh_prediction(ball, flight: Dictionary) -> void :
 	if _invalid_prediction_time > 0.21 and human.contact.is_empty():
 		cancel("prediction no longer reachable")
 		if human.phase == 0: human.cancel()
+
+static func _load_side_for(candidate: Dictionary) -> int:
+	# Overheads (family 3) load like a forehand.
+	var forehand: bool = int(candidate.def.family) in [0, 3]
+	return 1 if bool(candidate.neutral) and forehand else (0 if forehand else 1)
+
+static func is_smash_contact(owner, candidate: Dictionary) -> bool:
+	var def = candidate.get("def")
+	if def == null or not candidate.has("point"): return false
+	return int(def.family) == 3 and candidate.point.y - owner.COURT_FLOOR_Y >= SMASH_MIN_HEIGHT
+
+## Where to stand to smash this ball, from the player's current position: the
+## nearest overhead contact the player can still run to (manual speed), whether
+## or not the held-HIT footwork could get there by itself. Presentation and
+## planning hint only; the real contact is still chosen by the planner.
+static func select_smash_spot(owner, ball, flight: Dictionary, previous: Dictionary = {}) -> Dictionary:
+	if not Planner.should_track(owner, ball) or Planner.wall_mode(ball): return {}
+	var fault_time: float = Planner.predicted_fault_time(owner, ball, flight)
+	var fwd: Vector3 = owner._get_forward_axis()
+	var fh: Vector3 = owner._get_forehand_axis()
+	var samples: Array = flight.get("samples", [])
+	var previous_target: Vector3 = previous.get("target_root", Vector3.INF)
+	var bases: Array = []
+	for base in PostureLibrary.instance().all_definitions():
+		if base.has_zone and base.family == 3: bases.append(base)
+	var best: Dictionary = {}
+	var best_base: PostureDefinition
+	var best_score: = INF
+	for index in range(0, samples.size(), 2):
+		var sample: Dictionary = samples[index]
+		var time: float = sample.time
+		if time < 0.1 or time > MAX_HORIZON or time >= fault_time: continue
+		var point: Vector3 = sample.pos
+		var height: float = point.y - owner.COURT_FLOOR_Y
+		if height < SMASH_MIN_HEIGHT: continue
+		var bounces: int = int(sample.bounces) + ball.bounces_since_last_hit
+		if bounces >= 2 or bounces == 0 and not ball.both_bounces_complete: continue
+		if point.z * owner.global_position.z <= 0.0: continue
+		for base in bases:
+			if height < base.zone_y_min or height > base.zone_y_max: continue
+			var target: Vector3 = point - fh * base.paddle_forehand_mul - fwd * base.zone_forward_offset
+			target.y = owner.ground_y
+			if owner.bounds_ready and (target.x < owner.min_x or target.x > owner.max_x or target.z < owner.min_z or target.z > owner.max_z): continue
+			if target.z * owner.global_position.z <= 0.0: continue
+			# A volley needs both shoes clear of the kitchen.
+			if bounces == 0 and absf(target.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.55: continue
+			var shift: Vector3 = target - owner.global_position
+			shift.y = 0.0
+			var distance: float = shift.length()
+			if distance > SMASH_SPOT_MAX_TRAVEL: continue
+			if distance > 0.3 and distance / maxf(owner.move_speed, 0.1) + SMASH_SPOT_SETTLE + base.ft_duration_strike > time: continue
+			# Nearest spot, but a ball still in the air beats waiting for its bounce.
+			var score: float = distance + time * 0.1 + (0.0 if bounces == 0 else 1.2) - (0.25 if previous_target.is_finite() and previous_target.distance_to(target) < 0.35 else 0.0)
+			if score >= best_score: continue
+			if not Planner.point_fits(owner, base, point - shift): continue
+			best_score = score
+			best_base = base
+			best = {"flight_id": ball.flight_id, "point": point, "target_root": target, "time": time, "bounces": int(sample.bounces), "posture": base.posture_id, "distance": distance, "smash": true}
+	if best.is_empty(): return best
+	best["path"] = path_to(flight, best)
+	best["def"] = Planner.pose_at(owner, best_base, best.point - (best.target_root - owner.global_position) * Vector3(1, 0, 1))
+	return best
+
+## Flight points from the ball to a planned contact, for the smash guide.
+static func path_to(flight: Dictionary, candidate: Dictionary) -> PackedVector3Array:
+	var path: = PackedVector3Array()
+	var samples: Array = flight.get("samples", [])
+	for index in range(0, samples.size(), 2):
+		if float(samples[index].time) >= float(candidate.time): break
+		path.append(samples[index].pos)
+	path.append(candidate.point)
+	return path
 
 static func travel_time(distance: float, speed: float) -> float:
 	if not is_finite(distance) or not is_finite(speed) or distance < 0.0 or speed <= 0.0: return INF
@@ -292,7 +373,7 @@ static func travel_time(distance: float, speed: float) -> float:
 
 	return SPLIT_TIME + motion + minf(distance, ADJUST_DISTANCE) * 0.55 + PLANT_TIME + LOAD_TIME
 
-static func select_plan(owner, ball, flight: Dictionary) -> Dictionary:
+static func select_plan(owner, ball, flight: Dictionary, smash_only: bool = false) -> Dictionary:
 	if not Planner.should_track(owner, ball): return {}
 	var fault_time: float = Planner.predicted_fault_time(owner, ball, flight)
 	var best: Dictionary = {}
@@ -310,8 +391,11 @@ static func select_plan(owner, ball, flight: Dictionary) -> Dictionary:
 		if bounces >= 2 or bounces == 0 and not ball.both_bounces_complete: continue
 		if point.z * owner.global_position.z <= 0.0: continue
 		for base in PostureLibrary.instance().all_definitions():
-			if not base.has_zone or base.family not in [0, 1] or base.posture_id in [8, 9]: continue
+			if not base.has_zone or base.family not in [0, 1, 3] or base.posture_id in [8, 9]: continue
 			var height: float = point.y - owner.COURT_FLOOR_Y
+			# Overheads join the footwork plan only as a smash (never in wall practice).
+			var smash: bool = base.family == 3
+			if smash and (height < SMASH_MIN_HEIGHT or Planner.wall_mode(ball)) or smash_only and not smash: continue
 			if height < Planner.ActivationZones.minimum_height(base, 0.0) or height > base.zone_y_max: continue
 			var target: Vector3 = point - fh * base.paddle_forehand_mul - fwd * base.zone_forward_offset
 			target.y = owner.ground_y
@@ -336,11 +420,11 @@ static func select_plan(owner, ball, flight: Dictionary) -> Dictionary:
 			var wide: bool = base.posture_id in [10, 11, 16, 17, 18, 19]
 
 
-			var score: float = time * 0.48 + distance * 0.55 + (0.12 if wide else 0.0)
+			var score: float = time * 0.48 + distance * 0.55 + (0.12 if wide else 0.0) - (SMASH_PLAN_BONUS if smash else 0.0)
 			if score >= best_score: continue
 			best_score = score
 			var pose: PostureDefinition = Planner.pose_at(owner, base, relative_point)
-			best = {"flight_id": ball.flight_id, "point": point, "target_root": target, "time": time, "bounces": int(sample.bounces), "posture": base.posture_id, "def": pose, "distance": distance, "score": score, "neutral": forward_travel > absf(shift.dot(fh)) * 1.3, "lunge": wide, "lob_retrieval": lob}
+			best = {"flight_id": ball.flight_id, "point": point, "target_root": target, "time": time, "bounces": int(sample.bounces), "posture": base.posture_id, "def": pose, "distance": distance, "score": score, "neutral": forward_travel > absf(shift.dot(fh)) * 1.3, "lunge": wide, "lob_retrieval": lob, "smash": smash}
 	return best
 
 static func route_is_safe(owner, shift: Vector3, target: Vector3, lob: bool, bounces: int, wall: bool = false) -> bool:

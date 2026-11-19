@@ -405,7 +405,15 @@ func _update_serve_rotation(point: Vector2) -> void :
 
 func _hit_label() -> String:
 	if _gesture_is_serve or _is_serve_context(): return str(_selected_serve_option(true).get("label", "Flat")).to_upper()
+	if _smash_state() > 0: return "SMASH"
 	return "FLAT"
+
+## 0 none, 1 smash spot reachable (hold HIT steps under the ball), 2 smash from here.
+func _smash_state() -> int:
+	if game == null or game.game_state != 2 or game.selected_shot_intent == "DROP": return 0
+	var actor = game.get_human_actor()
+	var human = actor.posture.human_contact if actor != null and actor.posture != null else null
+	return human.smash_state() if human != null else 0
 
 func _select_shot(shot: String) -> void :
 	if shot == "DROP":
@@ -457,6 +465,8 @@ func _draw() -> void :
 	var held: = _charge_id != -1
 	var perfect: bool = _hit_timing.ready
 	var hit_color: Color = UiTheme.RED if _cancel_armed else UiTheme.ACCENT if perfect or held and _gesture_is_serve else UiTheme.BLUE
+	var smash: int = 0 if _cancel_armed or _is_serve_context() else _smash_state()
+	if smash > 0 and not perfect: hit_color = Color("ff9a3c")
 	draw_circle(_charge_center, _charge_radius, Color(0.04, 0.1, 0.15, 0.18))
 	draw_arc(_charge_center, _charge_radius, 0, TAU, 64, Color(hit_color, 0.8), 2.5 * _s, true)
 	var ratio: float = game.hud._charge_bar.value
@@ -468,6 +478,8 @@ func _draw() -> void :
 	var serve_locked: bool = _is_serve_context() and bool(_serve_timing.get("locked", false))
 	var subcaption: String = "HOLD + AIM"
 	var footer: = "HIT"
+	if smash == 2: footer = "SMASH"
+	elif smash == 1: subcaption = "HOLD: STEP IN"
 	if serve_locked:
 		subcaption = "COMMITTED"
 		footer = "CONTACT"

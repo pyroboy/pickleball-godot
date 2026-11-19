@@ -8,6 +8,7 @@
 #   VERBOSE=1     full perf report instead of the short one
 #   SPIKE_MS=n   freeze threshold (default 20: the Mac runs ~2.5x the phone, so 20 ms here ~ 50 ms there)
 #   RES=WxH       viewport (default 720x1280 portrait, the phone's camera path)
+#   HUMAN=n       coordination treats actor n as a human partner (still AI-driven)
 #   KEEP=n        keep the newest n bench runs in logs/ (default 12), delete older ones
 #   -> logs/bench_<name>.perf.jsonl, .pose.jsonl.gz (.log only if it had errors).
 #   Output is ~5 lines: errors, gameplay (points, how they ended, phase times), top systems,
@@ -23,7 +24,7 @@ if [ -z "${GODOT:-}" ]; then
   done
 fi
 "$GODOT" --headless --path . --fixed-fps 60 --quit-after $((SECS * 60)) res://scenes/game.tscn -- \
-  $([ "${DESKTOP:-0}" = 1 ] || echo --mobile-runtime) --autoplay --doubles --seed=$SEED --viewport=${RES:-720x1280} \
+  $([ "${DESKTOP:-0}" = 1 ] || echo --mobile-runtime) --autoplay --doubles --seed=$SEED $([ -n "${HUMAN:-}" ] && echo --bench-human=$HUMAN) --viewport=${RES:-720x1280} \
   --perf-out="$PWD/logs/bench_$NAME.perf.jsonl" --spike-ms=${SPIKE_MS:-20} --pose-trace="$PWD/logs/bench_$NAME.pose.jsonl" $([ "${FRAME_LOG:-0}" = 1 ] && echo --frame-log="$PWD/logs/bench_$NAME.frames.jsonl") \
   > "logs/bench_$NAME.log" 2>&1
 ERRS=$(grep -cE 'SCRIPT ERROR|Parse Error' "logs/bench_$NAME.log")

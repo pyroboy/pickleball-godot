@@ -14,7 +14,9 @@ const ServeStyles = preload("res://scripts/serve_style.gd")
 class CursorPresentation extends Node:
 	var trajectory
 	func _process(delta: float) -> void:
-		if is_instance_valid(trajectory): trajectory._update_player_cursor(delta)
+		if is_instance_valid(trajectory):
+			trajectory._update_player_cursor(delta)
+			trajectory._update_smash_marker()
 
 var _cursor_presentation: Node
 var _game: Node = null
@@ -31,6 +33,17 @@ var landing_cursor: MeshInstance3D
 var landing_label: Label3D
 var _cursor_material: StandardMaterial3D
 var _execution_axes := Vector2.ZERO
+# Smash guide: ring where to stand, post up to the contact point, the incoming
+# arc and a label. Orange while the player must move, green once in position.
+const SMASH_MOVE_COLOR := Color("ff9a3c")
+const SMASH_READY_COLOR := Color("bde879")
+var _smash_root: Node3D
+var _smash_ring: MeshInstance3D
+var _smash_dot: MeshInstance3D
+var _smash_lines: ImmediateMesh
+var _smash_label: Label3D
+var _smash_material: StandardMaterial3D
+var _smash_key: String = ""
 var _execution_area_showing := false
 
 
@@ -207,6 +220,8 @@ func _create_visuals() -> void :
 	var marker_mesh: = SphereMesh.new()
 	marker_mesh.radius = 0.25
 	marker_mesh.height = 0.5
+	marker_mesh.radial_segments = 12
+	marker_mesh.rings = 6
 	target_marker.mesh = marker_mesh
 	var marker_mat: = StandardMaterial3D.new()
 	marker_mat.albedo_color = Color(1.0, 0.35, 0.35, 0.8)
@@ -291,8 +306,8 @@ func _create_landing_cursor() -> void :
 	var ring: = TorusMesh.new()
 	ring.inner_radius = 0.94
 	ring.outer_radius = 1.0
-	ring.rings = 48
-	ring.ring_segments = 12
+	ring.rings = 24
+	ring.ring_segments = 4
 	landing_cursor.mesh = ring
 	landing_cursor.scale.y = 0.3
 	_cursor_material = StandardMaterial3D.new()
@@ -312,6 +327,88 @@ func _create_landing_cursor() -> void :
 	landing_label.no_depth_test = true
 	landing_label.visible = false
 	add_child(landing_label)
+	_create_smash_marker()
+
+func _create_smash_marker() -> void :
+	_smash_root = Node3D.new()
+	_smash_root.name = "SmashGuide"
+	_smash_root.visible = false
+	add_child(_smash_root)
+	_smash_material = StandardMaterial3D.new()
+	_smash_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_smash_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_smash_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_smash_material.disable_fog = true
+	_smash_ring = MeshInstance3D.new()
+	var ring: = TorusMesh.new()
+	ring.inner_radius = 0.34
+	ring.outer_radius = 0.42
+	ring.rings = 24
+	ring.ring_segments = 4
+	_smash_ring.mesh = ring
+	_smash_ring.scale.y = 0.12
+	_smash_dot = MeshInstance3D.new()
+	var dot: = SphereMesh.new()
+	dot.radius = 0.11
+	dot.height = 0.22
+	dot.radial_segments = 8
+	dot.rings = 4
+	_smash_dot.mesh = dot
+	var lines: = MeshInstance3D.new()
+	_smash_lines = ImmediateMesh.new()
+	lines.mesh = _smash_lines
+	for node in [_smash_ring, _smash_dot, lines]:
+		node.material_override = _smash_material
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_smash_root.add_child(node)
+	_smash_label = Label3D.new()
+	_smash_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_smash_label.font_size = 40
+	_smash_label.pixel_size = 0.005
+	_smash_label.outline_size = 12
+	_smash_label.no_depth_test = true
+	_smash_root.add_child(_smash_label)
+
+func _update_smash_marker() -> void :
+	if _smash_root == null or _game == null: return
+	var actor = _game.get_human_actor() if _game.has_method("get_human_actor") else null
+	var human = actor.posture.human_contact if actor != null and actor.posture != null else null
+	var state: int = human.smash_state() if human != null and _game.game_state == 2 and not _game.match_over and not _game._tool_state_active() and _game.hud != null and _game.hud._gameplay_visible and not _game.hud._between_point_active else 0
+	var spot: Dictionary = human.smash_spot if state > 0 else {}
+	# In position the planned contact is the smash itself; show that point.
+	if state == 2: spot = {"point": human.preparation_contact().point, "target_root": actor.global_position, "path": spot.get("path", PackedVector3Array())}
+	_smash_root.visible = not spot.is_empty()
+	if spot.is_empty():
+		_smash_key = ""
+		return
+	var ready: bool = state == 2 or Vector2(spot.target_root.x - actor.global_position.x, spot.target_root.z - actor.global_position.z).length() < 0.3
+	var color: Color = SMASH_READY_COLOR if ready else SMASH_MOVE_COLOR
+	_smash_material.albedo_color = Color(color, 0.9)
+	_smash_label.modulate = color
+	_smash_label.text = "SMASH!" if ready else "SMASH HERE"
+	var point: Vector3 = spot.point
+	var ground: = Vector3(spot.target_root.x, actor.COURT_FLOOR_Y + 0.02, spot.target_root.z)
+	_smash_ring.global_position = ground
+	_smash_dot.global_position = point
+	_smash_label.global_position = point + Vector3(0, 0.38, 0)
+	var key: String = "%v|%v|%d" % [point.snapped(Vector3.ONE * 0.02), ground.snapped(Vector3.ONE * 0.02), int(ready)]
+	if key == _smash_key: return
+	_smash_key = key
+	_smash_lines.clear_surfaces()
+	_smash_lines.surface_begin(Mesh.PRIMITIVE_LINES)
+	# Dashed post from the standing spot up to the contact point.
+	var foot: = Vector3(point.x, ground.y, point.z)
+	for dash in 8:
+		_smash_lines.surface_add_vertex(foot.lerp(point, float(dash) / 8.0))
+		_smash_lines.surface_add_vertex(foot.lerp(point, (float(dash) + 0.55) / 8.0))
+	_smash_lines.surface_add_vertex(ground)
+	_smash_lines.surface_add_vertex(foot)
+	# Dashed incoming arc from the ball to the contact point.
+	var path: PackedVector3Array = spot.get("path", PackedVector3Array())
+	for index in range(0, path.size() - 1, 2):
+		_smash_lines.surface_add_vertex(path[index])
+		_smash_lines.surface_add_vertex(path[index + 1])
+	_smash_lines.surface_end()
 
 func _update_player_cursor(delta: float = 1.0 / 60.0) -> void :
 	if landing_cursor == null or _game == null or _game.aim_controller == null: return

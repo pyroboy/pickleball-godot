@@ -14,8 +14,7 @@ var _realtime_sources: Dictionary = {}
 var _slowmo_sources: Dictionary = {}
 var _pause_forced: bool = false
 var _hitstop_active: bool = false
-var _hitstop_timer: float = 0.0
-var _hitstop_scale: float = 1.0
+var _hitstop_until_usec: int = 0   # wall-clock end of the visual-only hit-stop
 var _test_fast_forward: float = 0.0
 
 func _ready() -> void :
@@ -33,13 +32,11 @@ func _process(delta: float) -> void:
 	_perf_process(delta)
 	PerfMonitor.record("proc.time_scale_manager", Time.get_ticks_usec() - _pt)
 
-func _perf_process(delta: float) -> void:
-	if _hitstop_active:
-
-		_hitstop_timer -= delta / maxf(Engine.time_scale, 0.001) if Engine.time_scale > 0.0 else delta
-		if _hitstop_timer <= 0.0:
-			_hitstop_active = false
-			_apply()
+func _perf_process(_delta: float) -> void:
+	# Hit-stop is visual only (camera/cards hold still); it never touches Engine.time_scale,
+	# so physics, AI and input timing are identical with it on or off.
+	if _hitstop_active and Time.get_ticks_usec() >= _hitstop_until_usec:
+		_hitstop_active = false
 
 func request_slowmo(source_id: String, scale: float) -> void :
 	# The imminent-contact aim brake needs a lower, still nonzero floor.
@@ -58,27 +55,26 @@ func release_all_slowmo() -> void :
 
 
 
-func request_hitstop(duration: float = 0.06, scale: float = 0.05) -> void :
+# Visual-only: other visual code reads visual_hitstop_active() and holds still ~50 ms.
+# `scale` is kept for call compatibility and ignored.
+func request_hitstop(duration: float = 0.05, _scale: float = 1.0) -> void :
 	if _pause_forced or not _realtime_sources.is_empty():
 		return
 	if not _slowmo_sources.is_empty():
 		return
 	_hitstop_active = true
-	_hitstop_timer = maxf(0.01, duration)
-	_hitstop_scale = clampf(scale, 0.01, 0.9)
-	_apply()
+	_hitstop_until_usec = Time.get_ticks_usec() + int(clampf(duration, 0.01, 0.1) * 1000000.0)
 
 func cancel_hitstop() -> void :
 	_hitstop_active = false
-	_hitstop_timer = 0.0
-	_hitstop_scale = 1.0
-	_apply()
+	_hitstop_until_usec = 0
 
+func visual_hitstop_active() -> bool:
+	return _hitstop_active and Time.get_ticks_usec() < _hitstop_until_usec
 
 func force_normal() -> void :
 	_pause_forced = true
 	_hitstop_active = false
-	_apply()
 
 func release_forced_normal() -> void :
 	_pause_forced = false
@@ -96,9 +92,6 @@ func _apply() -> void :
 		for v in _slowmo_sources.values():
 			lowest = minf(lowest, float(v))
 		Engine.time_scale = lowest
-		return
-	if _hitstop_active:
-		Engine.time_scale = _hitstop_scale
 		return
 	Engine.time_scale = 1.0
 

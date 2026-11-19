@@ -19,9 +19,11 @@ are in `docs/ROADMAP.md`. Read it before planning work.
 - iOS Simulator is not usable: Godot 4.6.3's official simulator library is x86_64-only.
 - Physics runs at 30 Hz with physics interpolation (`project.godot`). Visuals placed in
   `_process` must read `get_global_transform_interpolated()`, not `global_position`.
-- Visual-only changes must leave gameplay identical: compare `tools/bench.sh` runs with
-  `python3 tools/pose_diff.py` (expect `IDENTICAL`). Never add nodes or meshes under a
-  player's `BodyPivot`; gameplay scans every mesh there.
+- Don't run `tools/bench.sh` by default. Run it only when required: the change could
+  alter gameplay (shot physics, ball flight, AI, contact, input timing, anything gameplay
+  reads), or the user asks. Then compare runs with `python3 tools/pose_diff.py` (expect
+  `IDENTICAL` for visual-only work). Never add nodes or meshes under a player's
+  `BodyPivot`; gameplay scans every mesh there.
 - The headless smoke check below starts at the title screen, so it does not compile
   gameplay scripts; `tools/bench.sh` loads the match and catches those errors.
 - Pose work: `tools/pose_review.sh s00 [b11 ...]` captures poses in the mobile editor preview

@@ -42,6 +42,9 @@ var _audio_rng: = RandomNumberGenerator.new()
 var _thock_pool: Array[AudioStreamWAV] = []
 var _volley_pool: Array[AudioStreamWAV] = []
 var _smash_pool: Array[AudioStreamWAV] = []
+var _dink_pool: Array[AudioStreamWAV] = []   # soft hollow tick for dinks and resets
+var _last_dink_idx: = -1
+const DINK_SPEED: = 3.4
 var _rim_pool: Array[AudioStreamWAV] = []
 var _frame_pool: Array[AudioStreamWAV] = []
 var _court_pool: Array[AudioStreamWAV] = []
@@ -173,6 +176,7 @@ func _create_procedural_sounds() -> void :
 	_thock_pool.clear()
 	_volley_pool.clear()
 	_smash_pool.clear()
+	_dink_pool.clear()
 	_rim_pool.clear()
 	_frame_pool.clear()
 	_court_pool.clear()
@@ -183,6 +187,9 @@ func _create_procedural_sounds() -> void :
 		_thock_pool.append(_create_thock_sound_at(8.0, q))
 		_volley_pool.append(_create_volley_sound_at(q))
 		_smash_pool.append(_create_smash_sound_at(q))
+
+	for q in [0.3, 0.5, 0.7, 0.9]:
+		_dink_pool.append(_create_dink_sound_at(q))
 
 	var edge_qualities: = [0.1, 0.38, 0.65, 0.9]
 	for q in edge_qualities:
@@ -379,7 +386,10 @@ func on_paddle_hit(speed: float) -> void :
 			pool = _frame_pool
 			last_idx = _last_frame_idx
 		_:
-			if speed < 5.0:
+			if speed < DINK_SPEED and not _dink_pool.is_empty():
+				pool = _dink_pool
+				last_idx = _last_dink_idx
+			elif speed < 5.0:
 				pool = _volley_pool
 				last_idx = _last_volley_idx
 			elif speed < 12.0:
@@ -405,7 +415,8 @@ func on_paddle_hit(speed: float) -> void :
 		1: _last_rim_idx = idx
 		2: _last_frame_idx = idx
 		_:
-			if speed < 5.0: _last_volley_idx = idx
+			if pool == _dink_pool: _last_dink_idx = idx
+			elif speed < 5.0: _last_volley_idx = idx
 			elif speed < 12.0: _last_thock_idx = idx
 			else: _last_smash_idx = idx
 
@@ -416,8 +427,31 @@ func on_paddle_hit(speed: float) -> void :
 
 	paddle_hit_player.stream = pool[idx]
 	paddle_hit_player.volume_db = clampf(impact_volume_db(speed) + vol_offset, -25.0, -7.0)
-	paddle_hit_player.pitch_scale = _audio_rng.randf_range(0.985, 1.015)
+	# Pitch rises with shot power: a soft dink sits low, a smash rings high.
+	paddle_hit_player.pitch_scale = hit_pitch_scale(speed) * _audio_rng.randf_range(0.985, 1.015)
 	paddle_hit_player.play()
+
+static func hit_pitch_scale(speed: float) -> float:
+	return lerpf(0.90, 1.16, pow(clampf(speed / 22.0, 0.0, 1.0), 0.8))
+
+## Dink: short, hollow, low-energy tick (a quick sine knock plus a breath of filtered noise).
+func _create_dink_sound_at(quality: float) -> AudioStreamWAV:
+	var rng: = RandomNumberGenerator.new()
+	rng.seed = 9100 + int(quality * 100.0)
+	var samples: = PackedByteArray()
+	var frames: = int(AUDIO_SAMPLE_RATE * 0.085)
+	var lp: = 0.0
+	var base: = lerpf(760.0, 980.0, quality)
+	for i in frames:
+		var t: = float(i) / AUDIO_SAMPLE_RATE
+		var tone: = sin(TAU * base * t) * exp(-t * 85.0) + 0.45 * sin(TAU * base * 1.52 * t) * exp(-t * 130.0)
+		lp = lerpf(lp, rng.randf_range(-1.0, 1.0), 0.35)
+		var tick: = lp * exp(-t * 260.0) * 0.5
+		_append_sample(samples, clampf((tone * 0.55 + tick) * minf(t / 0.0006, 1.0), -1.0, 1.0) * 0.8)
+	_fade_short_tail(samples)
+	var wave: = _new_wave()
+	wave.data = samples
+	return wave
 
 static func impact_volume_db(speed: float) -> float:
 

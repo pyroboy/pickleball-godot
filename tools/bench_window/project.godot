@@ -1,0 +1,24 @@
+; Small window that runs a multi-seed bench and shows its progress.
+; Started by tools/bench_gui.sh; not part of the game project.
+config_version=5
+
+[application]
+
+config/name="Pickleball bench"
+run/main_scene="res://bench_window.tscn"
+config/features=PackedStringArray("4.6")
+run/low_processor_mode=true
+
+[display]
+
+window/size/viewport_width=400
+window/size/viewport_height=200
+window/size/resizable=false
+window/size/always_on_top=true
+window/size/initial_position_type=1
+window/dpi/allow_hidpi=false
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.07, 0.09, 0.12, 1)

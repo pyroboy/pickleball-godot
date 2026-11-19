@@ -113,13 +113,6 @@ func receiver_contact(actor_id: int, token: int) -> Dictionary:
 		return {"valid": true, "fault_team": receiving_team, "rule": "5.C.1.c", "reason": "incorrect receiver returned serve"}
 	return {"valid": true, "fault_team": -1, "position_correction_needed": _player_position_error(active_rally)}
 
-func position_claim(claimant_team: int, token: int) -> Dictionary:
-	if not _active_token(token) or not claimant_team in [0, 1]: return {"valid": false, "reason": "inactive or invalid claim"}
-	if _player_position_error(active_rally):
-		active_rally = {}
-		return {"valid": true, "decision": "replay", "rule": "5.C.1.a", "score_unchanged": true}
-	return {"valid": true, "decision": "fault", "fault_team": claimant_team, "rule": "5.C.1.b"}
-
 func complete_rally(winning_team: int, token: int, reason: String = "") -> Dictionary:
 	# Physical legality/momentum settlement is external and must finish first.
 	if not _active_token(token) or not winning_team in [0, 1]: return {"accepted": false, "reason": "inactive, duplicate or invalid result"}
@@ -130,38 +123,6 @@ func complete_rally(winning_team: int, token: int, reason: String = "") -> Dicti
 		"core_before": context.core_before, "outcome": outcome.duplicate(true)}
 	_last_result_open_to_correction = true
 	return outcome
-
-func correct_completed_wrong_receiver(actor_id: int, token: int) -> Dictionary:
-	# Specific 5.C.1.c exception before the next serve; a generic discovered
-	# setup/position error after completion leaves the rally result intact (5.C.2).
-	if not _last_result_open_to_correction or last_result.is_empty() or int(last_result.token) != token or not active_rally.is_empty():
-		return {"accepted": false, "reason": "correction window closed"}
-	var context: Dictionary = last_result.rally
-	if not _score_call_positions_correct(context) or actor_id == int(context.receiver_actor) or team_for_actor(actor_id) != 1 - int(context.serving_team):
-		return {"accepted": false, "reason": "wrong-receiver fault conditions not met", "rule": "5.C.2"}
-	if int(context.first_return_actor) != actor_id: return {"accepted": false, "reason": "actor was not the observed first returner"}
-	var previous: Dictionary = snapshot()
-	_restore_core(last_result.core_before)
-	# This correction assigns the rally to its serving team. It can preserve
-	# or add that team's point, never remove a legitimately reached end-change
-	# threshold. Retain any already executed change instead of undoing movement.
-	if bool(previous.ends_changed):
-		court_ends = previous.court_ends.duplicate()
-		ends_changed = true
-		end_change_pending = false
-	var outcome := _apply_winner(int(context.serving_team))
-	outcome["corrected"] = true
-	outcome["rule"] = "5.C.1.c"
-	outcome["physical_reposition_required"] = previous.court_ends != court_ends
-	last_result.winning_team = int(context.serving_team)
-	last_result.reason = "incorrect receiver returned serve"
-	last_result.outcome = outcome.duplicate(true)
-	_last_result_open_to_correction = false
-	return outcome
-
-func completed_position_error(token: int) -> Dictionary:
-	if last_result.is_empty() or int(last_result.token) != token: return {"valid": false}
-	return {"valid": true, "result_stands": true, "rule": "5.C.2", "context": service_context()}
 
 func confirm_end_change() -> bool:
 	# The scene adapter must complete controlled dead-ball repositioning first.

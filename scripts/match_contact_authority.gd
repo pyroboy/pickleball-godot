@@ -83,6 +83,7 @@ var unresolved_continuation: Dictionary = {}
 
 func setup(owner) -> void:
 	game = owner
+	if game.ball != null and not game.ball.actor_hit_paddle.is_connected(_on_actor_hit_paddle): game.ball.actor_hit_paddle.connect(_on_actor_hit_paddle)
 	game.ball.set_actor_registry(game)
 	game.ball.set_scene_interval_owner(self)
 	if game.rally_scorer != null: game.rally_scorer.set_actor_registry(game)
@@ -316,6 +317,9 @@ func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, inc
 			geometry_span = maxf(1.0 - _remainder_geometry_start, 1e-12)
 			query_start = clampf((start - _remainder_geometry_start) / geometry_span, 0.0, 1.0)
 			query_end = clampf((end - _remainder_geometry_start) / geometry_span, query_start, 1.0)
+		if _legs_pass(player):
+			previous = _without_legs(previous)
+			current = _without_legs(current)
 		var remaining_units: int = maxi(0, MAX_FRAME_ALGEBRA_QUERIES * History.ALGEBRA_UNITS_PER_QUERY - _algebra_units)
 		var result: Dictionary = History.query_range(previous, current, from, to, game.ball.BALL_RADIUS + _query_radius_adjustment, query_start, query_end, true, departing, MAX_FRAME_TRIANGLE_QUERIES - _query_work, {}, ceili(float(remaining_units) / History.ALGEBRA_UNITS_PER_QUERY), _maintained_faces if ActorIdentity.actor_id(player) == _maintained_player else {}, physical_displacement, remaining_units, physical_velocity, _delta * geometry_span)
 		if _remainder_geometry_start >= 0.0:
@@ -331,6 +335,45 @@ func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, inc
 		if result.get("ambiguous", false): ambiguous_count += 1
 		earliest = ActorIdentity.earliest(earliest, result)
 	return earliest
+
+# Low receptions put the front thigh between the ball and the paddle. Bench (6
+# seeds): 27 of 40 body-hit faults were the thigh, 22 of them with the paddle
+# planned centimetres behind it, and 8 were the hitter's own shot clipping a
+# leg. While a player is playing a low or mid-low ball, and for a moment after
+# their own hit, the ball does not collide with that player's thighs and shins.
+const LEG_PARTS: Array[String] = ["ThighMesh", "ShinMesh"]
+const OWN_SHOT_LEG_TICKS := 8
+var _paddle_hit_tick: Dictionary = {}   # actor id -> physics tick of its last paddle hit
+
+func _on_actor_hit_paddle(actor_id: int, _team_id: int, _court_side: int) -> void:
+	_paddle_hit_tick[actor_id] = Engine.get_physics_frames()
+
+func _legs_pass(player) -> bool:
+	var ball = game.ball
+	if ball == null or not ball.is_in_play: return false
+	var id: int = ActorIdentity.actor_id(player)
+	if ball.get_last_hit_actor_id() == id:
+		return Engine.get_physics_frames() - int(_paddle_hit_tick.get(id, -1000)) <= OWN_SHOT_LEG_TICKS
+	if ball.get_last_hit_team_id() == ActorIdentity.team_id(player): return false
+	var pose: PostureDefinition = null
+	if player.is_ai:
+		var brain = player.ai_brain
+		if brain == null or not brain.ai_is_charging or not brain.ai_selected_contact_reachable: return false
+		pose = brain.ai_reach_pose if brain.ai_reach_pose != null else PostureLibrary.instance().get_def(brain.ai_desired_posture)
+	else:
+		var human = player.posture.human_contact if player.posture != null else null
+		if human == null or human.phase < 0 or human.phase > 1: return false
+		pose = human.preparation_contact().get("def")
+	return pose != null and pose.has_zone and pose.height_tier <= 1
+
+func _without_legs(snapshot: Dictionary) -> Dictionary:
+	if not snapshot.has("parts"): return snapshot
+	var kept := {}
+	for id in snapshot.parts:
+		if not str(snapshot.parts[id].get("part", "")) in LEG_PARTS: kept[id] = snapshot.parts[id]
+	var copy: Dictionary = snapshot.duplicate()
+	copy["parts"] = kept
+	return copy
 
 func _fault(evidence: Dictionary) -> void:
 	game.rally_scorer.on_actor_body_contact(_evidence_actor(evidence), evidence)
@@ -1217,6 +1260,9 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	if settlement_receipts.size() > 256: settlement_receipts.pop_front()
 	return result
 
+static func _note_point(point: Vector3) -> Array:
+	return [snappedf(point.x, 0.01), snappedf(point.y, 0.01), snappedf(point.z, 0.01)]
+
 func intended_velocity_leaves_surface(actor, certificate: Dictionary, velocity: Vector3, stage: String) -> bool:
 	if not validates_settlement(actor, certificate): return false
 	var evidence: Dictionary = certificate.evidence
@@ -1225,6 +1271,16 @@ func intended_velocity_leaves_surface(actor, certificate: Dictionary, velocity: 
 	var surface_velocity: Vector3 = Vector3(evidence.surface_displacement) / seconds
 	var feasible: bool = velocity.is_finite() and normal.is_finite() and surface_velocity.is_finite() and normal.length_squared() > .5 and (velocity - surface_velocity).dot(normal) >= 0.0
 	if not feasible:
+		# Bench evidence for tools/shot_report.py: the planned shot is dropped here
+		# and the ball deflects off the paddle.
+		var pose: PostureDefinition = actor.posture.transition_pose_blend if actor.posture != null else null
+		PerfMonitor.note("shot_dropped", {"actor": ActorIdentity.actor_id(actor), "stage": stage, "posture": pose.posture_id if pose != null else -1,
+			"normal": [snappedf(normal.x, 0.01), snappedf(normal.y, 0.01), snappedf(normal.z, 0.01)],
+			"launch_along_normal": snappedf(velocity.dot(normal), 0.01), "surface_along_normal": snappedf(surface_velocity.dot(normal), 0.01),
+			"launch": [snappedf(velocity.x, 0.1), snappedf(velocity.y, 0.1), snappedf(velocity.z, 0.1)],
+			"ball": [snappedf(game.ball.global_position.x, 0.01), snappedf(game.ball.global_position.y, 0.01), snappedf(game.ball.global_position.z, 0.01)],
+			"head": _note_point(PaddleReach.head_world(actor)), "blade_axis": _note_point(actor.paddle_node.global_basis.y.normalized()), "face_axis": _note_point(actor.paddle_node.global_basis.z.normalized()), "planned": _note_point(actor.ai_brain.ai_predicted_contact_position) if actor.is_ai and actor.ai_brain != null else [], "planned_in": snappedf(actor.ai_brain.ai_selected_contact_time, 0.01) if actor.is_ai and actor.ai_brain != null else -1.0,
+			"root": [snappedf(actor.global_position.x, 0.01), snappedf(actor.global_position.z, 0.01)], "incoming": [snappedf(game.ball.linear_velocity.x, 0.1), snappedf(game.ball.linear_velocity.y, 0.1), snappedf(game.ball.linear_velocity.z, 0.1)]})
 		last_evidence["intended_fallback"] = {"actor_id": ActorIdentity.actor_id(actor), "fraction": evidence.fraction,
 			"stage": stage, "velocity": velocity, "normal": normal, "surface_velocity": surface_velocity,
 			"relative_normal_velocity": (velocity - surface_velocity).dot(normal)}

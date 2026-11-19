@@ -111,6 +111,9 @@ func _classify_intended_shot(ball_ref: RigidBody3D, player_node: CharacterBody3D
 			ball_y = preparation.point.y
 			player_z_abs = absf(preparation.get("target_root", player_node.global_position).z)
 			ball_not_bounced = ball_ref.bounces_since_last_hit + int(preparation.get("bounces", 0)) == 0
+			# An overhead contact from 1.5 m up is a smash (the AI's rule too);
+			# before, only balls above 1.8 m counted.
+			if preload("res://scripts/charged_footwork.gd").is_smash_contact(player_node, preparation): return "SMASH"
 	if ball_y > 1.8:
 		return "SMASH"
 	if "wall_practice_active" in ball_ref and ball_ref.wall_practice_active:

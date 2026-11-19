@@ -320,7 +320,12 @@ func compute_sweet_spot_speed(ball_pos: Vector3, paddle_pos: Vector3, velocity: 
 	# Max 15% pace loss off the sweet spot (was 40%): a 40% slower drop or
 	# reset almost always hit the net (8 of 11 AI net faults over 3 bench
 	# matches were these edge contacts at exactly 0.6 quality).
-	var penalty: = clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 1.0) * MAX_OFF_CENTER_PACE_LOSS
+	# Soft shots keep their pace: a dink, reset or drop is aimed just over the
+	# net, and losing 15% put it in the net (7 of 14 net faults over 3 seeds were
+	# planned shots at 0.85-0.89 quality). Full loss from 13 m/s, a fifth of it
+	# at 6 m/s and below.
+	var pace_share: float = lerpf(0.2, 1.0, clampf((velocity.length() - 6.0) / 7.0, 0.0, 1.0))
+	var penalty: = clampf((offset_mag - SWEET_SPOT_RADIUS) / (EDGE_RADIUS - SWEET_SPOT_RADIUS), 0.0, 1.0) * MAX_OFF_CENTER_PACE_LOSS * pace_share
 	return 1.0 - penalty
 
 func simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, grav: float, target_z: float, net_sign: float) -> Dictionary:

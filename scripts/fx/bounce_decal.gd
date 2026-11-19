@@ -22,8 +22,8 @@ func _ready() -> void :
 	var ring: TorusMesh = TorusMesh.new()
 	ring.inner_radius = RADIUS * 0.78
 	ring.outer_radius = RADIUS
-	ring.rings = 24
-	ring.ring_segments = 4
+	ring.rings = 16
+	ring.ring_segments = 3
 	_mesh.mesh = ring
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 

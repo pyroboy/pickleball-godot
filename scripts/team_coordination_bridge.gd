@@ -4,6 +4,7 @@ extends RefCounted
 const Policy=preload("team_shot_coordinator.gd")
 const Avoidance=preload("team_avoidance.gd")
 const Cancel=preload("ai_pending_contact_cancellation.gd")
+const RuntimePolicy=preload("runtime_policy.gd")
 var cancellations:Array=[]
 var game
 var policy=Policy.new()
@@ -30,7 +31,7 @@ func _configure_roster() -> bool:
   key.append([actor.get_actor_id(),actor.get_team_id(),actor.get_court_side()])
   var home:Vector3=actor.global_position
   if absf(home.x)<.3:home.x=1.35 if actor.get_actor_id() in [0,3] else -1.35
-  records.append({"actor_id":actor.get_actor_id(),"team_id":actor.get_team_id(),"court_side":actor.get_court_side(),"human":not actor.is_ai,
+  records.append({"actor_id":actor.get_actor_id(),"team_id":actor.get_team_id(),"court_side":actor.get_court_side(),"human":not actor.is_ai or actor.get_actor_id()==RuntimePolicy.bench_human,
    "home":home,"min_x":actor.min_x,"max_x":actor.max_x,"min_z":actor.min_z,"max_z":actor.max_z})
  if key==_roster_key:return true
  if not policy.configure(records):return false
@@ -199,7 +200,11 @@ func _human_offer(brain,observed:Dictionary,age:float,latency:float,ready:bool,f
 
 func advise(brain,ordinary_offer:Dictionary,delta:float) -> Dictionary:
  if not _begin(delta):return {"pursue":false,"reason":"coordination not configured"}
- var actor=brain._player;var id:int=actor.get_actor_id();var observed:Dictionary=_observe(brain,delta)
+ var actor=brain._player;var id:int=actor.get_actor_id()
+ # Bench stand-in for a human: plays every ball itself, never coordinated;
+ # its partner models it from sight like a real human (_human_offer below).
+ if id==RuntimePolicy.bench_human:return {"pursue":true,"owner":id,"reason":"bench human"}
+ var observed:Dictionary=_observe(brain,delta)
  var flight:int=int(policy._context.flight_id)
  var age:float=0.0
  if not brain._ball_history.is_empty():age=brain._observation_time-float(brain._ball_history.front().time)
@@ -216,7 +221,7 @@ func advise(brain,ordinary_offer:Dictionary,delta:float) -> Dictionary:
  policy.publish(id,own)
  for teammate_id in observed.visible:
   var teammate=game.get_player_by_actor_id(int(teammate_id))
-  if teammate!=null and not teammate.is_ai:
+  if teammate!=null and (not teammate.is_ai or int(teammate_id)==RuntimePolicy.bench_human):
    policy.publish(int(teammate_id),_human_offer(brain,observed.visible[teammate_id],observed.age,observed.latency,observed.ready,flight,int(observed.bounces)))
  var decision:Dictionary=policy.decision(id)
  last_decision_by_actor[id]=decision.duplicate(true)
@@ -224,6 +229,7 @@ func advise(brain,ordinary_offer:Dictionary,delta:float) -> Dictionary:
 
 func may_begin_stroke(actor) -> bool:
  if not _begin(0.0):return false
+ if actor.get_actor_id()==RuntimePolicy.bench_human:return true
  return bool(policy.decision(actor.get_actor_id()).pursue)
 
 func cover_input(brain,decision:Dictionary) -> Vector3:

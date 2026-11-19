@@ -7,7 +7,7 @@ func setup(owner)->void:
 	game=owner;name="DoublesIdentityCues"
 	for actor in game.get_players():
 		var marker:=MeshInstance3D.new();var ring:=TorusMesh.new()
-		ring.inner_radius=.235;ring.outer_radius=.255;ring.rings=24;ring.ring_segments=6
+		ring.inner_radius=.235;ring.outer_radius=.255;ring.rings=16;ring.ring_segments=3
 		marker.mesh=ring;marker.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var material:=StandardMaterial3D.new();material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED;material.albedo_color=Color("e8f4ff")
 		marker.material_override=material;marker.physics_interpolation_mode=Node.PHYSICS_INTERPOLATION_MODE_OFF;add_child(marker)

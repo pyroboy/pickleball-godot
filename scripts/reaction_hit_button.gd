@@ -183,7 +183,7 @@ func _draw() -> void :
 	draw_circle(center, btn_r, btn_col)
 
 
-	var txt: String = "SPACE"
+	var txt: String = "SMASH" if _posture_label == "SMASH" else "SPACE"
 	var txt_size: int = 18
 	var text_w: float = font.get_string_size(txt, HORIZONTAL_ALIGNMENT_CENTER, -1, txt_size).x
 	draw_string(font, center + Vector2( - text_w * 0.5, 6.0), txt, HORIZONTAL_ALIGNMENT_CENTER, -1, txt_size, Color("102431") if _in_perfect_window else Color("eef5fa"))

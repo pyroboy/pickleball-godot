@@ -19,6 +19,8 @@ const POINT_LOST = preload("res://assets/audio/court/point_lost.wav")
 const SIDE_OUT = preload("res://assets/audio/court/side_out.wav")
 const MATCH_WON = preload("res://assets/audio/court/match_won.wav")
 const MATCH_LOST = preload("res://assets/audio/court/match_lost.wav")
+const ParkSounds = preload("res://scripts/audio/park_sounds.gd")
+const SWELL_AFTER_SHOTS: = 8
 const STEP_COOLDOWN: = 0.075
 const SQUEAK_COOLDOWN: = 0.72
 
@@ -46,6 +48,14 @@ var _ambience_started: = false
 var _resume_ambience_pending: = false
 var _footsteps_enabled: = true
 var _last_cue_msec: = -1000
+var crowd: AudioStreamPlayer
+var birds: AudioStreamPlayer
+var _chirps: Array[AudioStreamWAV] = []
+var _scuffs: Array[AudioStreamWAV] = []
+var _park_rng: = RandomNumberGenerator.new()
+var _bird_wait: = 3.0
+var _rally_shots: = 0
+var _crowd_db: = -80.0
 
 func _ready() -> void :
 
@@ -70,6 +80,22 @@ func _ready() -> void :
 	cue.max_polyphony = 1
 	cue.volume_db = -15.0
 	add_child(cue)
+	_park_rng.seed = 5150
+	for variant in 3: _chirps.append(ParkSounds.chirp(variant))
+	for variant in 3: _scuffs.append(ParkSounds.scuff(variant))
+	birds = AudioStreamPlayer.new()
+	birds.process_mode = Node.PROCESS_MODE_PAUSABLE
+	birds.name = "ParkBirds"
+	birds.bus = "Ambience"
+	birds.volume_db = -27.0
+	add_child(birds)
+	crowd = AudioStreamPlayer.new()
+	crowd.process_mode = Node.PROCESS_MODE_PAUSABLE
+	crowd.name = "CrowdSwell"
+	crowd.bus = "Ambience"
+	crowd.volume_db = -80.0
+	crowd.stream = ParkSounds.crowd_loop()
+	add_child(crowd)
 	for index in range(2):
 		var voice: = AudioStreamPlayer3D.new()
 		voice.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -96,6 +122,9 @@ func setup(game: Node) -> void :
 	_players.clear()
 	_players.append(game.player_left)
 	_players.append(game.player_right)
+	var ball = game.get("ball")
+	if ball != null and ball.has_signal("hit_by_paddle") and not ball.hit_by_paddle.is_connected(_on_rally_shot):
+		ball.hit_by_paddle.connect(_on_rally_shot)
 	reset_contacts()
 	_sync_ambience()
 
@@ -109,6 +138,29 @@ func reset_contacts() -> void :
 		if index < shoe_voices.size(): _stop_voice(shoe_voices[index])
 	if cue: _stop_voice(cue)
 	_last_cue_msec = -1000
+	_rally_shots = 0
+
+func _on_rally_shot(_player_num: int) -> void :
+	_rally_shots += 1
+
+func _update_park(delta: float) -> void :
+	if _backgrounded or not _ambience_enabled or not _ambience_started: return
+	_bird_wait -= delta
+	if _bird_wait <= 0.0:
+		_bird_wait = _park_rng.randf_range(3.5, 9.0)
+		birds.stream = _chirps[_park_rng.randi() % _chirps.size()]
+		birds.pitch_scale = _park_rng.randf_range(0.9, 1.15)
+		birds.volume_db = _park_rng.randf_range(-31.0, -25.0)
+		birds.play()
+	# Crowd swells on long rallies and falls away once the point is over.
+	var target: = -80.0
+	if _rally_shots > SWELL_AFTER_SHOTS:
+		target = lerpf(-38.0, -22.0, clampf(float(_rally_shots - SWELL_AFTER_SHOTS) / 10.0, 0.0, 1.0))
+	if absf(target - _crowd_db) > 0.05:
+		_crowd_db = move_toward(_crowd_db, target, delta * (14.0 if target > _crowd_db else 24.0))
+		crowd.volume_db = _crowd_db
+	if _crowd_db > -70.0 and not crowd.playing: crowd.play()
+	elif _crowd_db <= -70.0 and crowd.playing: crowd.stop()
 
 func _process(delta: float) -> void:
 	var _pt := Time.get_ticks_usec()
@@ -123,6 +175,7 @@ func _perf_process(delta: float) -> void:
 		_resume_ambience_pending = false
 		_sync_ambience()
 	if _game == null or _players.size() != 2 or delta <= 0.0 or _backgrounded: return
+	_update_park(delta)
 
 	if not _footsteps_enabled: return
 	if _game.has_method("_tool_state_active") and _game._tool_state_active():
@@ -184,8 +237,12 @@ func _play_shoe(index: int, position_now: Vector3, speed: float, squeak: bool) -
 		_squeak_remaining[index] = SQUEAK_COOLDOWN
 		squeaks_played += 1
 	else:
-		voice.stream = STEPS[_next_step[index] %STEPS.size()]
-		voice.volume_db = lerpf(-25.0, -17.0, clampf(speed / 5.0, 0.0, 1.0))
+		if speed > 3.2 and _next_step[index] % 3 == 0:
+			voice.stream = _scuffs[(_next_step[index] / 3) % _scuffs.size()]   # hard push-off scuff
+			voice.volume_db = lerpf(-27.0, -20.0, clampf((speed - 3.2) / 2.0, 0.0, 1.0))
+		else:
+			voice.stream = STEPS[_next_step[index] %STEPS.size()]
+			voice.volume_db = lerpf(-25.0, -17.0, clampf(speed / 5.0, 0.0, 1.0))
 		steps_played += 1
 	_next_step[index] += 1
 	voice.pitch_scale = 0.985 if _next_step[index] %2 == 0 else 1.015
@@ -198,6 +255,7 @@ func play_point_cue(winner: int, side_out: bool = false, match_finished: bool = 
 	var now: = Time.get_ticks_msec()
 	if now - _last_cue_msec < 100: return
 	_last_cue_msec = now
+	_rally_shots = 0
 	if match_finished: cue.stream = MATCH_WON if winner == 0 else MATCH_LOST
 	elif side_out: cue.stream = SIDE_OUT
 	else: cue.stream = POINT_WON if winner == 0 else POINT_LOST
@@ -258,6 +316,7 @@ func _notification(what: int) -> void :
 
 
 		if ambience: _stop_voice(ambience)
+		if crowd: _stop_voice(crowd)
 		_ambience_started = false
 		_resume_ambience_pending = false
 		if cue: _stop_voice(cue)

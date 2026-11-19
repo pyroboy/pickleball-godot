@@ -538,6 +538,9 @@ func _setup_subsystems() -> void :
 	game_trajectory = _GameTrajectory.new()
 	add_child(game_trajectory)
 	game_trajectory.setup(self, ball)
+	var match_feel = preload("res://scripts/fx/match_feel.gd").new()
+	add_child(match_feel)
+	match_feel.setup(self)
 
 
 	game_shots = _GameShots.new()
@@ -748,6 +751,7 @@ func _perf_physics_process(delta: float) -> void:
 		if camera_rig and posture_editor_v2 and posture_editor_v2.visible:
 			camera_rig.update(delta)
 		return
+	if _settle_retry_team >= 0: _retry_point_settlement()
 
 	if _in_slow_mo and game_state != GameState.PLAYING:
 		_exit_slow_mo()
@@ -821,11 +825,6 @@ var _t_was_pressed: bool = false
 
 
 
-func _format_scoreboard() -> String:
-	var arrow_left: String = "▶ " if serving_team == 0 else "  "
-	var arrow_right: String = " ◀" if serving_team == 1 else "  "
-	return "%s%d  -  %d%s" % [arrow_left, score_left, score_right, arrow_right]
-
 func _format_serve_call() -> String:
 	if doubles_mode and doubles_state != null:
 		var server = get_server_actor()
@@ -855,6 +854,8 @@ func _on_player_stage_changed(stage: int, posture: int, commit_dist: float, ball
 	var posture_name: String = ""
 	if posture >= 0 and player_left and posture < player_left.DEBUG_POSTURE_NAMES.size():
 		posture_name = player_left.DEBUG_POSTURE_NAMES[posture]
+	var stage_human = player_left.posture.human_contact if player_left and player_left.posture else null
+	if stage_human != null and stage_human.smash_state() == 2: posture_name = "SMASH"
 	if reaction_button:
 		reaction_button.update_from_stage(stage, posture_name, commit_dist, ball2ghost, ttc)
 
@@ -1284,7 +1285,6 @@ func settle_human_contact_intent(actor, intent: Dictionary, certificate: Diction
 func _check_rally() -> void :
 	if ball.global_position.y < 0.1 and ball.linear_velocity.y < -1.0:
 		ball_has_bounced = true
-		scoreboard_ui.set_state_text("Ball bounced!")
 
 
 
@@ -1311,8 +1311,37 @@ func _on_rally_ended(winner: int, reason: String, detail: String) -> void :
 
 
 	var line_call: bool = reason == RallyScorer.FAULT_OUT_OF_BOUNDS and ball.last_hit_by in [0, 1] and ball.bounces_since_last_hit <= 1 and winner == 1 - ball.last_hit_by
-	if not line_call: scoreboard_ui.show_fault(reason.replace("_", " "), detail)
+	var human_actor = get_human_actor()
+	if human_actor != null:
+		# Casual players get the reason in a few friendly words, from their side's
+		# view, inside the result banner (line calls included).
+		var told: Dictionary = preload("res://scripts/fault_explainer.gd").explain(reason, detail, winner, human_actor.team_id)
+		scoreboard_ui.show_fault(told.headline, told.line, 1 if told.won else -1)
+	elif not line_call:
+		scoreboard_ui.show_fault(reason.replace("_", " "), detail)
 	_on_point_scored(winner)
+
+# A rejected settlement (contact or landing still unresolved, or no live rally record) used
+# to leave the match on "Point settlement pending" forever. Retry each physics tick, and if
+# it never resolves replay the point from the serve so play cannot hang.
+var _settle_retry_team: int = -1
+var _settle_retry_ticks: int = 0
+var _settle_retry_reason: String = ""
+const SETTLE_RETRY_TRANSIENT_TICKS: int = 300
+const SETTLE_RETRY_HARD_TICKS: int = 30
+
+func _retry_point_settlement() -> void:
+	if game_state == GameState.POINT_SCORED or match_over or not doubles_mode or _is_practice():
+		_settle_retry_team = -1
+		return
+	_settle_retry_ticks += 1
+	var limit: int = SETTLE_RETRY_HARD_TICKS if _settle_retry_reason.begins_with("inactive") else SETTLE_RETRY_TRANSIENT_TICKS
+	if _settle_retry_ticks > limit:
+		_settle_retry_team = -1
+		if RuntimePolicy.developer_tools: print("[Game] point settlement never resolved (%s); replaying the point" % _settle_retry_reason)
+		_reset_ball(false)
+		return
+	_on_point_scored(_settle_retry_team)
 
 func _on_point_scored(winning_team: int) -> void :
 	if _is_practice():
@@ -1325,7 +1354,12 @@ func _on_point_scored(winning_team: int) -> void :
 		var outcome: Dictionary = doubles_controller.settle_rally(winning_team)
 		if not outcome.get("accepted", false):
 			scoreboard_ui.set_state_text("Point settlement pending · " + str(outcome.get("reason", "service context")))
+			if _settle_retry_team != winning_team:
+				_settle_retry_team = winning_team
+				_settle_retry_ticks = 0
+			_settle_retry_reason = str(outcome.get("reason", ""))
 			return
+		_settle_retry_team = -1
 		side_out = bool(outcome.side_out)
 	var presentations: Array = between_point_controller.capture_presentations()
 	_point_reset_generation += 1
@@ -1430,6 +1464,7 @@ func request_rematch() -> void :
 func _reset_ball(preserve_positions: bool = false, quick_generation: int = -1) -> void :
 	if _fast_point_transition != null: _fast_point_transition.observe_reset_request(quick_generation)
 	_execution_commits.clear()
+	_settle_retry_team = -1
 	if rally_scorer: rally_scorer.cancel_rally()
 	if doubles_mode and not preserve_positions: doubles_controller.cancel_rally()
 	selected_movement_intent = "AUTO"

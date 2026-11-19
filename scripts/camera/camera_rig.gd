@@ -37,6 +37,24 @@ const SLOWMO_PUSH: = 0.26          # share of the way to the ball at full effect
 const SLOWMO_FOV_ADD: = 5.0        # degrees wider while pushed in (perspective stretch)
 const SLOWMO_FULL_SCALE: = 0.55    # time scale at which the effect is complete
 var _slowmo_focus: = 0.0
+# Cinematic push-ins (camera only, nothing waits on them): serve intro, point-won hold,
+# match point and win. Zero during rally play so the tuned rally framing is untouched.
+const CINE_SERVE: = 0.10
+const CINE_MATCH_POINT: = 0.17
+const CINE_POINT_WON: = 0.12
+const CINE_WIN: = 0.30
+const CINE_POINT_HOLD: = 1.0
+const CINE_FOV_ADD: = 3.0
+const CinematicBannerScript = preload("res://scripts/ui/cinematic_banner.gd")
+var cinematic_enabled: = true
+var _banner: CanvasLayer
+var _cine_amount: = 0.0
+var _cine_point: = Vector3.ZERO
+var _cine_state: = -1
+var _cine_state_time: = 0.0
+var _cine_skipped: = false
+var _cine_end_pending: = false
+var _cine_match_point_shown: = false
 var _slowmo_point: = Vector3.ZERO
 var _portrait_action_zoom: = 1.0
 # Fixed zoom steps (measured from the fitted zoom: tight net play ~0.70,
@@ -134,6 +152,10 @@ func setup(
 
 	_default_pos = camera.position
 	_default_rot = camera.rotation_degrees
+
+	_banner = CinematicBannerScript.new()
+	_banner.name = "CinematicBanner"
+	add_child(_banner)
 
 	_shake = CameraShakeScript.new()
 	_shake.name = "Shake"
@@ -267,10 +289,15 @@ func cancel_orbit_drag() -> void :
 func _apply_end_flip() -> void:
 	var flipped: bool = not editor_active and _game_root != null and _game_root.has_method("view_flipped") and _game_root.view_flipped()
 	var wanted: Basis = Basis(Vector3.UP, PI) if flipped else Basis.IDENTITY
-	if not transform.basis.is_equal_approx(wanted): transform.basis = wanted
+	if not transform.basis.is_equal_approx(wanted):
+		transform.basis = wanted
+		# The half turn is a hard cut: cover it with a short black fade.
+		if _banner != null and cinematic_enabled and not editor_active: _banner.cut_flash(0.6)
 
 func update(delta: float) -> void :
 	_apply_end_flip()
+	# Visual-only hit-stop: hold the framing (and shake) still for ~50 ms on a hard hit.
+	if not editor_active and not _between_point_camera.active and TimeScale.visual_hitstop_active(): return
 	if _game_root != null and _game_root.practice_launcher and _game_root.practice_launcher.is_wall() and gameplay_camera.mode == GameplayCamera.CENTER:
 		gameplay_camera.suspend()
 		camera.projection = Camera3D.PROJECTION_PERSPECTIVE
@@ -474,6 +501,7 @@ func _update_centered(delta: float) -> void:
 # toward the ball (it stays where it is on screen and grows) and widen the lens
 # a little. Eased in real time, so it is as smooth at 0.1x as at 1x.
 func _apply_slowmo_focus(delta: float) -> void:
+	_apply_cinematic_push(delta)
 	var time_scale: Node = get_node_or_null("/root/TimeScale")
 	var slow: float = time_scale.slowmo_scale() if time_scale != null and time_scale.has_method("slowmo_scale") else 1.0
 	var wanted: float = clampf((1.0 - slow) / (1.0 - SLOWMO_FULL_SCALE), 0.0, 1.0)
@@ -491,6 +519,74 @@ func _apply_slowmo_focus(delta: float) -> void:
 	var amount: float = smoothstep(0.0, 1.0, _slowmo_focus)
 	camera.global_position += (_slowmo_point - camera.global_position) * SLOWMO_PUSH * amount
 	camera.fov += SLOWMO_FOV_ADD * amount
+
+func _input(event: InputEvent) -> void:
+	# Any press skips the current push-in (and the banner, in the banner itself).
+	if _cine_amount > 0.001 and not _cine_skipped:
+		if (event is InputEventKey and event.pressed and not event.echo) or (event is InputEventMouseButton and event.pressed) or (event is InputEventScreenTouch and event.pressed):
+			_cine_skipped = true
+
+func _cine_wanted(real_delta: float) -> float:
+	var g: Node = _game_root
+	if g == null or not cinematic_enabled or _is_practice(): return 0.0
+	var state: int = int(g.get("game_state"))
+	if state != _cine_state:
+		_cine_state = state
+		_cine_state_time = 0.0
+		_cine_skipped = false
+	else:
+		_cine_state_time += real_delta
+	_update_cinematic_banners(g, state)
+	if _cine_skipped: return 0.0
+	if bool(g.get("match_over")): return CINE_WIN
+	if state == 3: # POINT_SCORED: hold on the point for ~1 s
+		return CINE_POINT_WON if _cine_state_time < CINE_POINT_HOLD else 0.0
+	if state == 0: # WAITING: serve intro
+		return CINE_MATCH_POINT if _is_match_point(g) else CINE_SERVE
+	return 0.0
+
+func _is_match_point(g: Node) -> bool:
+	if g.get("doubles_mode") != true: return false
+	var ds = g.get("doubles_state")
+	if ds == null or ds.match_over: return false
+	var mine: int = int(ds.scores[ds.serving_team])
+	var theirs: int = int(ds.scores[1 - ds.serving_team])
+	return mine >= int(ds.target_score) - 1 and mine - theirs >= 1
+
+func _update_cinematic_banners(g: Node, state: int) -> void:
+	if _banner == null or g.get("doubles_mode") != true: return
+	var ds = g.get("doubles_state")
+	if ds == null: return
+	var pending: bool = bool(ds.end_change_pending)
+	if pending and not _cine_end_pending and not bool(g.get("match_over")):
+		_banner.show_banner("CHANGE ENDS", "Walk to the other side", 3.0)
+	_cine_end_pending = pending
+	if state == 0 and _is_match_point(g):
+		if not _cine_match_point_shown and not pending:
+			_cine_match_point_shown = true
+			_banner.show_banner("MATCH POINT", "", 1.6, 0.0)
+	elif state != 0:
+		_cine_match_point_shown = false
+
+func _apply_cinematic_push(delta: float) -> void:
+	var real_delta: float = clampf(delta / maxf(Engine.time_scale, 0.001), 0.0, 0.1)
+	var wanted: float = _cine_wanted(real_delta)
+	_cine_amount = lerpf(_cine_amount, wanted, 1.0 - exp(-(2.4 if wanted > _cine_amount else 3.5) * real_delta))
+	if _cine_amount <= 0.001:
+		_cine_amount = 0.0
+		_cine_point = Vector3.ZERO
+		return
+	var subject: Node3D = null
+	if _cine_state == 0 and _game_root != null and _game_root.has_method("get_server_actor"):
+		subject = _game_root.get_server_actor()
+	if not is_instance_valid(subject): subject = _ball if is_instance_valid(_ball) else _player_left
+	if not is_instance_valid(subject): return
+	var point: Vector3 = _drawn(subject)
+	point = Vector3(clampf(point.x, -3.5, 3.5), clampf(point.y, 0.4, 1.4), clampf(point.z, -7.0, 7.0))
+	_cine_point = point if _cine_point == Vector3.ZERO else _cine_point.lerp(point, 1.0 - exp(-4.0 * real_delta))
+	var amount: float = smoothstep(0.0, 1.0, _cine_amount / CINE_WIN) * CINE_WIN
+	camera.global_position += (_cine_point - camera.global_position) * amount
+	camera.fov += CINE_FOV_ADD * clampf(amount / CINE_WIN, 0.0, 1.0)
 
 func _update_third_person(delta: float) -> void :
 	var target_player: CharacterBody3D = _player_left if (orbit_mode == 1 or orbit_mode == 3) else _player_right

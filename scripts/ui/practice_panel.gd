@@ -146,9 +146,11 @@ func _perf_process(_delta: float) -> void:
 	if show_result and not _shown_result:
 		_clear()
 		_label("MATCH COMPLETE", 15, UiTheme.ACCENT)
-		_label("You win!" if _game.match_winner == 0 else "AI wins this one", 30)
+		var doubles: bool = _game.get("doubles_mode") == true
+		_label(("Your team wins!" if doubles else "You win!") if _game.match_winner == 0 else ("The other team wins this one" if doubles else "AI wins this one"), 30)
 		_label("%d  :  %d" % [_game.score_left, _game.score_right], 40)
-		_label("Singles · first to 11, win by 2", 16, UiTheme.MUTED)
+		var target: int = int(_game.doubles_state.target_score) if doubles and _game.get("doubles_state") != null else 11
+		_label("%s · first to %d, win by 2" % ["Doubles" if doubles else "Singles", target], 16, UiTheme.MUTED)
 		_button("Rematch", _rematch)
 		_button("Practice drills", open_practice)
 		_shown_result = true

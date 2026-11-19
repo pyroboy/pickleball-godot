@@ -12,10 +12,14 @@ var _rally_visible_timer: float = 0.0
 var _rally_generation: int = -1
 var _shot_type_timer: float = 0.0
 var _fault_visible_timer: float = 0.0
+var _fault_edge: Color = Color("ff8f80")
+var _fault_font: int = 34
 var _zone_visible_timer: float = 0.0
 var _speed_visible_timer: float = 0.0
 var _preparation_guidance_text: = ""
 var _game: Node
+var _context_key: Array = []
+var _context_portrait: = false
 
 const AI_DIFFICULTY_NAMES: Array[String] = ["EASY", "MEDIUM", "HARD"]
 const AI_DIFFICULTY_COLORS: Array[Color] = [Color(0.4, 1.0, 0.4), Color(1.0, 0.85, 0.3), Color(1.0, 0.35, 0.35)]
@@ -86,12 +90,63 @@ func clear_rally_result() -> void:
 	_rally_visible_timer = 0.0
 	if is_instance_valid(_hud): _hud.clear_rally_result()
 
-func show_fault(headline: String, detail: String) -> void :
+## tone: 1 the human's side won the point, -1 it lost, 0 neutral (classic red).
+func show_fault(headline: String, detail: String, tone: int = 0) -> void :
+	if tone != 0 and is_instance_valid(_hud) and _hud.has_method("set_rally_reason"):
+		# With a human playing, the reason joins the result banner (one banner,
+		# not two): headline, this short line, then the score.
+		_hud.set_rally_reason(detail, Color("bde879") if tone > 0 else Color("ff8f80"))
+		if _hud.get("fault"): _hud.fault.visible = false
+		_fault_visible_timer = 0.0
+		return
 	if _hud and _hud.get("fault"):
-		_hud.fault.text = "%s\n%s" % [headline, detail]
+		# With a human playing, the result banner already says whose point it was:
+		# show only the short friendly reason.
+		_hud.fault.text = detail if tone != 0 else "%s\n%s" % [headline, detail]
+		_hud.fault.add_theme_color_override("font_color", Color("bde879") if tone > 0 else Color("ff8f80"))
+		_fault_edge = Color("bde879") if tone > 0 else Color("ff8f80")
+		_fault_font = 34 if tone == 0 else 28
+		_place_fault_banner(_fault_edge, _fault_font)
 		_hud.fault.modulate.a = 1.0
 		_hud.fault.visible = true
 		_fault_visible_timer = 2.5
+
+## The reason sits in a dark panel, centred, with its bottom edge just above the
+## net on screen, so it is readable over the court and clear of the players' feet.
+func _place_fault_banner(edge: Color, font_size: int) -> void:
+	var label: Label = _hud.fault
+	var layout = preload("res://scripts/ui/mobile_layout.gd")
+	var view: Vector2 = label.get_viewport().get_visible_rect().size
+	var portrait: bool = layout.is_portrait(view)
+	var scale: float = layout.scale_for(view) if portrait else 1.0
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = Color(0.04, 0.08, 0.12, 0.9)
+	panel.border_color = edge
+	panel.set_border_width_all(maxi(2, roundi(2.0 * scale)))
+	panel.set_corner_radius_all(roundi(12.0 * scale))
+	panel.content_margin_left = 16.0 * scale
+	panel.content_margin_right = 16.0 * scale
+	panel.content_margin_top = 9.0 * scale
+	panel.content_margin_bottom = 10.0 * scale
+	label.add_theme_stylebox_override("normal", panel)
+	label.add_theme_font_size_override("font_size", roundi(font_size * scale))
+	# Size the panel to its text: each line measured, never wider than the screen.
+	var font: Font = label.get_theme_font("font")
+	var size_px: int = roundi(font_size * scale)
+	var lines: PackedStringArray = label.text.split("\n")
+	var text_width := 0.0
+	for line in lines: text_width = maxf(text_width, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px).x)
+	var width: float = minf(view.x - 24.0 * scale, text_width + 36.0 * scale)
+	var height: float = font.get_height(size_px) * lines.size() + 22.0 * scale
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if text_width + 36.0 * scale > view.x - 24.0 * scale else TextServer.AUTOWRAP_OFF
+	label.custom_minimum_size = Vector2.ZERO
+	label.size = Vector2(width, height)
+	var net_y: float = view.y * 0.45
+	var camera: Camera3D = label.get_viewport().get_camera_3d()
+	var net_top := Vector3(0.0, PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT, 0.0)
+	if camera != null and not camera.is_position_behind(net_top):
+		net_y = camera.unproject_position(net_top).y
+	label.position = Vector2((view.x - width) * 0.5, maxf(8.0 * scale, net_y - height - 14.0 * scale))
 
 func clear_fault() -> void :
 	_fault_visible_timer = 0.0
@@ -202,6 +257,9 @@ func _update_timers(delta: float) -> void :
 		if _hud.get("speed"):
 			_hud.speed.modulate.a = clampf(_speed_visible_timer / 0.6, 0.0, 1.0)
 	if _fault_visible_timer > 0:
+		# The HUD re-lays out its labels when the result banner appears; keep the
+		# reason panel sized to its text and above the net while it shows.
+		if _hud and _hud.get("fault") and _hud.fault.visible: _place_fault_banner(_fault_edge, _fault_font)
 		_fault_visible_timer -= delta
 		if _fault_visible_timer <= 0:
 			if _hud.get("fault"): _hud.fault.visible = false
@@ -229,7 +287,19 @@ func _hide_temporary_ui() -> void :
 func _sync_match_context() -> void :
 	if not is_instance_valid(_hud) or not is_instance_valid(_game): return
 	if _hud.has_method("set_match_context"):
-		_hud.set_match_context(_game.serving_team, _game.game_state in [1, 2])
+		# Only rebuild the HUD's match-context text when its inputs change (not every frame).
+		var practice_game: bool = _game.has_method("_is_practice") and _game._is_practice()
+		var launcher = _game.get("practice_launcher")
+		var key: Array = [_game.serving_team, _game.game_state in [1, 2], _game.get("match_over"), _game.score_left, _game.score_right, practice_game]
+		var doubles = _game.get("doubles_state")
+		if doubles != null: key.append(doubles.server_number)
+		if practice_game and launcher != null:
+			key.append(launcher.drill_mode)
+			if launcher.is_wall(): key.append(launcher.wall_practice.returns * 1000 + launcher.wall_practice.targets)
+		if key != _context_key or _hud._portrait != _context_portrait:
+			_context_key = key
+			_context_portrait = _hud._portrait
+			_hud.set_match_context(_game.serving_team, _game.game_state in [1, 2])
 	if _hud.has_method("set_charge"):
 		var input = _game.get("input_handler")
 		var serve = _game.get("game_serve")

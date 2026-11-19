@@ -14,6 +14,42 @@ const FACE_H: = 60
 const GRIP_W: = 16
 const GRIP_H: = 24
 const EDGE_WRAP: = 0.005    # metres of edge guard visible on the face
+# Wrist lag (visual only, see _wrist_lag): the head is a damped pendulum on the grip.
+# Like tennis lag it is passive: the hand speeds up, the head's inertia keeps it behind,
+# a relaxed wrist lets gravity drop it, and it whips past the true face after contact.
+# How relaxed the wrist is comes from the shot charge and shot type (_grip_relax).
+const LAG_HZ_FIRM: = 18.0     # wrist natural frequency, firm grip (dinks, ready)
+const LAG_HZ_LOOSE: = 2.2     # relaxed grip, full charge drive / smash
+const LAG_ZETA_FIRM: = 0.9    # damping ratio, firm wrist: no wobble on quick pose changes
+const LAG_ZETA_LOOSE: = 0.5   # relaxed wrist: whips past the face after contact
+const LAG_GRAVITY: = 45.0     # m/s2 on the head at full relax (~12 degree drop when held flat)
+const LAG_MAX_DEG: = 40.0     # largest bend shown at the wrist
+const LAG_SUBSTEPS: = 3
+const RELEASE_NEAR: = 0.45    # m, incoming ball to paddle head: lag fully released (true face)
+const RELEASE_FAR: = 1.4      # m, incoming ball further than this: full lag
+const LAG_RESET_M: = 0.5      # head jumped this far in one frame (reset / teleport): no lag
+const AI_CHARGE_TIME: = 0.32  # player_ai_brain.gd AI_CHARGE_DURATION
+const RELAX_IDLE: = 0.2       # ready / between swings: paddle held up
+const RELAX_HALFLIFE: = 0.05
+const SHOT_RELAX: = {"DINK": 0.15, "DROP": 0.15, "VOLLEY": 0.45, "LOB": 0.6,
+	"GROUNDSTROKE": 1.0, "RETURN": 1.0, "SMASH": 1.0}
+const SHOT_RELAX_UNKNOWN: = 0.45
+# Pre-lag (deliberate): while preparing for an incoming ball the wrist is laid back, head
+# set behind the hand along the ball's travel, then let go as the ball arrives so the
+# spring whips it through to the true face.
+const PRELAG_DEG: = 28.0      # lay-back at full charge on a drive
+const PRELAG_LET_GO_FAR: = 2.2  # m, incoming ball to head: start letting go of the lay-back
+const PRELAG_LET_GO_NEAR: = 1.1 # m: lay-back fully let go (spring now whips the head through)
+const PRELAG_SHOT: = {"DINK": 0.2, "DROP": 0.2, "VOLLEY": 0.5, "LOB": 0.5,
+	"GROUNDSTROKE": 1.0, "RETURN": 1.0, "SMASH": 0.8}
+const PRELAG_UNKNOWN: = 0.3
+# Auto lag (passive): driving the head forward fast during a swing loosens the wrist on
+# its own, so quick volleys and hand battles trail even without charge. Only speed along
+# the swing (against the incoming ball, else court-forward) counts, not repositioning.
+const AUTO_SPEED_LO: = 1.5    # m/s, forward head speed (body-relative) where auto lag starts
+const AUTO_SPEED_HI: = 5.0    # m/s: full auto lag
+const AUTO_LOOSE: = 0.75      # looseness auto lag can reach
+const SPEED_HALFLIFE: = 0.04  # s, smooths one-frame pose snaps out of the speed
 const SUNSET: = [Color("#993c1d"), Color("#d85a30"), Color("#ef9f27"), Color("#f0997b")]
 
 static var _data: Dictionary = {}
@@ -25,6 +61,15 @@ var _player
 var _paddle: Node3D
 var _hide_timer: = 0.0
 var _culled_cam: Camera3D
+var _lag_tip: = Vector3.INF   # lagged head centre, relative to the body origin
+var _lag_vel: = Vector3.ZERO
+var _prev_tip: = Vector3.INF  # real head centre last frame, relative to the body origin
+var _relax: = RELAX_IDLE
+var _charge_latch: = 0.0      # highest charge seen this stroke
+var _shot_type: = ""
+var _swinging: = false        # this player is in a stroke (charge, strike or follow-through)
+var _preparing: = false       # swinging and not yet in the follow-through
+var _speed: = 0.0             # smoothed forward head speed relative to the body
 
 static func attach(player) -> Node3D:
 	if player == null or player.get("paddle_node") == null: return null
@@ -91,14 +136,14 @@ func _ready() -> void:
 	grip.top_radius = D.HANDLE_RADIUS * 1.04   # tape sits proud of the handle
 	grip.bottom_radius = grip.top_radius
 	grip.height = grip_len
-	grip.radial_segments = 12
+	grip.radial_segments = 6
 	grip.rings = 1
 	_mesh_node(grip, Vector3(0, 0.008 + grip_len * 0.5, 0)).material_override = mats.grip
 	var cap: = CylinderMesh.new()
 	cap.top_radius = D.HANDLE_RADIUS * 1.22
 	cap.bottom_radius = cap.top_radius
 	cap.height = 0.008
-	cap.radial_segments = 12
+	cap.radial_segments = 6
 	cap.rings = 1
 	_mesh_node(cap, Vector3(0, 0.004, 0)).material_override = mats.cap
 	var throat: = BoxMesh.new()
@@ -134,13 +179,176 @@ func _process(delta: float) -> void:
 	if _hide_timer <= 0.0:
 		_hide_timer = 2.0
 		_hide_original()
-	_follow()
+	_follow(delta)
 
-func _follow() -> void:
+func _follow(delta: float = 0.0) -> void:
 	# Pose editors pause physics and pose directly: read live transforms there.
 	var posture = _player.get("posture")
 	var raw: bool = get_tree().paused or (posture != null and posture.editor_preview_mode)
-	global_transform = _paddle.global_transform if raw else _paddle.get_global_transform_interpolated()
+	if raw:
+		_lag_tip = Vector3.INF
+		global_transform = _paddle.global_transform
+		return
+	global_transform = _wrist_lag(_paddle.get_global_transform_interpolated(), delta)
+
+## Wrist lag: the shown paddle turns about the main grip so its head follows a damped
+## pendulum (spring to the real head, damping, gravity) instead of the real head. Lag grows
+## with the hand's acceleration and with how relaxed the wrist is. Tracked relative to the
+## body origin so running does not tilt the paddle. Fades out while the ball comes in, so
+## the face the player sees at contact is the real one; after contact the whip shows.
+func _wrist_lag(xf: Transform3D, delta: float) -> Transform3D:
+	var pivot: Node3D = _player.get("body_pivot")
+	var body: Vector3 = pivot.get_global_transform_interpolated().origin if pivot else Vector3.ZERO
+	var grip: Vector3 = xf * D.MAIN_GRIP_OFFSET - body
+	var tip: Vector3 = xf * D.HEAD_OFFSET - body
+	var relax: float = _grip_relax(delta)
+	if delta <= 0.0 or _lag_tip == Vector3.INF or _prev_tip.distance_to(tip) > LAG_RESET_M:
+		_lag_tip = tip
+		_prev_tip = tip
+		_lag_vel = Vector3.ZERO
+		return xf
+	delta = minf(delta, 0.05)
+	var tip_vel: Vector3 = (tip - _prev_tip) / delta
+	# Soft shots stay near the firm wrist; only charged drives / smashes go loose.
+	var loose: float = smoothstep(0.25, 0.9, relax)
+	var fwd_speed: float = maxf(0.0, tip_vel.dot(_swing_dir(tip + body)))
+	_speed = lerpf(_speed, fwd_speed, 1.0 - exp(-0.693 * delta / SPEED_HALFLIFE))
+	if _swinging:
+		loose = maxf(loose, AUTO_LOOSE * smoothstep(AUTO_SPEED_LO, AUTO_SPEED_HI, _speed))
+	var w: float = TAU * lerpf(LAG_HZ_FIRM, LAG_HZ_LOOSE, loose)
+	var k: float = w * w
+	var c: float = 2.0 * lerpf(LAG_ZETA_FIRM, LAG_ZETA_LOOSE, loose) * w
+	var g: = Vector3.DOWN * LAG_GRAVITY * loose
+	var radius: float = (tip - grip).length()
+	var limit: float = deg_to_rad(LAG_MAX_DEG)
+	var h: float = delta / LAG_SUBSTEPS
+	var pre: Vector4 = _prelag(tip + body, tip - grip)   # axis xyz, angle w
+	var pre_axis: = Vector3(pre.x, pre.y, pre.z)
+	for i in LAG_SUBSTEPS:
+		var f: float = float(i + 1) / LAG_SUBSTEPS   # real head and grip move through the frame
+		var t_i: Vector3 = _prev_tip.lerp(tip, f)
+		var g_i: Vector3 = grip - (tip - t_i)
+		var aim: Vector3 = t_i if pre.w <= 0.0 else g_i + (t_i - g_i).rotated(pre_axis, pre.w)
+		_lag_vel += (k * (aim - _lag_tip) - c * (_lag_vel - tip_vel) + g) * h
+		_lag_tip += _lag_vel * h
+		# Stay on the head's circle round the grip, within the bend limit.
+		var arm: Vector3 = t_i - g_i
+		var lag_arm: Vector3 = (_lag_tip - g_i).normalized() * radius
+		var bend: float = arm.angle_to(lag_arm)
+		if bend > limit:
+			var axis: Vector3 = arm.cross(lag_arm)
+			if axis.length_squared() > 1e-10:
+				lag_arm = arm.rotated(axis.normalized(), limit)
+			_lag_vel = _lag_vel.lerp(tip_vel, 0.5)
+		_lag_tip = g_i + lag_arm
+		var radial: Vector3 = lag_arm / maxf(radius, 0.001)
+		_lag_vel -= radial * (_lag_vel - tip_vel).dot(radial)
+	_prev_tip = tip
+	var real_arm: Vector3 = tip - grip
+	var shown_arm: Vector3 = _lag_tip - grip
+	var angle: float = real_arm.angle_to(shown_arm)
+	var turn_axis: Vector3 = real_arm.cross(shown_arm)
+	if angle < 0.001 or turn_axis.length_squared() < 1e-10: return xf
+	var turn: = Basis(turn_axis.normalized(), angle * _release_weight(tip + body))
+	var grip_w: Vector3 = grip + body
+	return Transform3D(turn * xf.basis, grip_w + turn * (xf.origin - grip_w))
+
+## Direction the stroke drives the head: against an incoming ball's travel, else court-forward.
+func _swing_dir(head: Vector3) -> Vector3:
+	var ball: = _player.call("_get_ball_ref") as RigidBody3D if _player.has_method("_get_ball_ref") else null
+	if ball != null and is_instance_valid(ball):
+		var vel: = Vector3(ball.linear_velocity.x, 0.0, ball.linear_velocity.z)
+		if vel.length_squared() > 0.01 and ball.linear_velocity.dot(head - ball.get_global_transform_interpolated().origin) > 0.0:
+			return -vel.normalized()
+	return _player.call("_get_forward_axis") if _player.has_method("_get_forward_axis") else Vector3.ZERO
+
+## Deliberate lay-back while preparing for an incoming ball: returns the rotation (axis,
+## angle) that sets the head behind the hand along the ball's travel, let go as the ball
+## nears. Zero when not preparing, no ball, or the ball is moving away.
+func _prelag(head: Vector3, arm: Vector3) -> Vector4:
+	if not _preparing: return Vector4.ZERO
+	var ball: = _player.call("_get_ball_ref") as RigidBody3D if _player.has_method("_get_ball_ref") else null
+	if ball == null or not is_instance_valid(ball): return Vector4.ZERO
+	var vel: Vector3 = ball.linear_velocity
+	var to_head: Vector3 = head - ball.get_global_transform_interpolated().origin
+	if vel.dot(to_head) <= 0.0: return Vector4.ZERO
+	var travel: = Vector3(vel.x, 0.0, vel.z)
+	if travel.length_squared() < 0.01: return Vector4.ZERO
+	var axis: Vector3 = arm.cross(travel.normalized())
+	if axis.length_squared() < 1e-6: return Vector4.ZERO
+	axis = axis.normalized()
+	var amount: float = float(PRELAG_SHOT.get(_shot_type, PRELAG_UNKNOWN)) * (0.4 + 0.6 * _charge_latch)
+	var hold: float = smoothstep(PRELAG_LET_GO_NEAR, PRELAG_LET_GO_FAR, to_head.length())
+	return Vector4(axis.x, axis.y, axis.z, deg_to_rad(PRELAG_DEG) * amount * hold)
+
+## 1 = full lag, 0 = true face. Only an incoming ball releases the lag, so the whip
+## after contact still shows while the ball flies off.
+func _release_weight(head: Vector3) -> float:
+	var ball: = _player.call("_get_ball_ref") as RigidBody3D if _player.has_method("_get_ball_ref") else null
+	if ball == null or not is_instance_valid(ball): return 1.0
+	var to_head: Vector3 = head - ball.get_global_transform_interpolated().origin
+	if ball.linear_velocity.dot(to_head) <= 0.0: return 1.0
+	return smoothstep(RELEASE_NEAR, RELEASE_FAR, to_head.length())
+
+## How loose the wrist is, 0 firm to 1 relaxed: shot charge and shot type of the
+## current stroke (read only from the player), idle RELAX_IDLE between swings.
+func _grip_relax(delta: float) -> float:
+	var hitting: Object = _player.get("hitting")
+	var human: Object = null
+	var posture: Object = _player.get("posture")
+	if posture != null: human = posture.get("human_contact")
+	var is_ai: bool = bool(_player.get("is_ai"))
+	var swinging: bool = false
+	if hitting != null:
+		swinging = bool(hitting.get("charge_visual_active")) or bool(hitting.get("is_in_follow_through")) \
+			or bool(hitting.get("serving_visual_active"))
+	var charge: float = 0.0
+	var shot: = ""
+	if is_ai:
+		if bool(_player.get("ai_is_charging")):
+			swinging = true
+			charge = _num(_player.get("ai_charge_time"), 0.0) / AI_CHARGE_TIME
+		# The AI plans shot type and charge before it starts charging.
+		var brain: Object = _player.get("ai_brain")
+		var plan: Variant = brain.get("_planned_shot") if brain != null else null
+		var ctx: Variant = hitting.get("committed_motion_context") if hitting != null else null
+		if plan is Dictionary and not plan.is_empty():
+			charge = maxf(charge, _num(plan.get("charge"), 0.0))
+			shot = str(plan.get("shot_type", ""))
+		elif ctx is Dictionary and not ctx.is_empty():
+			charge = maxf(charge, _num(ctx.get("charge"), 0.0))
+			shot = str(ctx.get("shot_type", ""))
+	elif human != null:
+		if int(_num(human.get("phase"), -1.0)) >= 0: swinging = true
+		charge = _num(human.get("charge_ratio"), 0.0)
+		shot = str(human.get("_swing_shot_type")) if human.get("_swing_shot_type") != null else ""
+	var preparing: bool = swinging and not (hitting != null and bool(hitting.get("is_in_follow_through")))
+	# AI: a shot planned for this flight counts as preparing, before the charge starts.
+	if is_ai and not swinging:
+		var brain2: Object = _player.get("ai_brain")
+		var ball2: Object = _player.call("_get_ball_ref") if _player.has_method("_get_ball_ref") else null
+		var plan2: Variant = brain2.get("_planned_shot") if brain2 != null else null
+		if ball2 != null and plan2 is Dictionary and not plan2.is_empty() \
+				and _num(brain2.get("_planned_flight"), -1.0) == _num(ball2.get("flight_id"), -2.0):
+			preparing = true
+			_charge_latch = maxf(_charge_latch, clampf(charge, 0.0, 1.0))
+			if shot != "": _shot_type = shot
+	_swinging = swinging
+	_preparing = preparing
+	var target: float = RELAX_IDLE
+	if swinging:
+		_charge_latch = maxf(_charge_latch, clampf(charge, 0.0, 1.0))
+		if shot != "": _shot_type = shot
+		var factor: float = float(SHOT_RELAX.get(_shot_type, SHOT_RELAX_UNKNOWN))
+		target = maxf(RELAX_IDLE, clampf((0.25 + 0.75 * _charge_latch) * factor, 0.0, 1.0))
+	elif not preparing:
+		_charge_latch = 0.0
+		_shot_type = ""
+	_relax = lerpf(_relax, target, 1.0 - exp(-0.693 * maxf(delta, 0.0) / RELAX_HALFLIFE))
+	return _relax
+
+static func _num(v: Variant, fallback: float) -> float:
+	return float(v) if (v is float or v is int) else fallback
 
 func _hide_original() -> void:
 	# Layer 20, never 0: gameplay (player_surface_contacts.gd) only skips layer-0 meshes.
@@ -152,7 +360,10 @@ func _hide_original() -> void:
 
 ## Front face (+z), back face (-z, u mirrored so graphics read correctly), rim.
 static func _build_head() -> ArrayMesh:
-	var outline: PackedVector2Array = D.head_outline()
+	# Every other outline point: half the triangles, same pixel silhouette (the gameplay paddle keeps the full outline).
+	var full: PackedVector2Array = D.head_outline()
+	var outline: = PackedVector2Array()
+	for i in range(0, full.size(), 2): outline.append(full[i])
 	var r: float = D.HEAD_RADIUS
 	var t: float = D.HEAD_HALF_THICKNESS
 	var centre: = Vector2(0, D.HEAD_CENTER_Y)

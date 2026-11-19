@@ -1,11 +1,40 @@
 #!/usr/bin/env python3
-"""AI shot choices from a perf log (PerfMonitor "ai_plan" notes): what the AI chose,
-and how many high balls (smash chances) it saw and what it did with them.
+"""How points end per 100 shots, then AI shot choices, from bench perf logs
+(PerfMonitor events and "ai_plan" notes): what the AI chose, and how many high
+balls (smash chances) it saw and what it did with them.
 
 Usage: python3 tools/shot_report.py logs/bench_<name>.perf.jsonl [more logs...]
 """
 import json, sys
 from collections import Counter
+
+# ---- how points end, per 100 shots (the number to compare between bench runs) ----
+# Cause is read from the rally_end reason plus the last hit before it:
+#   low kitchen contact: that hit was met <= 0.65 m up within 2.6 m of the net
+#   soft / fast ball:    the ball the loser failed on left the paddle below / from 10 m/s
+def _cause(reason, hit):
+    speed = sum(v * v for v in hit["vel"]) ** 0.5 if hit else 0.0
+    if reason == "BALL_IN_NET":
+        low = hit is not None and hit["pos"][1] <= 0.65 and abs(hit["pos"][2]) <= 2.6
+        return "net: low kitchen contact" if low else "net: other contact"
+    if reason in ("DOUBLE_BOUNCE", "BODY_HIT"):
+        pace = "fast ball" if speed >= 10.0 else "soft ball"
+        return f"{pace} {'hit the body' if reason == 'BODY_HIT' else 'not returned'}"
+    return reason.lower().replace("_", " ")
+causes, shots, points = Counter(), 0, 0
+for path in sys.argv[1:]:
+    hit = None
+    for r in (json.loads(l) for l in open(path)):
+        if r.get("kind") != "event": continue
+        if r["event"] == "hit": hit = r["data"]; shots += 1
+        elif r["event"] == "rally_end":
+            causes[_cause(r["data"]["reason"], hit)] += 1; points += 1; hit = None
+if points:
+    print(f"{points} points, {shots} shots ({shots / points:.1f} per point), {len(sys.argv) - 1} runs. Point endings per 100 shots:")
+    for cause, n in causes.most_common():
+        print(f"  {cause:28s} {n:3d}  {100.0 * n / max(shots, 1):5.1f}")
+    print(f"  {'all':28s} {points:3d}  {100.0 * points / max(shots, 1):5.1f}")
+
 plans = []
 for path in sys.argv[1:]:
     plans += [r["data"] for r in (json.loads(l) for l in open(path)) if r.get("kind") == "note" and r.get("note") == "ai_plan"]

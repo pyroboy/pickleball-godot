@@ -4,6 +4,9 @@ const SWITCH_ADVANTAGE_SECONDS := 0.16
 const MIN_CLAIM_SECONDS := 0.14
 const COVER_TARGET_SPEED := 2.5
 const MIDDLE_DEADBAND := 0.55
+const CHASE_MIN_RUN := 0.05        # m: an offer with no run target is not a chase
+const CHASE_KEEP_ADVANTAGE := 0.5  # m the current chaser is favoured by, so partners don't swap
+const HUMAN_SIDE_MARGIN := 0.2     # m past the partners' midpoint, toward the human, that makes a ball the human's
 var roster: Dictionary = {}
 var teams: Dictionary = {0: [], 1: []}
 var _context_key: Array = []
@@ -106,6 +109,26 @@ func _eligible(offer: Dictionary, team: int) -> bool:
  # offers withdraw the advisory claim. Actual contact authority remains final.
  return (receiver<0 or receiver==int(offer.actor_id)) and bool(offer.reachable)
 
+func _may_chase(offer: Dictionary, team: int) -> bool:
+ if not bool(_context.get("in_play",false)) or not bool(_context.get("eligible_play",false)):return false
+ if int(_context.get("incoming_team",-1))!=team:return false
+ var receiver:int=int(_context.get("required_receiver",-1))
+ return (receiver<0 or receiver==int(offer.actor_id)) and bool(offer.ready)
+
+func _yields_to_human(id: int, team: int, prior: Dictionary) -> bool:
+ # An AI never takes a ball headed to its human partner's side of the court.
+ # "Side" is split at the midpoint between the two partners (so it follows
+ # them when they move); only balls in the middle strip stay contestable.
+ if roster[id].human or not prior.has(id):return false
+ for other in teams[team]:
+  if other==id or not roster[other].human or not prior.has(other):continue
+  var human_x:float=Vector3(prior[other].root).x;var ai_x:float=Vector3(prior[id].root).x
+  var side:float=signf(human_x-ai_x) if absf(human_x-ai_x)>.3 else signf(Vector3(roster[other].home).x-Vector3(roster[id].home).x)
+  if side==0.0:return false
+  var mid:float=(human_x+ai_x)*.5
+  return (Vector3(prior[id].contact).x-mid)*side>HUMAN_SIDE_MARGIN
+ return false
+
 func _cost(offer: Dictionary) -> float:
  var travel:Vector3=Vector3(offer.target)-Vector3(offer.root);travel.y=0.0
  var reversal:float=.12 if Vector3(offer.velocity).dot(travel)<-.1 else 0.0
@@ -123,7 +146,7 @@ func _resolve_team(team: int) -> Dictionary:
   reason="no legal reachable offer"
   for id in ids:
    var offer:Dictionary=prior[id]
-   if not _eligible(offer,team):continue
+   if not _eligible(offer,team) or _yields_to_human(id,team,prior):continue
    var value:float=_cost(offer)
    if roster[id].human and offer.committed:
     selected=id;best=value;reason="observed reachable human commitment";break
@@ -136,11 +159,23 @@ func _resolve_team(team: int) -> Dictionary:
   # Fresh flight, service, reach or dead-ball invalidation still wins immediately.
   if reason=="observed reachable human commitment" and old_id!=selected and prior.has(old_id) and _eligible(prior[old_id],team) and bool(prior[old_id].get("stroke_started",false)):
    selected=old_id;reason="existing physical forward stroke retains reachable owner"
-  if selected>=0 and reason!="observed reachable human commitment" and prior.has(old_id) and _eligible(prior[old_id],team):
+  if selected>=0 and reason!="observed reachable human commitment" and prior.has(old_id) and _eligible(prior[old_id],team) and not _yields_to_human(old_id,team,prior):
    var old_cost:float=_cost(prior[old_id])
    if bool(prior[old_id].committed) or _time-float(old.get("since",_time))<MIN_CLAIM_SECONDS or old_cost-best<SWITCH_ADVANTAGE_SECONDS:
     selected=old_id
     if reason!="existing physical forward stroke retains reachable owner":reason="stable reachable claim"
+  if selected<0:
+   # Nobody is certain to reach it: the partner with the shorter run still goes
+   # for the ball (and may lunge) instead of both holding their cover spots.
+   # Before, a ball through the middle or wide of both was left to bounce twice.
+   var shortest:=INF
+   for id in ids:
+    var offer:Dictionary=prior[id]
+    if not _may_chase(offer,team) or _yields_to_human(id,team,prior):continue
+    var run:Vector3=Vector3(offer.target)-Vector3(offer.root);run.y=0.0
+    if run.length()<CHASE_MIN_RUN:continue
+    var value:float=run.length()-(CHASE_KEEP_ADVANTAGE if id==old_id else 0.0)
+    if value<shortest:shortest=value;selected=id;reason="best-effort chase"
   if selected>=0:
    if int(old.get("actor_id",-1))!=selected:_claims[team]={"actor_id":selected,"since":_time}
   else:_claims.erase(team)

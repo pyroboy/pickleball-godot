@@ -150,6 +150,9 @@ func _setup_ball() -> void :
 	var mesh: SphereMesh = SphereMesh.new()
 	mesh.radius = BALL_RADIUS
 	mesh.height = BALL_RADIUS * 2
+	# A few pixels on the phone: 12x8 keeps a round silhouette at ~220 triangles (default 64x32 is ~4.2k).
+	mesh.radial_segments = 12
+	mesh.rings = 8
 	mesh_inst.mesh = mesh
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(1, 1, 0)

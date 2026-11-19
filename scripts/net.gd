@@ -5,8 +5,10 @@ const Profile = preload("res://scripts/net_profile.gd")
 const Runtime = preload("res://scripts/net_runtime.gd")
 const FabricShader = preload("res://shaders/net_fabric.gdshader")
 const NET_HEIGHT: = Profile.SIDELINE_HEIGHT
-const MESH_COLUMNS: = 80
-const MESH_ROWS: = 12
+# Enough vertices for the post sag curve and the impact ripple (~0.5 m waves in
+# net_fabric.gdshader); the weave itself is drawn per pixel. Was 80 x 12 (2,080 triangles).
+const MESH_COLUMNS: = 24
+const MESH_ROWS: = 8
 
 func create_net(parent: Node3D) -> StaticBody3D:
 	var net: = Runtime.new()
@@ -75,8 +77,11 @@ func _add_posts(net: StaticBody3D) -> void :
 	for direction in [-1.0, 1.0]:
 		var post: = MeshInstance3D.new()
 		post.name = "LeftPost" if direction < 0.0 else "RightPost"
-		var cylinder: = Profile.post_mesh()
-		post.mesh = cylinder
+		var cylinder: = Profile.post_mesh()   # collision shape: keep as is (ball-vs-post reads it)
+		var look: = cylinder.duplicate() as CylinderMesh   # drawn copy: one ring, no hidden bottom cap (120 -> 30 triangles)
+		look.rings = 1
+		look.cap_bottom = false
+		post.mesh = look
 		post.material_override = post_material
 		post.position = Vector3(direction * Profile.HALF_SPAN, Profile.FLOOR_Y + cylinder.height * 0.5, 0.0)
 		net.add_child(post)

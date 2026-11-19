@@ -295,6 +295,10 @@ func on_actor_body_contact(actor_id: int, evidence: Dictionary) -> void:
 	var key: String = "%d/%d" % [flight, actor_id]
 	if _physical_body_contacts.has(key): return
 	_physical_body_contacts[key] = true
+	# Bench evidence for tools/shot_report.py: which body part the ball struck.
+	var struck: Vector3 = evidence.get("point", Vector3.ZERO)
+	PerfMonitor.note("body_hit", {"actor": actor_id, "part": str(evidence.get("part", "")), "height": snappedf(struck.y, 0.01),
+		"own_shot": int(_ball.get("last_hit_actor_id")) == actor_id if "last_hit_actor_id" in _ball else false})
 	_emit({"valid": false, "winner": 1 - _team(actor_id), "reason": FAULT_BODY_HIT,
 		"detail": "%s: ball struck the player" % ("BLUE" if _team(actor_id) == 0 else "RED"), "contact": evidence})
 

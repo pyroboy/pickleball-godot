@@ -183,6 +183,7 @@ func _swing_trace(ed) -> Dictionary:
 		"max_elbow_bend_step_deg": _r(snap), "snap_at": snap_at, "max_elbow_jump_m": _r(jump),
 		"min_elbow_torso_clearance_m": _r(clear), "elbow_inward_steps": inward,
 		"forearm_roll_range_deg": [_r(roll_min), _r(roll_max)], "max_forearm_roll_step_deg": _r(roll_step),
+		"max_elbow_above_shoulder_m": _r(elbow_up.map(func(v): return v[0]).max()),
 		"traced_from": _r(from), "elbow_up_steps": up_steps, "elbow_up": elbow_up, "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v)), "grip_inhand_pitch_yaw_roll": fields}
 
 # Player-local frame: x = forehand side, y = height above the court floor, z = toward the net.
@@ -228,7 +229,17 @@ func _body_metrics(p) -> Dictionary:
 	var t: float = clampf(c.dot(base) / maxf(base.length_squared(), 0.0001), -1.0, 2.0)
 	var off: float = (c - base * clampf(t, 0.0, 1.0)).length()
 	var spine := torso - hips
+	# Hitting upper arm relative to the trunk: elevation (0 = hanging, 90 = level with the shoulder,
+	# >90 = above) and flare: angle of the upper arm out of the trunk's front-back plane
+	# (+ = elbow out to the hitting side, - = across the chest; elbow in front of the body is 0).
+	var down: Vector3 = -spine.normalized()
+	var across: Vector3 = (rs - ls)
+	across = (across - spine.normalized() * across.dot(spine.normalized())).normalized()
+	var upper: Vector3 = (re - rs).normalized()
 	return {
+		"elbow_above_shoulder_m": _r(re.y - rs.y),
+		"upper_arm_elevation_deg": _r(rad_to_deg(upper.angle_to(down))),
+		"elbow_flare_deg": _r(rad_to_deg(asin(clampf(upper.dot(across), -1.0, 1.0)))),
 		"left_ankle": _rv(la), "right_ankle": _rv(ra),
 		"feet_planted": la.y < 0.10 and ra.y < 0.10,  # planted ankle sits ~0.04 m up
 		"stance_width": _r(absf(la.x - ra.x)), "stance_depth": _r(absf(la.z - ra.z)),

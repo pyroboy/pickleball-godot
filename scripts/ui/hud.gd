@@ -38,6 +38,9 @@ var _score_panel: Panel
 var _status_panel: Panel
 var _score_chrome: HudChrome
 var _guidance_chrome: HudChrome
+var _pill_chrome: HudChrome   # portrait corner score pill: team dots
+var _pill_label: Label        # "7-5-2" score-score-server
+var _pill_text: = ""
 var _toolbar: HBoxContainer
 var _guide: PanelContainer
 var _guide_scroll: ScrollContainer
@@ -59,6 +62,7 @@ var _serve_ball: Control
 var _rally_banner: Panel
 var _rally_headline: Label
 var _rally_detail: Label
+var _rally_reason: Label   # short friendly reason, between the headline and the score line
 var _serve_label: Label
 var _blue_label: Label
 var _red_label: Label
@@ -240,6 +244,12 @@ func _build_panels() -> void :
 	_score_panel.add_child(_score_chrome)
 	_score_chrome.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_score_chrome.hide()
+	_pill_chrome = HudChrome.new()
+	_pill_chrome.name = "ScorePillDots"
+	_pill_chrome.kind = HudChrome.Kind.PILL
+	_score_panel.add_child(_pill_chrome)
+	_pill_chrome.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_pill_chrome.hide()
 	_guidance_chrome = HudChrome.new()
 	_guidance_chrome.name = "GuidanceIcons"
 	_guidance_chrome.kind = HudChrome.Kind.GUIDANCE
@@ -254,6 +264,10 @@ func _build_labels() -> void :
 	_red_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	score = _label("0   :   0", 40, UiTheme.INK, true)
 	score.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pill_label = _label("0-0", 30, UiTheme.INK, true)
+	_pill_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pill_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_pill_label.hide()
 	_serve_label = _label("YOU SERVE", 13, UiTheme.ACCENT, true)
 	_serve_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	difficulty = _label("AI: EASY  [X]", 16, UiTheme.ACCENT, true)
@@ -275,6 +289,7 @@ func _build_labels() -> void :
 	var background: = UiTheme.button_style(UiTheme.SURFACE)
 	background.content_margin_top = 0
 	background.content_margin_bottom = 0
+	background.border_width_bottom = 0
 	var fill: = background.duplicate() as StyleBoxFlat
 	fill.bg_color = UiTheme.ACCENT
 	_charge_bar.add_theme_stylebox_override("background", background)
@@ -323,7 +338,8 @@ func _build_singles_feedback() -> void:
 	_rally_banner.add_theme_stylebox_override("panel", style)
 	_rally_headline = _label("", 34, Color("effa92"), true)
 	_rally_detail = _label("", 17, UiTheme.INK, true)
-	for label in [_rally_headline, _rally_detail]:
+	_rally_reason = _label("", 22, UiTheme.INK, true)
+	for label in [_rally_headline, _rally_reason, _rally_detail]:
 		remove_child(label)
 		_rally_banner.add_child(label)
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -348,11 +364,19 @@ func show_rally_result(headline: String, detail: String) -> void:
 	_rally_detail.text = detail
 	_rally_banner.modulate.a = 1.0
 	_rally_banner.visible = _gameplay_visible
+	_place_rally_banner()
+
+## One banner for the whole result: headline, why the point ended, score line.
+func set_rally_reason(text: String, color: Color) -> void:
+	_rally_reason.text = text
+	_rally_reason.add_theme_color_override("font_color", color)
+	if _rally_banner.visible: _place_rally_banner()
 
 func clear_rally_result() -> void:
 	_rally_banner.hide()
 	_rally_headline.text = ""
 	_rally_detail.text = ""
+	_rally_reason.text = ""
 
 func _layout_singles_feedback() -> void:
 	if not is_instance_valid(_serve_ball): return
@@ -362,19 +386,33 @@ func _layout_singles_feedback() -> void:
 	var ball_size := 46.0 * s if _portrait else 30.0
 	var center := Vector2(rect.position.x + (50.0 * s if _server == 0 else rect.size.x - 50.0 * s), rect.position.y + (52.0 * s if _portrait else 84.0))
 	_place(_serve_ball, Rect2(center - Vector2.ONE * ball_size * 0.5, Vector2.ONE * ball_size))
+	_place_rally_banner()
+
+func _place_rally_banner() -> void:
+	if not is_instance_valid(_rally_banner) or not is_instance_valid(_score_panel): return
+	var rect := _score_panel.get_global_rect()
+	var view := get_viewport().get_visible_rect().size
+	var s := MobileLayout.scale_for(view) if _portrait else 1.0
 	var banner_width := minf(420.0 * s, view.x - 32.0 * s)
+	var has_reason: bool = not _rally_reason.text.is_empty()
+	var height: float = ((126.0 if has_reason else 94.0) * s) if _portrait else (118.0 if has_reason else 88.0)
 	var top := rect.end.y + 198.0 * s if _portrait else view.y * 0.35 + 136.0
-	# Keep the independent fault reason below the result, including short portrait.
-	if _portrait and top + 94.0 * s > fault.position.y:
-		fault.position.y = top + 100.0 * s
+	# Sit in the middle of the screen with the bottom edge just above the net.
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	var net_top := Vector3(0.0, PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT, 0.0)
+	if camera != null and not camera.is_position_behind(net_top):
+		top = maxf(rect.end.y + 8.0 * s, camera.unproject_position(net_top).y - height - 12.0 * s)
 	var banner_x := (view.x - banner_width) * 0.5
 	if not _portrait and view.x < 1100.0:
 		banner_x = _status_panel.position.x + (_status_panel.size.x - banner_width) * 0.5
-	_place(_rally_banner, Rect2(banner_x, top, banner_width, (94.0 * s if _portrait else 88.0)))
+	_place(_rally_banner, Rect2(banner_x, top, banner_width, height))
 	_place(_rally_headline, Rect2(10 * s, 6 * s, banner_width - 20 * s, 46 * s))
-	_place(_rally_detail, Rect2(10 * s, 52 * s, banner_width - 20 * s, 30 * s))
+	_place(_rally_reason, Rect2(10 * s, 50 * s, banner_width - 20 * s, 32 * s))
+	_place(_rally_detail, Rect2(10 * s, (86 if has_reason else 52) * s, banner_width - 20 * s, 30 * s))
+	_rally_reason.visible = has_reason
 	_rally_headline.add_theme_font_size_override("font_size", roundi(36 * s))
-	_rally_detail.add_theme_font_size_override("font_size", roundi(18 * s))
+	_rally_reason.add_theme_font_size_override("font_size", roundi(23 * s))
+	_rally_detail.add_theme_font_size_override("font_size", roundi((16 if has_reason else 18) * s))
 
 func _build_toolbar() -> void :
 	_toolbar = HBoxContainer.new()
@@ -492,6 +530,38 @@ func set_score(left: int, right: int) -> void :
 	_blue_score = left
 	_red_score = right
 	score.text = "%d   :   %d" % [left, right]
+	_refresh_pill()
+
+## Corner pill text: serving score, receiving score, server number (e.g. 7-5-2).
+## Only written when it changes.
+func _refresh_pill() -> void :
+	if _pill_label == null: return
+	var game: = get_parent()
+	var first: int = _server if _server in [0, 1] else 0
+	var mine: int = _blue_score if first == 0 else _red_score
+	var theirs: int = _red_score if first == 0 else _blue_score
+	var text: = "%d-%d" % [mine, theirs]
+	if game != null and game.get("doubles_mode") == true and game.get("doubles_state") != null:
+		var ds = game.doubles_state
+		mine = int(ds.scores[ds.serving_team])
+		theirs = int(ds.scores[1 - ds.serving_team])
+		text = "%d-%d-%d" % [mine, theirs, int(ds.server_number)]
+		first = int(ds.serving_team)
+	if _practice_exchange_context or _wall_context: text = score.text.replace("   ", "")
+	_pill_chrome.first_team = first
+	if text != _pill_text:
+		_pill_text = text
+		_pill_label.text = text
+
+## "right" / "left" service side for the current server, or "" when unknown.
+func _serve_side_text(game: Node) -> String:
+	if game == null: return ""
+	if game.get("doubles_mode") == true and game.get("doubles_state") != null:
+		var ds = game.doubles_state
+		var court: int = int(ds.service_context().get("serving_court", -1))
+		return "" if court < 0 else ("RIGHT" if court == ds.RIGHT else "LEFT")
+	var points: int = int(game.get("score_left")) if _server == 0 else int(game.get("score_right"))
+	return "RIGHT" if points % 2 == 0 else "LEFT"
 
 func set_spin_selection(mode: String, locked_mode: String = "", intent: String = "AUTO", locked_intent: String = "") -> void :
 
@@ -528,7 +598,7 @@ func set_match_context(server: int, rally_active: bool) -> void :
 	var complete: bool = game != null and game.get("match_over") == true
 	var old_server := _server
 	_server = server
-	_serve_ball.visible = _gameplay_visible and not practice and not complete and server in [0, 1]
+	_serve_ball.visible = _gameplay_visible and not practice and not complete and server in [0, 1] and not _portrait
 	_score_chrome.serving_team = server if _serve_ball.visible else -1
 	_serve_ball.tooltip_text = "%s serving · only the server can score" % team_name(server)
 	if old_server != server: _layout_singles_feedback()
@@ -542,6 +612,7 @@ func set_match_context(server: int, rally_active: bool) -> void :
 		_blue_label.text = "RETURNS"
 		_red_label.text = "TARGETS"
 		score.text = "%d   :   %d" % [game.practice_launcher.wall_practice.returns, game.practice_launcher.wall_practice.targets]
+		_refresh_pill()
 		_serve_label.text = "SOLO · NO SCORE"
 		_serve_label.add_theme_color_override("font_color", UiTheme.MUTED)
 		difficulty.visible = false
@@ -567,9 +638,17 @@ func set_match_context(server: int, rally_active: bool) -> void :
 	_serve_label.text = "%s SERVE · CAN SCORE" % owner
 	if not practice and game != null and game.get("doubles_mode") == true:
 		_serve_label.text = "%s SERVE · %s" % [game.actor_label(game.get_server_actor()).to_upper(), game.doubles_state.score_call()]
+	var side: = _serve_side_text(game) if not practice else ""
+	if not side.is_empty():
+		if _portrait:
+			var who: String = game.actor_label(game.get_server_actor()).to_upper() if game.get("doubles_mode") == true else team_name(server).to_upper()
+			_serve_label.text = "%s %s · %s SIDE" % [who, "SERVE" if who == "YOU" else "SERVES", side]
+		else:
+			_serve_label.text += " · %s" % side
 	_serve_label.add_theme_color_override("font_color", UiTheme.BLUE if server == 0 else UiTheme.RED)
 	if practice: _serve_label.text = "PRACTICE · NO SCORE"
 	if complete: _serve_label.text = "MATCH OVER"
+	_refresh_pill()
 
 func set_status_text(value: String) -> void :
 	var display: = value
@@ -587,7 +666,7 @@ func set_status_text(value: String) -> void :
 			var owner: String = "demo" if practice.demo_enabled else "drill"
 			display = "%s %s · %d hits · best %d" % [mode, owner, practice.exchange_count, practice.best_exchange_count]
 			if practice._attempt_finished: display = "%s · %d hits" % [practice.last_failure.replace("_", " ").capitalize(), practice.exchange_count]
-		state.max_lines_visible = 1 if practice else 2
+		state.max_lines_visible = 1
 		state.autowrap_mode = TextServer.AUTOWRAP_OFF if practice else TextServer.AUTOWRAP_WORD_SMART
 	state.text = display
 
@@ -660,6 +739,7 @@ func set_gameplay_elements_visible(p_visible: bool) -> void :
 	if _between_point_active:
 		for control in [_charge_label, _charge_bar, _controls_hint, _locked_spin_label]: control.hide()
 	set_match_context(_server, _rally_active)
+	_apply_score_surface()
 	if not p_visible:
 		clear_rally_result()
 		_guide.hide()
@@ -668,6 +748,17 @@ func set_gameplay_elements_visible(p_visible: bool) -> void :
 	else:
 		speed.show()
 		shot_type.show()
+
+## Portrait shows one score surface (the corner pill): the big score, team and match
+## labels and the singles serving ball stay hidden. Landscape keeps the desktop panel.
+func _apply_score_surface() -> void :
+	var show_pill: bool = _portrait and _gameplay_visible
+	_pill_label.visible = show_pill
+	_pill_chrome.visible = show_pill
+	_serve_label.visible = _gameplay_visible
+	for widget in [score, _match_label, _blue_label, _red_label]:
+		widget.visible = _gameplay_visible and not _portrait
+	if is_instance_valid(_serve_ball) and _portrait: _serve_ball.hide()
 
 func _place(control: Control, rect: Rect2) -> void :
 	control.set_anchors_preset(Control.PRESET_TOP_LEFT)
@@ -795,6 +886,8 @@ func _restore_desktop_fonts() -> void :
 	_score_panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
 	_score_chrome.hide()
 	_guidance_chrome.hide()
+	_apply_score_surface()
+	_serve_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_blue_label.text = _team_label_text(0)
 	_red_label.text = _team_label_text(1)
 	_blue_label.add_theme_color_override("font_color", UiTheme.BLUE)
@@ -833,8 +926,9 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	var y: = safe.position.y + 12 * s
 	var w: = safe.size.x - 32 * s
 	_score_panel.modulate.a = 1.0
-	_score_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
-	_score_chrome.show()
+	_score_panel.add_theme_stylebox_override("panel", UiTheme.pill_style(s))
+	_score_chrome.hide()
+	_apply_score_surface()
 	_guidance_chrome.visible = _gameplay_visible
 	_status_panel.hide()
 	difficulty.hide()
@@ -842,7 +936,12 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_debug_button.hide()
 	_debug_toolbar.hide()
 	debug_mode = false
-	_place(_score_panel, Rect2(x, y, w, 104 * s))
+	# Corner pill (top-left) with the server line under it; the rest of the top is court.
+	var pill_w: float = 250 * s
+	var pill_h: float = 62 * s
+	_place(_score_panel, Rect2(x, y, pill_w, pill_h))
+	_place(_pill_label, Rect2(x + 40 * s, y + 4 * s, pill_w - 80 * s, pill_h - 10 * s))
+	_pill_label.add_theme_font_size_override("font_size", maxi(12, roundi(34 * s)))
 	_place(_match_label, Rect2(x + w * 0.28, y + 10 * s, w * 0.44, 20 * s))
 	_blue_label.text = _team_label_text(0)
 	_red_label.text = _team_label_text(1)
@@ -851,13 +950,21 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_place(_blue_label, Rect2(x + 86 * s, y + 29 * s, 100 * s, 58 * s))
 	_place(_red_label, Rect2(x + w - 220 * s, y + 29 * s, 134 * s, 58 * s))
 	_place(score, Rect2(x + w * 0.28, y + 27 * s, w * 0.44, 50 * s))
-	_place(_serve_label, Rect2(x + w * 0.28, y + 78 * s, w * 0.44, 22 * s))
+	_place(_serve_label, Rect2(x + 4 * s, y + pill_h + 8 * s, w * 0.7, 26 * s))
+	_serve_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_serve_label.add_theme_color_override("font_shadow_color", Color(0.04, 0.08, 0.14, 0.9))
+	_serve_label.add_theme_constant_override("shadow_offset_y", 2)
 	_toolbar.add_theme_constant_override("separation", maxi(1, roundi(8 * s)))
 	for button in _toolbar.get_children():
 		button.custom_minimum_size = Vector2(ceilf(100 * s), ceilf(92 * s))
 		button.add_theme_font_size_override("font_size", roundi(21 * s))
 		for key in ["normal", "hover", "pressed"]:
-			var style: = UiTheme.button_style(Color(0.065, 0.12, 0.2, 0.91 if key == "normal" else 1.0))
+			var style: = UiTheme.button_style(Color(0.08, 0.15, 0.25, 0.94 if key == "normal" else 1.0))
+			# Round icon button: same touch rect, drawn as a circle (stadium for the wider Skip).
+			style.set_corner_radius_all(roundi(46 * s))
+			style.expand_margin_left = - 4 * s
+			style.expand_margin_right = - 4 * s
+			style.border_width_bottom = maxi(2, roundi(4 * s))
 			style.content_margin_left = 16 * s
 			style.content_margin_right = 16 * s
 			style.content_margin_top = 10 * s
@@ -886,13 +993,13 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	# mobile scales cannot move the same button by a subpixel when Skip hides.
 	_place(_toolbar, Rect2(Vector2(x + w - toolbar_width, y + 112 * s).round(), Vector2(toolbar_width, ceilf(92 * s))))
 	for icon in _toolbar_icons:
-		_place(icon, Rect2(31 * s, 13 * s, 38 * s, 38 * s))
+		_place(icon, Rect2(23 * s, 19 * s, 54 * s, 54 * s))
 		icon.show()
 	for caption in _toolbar_captions:
+		caption.hide()
 		_place(caption, Rect2(4 * s, 55 * s, 92 * s, 29 * s))
 		# Authored units preserve this small portrait improvement on high-DPI phones.
 		caption.add_theme_font_size_override("font_size", maxi(roundi(21 * s), floori(23 * s)))
-		caption.show()
 
 
 	_place(_status_panel, Rect2(x, y + 112 * s, guidance_width, 148 * s))
@@ -903,7 +1010,7 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_place(_controls_hint, Rect2(x + 64 * s, y + 215 * s, caption_width, 38 * s))
 	_place(_locked_spin_label, Rect2(x + w - toolbar_width, y + 214 * s, toolbar_width, 38 * s))
 	state.add_theme_font_size_override("font_size", roundi(21 * s))
-	state.max_lines_visible = 2
+	state.max_lines_visible = 1   # one-line state text
 	state.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_controls_hint.add_theme_font_size_override("font_size", roundi(18 * s))
 	for label in [_charge_label, _controls_hint]:

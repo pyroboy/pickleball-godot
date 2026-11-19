@@ -10,6 +10,9 @@ const BALL_MIN_DIAMETER: = 0.30
 const BALL_MAX_DIAMETER: = 0.48
 const BALL_MIN_OPACITY: = 0.48
 const BALL_MAX_OPACITY: = 0.72
+# Player blob ellipse (metres, x by z) and its opacity at ground level.
+const PLAYER_BLOB: = Vector2(0.95, 0.62)
+const PLAYER_OPACITY: = 0.42
 var _targets: Array[Node3D] = []
 var _shadows: Array[MeshInstance3D] = []
 var _materials: Array[ShaderMaterial] = []
@@ -75,7 +78,9 @@ static func cue_for_height(height: float, ball: bool) -> Vector3:
 		var diameter: float = lerpf(BALL_MIN_DIAMETER, BALL_MAX_DIAMETER, lift)
 		return Vector3(diameter, diameter, lerpf(BALL_MAX_OPACITY, BALL_MIN_OPACITY, lift))
 	var lift: float = clampf(h / 1.0, 0.0, 1.0)
-	return Vector3(lerpf(0.7, 0.88, lift), lerpf(0.44, 0.58, lift), lerpf(0.25, 0.12, lift))
+	# Player blob (cards cast no shadow): a soft dark ellipse under the feet, a touch
+	# darker when planted and shrinking / fading as the player leaves the ground.
+	return Vector3(lerpf(PLAYER_BLOB.x, PLAYER_BLOB.x * 0.72, lift), lerpf(PLAYER_BLOB.y, PLAYER_BLOB.y * 0.72, lift), lerpf(PLAYER_OPACITY, PLAYER_OPACITY * 0.4, lift))
 
 func update_shadows() -> void :
 	for i in range(_targets.size()):

@@ -14,21 +14,37 @@ static func panel_style() -> StyleBoxFlat:
 	var style: = StyleBoxFlat.new()
 	style.bg_color = PANEL
 	style.border_color = BORDER
-	style.set_border_width_all(1)
-	style.set_corner_radius_all(16)
+	# Pixel look: crisp edges, chunky bevel (thicker lower edge), hard drop shadow, no black outline.
+	style.anti_aliasing = false
+	style.set_border_width_all(3)
+	style.border_width_bottom = 6
+	style.set_corner_radius_all(6)
 	style.content_margin_left = 20
 	style.content_margin_right = 20
 	style.content_margin_top = 18
 	style.content_margin_bottom = 18
-	style.shadow_color = Color(0.015, 0.035, 0.05, 0.25)
-	style.shadow_size = 10
-	style.shadow_offset = Vector2(0, 4)
+	style.shadow_color = Color(0.04, 0.08, 0.14, 0.35)
+	style.shadow_size = 1
+	style.shadow_offset = Vector2(0, 3)
+	return style
+
+## Score pill: dark chunky plate with a lighter bevel.
+static func pill_style(scale_f: float = 1.0) -> StyleBoxFlat:
+	var style: = panel_style()
+	style.bg_color = Color("14283b")
+	style.border_color = Color("4a6c90")
+	style.set_border_width_all(maxi(2, roundi(3.0 * scale_f)))
+	style.border_width_bottom = maxi(4, roundi(6.0 * scale_f))
+	style.set_corner_radius_all(roundi(10.0 * scale_f))
 	return style
 
 static func button_style(color: Color) -> StyleBoxFlat:
 	var style: = StyleBoxFlat.new()
 	style.bg_color = color
-	style.set_corner_radius_all(8)
+	style.anti_aliasing = false
+	style.border_color = color.darkened(0.35)   # bevel: darker chunky lower edge, not an outline
+	style.border_width_bottom = 4
+	style.set_corner_radius_all(6)
 	style.content_margin_left = 16
 	style.content_margin_right = 16
 	style.content_margin_top = 10

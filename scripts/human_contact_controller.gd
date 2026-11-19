@@ -29,6 +29,9 @@ var contact: Dictionary = {}
 
 var anticipated_contact: Dictionary = {}
 var superblock_hint: Dictionary = {}
+# Where this ball can be smashed from (Footwork.select_smash_spot), refreshed at
+# 10 Hz with the anticipation. Drives the court marker and the SMASH button label.
+var smash_spot: Dictionary = {}
 var _preparation_hold_suppressed: = false
 var _superblock_clock: = 0.0
 var _superblock_root: = Vector3.INF
@@ -111,6 +114,7 @@ func _perf_update(delta: float) -> void:
 		_distant_load_active = false
 		contact = {}
 		anticipated_contact = {}
+		smash_spot = {}
 		superblock_hint = {}
 		_superblock_clock = 0.0
 		anticipation_path.clear()
@@ -154,6 +158,7 @@ func _perf_update(delta: float) -> void:
 		_distant_load_active = false
 		contact = {}
 		anticipated_contact = {}
+		smash_spot = {}
 		superblock_hint = {}
 		_superblock_clock = 0.0
 		anticipation_path.clear()
@@ -266,6 +271,7 @@ func _update_anticipation(delta: float, ball, flight: Dictionary) -> void :
 	prediction_revision += 1
 	prediction_flight_id = ball.flight_id
 	var previous_id: int = anticipated_contact.get("posture", -1)
+	smash_spot = Footwork.select_smash_spot(player, ball, flight, smash_spot) if phase < 1 and footwork._eligible(ball) else {}
 	if footwork.active: footwork.refresh_prediction(ball, flight)
 	if footwork.active:
 		anticipated_contact = footwork.plan.duplicate()
@@ -275,8 +281,16 @@ func _update_anticipation(delta: float, ball, flight: Dictionary) -> void :
 		anticipated_contact = Footwork.select_plan(player, ball, flight)
 		if anticipated_contact.is_empty() and (player.hitting.charge_visual_active or phase == 0):
 			anticipated_contact = Footwork.select_preparation(player, ball, flight, previous_id)
+	elif phase < 0 and not smash_spot.is_empty() and not Footwork.is_smash_contact(player, contact) and footwork._eligible(ball):
+		# The ball is already in reach, but it could be smashed from a better
+		# spot: offer the step under it (taken only while HIT is held).
+		anticipated_contact = Footwork.select_plan(player, ball, flight, true)
 	else:
 		anticipated_contact = {}
+	# When the footwork itself plans a smash, the guide marks that same spot.
+	if bool(anticipated_contact.get("smash", false)) and phase < 1:
+		smash_spot = anticipated_contact.duplicate()
+		smash_spot["path"] = Footwork.path_to(flight, smash_spot)
 	anticipation_path.clear()
 	var preparation: Dictionary = preparation_contact()
 	if preparation.is_empty(): return
@@ -360,12 +374,21 @@ func _held_preparation_pose(preparation: Dictionary) -> PostureDefinition:
 		_contact_is_volley(player._get_ball_ref()) and not _distant_load_active, 
 		_visual_spin_mode(), _near_kitchen_context(), _visual_shot_intent(), preparation_motion_context)
 
+## 0: no smash on this ball, 1: a smash spot is reachable (move or hold HIT),
+## 2: the planned contact is a smash from where the player stands.
+func smash_state() -> int:
+	if phase >= 2: return 0
+	var ball = player._get_ball_ref()
+	if ball == null or ball.flight_id != _flight_id or not ball.is_in_play: return 0
+	if Footwork.is_smash_contact(player, preparation_contact()): return 2
+	return 1 if phase < 1 and not smash_spot.is_empty() else 0
+
 func preparation_label() -> String:
 	var preparation: Dictionary = preparation_contact()
 	if preparation.is_empty(): return ""
 	if preparation.has("label"): return str(preparation.label)
 	var def: PostureDefinition = preparation.def
-	if def.family == 3: return "Overhead"
+	if def.family == 3: return "Smash" if Footwork.is_smash_contact(player, preparation) else "Overhead"
 	if def.family == 2: return "Low block" if def.height_tier <= 1 else "Block"
 	var side: String = "Backhand" if def.family == 1 else "Forehand"
 	if def.height_tier <= 1: return "Low " + side.to_lower()
