@@ -800,6 +800,36 @@ Not done: relaxed stand / no more "always ready", later reactions (arms up, hop,
 hips or knees, partner paddle tap, match-end sequence), face variants, emote icons, sound and
 camera framing, a Reactions workspace in the studio. Look not yet checked by the user.
 
+Partner paddle tap (built 2026-11-21, card layer, visual only): `scripts/graphics/card_partner_tap.gd`.
+Starts when partners are within 1.5 m now and still at the tap moment (velocity look-ahead), ball
+dead, within 5 s of the point end, neither bending for / lifting / passing / catching the ball;
+replaces both partners' reactions; once per team per point; both start on the same frame.
+0.7 s: chest turns up to 35 deg toward the partner, lean up to 16 deg when farther, the paddle hand
+stops a paddle short of the meeting point (midpoint, 1.15 m up) and the paddle turns to point at
+it, a 5 cm push at 0.3 s. Autoplay seed 1, 150 s, 7 points: 3 taps, in sync, none during a live
+ball; paddle heads met at 4 and 10 cm, one near-miss at 29 cm (partners crossing fast). Partners
+usually end a point 2-3 m apart, so most points have no tap: making partners walk to each other
+is a gameplay change (between-point movement, owned by the between-point session): ask the user.
+Bench seed 1 60 s and motion bench, motion on vs off: IDENTICAL.
+
+Standing expressions (built 2026-11-21, card layer, visual only): `scripts/graphics/card_expressions.gd`.
+Context: idle (ball dead between points), waiting (WAITING / SERVING), live (ball in play). Mood per
+player: frustration (own error +0.5, team loss +0.15, x0.55 per team win), confidence (team streak),
+tension (both >= 7 within 2, or anyone at 10+), fatigue (stamina speed factor). Expressions: idle,
+idle_tired, idle_frustrated, idle_confident, ready, ready_waiting, ready_tense, ready_frustrated,
+ready_tired; looping channels (paddle-arm lift / elbow, torso lean, head nod, head look, shoulder
+shrug, body bob, paddle twirl); 0.45 s crossfades; fade with travel speed (0.3-1.2 m/s); give way to
+reactions (fade under them), taps, strokes and hands busy with the ball.
+Rule: while the ball is in play the paddle and every hand on it (grip, and the support hand on the
+throat) stay exactly where gameplay has them: no expression, swing or shoulder turn on those arms
+(eased over 0.1 s as a hand comes on or off the paddle). Autoplay seed 1, 150 s: largest move of a
+paddle hand by card motion while the ball is live and the player stands: 1.3 mm. The running shoulder
+turn used to move the paddle arm in live play (up to 4-5 cm); now it does not.
+Seen in that match: idle and idle_frustrated between points, ready_waiting / ready_frustrated before
+serves, ready / ready_frustrated in rallies; tension, confidence and fatigue did not come up (low
+scores, full stamina), so those show only in the motion bench expr:<name> segments.
+Bench seed 1 60 s and motion bench: IDENTICAL.
+
 ## 6. Decisions
 
 Decided by the user:

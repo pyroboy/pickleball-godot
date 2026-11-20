@@ -15,6 +15,8 @@ Per segment (card motion is what the pixel cards draw on top of the gameplay pos
   react s   how long a reaction drew (react:<name> segments: the player stands and plays it)
   paddle    largest move of the drawn paddle hand away from the gameplay hand, cm
   bob       largest body lift, cm; spin: largest paddle spin, deg
+  expr      the standing expression shown most in the segment (expr:<name> segments force one)
+  head/look/torso  largest head nod, head turn and torso lean, deg; shrug cm
 With a base run: changes per segment, and the gameplay joints (body, hands, shoulders, feet,
 paddle) compared frame by frame: IDENTICAL means the change is visual only.
 """
@@ -71,6 +73,10 @@ def metrics(rows):
         spin = max(spin, abs(r.get("spin", 0.0)))
         react_n += 1 if r.get("react") else 0
     m.update(react=react_n / 60.0, paddle=pad * 100, bob=bob * 100, spin=spin)
+    names = [r.get("expr", "") for r in rows if r.get("expr")]
+    m["expr"] = max(set(names), key=names.count) if names else None
+    for k in ("head", "look", "torso"): m[k] = max(abs(r.get(k, 0.0)) for r in rows)
+    m["shrug"] = max(abs(r.get("shrug", 0.0)) for r in rows) * 100
     m.update(swing=swing * 100, twist=twist, in_step=(100.0 * ok / n) if n else None, steps=steps,
              slide=slide * 1000, pop=pop * 1000)
     return m
@@ -78,26 +84,28 @@ def metrics(rows):
 COLS = [("speed", "speed m/s", "{:.2f}"), ("w_mean", "w mean", "{:.2f}"), ("w_max", "w max", "{:.2f}"),
         ("swing", "swing cm", "{:.1f}"), ("twist", "twist deg", "{:.1f}"), ("in_step", "in step %", "{:.0f}"),
         ("steps", "steps", "{:d}"), ("slide", "slide mm", "{:.1f}"), ("pop", "pop mm", "{:.1f}"),
-        ("react", "react s", "{:.2f}"), ("paddle", "paddle cm", "{:.1f}"), ("bob", "bob cm", "{:.1f}"), ("spin", "spin deg", "{:.0f}")]
+        ("react", "react s", "{:.2f}"), ("paddle", "paddle cm", "{:.1f}"), ("bob", "bob cm", "{:.1f}"), ("spin", "spin deg", "{:.0f}"),
+        ("head", "head deg", "{:.0f}"), ("look", "look deg", "{:.0f}"), ("torso", "torso deg", "{:.0f}"), ("shrug", "shrug cm", "{:.1f}"),
+        ("expr", "expr", "{}")]
 
 def fmt(c, v):
     return "-" if v is None else c[2].format(v)
 
 def table(segs, base=None):
-    head = f"{'segment':<19}" + "".join(f"{c[1]:>11}" for c in COLS)
+    head = f"{'segment':<23}" + "".join(f"{c[1]:>11}" for c in COLS)
     print(head)
     for i, s in enumerate(segs):
         m = s["m"]
-        line = f"{s['seg']:<19}" + "".join(f"{fmt(c, m[c[0]]):>11}" for c in COLS)
+        line = f"{s['seg']:<23}" + "".join(f"{fmt(c, m[c[0]]):>11}" if c[0] != "expr" else f"  {fmt(c, m[c[0]])}" for c in COLS)
         print(line)
         if base is not None and i < len(base) and base[i]["seg"] == s["seg"]:
             b = base[i]["m"]
             diffs = []
             for c in COLS:
-                if m[c[0]] is None or b[c[0]] is None: diffs.append(f"{'':>11}"); continue
+                if m[c[0]] is None or b[c[0]] is None or isinstance(m[c[0]], str): diffs.append(f"{'':>11}"); continue
                 d = m[c[0]] - b[c[0]]
                 diffs.append(f"{('' if abs(d) < 1e-9 else ('+' if d > 0 else '') + c[2].format(d if c[0] != 'steps' else int(d))):>11}")
-            if any(x.strip() for x in diffs): print(f"{'  vs base':<19}" + "".join(diffs))
+            if any(x.strip() for x in diffs): print(f"{'  vs base':<23}" + "".join(diffs))
 
 def gameplay_diff(a, b):
     n = min(len(a), len(b))

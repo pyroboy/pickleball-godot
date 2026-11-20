@@ -72,6 +72,8 @@ func _initialize() -> void:
 	var R = load("res://scripts/graphics/card_reactions.gd")
 	for name in R.REACTIONS:
 		_course.append(["react:" + name, R.duration(name) + 0.4, 0.0, 0.0])
+	for name in load("res://scripts/graphics/card_expressions.gd").NAMES:
+		_course.append(["expr:" + name, 3.0, 0.0, 0.0])
 	_game = (load("res://scenes/game.tscn") as PackedScene).instantiate()
 	root.add_child.call_deferred(_game)
 	var d := Driver.new()
@@ -117,6 +119,8 @@ func _physics(delta: float) -> void:
 		var m = _rig._motion
 		if m._reactions == null: m._reactions = m.CardReactionsScript.new(_p)
 		m._reactions.play(str(seg[0]).trim_prefix("react:"))
+	if _seg_t == 0.0 and _rig != null and _rig.get("_motion") != null and _rig._motion._expressions != null:
+		_rig._motion._expressions.force(str(seg[0]).trim_prefix("expr:") if str(seg[0]).begins_with("expr:") else "")
 	var target: Vector3 = _fh * float(seg[2]) + _fwd * float(seg[3])
 	_vel = _vel.move_toward(target, ACCEL * delta)
 	_move.vel = _vel
@@ -141,6 +145,12 @@ func _sample(_delta: float) -> void:
 		row["w"] = snappedf(m._weight, 0.001)
 		row["stride"] = snappedf(m._stride, 0.001)
 		row["react"] = m.reaction()
+		row["expr"] = m.expression()
+		var lc: Dictionary = m.last_channels
+		row["look"] = snappedf(float(lc.get("look", 0.0)), 0.01)
+		row["shrug"] = snappedf(float(lc.get("shrug", 0.0)), 0.0001)
+		row["head"] = snappedf(float(lc.get("head", 0.0)), 0.01)
+		row["torso"] = snappedf(float(lc.get("torso", 0.0)), 0.01)
 		row["spin"] = snappedf(rad_to_deg(m.paddle_spin()), 0.1)
 		var body_raw: Vector3 = _p.body_pivot.get_global_transform_interpolated().origin
 		row["bob"] = snappedf(_drawn(_p.body_pivot).y - body_raw.y, 0.0001)

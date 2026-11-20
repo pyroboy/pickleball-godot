@@ -531,6 +531,12 @@ func _process(delta: float) -> void:
 	_raw = get_tree().paused or (_player.posture != null and _player.posture.editor_preview_mode)
 	if _motion == null: _motion = CardMotion.new(self)
 	_motion.clear()
+	# Visual-only motion first, so facing cells and every joint read below include it.
+	var squash: float = _squash(delta)
+	_update_paddle_arm()
+	var _mt: = Time.get_ticks_usec()
+	_motion.update(delta, _swing_active, _paddle_arm)
+	PerfMonitor.record("card.motion", Time.get_ticks_usec() - _mt)
 	var body_cell: int = _cell_for("body", _player.body_pivot, cam_pos)
 	var torso_node: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var torso_cell: int = _cell_for("torso", torso_node, cam_pos) if torso_node else body_cell
@@ -538,11 +544,6 @@ func _process(delta: float) -> void:
 	var head_cell: int = _cell_for("head", head_node, cam_pos) if head_node else torso_cell
 	var torso_pos: Vector3 = _xf(torso_node if torso_node else _player.body_pivot).origin
 	_update_far(cam_pos.distance_to(torso_pos))
-	var squash: float = _squash(delta)
-	_update_paddle_arm()
-	var _mt: = Time.get_ticks_usec()
-	_motion.update(delta, _swing_active, _paddle_arm)
-	PerfMonitor.record("card.motion", Time.get_ticks_usec() - _mt)
 	var want_dbg: bool = show_bones or show_axes
 	if want_dbg:
 		_dbg_pts.clear()
@@ -657,7 +658,9 @@ func _draw_debug(on: bool) -> void:
 	_dbg_mesh.surface_end()
 
 func _cell_for(key: String, node: Node3D, cam_pos: Vector3) -> int:
-	var fwd: Vector3 = node.global_basis * _player._get_forward_axis()
+	var basis: Basis = node.global_basis
+	if _motion != null and _motion.has_motion(): basis = _motion.apply(node, Transform3D(basis, Vector3.ZERO)).basis
+	var fwd: Vector3 = basis * _player._get_forward_axis()
 	fwd.y = 0.0
 	var to_cam: Vector3 = cam_pos - node.global_position
 	to_cam.y = 0.0

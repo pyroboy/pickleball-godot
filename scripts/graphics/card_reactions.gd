@@ -68,6 +68,10 @@ func play(name: String, delay: float = 0.0) -> void:
 	_fade = 1.0
 	_fading = false
 
+## Let the current reaction go (quick fade), e.g. when a partner tap takes over.
+func stop() -> void:
+	if _name != "": _fading = true
+
 static func duration(name: String) -> float:
 	var keys: Array = REACTIONS.get(name, [])
 	return float(keys[-1][0]) if not keys.is_empty() else 0.0
@@ -127,6 +131,9 @@ func update(delta: float) -> Dictionary:
 	if not _fading and ball != null and bool(ball.get("is_in_play")): _fading = true   # next rally: let go
 	if _fading:
 		_fade = move_toward(_fade, 0.0, delta / FADE_OUT)
+		if _fade <= 0.0:
+			_name = ""
+			return {}
 	if _delay > 0.0:
 		_delay -= delta
 		if _fading: _name = ""
