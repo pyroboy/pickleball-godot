@@ -491,8 +491,10 @@ func _perf_physics_process(delta: float) -> void:
 
 	var stamina_game = get_parent()
 	var stamina_active: bool = stamina_game != null and "game_state" in stamina_game and not stamina_game._tool_state_active()
+	var _pp_stamina := Time.get_ticks_usec()
 	if stamina_active:
 		stamina.advance(delta, current_velocity.length(), stamina_game.game_state == stamina_game.GameState.PLAYING, stamina_game.game_state != stamina_game.GameState.PLAYING)
+	PerfMonitor.record("pp.stamina", Time.get_ticks_usec() - _pp_stamina)
 	if special_reach_driver != null and special_reach_driver.bridge_active():
 		special_reach_driver.bridge_step(delta)
 		return
@@ -527,29 +529,43 @@ func _perf_physics_process(delta: float) -> void:
 	# On a skipped tick the paddle stays where the last aligned pose put it. Running
 	# the legacy tracking here moved it to a different spot every other tick, so
 	# waiting AI players flickered between two poses (bench: 20 cm paddle jumps).
+	var _pp_paddle_tracking := Time.get_ticks_usec()
 	if posture and not lod_skip:
 		posture.update_paddle_tracking(false)
+	PerfMonitor.record("pp.paddle_tracking", Time.get_ticks_usec() - _pp_paddle_tracking)
+	var _pp_align := Time.get_ticks_usec()
 	if is_ai and ai_brain and not lod_skip:
 		ai_brain.align_paddle_to_contact(_lod_delta)
+	PerfMonitor.record("pp.align", Time.get_ticks_usec() - _pp_align)
+	var _pp_clamp_paddle := Time.get_ticks_usec()
 	PaddleReach.clamp_paddle_for_player(self)
+	PerfMonitor.record("pp.clamp_paddle", Time.get_ticks_usec() - _pp_clamp_paddle)
 	# Body-contact authority observes the physics endpoint before render.
 	# Finish each normal owner's actual seated rig after its final clamp.
+	var _pp_contact_support := Time.get_ticks_usec()
 	if posture != null and not posture.editor_preview_mode and not lod_skip:
 		refresh_contact_support(posture._presented_body_pose if posture._presented_body_pose != null else posture.capture_displayed_pose(), true)
+	PerfMonitor.record("pp.contact_support", Time.get_ticks_usec() - _pp_contact_support)
 	if not lod_skip: _lod_delta = 0.0
 	_physics_human_presentation = _human_owns_physics_pose()
 	_physics_ai_presentation = _ai_owns_physics_pose()
 	if _physics_human_presentation or _physics_ai_presentation: _advance_physics_head_gaze(delta)
+	var _pp_pose_state := Time.get_ticks_usec()
 	if pose_controller:
 		pose_controller.update_runtime_pose_state(delta)
+	PerfMonitor.record("pp.pose_state", Time.get_ticks_usec() - _pp_pose_state)
+	var _pp_ghosts := Time.get_ticks_usec()
 	if posture:
 		posture.update_posture_ghosts()
+	PerfMonitor.record("pp.ghosts", Time.get_ticks_usec() - _pp_ghosts)
 	if awareness_grid:
 		awareness_grid.update_grid(delta)
 	if debug_visual:
 		debug_visual.update_ai_indicators()
+	var _pp_try_hit := Time.get_ticks_usec()
 	if ai_brain:
 		ai_brain._try_ai_hit_ball()
+	PerfMonitor.record("pp.try_hit", Time.get_ticks_usec() - _pp_try_hit)
 
 var _lod_delta: float = 0.0
 const LOD_FAR_M := 5.0

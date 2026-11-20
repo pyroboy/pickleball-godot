@@ -781,6 +781,9 @@ var _pose_alignment_tick: = -1
 var _pose_alignment_flight: = -1
 
 const ALIGN_LEAD_SECONDS := 0.6
+var _align_desired: PostureDefinition = null   # last intended (pre wrist-correction) aligned pose
+var _align_desired_flight: int = -1
+var _align_desired_tick: int = -100
 func align_paddle_to_contact(delta: float) -> void :
 	# Receipt describes this actual presentation call, never a prior flight.
 	coordination_forward_progress = 0.0
@@ -796,18 +799,22 @@ func align_paddle_to_contact(delta: float) -> void :
 	var previous_support: PostureDefinition = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
 	# Legacy paddle-only tracking ran earlier in Player.physics. Restore the
 	# actual owner before feet advance, so body fitting sees its seated grip.
+	var _al_restore := Time.get_ticks_usec()
 	_player.posture.transition_pose_blend = previous_support
 	_player.posture.force_posture_update(previous_support)
+	PerfMonitor.record("al.restore", Time.get_ticks_usec() - _al_restore)
 	var coordination = _team_coordination()
 	if ball.get_last_hit_by() == _player.player_num or coordination != null and not coordination.may_begin_stroke(_player):
 		if _player.hitting.is_in_follow_through or _player.hitting.serving_visual_active: return
 		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
 		var previous: PostureDefinition = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
+		var _al_ready := Time.get_ticks_usec()
 		ready = preload("res://scripts/incoming_ready_motion.gd").blend_pose(previous, ready, delta, .07)
 		ready = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, ready, previous, delta)
 		incoming_pose_override = ready
 		_player.posture.transition_pose_blend = ready
 		_player.posture.force_posture_update(ready)
+		PerfMonitor.record("al.ready", Time.get_ticks_usec() - _al_ready)
 		return
 
 
@@ -821,16 +828,22 @@ func align_paddle_to_contact(delta: float) -> void :
 	if ai_selected_contact_time <= 0.35:
 		# Retain the existing plan-selection clock and random sequence, but
 		# capture its context before fitting the Contact endpoint this frame.
+		var _al_motion_plan := Time.get_ticks_usec()
 		_prepare_motion_plan(ball, base, contact)
+		PerfMonitor.record("al.motion_plan", Time.get_ticks_usec() - _al_motion_plan)
 	if ai_selected_contact_time <= 0.65 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, contact):
+		var _al_intended_pose := Time.get_ticks_usec()
 		var intended: PostureDefinition = preload("res://scripts/incoming_contact_planner.gd").pose_at(_player, base, contact)
+		PerfMonitor.record("al.intended_pose", Time.get_ticks_usec() - _al_intended_pose)
 		if not motion_context.is_empty():
 			intended = DriveMotion.sample_drive(intended, .5, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
 		var compact_reception: bool = base.height_tier == 0 or str(motion_context.get("profile", "")) == "JAMMED"
 		var preferred: PostureDefinition = _planned_contact_grip
 		if compact_reception and preferred == null:
 			preferred = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
+		var _al_grip_fit := Time.get_ticks_usec()
 		_planned_contact_grip = PlannedGrip.fit_planned_contact_grip(_player, intended, preferred, compact_reception)
+		PerfMonitor.record("al.grip_fit", Time.get_ticks_usec() - _al_grip_fit)
 		base = base.duplicate(false)
 		base.main_grip_rotation_deg = _planned_contact_grip.main_grip_rotation_deg
 		if compact_reception and absf(float(_planned_contact_grip.get_meta("planned_live_grip_plane_deg", 0.0))) > .00001:
@@ -860,9 +873,11 @@ func align_paddle_to_contact(delta: float) -> void :
 		var prepare: PostureDefinition = preload("res://scripts/incoming_ready_motion.gd").prepare(base, ready, ai_selected_contact_time, ball.bounces_since_last_hit == 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65)
 		var previous_preparation: PostureDefinition = incoming_pose_override if incoming_pose_override else ready
 		incoming_pose_override = preload("res://scripts/incoming_ready_motion.gd").blend_pose(incoming_pose_override if incoming_pose_override else ready, prepare, pose_delta)
+		var _al_prep := Time.get_ticks_usec()
 		incoming_pose_override = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, incoming_pose_override, previous_preparation, pose_delta)
 		_player.posture.transition_pose_blend = incoming_pose_override
 		_player.posture.force_posture_update(incoming_pose_override)
+		PerfMonitor.record("al.prep", Time.get_ticks_usec() - _al_prep)
 		_player.hitting.charge_visual_active = false
 		_exchange_align_flight = -1
 		return
@@ -901,7 +916,14 @@ func align_paddle_to_contact(delta: float) -> void :
 
 
 
-	base = preload("res://scripts/incoming_ready_motion.gd").blend_pose(incoming_pose_override, base, pose_delta, 0.035)
+	# Blend from last tick's intended pose, not the wrist-corrected one shown: feeding
+	# the correction back flipped the blade ~15 deg every tick (corrected past the
+	# wrist limit, then inside it, then past again), so the AI paddle fluttered and
+	# every flip re-ran the costly arm solve.
+	var blend_from: PostureDefinition = incoming_pose_override
+	if _align_desired != null and _align_desired_flight == ball.flight_id and Engine.get_physics_frames() - _align_desired_tick <= 3:
+		blend_from = _align_desired
+	base = preload("res://scripts/incoming_ready_motion.gd").blend_pose(blend_from, base, pose_delta, 0.035)
 
 
 	var wrist_offset: Vector3 = WristReach.head_to_wrist_offset(preload("res://scripts/stroke_swing_path.gd").paddle_basis(_player, base), base)
@@ -911,15 +933,24 @@ func align_paddle_to_contact(delta: float) -> void :
 	if wrist_delta.length() > preparation_budget:
 		aligned = supported_shoulder + wrist_delta.normalized() * preparation_budget - wrist_offset
 	_exchange_align_head = aligned
+	var _al_final_pose := Time.get_ticks_usec()
+	var _al_pa := Time.get_ticks_usec()
 	var pose: PostureDefinition = preload("res://scripts/incoming_contact_planner.gd").pose_at(_player, base, aligned)
+	PerfMonitor.record("al.pose_at", Time.get_ticks_usec() - _al_pa)
+	_align_desired = pose; _align_desired_flight = ball.flight_id; _align_desired_tick = Engine.get_physics_frames()
+	var _al_js := Time.get_ticks_usec()
 	pose = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, pose, incoming_pose_override, pose_delta)
+	PerfMonitor.record("al.joint_path", Time.get_ticks_usec() - _al_js)
+	PerfMonitor.record("al.final_pose", Time.get_ticks_usec() - _al_final_pose)
 	aligned = preload("res://scripts/stroke_swing_path.gd").world_transform(_player, pose) * PaddleDimensions.HEAD_OFFSET
 	_exchange_align_head = aligned - approach_offset
 	pose.set_meta("live_approach_offset", approach_offset)
 	incoming_pose_override = pose
 	_player.hitting.charge_visual_active = false
 	_player.posture.transition_pose_blend = pose
+	var _al_final_update := Time.get_ticks_usec()
 	_player.posture.force_posture_update(pose)
+	PerfMonitor.record("al.final_update", Time.get_ticks_usec() - _al_final_update)
 	_player.paddle_node.global_position = aligned - _player.paddle_node.global_transform.basis.y * PaddleDimensions.HEAD_CENTER_Y
 # Head centre sits behind the ball along the hitting face (ball radius + half
 # the head thickness), like the dive / grounded reach. Aimed at the ball centre,

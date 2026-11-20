@@ -10,6 +10,11 @@ const Budget = preload("res://scripts/live_arm_budget.gd")
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
 const Rotation = preload("res://scripts/paddle_rotation.gd")
 const D = preload("res://scripts/paddle_dimensions.gd")
+## Binary search steps for the admissible blend (each runs a full arm condition).
+## 10 steps cost up to ~45 ms per call on iPhone 15 Pro; 6 resolve the blend to
+## 1/64, a few degrees of paddle turn at most.
+const SEARCH_STEPS := 6
+const WRIST_CORRECTION := false
 
 static func sample(player, desired: PostureDefinition, previous: PostureDefinition, delta: float) -> PostureDefinition:
 	if desired == null: return desired
@@ -29,7 +34,7 @@ static func sample(player, desired: PostureDefinition, previous: PostureDefiniti
 	if _hand_angle(player, result, old, previous) <= allowance: return _presented(player, result)
 	var low := 0.0; var high := 1.0
 	var admitted: PostureDefinition = previous
-	for unused in range(10):
+	for unused in range(SEARCH_STEPS):
 		var middle := (low + high) * .5
 		var candidate: PostureDefinition = _condition(player, Path.blend_pose(desired, previous, 1.0 - middle))
 		if _hand_angle(player, candidate, old, previous) <= allowance:
@@ -53,6 +58,10 @@ static func _hand_angle(player, pose: PostureDefinition, old: Quaternion, previo
 	return angle
 
 static func _condition(player, desired: PostureDefinition) -> PostureDefinition:
+	# Wrist-limit correction is off (user's call): projecting a pose past the wrist
+	# limit flipped the AI blade every tick and re-ran the arm solve. The pose is used
+	# as authored; the contact rule tolerates the arm (match_contact_authority).
+	if not WRIST_CORRECTION: return desired
 	var pose: PostureDefinition = desired
 	var left: bool = pose.paddle_hand == 1
 	var arm = player.left_arm_node if left else player.right_arm_node
