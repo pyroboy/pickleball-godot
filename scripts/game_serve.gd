@@ -472,6 +472,11 @@ func _launch_pending_serve() -> void :
 		return
 	launch = _game.apply_contact_execution(server, launch, pending.charge, _release_elapsed - float(pending.contact_at), true)
 	_pending_release = {}
+	# The ball may already have run this tick's drag/Magnus step on the delivery
+	# velocity. Rewind it and redo it on the launch, as rally contacts do (before
+	# reset_rally_state clears the delivery bounce the token checks); the
+	# solver's flight starts with that step, else serves land ~0.35 m long.
+	var aero: Dictionary = ball.take_prepared_aero()
 	_game.ball_has_bounced = false
 	ball.reset_rally_state()
 	if ball.has_method("set_actor_serve_identity"):
@@ -483,6 +488,7 @@ func _launch_pending_serve() -> void :
 	ball.freeze = _ball_was_frozen
 	ball.linear_velocity = launch.velocity
 	ball.angular_velocity = launch.omega
+	if aero.get("taken", false): ball.reapply_prepared_aero(aero)
 	ball.set_meta("shot_profile", launch.profile)
 	ball.set_meta("serve_style", pending.style)
 	ball.set_meta("serve_delivery_bounces", pending.observed_bounces)
