@@ -1203,6 +1203,16 @@ func _process_ordered_live(pending: Dictionary, control_seconds: float) -> void:
 	if unresolved_continuation.is_empty(): ball.reapply_prepared_aero(held)
 	_update_separation()
 
+# The paddle hand decides whether the planned shot is played. On fast two-handed
+# backhands the support wrist bends past its budget; the contact happens and looks the
+# same either way, but refusing the plan let the ball deflect off the paddle into the
+# net (bench: 38 of 43 unplanned returns of fast balls were netted).
+func _paddle_arm_certified(actor, report: Dictionary) -> bool:
+	var arms: Array = report.get("arms", [])
+	var pose: PostureDefinition = actor.posture.transition_pose_blend if actor.posture != null else null
+	if arms.size() < 2 or pose == null: return bool(report.get("valid", false))
+	return bool(arms[1 if pose.paddle_hand == 1 else 0].get("valid", false))
+
 func validates_settlement(actor, certificate: Dictionary) -> bool:
 	return not _settlement_scope.is_empty() and _settlement_scope == certificate and int(certificate.get("epoch", -1)) == _interval_reset_epoch and int(certificate.get("frame", -1)) == Engine.get_physics_frames() and int(certificate.get("actor_id", -1)) == ActorIdentity.actor_id(actor) and int(certificate.get("instance", -1)) == actor.get_instance_id() and int(certificate.get("flight", -1)) == game.ball.flight_id
 
@@ -1222,7 +1232,7 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	var controller = _controller_for_intent(actor, str(entry.intent.get("kind", "")))
 	if controller == null or not _event_permission_valid(actor, entry, event_permission): return {}
 	var previous: Dictionary = _snapshots.get(id, _current_snapshot(actor))
-	if not previous.get("endpoint_anatomy", {}).get("valid", false) or not _frame_current[id].get("endpoint_anatomy", {}).get("valid", false):
+	if not _paddle_arm_certified(actor, previous.get("endpoint_anatomy", {})) or not _paddle_arm_certified(actor, _frame_current[id].get("endpoint_anatomy", {})):
 		last_evidence["intended_decline"] = "uncertified_published_endpoint_anatomy"
 		return {}
 	var actual_frame: Transform3D = History._linear_frame(previous.paddle, _frame_current[id].paddle, float(evidence.fraction))

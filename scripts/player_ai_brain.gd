@@ -148,6 +148,12 @@ var _predicted_flight_frame: int = -1
 const REACTION_LATENCY_FRAMES_EASY: = 18
 const REACTION_LATENCY_FRAMES_MED: = 12
 const REACTION_LATENCY_FRAMES_HARD: = 8
+# Reflex read: a hard-hit ball (drive, smash) is read off the opponent's swing, so the
+# AI reacts faster to it. Without this the 0.2-0.3 s delay used up most of the
+# 0.4-0.5 s a 19 m/s drive takes to reach the kitchen line (bench: 62% returned).
+const FAST_READ_SPEED := 10.0                                 # m/s at the first look
+const FAST_READ_SECONDS: Array[float] = [0.16, 0.13, 0.10]    # easy, medium, hard
+var _incoming_fast := false
 var ai_committed_target_position: Vector3 = Vector3.ZERO
 var ai_committed_bounce_position: Vector3 = Vector3.ZERO
 var ai_committed_contact_position: Vector3 = Vector3.ZERO
@@ -182,6 +188,7 @@ const RUN_SLACK_WEIGHT := 1.2    # score (~seconds) per metre short of that
 const OVERHEAD_PREFERENCE := 1.0     # score bonus (~seconds): a reachable high ball beats letting it drop
 
 const LUNGE_ALLOWANCE := 0.45   # m of the final approach a lunge / reach covers
+const LUNGE_WINDOW_SECONDS := 0.4   # fast ball: lunge over the last 0.4 s before contact
 
 func _ready() -> void :
 	_player = get_parent() as CharacterBody3D
@@ -189,8 +196,9 @@ func _ready() -> void :
 
 
 func ground_velocity(input_dir: Vector3, delta: float) -> Vector3:
-	_player.move_speed = Movement.speed(ai_difficulty)
-	var desired: Vector3 = Movement.velocity(_player.current_velocity, input_dir, ai_target_position - _player.global_position, ai_difficulty, delta)
+	var lunge: bool = _incoming_fast and ai_selected_contact_reachable and ai_selected_contact_time >= 0.0 and ai_selected_contact_time <= LUNGE_WINDOW_SECONDS
+	_player.move_speed = Movement.speed(ai_difficulty) * (Movement.LUNGE_SPEED_MUL if lunge else 1.0)
+	var desired: Vector3 = Movement.velocity(_player.current_velocity, input_dir, ai_target_position - _player.global_position, ai_difficulty, delta, lunge)
 	var coordination = _team_coordination()
 	return coordination.filter_ground_velocity(self, desired, delta) if coordination != null else desired
 
@@ -556,6 +564,18 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			return {"target": _player.global_position, "posture": extended.posture, "contact": extended.point, 
 				"time": extended.time, "reachable": true, "def": extended.def}
 		best_target = predicted_ball_pos - _player._get_posture_offset_for(PP_READY)
+		if _incoming_fast:
+			# No contact fits yet: step toward the nearest point of the ball's path
+			# on this side, not its bounce spot (behind a kitchen-line player on a
+			# smash), so the partner nearer the line takes it and can block.
+			var nearest := INF
+			for sample in samples:
+				var p: Vector3 = sample["pos"]
+				if bounce_origin + int(sample.get("bounces", 0)) >= 2 or not _on_own_half(p) or p.y < _Flight.FLOOR_REST_Y + 0.12: continue
+				var gap: float = Vector2(p.x - _player.global_position.x, p.z - _player.global_position.z).length()
+				if gap < nearest:
+					nearest = gap
+					best_target = p - _player._get_posture_offset_for(PP_READY)
 		best_target.y = _player.ground_y
 		best_target.x = clampf(best_target.x, _player.min_x, _player.max_x)
 		best_target.z = clampf(best_target.z, _player.min_z, _player.max_z)
@@ -602,7 +622,9 @@ func _selected_reaction_seconds() -> float:
 	var base: int = REACTION_LATENCY_FRAMES_MED
 	if ai_difficulty == 0: base = REACTION_LATENCY_FRAMES_EASY
 	elif ai_difficulty == 2: base = REACTION_LATENCY_FRAMES_HARD
-	return base / 60.0 + clampf(extra_reaction_delay, 0.0, 0.5)
+	var seconds: float = base / 60.0
+	if _incoming_fast: seconds = minf(seconds, FAST_READ_SECONDS[clampi(ai_difficulty, 0, 2)])
+	return seconds + clampf(extra_reaction_delay, 0.0, 0.5)
 
 func _get_latency_frames() -> int:
 	# A committed stroke cannot forget the already observed incoming ball
@@ -632,6 +654,7 @@ func _perf_sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
 		ai_reach_pose = null
 		_charge_reach_pose = null
 		_ball_history.clear()
+		_incoming_fast = false
 		_observation_time = 0.0
 		_movement_plan.clear()
 		_movement_plan_due = 0.0
@@ -670,6 +693,8 @@ func _perf_sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
 				opponent_position = Vector3.ZERO
 				for opponent in opponents: opponent_position += opponent.global_position
 				opponent_position /= float(opponents.size())
+	if _ball_history.is_empty() and _observation_time == 0.0:
+		_incoming_fast = ball.is_in_play and ball.last_hit_by != _player.player_num and ball.linear_velocity.length() >= FAST_READ_SPEED
 	_ball_history.append({"pos": ball.global_position, "vel": ball.linear_velocity, "omega": ball.angular_velocity,
 		"time": _observation_time, "opponent": opponent_position, "bounces": ball.bounces_since_last_hit})
 	_advance_recorded_ball_history()

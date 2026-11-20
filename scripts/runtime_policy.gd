@@ -10,6 +10,9 @@ static var bench_seed: int = _arg_int("--seed=", -1)
 ## --bench-human=N: team coordination treats actor N as the human partner (it is
 ## still AI-driven), so the bench can test how the AI partner shares the court.
 static var bench_human: int = _arg_int("--bench-human=", -1)
+## --pressure-team=N (bench only): team N plays every rally ball as a full-power
+## drive, or a smash when high, to measure how the other team defends hard balls.
+static var pressure_team: int = _arg_int("--pressure-team=", -1)
 
 static func _arg_int(prefix: String, fallback: int) -> int:
 	for arg in OS.get_cmdline_user_args():

@@ -10,8 +10,21 @@ const REPLAN_SECONDS: Array[float] = [0.15, 0.12, 0.10]
 static func speed(difficulty: int) -> float:
 	return SPEEDS[clampi(difficulty, 0, 2)]
 
-static func velocity(current: Vector3, input: Vector3, offset: Vector3, difficulty: int, delta: float) -> Vector3:
+# Block lunge: the last step toward a hard-hit ball is a quick lunge, not a jog.
+# The body was 0.2-0.4 m short of a fast volley and the arm could not cover it.
+const LUNGE_SPEED_MUL := 1.35
+const LUNGE_ACCELERATION := 26.0
+
+static func velocity(current: Vector3, input: Vector3, offset: Vector3, difficulty: int, delta: float, lunge: bool = false) -> Vector3:
 	var level: int = clampi(difficulty, 0, 2)
+	if lunge:
+		var top: float = speed(level) * LUNGE_SPEED_MUL
+		current.y = 0.0
+		offset.y = 0.0
+		var want: Vector3 = Vector3.ZERO
+		if input.length_squared() > 0.0001:
+			want = offset.normalized() * minf(top, sqrt(2.0 * LUNGE_ACCELERATION * maxf(offset.length() - 0.03, 0.0)))
+		return current.move_toward(want, LUNGE_ACCELERATION * maxf(delta, 0.0)).limit_length(top)
 	current.y = 0.0
 	offset.y = 0.0
 	var desired: Vector3 = Vector3.ZERO

@@ -3,6 +3,7 @@ extends RefCounted
 const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Styles = preload("res://scripts/ai_playing_styles.gd")
 const Kitchen = preload("res://scripts/ai_kitchen_tactics.gd")
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const SMASH_MIN_OVER_NET := 0.6    # m above the net at contact (~1.5 m: medium overhead)
 const SMASH_MAX_DEPTH := 6.0       # m from the net
 const LOB_SHARE := 0.3         # rally lobs from mid-court back
@@ -89,6 +90,8 @@ static func choose(context: Dictionary, roll: float) -> String:
 
 static func plan(context: Dictionary, roll: float, placement: float) -> Dictionary:
 	var kind: String = choose(context, roll)
+	var pressure: bool = RuntimePolicy.pressure_team >= 0 and int(context.get("team_id", -1)) == RuntimePolicy.pressure_team and not bool(context.get("opening_return", false))
+	if pressure: kind = "SMASH" if float(context.get("ball_height", 0.0)) >= float(context.get("net_height", 1.05)) + SMASH_MIN_OVER_NET else "DRIVE"
 	var difficulty: int = clampi(int(context.get("difficulty", 0)), 0, 2)
 	var direction: float = -1.0 if int(context.get("court_side", context.get("player_num", 1))) == 0 else 1.0
 	var opponent: Vector3 = context.get("opponent", Vector3(0, 0, direction * 6.0))
@@ -155,6 +158,7 @@ static func plan(context: Dictionary, roll: float, placement: float) -> Dictiona
 			var net: float = float(context.get("net_height", 1.05))
 			var incoming: float = float(context.get("incoming_speed", 0.0))
 			if incoming < 8.0 and height < net + 0.45: spin_mode = 1
+	if pressure: charge = 1.0
 	var perf = Engine.get_main_loop().root.get_node_or_null("PerfMonitor") if Engine.get_main_loop() is SceneTree else null
 	if perf != null: perf.note("ai_plan", {"actor": int(context.get("actor_id", -1)), "team": int(context.get("team_id", -1)), "kind": kind,
 		"h": snappedf(float(context.get("ball_height", 0.0)), 0.01), "net": snappedf(float(context.get("net_height", 1.0)), 0.01),
