@@ -114,6 +114,26 @@ Status: done, in progress, next, later.
       the between-point and surface-contact code)
 - [ ] Release build
 
+### Pose quality: Pose Studio and 5-star poses (started 2026-11-20)
+Goal: most poses at 5 stars on the user's own rating (working target: 80% of each pose
+type at 5 stars, none below 4). Full spec: `docs/POSE_STUDIO_SPEC.md`.
+- [x] Data-only pose checker: `python3 tools/pose_check.py --solve` (10 s, no screenshots,
+      no bench). First run: 151 flags across 50 poses
+- [x] Desktop Pose Studio on the Mac: a full-screen Godot window (the browser editor was
+      dropped 2026-11-20). Pose list, big 3D preview with gizmo drags, inspector, timeline,
+      undo/redo, save, and tabs for metrics, notes, rating, versions, queue and bench. Saves to
+      `data/postures`, `data/base_poses`. Tooling, not gameplay. Start: `tools/pose_studio.sh`
+      (Ctrl+C stops Godot). Checked end to end by data 2026-11-20 (28/28); look and feel not
+      yet confirmed by the user
+- [x] Human star rating per pose with notes for Claude (`tools/pose_notes.py`), versions and a
+      change log, all stored in `pose_studio/` (committed). No real ratings yet
+- [ ] Refinement loop: lowest-rated poses first until the 5-star target is met
+- [ ] Phone: pose player, ratings, notes and change log (no editing)
+- [ ] Later: motion graphs, backhand-face front poses, movement, reactions
+
+Decided 2026-11-20: pose edits in this track go ahead without the seeded bench (they
+change gameplay by the Guardrails definition); the checker lists the gameplay fields touched.
+
 ### Later: Gameplay v2 (planned 2026-11-19)
 Stance: keep the solved shot (pick a target, the game finds the swing); make skill show
 in the result. Full inventory, gaps and decisions: Part 2 of the proposal PDF, pages 32-41.

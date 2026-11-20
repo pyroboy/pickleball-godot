@@ -42,7 +42,9 @@ values = {
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -15,
 "weight_shift": 0.8,
-"body_position_offset": Vector3(-0.1, 0, 0.08)
+"body_position_offset": Vector3(-0.1, 0, 0.08),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -31.84305567
 }
 
 [sub_resource type="Resource" id="Resource_cagah"]
@@ -84,7 +86,9 @@ values = {
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": 25,
 "weight_shift": -0.6,
-"body_position_offset": Vector3(0, 0, -0.15)
+"body_position_offset": Vector3(0, 0, -0.15),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -25.44876575
 }
 
 [resource]
@@ -148,3 +152,5 @@ last_tuned_at = "2026-09-30"
 body_yaw_deg = 0
 crouch_amount = 0.06
 body_position_offset = Vector3(0, 0, 0.08)
+right_elbow_swivel_deg = -31.3331001
+elbow_swivel_weight = 1.0

@@ -88,6 +88,11 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export var elbow_preset_bake: Dictionary = {}
 @export var right_elbow_pole: Vector3 = Vector3.ZERO
 @export var right_shoulder_rotation_deg: Vector3 = Vector3.ZERO
+## Elbow swivel (scripts/elbow_swivel.gd): the paddle elbow's turn around the arm in degrees,
+## used with weight elbow_swivel_weight (0 = the older pole + wrist correction, 1 = this angle).
+@export var right_elbow_swivel_deg: float = 0.0
+@export var left_elbow_swivel_deg: float = 0.0
+@export_range(0.0, 1.0) var elbow_swivel_weight: float = 0.0
 
 
 @export_group("Left Arm IK")
@@ -251,6 +256,8 @@ func lerp_with(other, w: float):
 	o.paddle_hand = paddle_hand if t < 0.5 else other.paddle_hand
 	o.right_elbow_pole = blend_elbow_pole(right_elbow_pole, other.right_elbow_pole, t, true)
 	o.right_shoulder_rotation_deg = right_shoulder_rotation_deg.lerp(other.right_shoulder_rotation_deg, t)
+	var swivel: Array = load("res://scripts/elbow_swivel.gd").blend(self, other, t)
+	o.right_elbow_swivel_deg = swivel[0]; o.left_elbow_swivel_deg = swivel[1]; o.elbow_swivel_weight = swivel[2]
 	o.left_hand_mode = left_hand_mode if t < 0.5 else other.left_hand_mode
 	o.left_hand_offset = left_hand_offset.lerp(other.left_hand_offset, t)
 	o.left_elbow_pole = blend_elbow_pole(left_elbow_pole, other.left_elbow_pole, t, false)

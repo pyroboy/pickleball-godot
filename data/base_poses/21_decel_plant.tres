@@ -16,3 +16,5 @@ crouch_amount = 0.18
 weight_shift = 0.18
 torso_pitch_deg = 10.0
 body_pitch_deg = 12.0
+right_elbow_swivel_deg = -11.02226388
+elbow_swivel_weight = 1.0

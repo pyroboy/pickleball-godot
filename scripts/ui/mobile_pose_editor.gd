@@ -123,6 +123,10 @@ var _gizmo_hint: Label
 var _camera_row: HBoxContainer
 var _gizmo_row: HBoxContainer
 var _gizmo_channels: Dictionary = {}
+# Desktop Pose Studio only (the phone never sets it): (id, mode, channels) -> {} or {channels, axes}.
+var studio_gizmo_override: Callable
+# Desktop Pose Studio only (the phone never sets it): (field) -> false refuses one gizmo drag step.
+var studio_edit_guard: Callable
 # Secondary tools share the inspector space instead of shrinking/scrolling the scene.
 var _title: Label
 var _picker_row: HBoxContainer
@@ -727,6 +731,10 @@ func _sync_selected_gizmo()->void:
 	_gizmo_mode.set_item_disabled(0,not GizmoFields.available(move_channels))
 	_gizmo_mode.set_item_disabled(1,not GizmoFields.available(rotate_channels))
 	_gizmo_channels=move_channels if _gizmo_mode.selected==0 else rotate_channels
+	var world_axes:Array[Vector3]=GizmoAxes.for_selection(_preview.player,_preview.pose,id,_gizmo_mode.selected==1)
+	if studio_gizmo_override.is_valid():
+		var override:Dictionary=studio_gizmo_override.call(id,_gizmo_mode.selected,_gizmo_channels)
+		if not override.is_empty():_gizmo_channels=override.channels;world_axes=override.axes
 	var at_key:bool=not _playing and not _timeline.active and _variant_mode==0 and is_equal_approx(_progress,float(_stage)*.5)
 	var note:String=_gizmo_channels.note
 	if not at_key and not id.is_empty():note="Select a keyframe to edit · preview only"
@@ -738,7 +746,7 @@ func _sync_selected_gizmo()->void:
 	var stage_name:String="Stance" if _base else "Ready" if not _has_motion() else ["Wind-up","Contact","Finish"][_stage]
 	var caption:String=("Move" if _gizmo_mode.selected==0 else "Rotate")+" · "+stage_name+" · "+("Bend guide" if id.ends_with("elbow") or id.ends_with("knee") else str(Preview.JOINT_NAMES.get(id,"")))
 	_preview.gizmo.configure(_gizmo_channels.axes,caption,at_key and GizmoFields.available(_gizmo_channels),_gizmo_mode.selected)
-	_preview.gizmo.world_axes=GizmoAxes.for_selection(_preview.player,_preview.pose,id,_gizmo_mode.selected==1)
+	_preview.gizmo.world_axes=world_axes
 	_preview.gizmo.sync_scene()
 
 func _drag_selected_gizmo(axis:int,amount:float)->void:
@@ -746,6 +754,7 @@ func _drag_selected_gizmo(axis:int,amount:float)->void:
 	var channel:Dictionary=_gizmo_channels.axes[axis]
 	if channel.is_empty():return
 	var field:String=channel.field
+	if studio_edit_guard.is_valid() and not studio_edit_guard.call(field):return
 	var component:int=channel.component
 	if _serve and not ServeStore.is_field_editable(_stage,field):return
 	if field in ROT:

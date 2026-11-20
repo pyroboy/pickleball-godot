@@ -69,6 +69,8 @@ var camera: Camera3D
 var yaw := 2.8
 var pitch := 0.08
 var distance := 2.9
+# Orbit centre. The phone editor never changes it; the desktop studio moves it (pan, F).
+var camera_target := Vector3(0, 1.0, 0)
 const CameraFraming = preload("res://scripts/ui/mobile_pose_camera_framing.gd")
 var _fitted_distance := 2.9
 var _manual_zoom := false
@@ -160,7 +162,10 @@ func select_joint(id: String) -> void:
 
 func joint_world_position(id: String) -> Vector3:
 	var node: Node3D = _joint_nodes.get(id)
-	return node.global_position if is_instance_valid(node) else Vector3.INF
+	if not is_instance_valid(node): return Vector3.INF
+	if player != null and (node == player.right_arm_node.forearm_pivot or node == player.left_arm_node.forearm_pivot):
+		return preload("res://scripts/elbow_swivel.gd").visual_elbow_now(player.right_arm_node if node == player.right_arm_node.forearm_pivot else player.left_arm_node)   # drawn elbow
+	return node.global_position
 
 func joint_screen_position(id: String) -> Vector2:
 	return _world_screen_position(joint_world_position(id))
@@ -451,7 +456,7 @@ func _fit_camera_to_pose()->void:
 	# Preserve the authored camera orientation. Only the default distance adapts.
 	_fitted_distance=distance;update_camera()
 	for iteration in range(3):
-		_fitted_distance=CameraFraming.distance_for(self,Vector3(0,1,0),distance)
+		_fitted_distance=CameraFraming.distance_for(self,camera_target,distance)
 		update_camera()
 
 func _resize_view()->void:
@@ -461,7 +466,7 @@ func _resize_view()->void:
 	queue_redraw();request_camera_fit()
 func update_camera()->void:
 	if camera==null:return
-	var target:=Vector3(0,1.0,0)
+	var target:=camera_target
 	camera.position=target+Vector3(sin(yaw)*cos(pitch),sin(pitch),cos(yaw)*cos(pitch))*(distance if _manual_zoom else maxf(distance,_fitted_distance))
 	camera.look_at(target);viewport.render_target_update_mode=SubViewport.UPDATE_ONCE
 	queue_redraw()

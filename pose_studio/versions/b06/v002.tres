@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 6
+display_name = "Punch Volley Ready"
+canonical_intent = 3
+stroke_overlay_mix = 0.78
+right_shoulder_rotation_deg = Vector3(-2, 4, 4)
+left_hand_mode = 1
+stance_width = 0.4
+back_foot_back = -0.06
+crouch_amount = 0.15
+body_pitch_deg = 4.0
+right_elbow_pole = Vector3(0.2000057, -0.30105418, 0.07309667)

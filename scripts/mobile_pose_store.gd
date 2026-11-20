@@ -33,6 +33,7 @@ const MAX_EXPORT_BYTES := 2097152
 # Explicit schema. Identity, metadata, resource_path and script are never writable.
 const COMMON_FIELDS := [
 	"right_hand_offset", "right_elbow_pole", "right_shoulder_rotation_deg",
+	"right_elbow_swivel_deg", "left_elbow_swivel_deg", "elbow_swivel_weight",
 	"left_hand_mode", "left_hand_offset", "left_elbow_pole", "left_shoulder_rotation_deg",
 	"stance_width", "front_foot_forward", "back_foot_back", "right_foot_yaw_deg", "left_foot_yaw_deg",
 	"right_foot_pitch_deg", "left_foot_pitch_deg",
@@ -71,6 +72,7 @@ const POSITIVE_FIELDS := ["stance_width", "crouch_amount", "paddle_floor_clearan
 static var last_error: String = ""
 static var _test_path: String = ""
 static var _packaged: Dictionary = {"postures": {}, "base_poses": {}}
+static var skip_overrides := false  # Pose Studio (--pose-studio): show the repo pose files only
 
 
 ## Test-only isolation: accepts a private subdirectory, never the production save path.
@@ -137,6 +139,7 @@ static func apply_overrides(definitions: Array, is_base: bool) -> void:
 		# .tres omits it. An absent override must never retain an old live bake.
 		if not is_base and not identity.is_empty() and _packaged[group].has(identity.id):
 			def.elbow_preset_bake = _packaged[group][identity.id].elbow_preset_bake.duplicate(true)
+	if skip_overrides: return
 	var loaded := _read_document()
 	if loaded.error != OK:
 		push_warning("MobilePoseStore: " + last_error + "; using packaged poses")

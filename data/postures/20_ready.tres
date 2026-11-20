@@ -183,3 +183,5 @@ notes = "User-approved whole static Ready pose imported on 2026-10-02. Top-level
 last_tuned_by = "User-approved JSON"
 last_tuned_at = "2026-10-02"
 metadata/support_grip_weight = 1.0
+right_elbow_swivel_deg = -7.24569519
+elbow_swivel_weight = 1.0

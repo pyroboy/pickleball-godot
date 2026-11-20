@@ -25,6 +25,11 @@ ROWS = [
     ("elbow_above_shoulder_m", "elbow above shoulder m", "{:.2f}"),
     ("upper_arm_elevation_deg", "upper arm elevation deg", "{:.0f}"),
     ("elbow_flare_deg", "elbow flare deg", "{:.0f}"),
+    ("wrist_angle_deg", "wrist: forearm-handle deg", "{:.0f}"),
+    ("wrist_flex_deg", "wrist flex deg", "{:.0f}"),
+    ("wrist_deviation_deg", "wrist deviation deg", "{:.0f}"),
+    ("paddle_tip_pitch_deg", "paddle tip pitch deg", "{:.0f}"),
+    ("face_to_net_deg", "paddle face to net deg", "{:.0f}"),
     ("paddle_from_shoulder", "paddle from shoulder m", "{:.2f}"),
 ]
 
@@ -91,6 +96,7 @@ def main():
                       f"elbow snap {sw['max_elbow_bend_step_deg']:.0f} deg/step at t={sw['snap_at']:.2f}, "
                       f"elbow jump {sw['max_elbow_jump_m']:.2f} m, elbow-torso clearance {sw['min_elbow_torso_clearance_m']:.2f} m, "
                       f"elbow inward {sw.get('elbow_inward_steps', 0)}/41 steps, forearm roll step {sw.get('max_forearm_roll_step_deg', 0):.0f} deg, "
+                      f"wrist max {sw.get('max_wrist_angle_deg', 0):.0f} deg, max |flex| {sw.get('max_abs_wrist_flex_deg', 0):.0f}, step {sw.get('max_wrist_step_deg', 0):.0f} deg, "
                       f"max elbow above shoulder {sw.get('max_elbow_above_shoulder_m', 0):.2f} m, "
                       f"elbow UP at steps {sw.get('elbow_up_steps', [])} (traced from t={sw.get('traced_from', 0)})")
             path = by_tag[t].get("path")

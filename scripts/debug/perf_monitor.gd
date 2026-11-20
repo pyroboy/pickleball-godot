@@ -73,6 +73,14 @@ func _ready() -> void:
 			for a in OS.get_cmdline_user_args():
 				if a.begins_with("--pose-only="): shots.only = a.trim_prefix("--pose-only=").split(",")
 			add_child(shots)
+		if arg.begins_with("--pose-data="):   # data-only capture for tools/pose_check.py
+			var data: Node = load("res://scripts/debug/pose_data.gd").new()
+			data.out_dir = arg.trim_prefix("--pose-data=")
+			add_child(data)
+		if arg.begins_with("--pose-studio="):   # Pose Studio: TCP link, which boots the Desktop Pose Studio (tools/pose_studio.sh)
+			var link: Node = load("res://scripts/debug/pose_studio_link.gd").new()
+			link.port = int(arg.trim_prefix("--pose-studio="))
+			add_child(link)
 	_file = FileAccess.open(path, FileAccess.WRITE)
 	if _pose_path != "":
 		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)

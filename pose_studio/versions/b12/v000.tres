@@ -1,0 +1,24 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 12
+display_name = "Backhand Lunge"
+canonical_intent = 6
+stroke_overlay_mix = 0.92
+recovery_time = 0.18
+lunge_distance = 0.95
+stance_width = 0.68
+front_foot_forward = 0.18
+back_foot_back = -0.2
+right_foot_offset = Vector3(0.36, 0, -0.1)
+left_foot_offset = Vector3(0.02, 0, 0.1)
+lead_foot = 1
+crouch_amount = 0.42
+weight_shift = 0.45
+torso_pitch_deg = 18
+body_yaw_deg = -30
+body_roll_deg = 14
+hip_yaw_deg = -8

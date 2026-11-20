@@ -6,7 +6,13 @@ const ArmAnatomy = preload("res://scripts/arm_anatomy.gd")
 const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
 const ElbowPreset = preload("res://scripts/elbow_preset_runtime.gd")
 const LiveArmBudget = preload("res://scripts/live_arm_budget.gd")
+const ElbowSwivel = preload("res://scripts/elbow_swivel.gd")
 var _hands
+## Experiment switch (Pose Studio, stage 6c step 2): false = the paddle arm's elbow follows the
+## authored pole without the wrist correction below. Default true: unchanged game.
+static var paddle_elbow_wrist_correction := true
+## PICKLEBALL_ELBOW_SWIVEL=0 ignores authored elbow swivels (the game as before them; bench A/B).
+static var elbow_swivel_enabled: bool = OS.get_environment("PICKLEBALL_ELBOW_SWIVEL") != "0"
 var _player
 
 func _ready() -> void :
@@ -52,7 +58,16 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 			var wrist: Vector3 = HandPresentation.wrist_for(dominant_arm, mount)
 			var distal: Vector3 = mount.basis * dominant_arm.articulated_hand.anatomical_basis.x
 			main_pole_world = ArmAnatomy.stabilized_pole(dominant_arm.upper_pivot.global_position, wrist, main_pole_world, -pole_reference_axis * side)
-			main_pole_world = ArmAnatomy.conditioned_pole(dominant_arm.upper_pivot.global_position, wrist, main_pole_world, distal, dominant_arm.upper_arm_length, dominant_arm.forearm_length)
+			if paddle_elbow_wrist_correction:
+				main_pole_world = ArmAnatomy.conditioned_pole(dominant_arm.upper_pivot.global_position, wrist, main_pole_world, distal, dominant_arm.upper_arm_length, dominant_arm.forearm_length)
+			# Authored elbow swivel (stage 6c): the pose's angle replaces the guide point by its weight.
+			var swivel_weight: float = clampf(float(def.elbow_swivel_weight), 0.0, 1.0) if def != null and "elbow_swivel_weight" in def else 0.0
+			var swivel_pole: Vector3 = main_pole_world
+			if swivel_weight > 0.0 and elbow_swivel_enabled:
+				var chest: Array = ElbowSwivel.frame(def, forehand_axis, forward_axis, left_dominant)
+				var sh: Vector3 = dominant_arm.upper_pivot.global_position
+				var deg: float = def.left_elbow_swivel_deg if left_dominant else def.right_elbow_swivel_deg
+				swivel_pole = ElbowSwivel.mix(sh, wrist, main_pole_world, chest[0], chest[1], deg, left_dominant, swivel_weight)
 
 
 			var lag: float = clampf(float(def.get_meta("visual_wrist_lag_deg", 0.0)) if def else 0.0, 0.0, 6.0)
@@ -62,7 +77,11 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 				var axis: Vector3 = (wrist - shoulder).normalized()
 				var trail_sign: float = side * (-1.0 if def.family == 1 else 1.0)
 				main_pole_world = shoulder + (main_pole_world - shoulder).rotated(axis, deg_to_rad(lag * trail_sign))
+				swivel_pole = shoulder + (swivel_pole - shoulder).rotated(axis, deg_to_rad(lag * trail_sign))
 			dominant_arm.solve_ik(main_target, main_pole_world, _player.paddle_node.global_transform, wrist)
+			# The authored swivel is visual only (gameplay reads the solved arm): record the turn from
+			# this elbow to the swivel one; the pixel cards draw the elbow turned by it.
+			ElbowSwivel.record_visual_turn(dominant_arm, wrist, main_pole_world, swivel_pole)
 			_hands.apply_mount(dominant_arm, mount)
 
 		var support_target: Vector3 = get_support_hand_target(def)
