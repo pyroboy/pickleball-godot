@@ -541,6 +541,9 @@ func _setup_subsystems() -> void :
 	var match_feel = preload("res://scripts/fx/match_feel.gd").new()
 	add_child(match_feel)
 	match_feel.setup(self)
+	var body_hit_fx = preload("res://scripts/fx/body_hit_fx.gd").new()
+	add_child(body_hit_fx)
+	body_hit_fx.setup(self)
 
 
 	game_shots = _GameShots.new()
