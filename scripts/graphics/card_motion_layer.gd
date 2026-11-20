@@ -11,7 +11,9 @@ class_name CardMotionLayer
 ## Motion so far (Stage 9): while running or walking, the free arm swings against the legs and
 ## the shoulders counter-turn against the hips, both driven by the real feet so they stay in
 ## step. Only when travelling along the facing (not in a side shuffle). Off during strokes,
-## pose editors and between-point carries.
+## pose editors and between-point carries. While the ball is in play the paddle arm never moves
+## (the shown paddle is where gameplay has it); only the free arm swings and the chest turns.
+## Standing expressions (card_expressions.gd): idle / ready waiting / ready, coloured by mood.
 ## Partner paddle tap (card_partner_tap.gd) when partners pass within reach after a point.
 ## Reactions (stage 10, card_reactions.gd): fist pump, bounce, paddle twirl, head drop, played
 ## at rally end on the paddle arm, torso, head and a small body bob.
@@ -28,9 +30,12 @@ const TAP_TURN_DEG: = 35.0    # chest turn toward the partner for a paddle tap
 const TAP_LEAN_DEG: = 16.0    # lean toward a partner who is farther away (up to 1.7 m)
 const TAP_PADDLE_REACH: = 0.30  # m from the hand to the paddle head centre
 const TAP_PUSH: = 0.05        # m: the tap's push along the reach
+const HOLD_EASE: = 0.1        # s to switch an arm between free and on the paddle
+const HOLD_DIST: = 0.14       # m: a hand this close to the paddle shaft / throat holds it
 const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no frame pops)
 
 const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
+const CardExpressionsScript = preload("res://scripts/graphics/card_expressions.gd")
 const CardPartnerTapScript = preload("res://scripts/graphics/card_partner_tap.gd")
 
 static var _env_off: int = -1
@@ -46,6 +51,10 @@ var _reactions = null         # CardReactions: between-point reactions (stage 10
 var _spin: = 0.0
 var _tap = null               # CardPartnerTap: partner paddle tap between points
 var _tapping: = false
+var _expressions = null       # CardExpressions: idle / ready moods while standing
+var _expr_amount: = 0.0
+var _free: Dictionary = {}    # arm -> 1 free .. 0 on the paddle (eased)
+var last_channels: Dictionary = {}   # reaction / expression channels applied this frame (bench)
 var _paddle_aim: = Transform3D.IDENTITY   # tap: paddle turned about the shown hand toward the partner
 var _prev_pos: = Vector3.INF
 var _dir: = Vector3.ZERO      # smoothed horizontal travel direction (unit or zero)
@@ -72,6 +81,31 @@ func paddle_delta(paddle_arm) -> Transform3D:
 	if paddle_arm == null: return Transform3D.IDENTITY
 	return _paddle_aim * _deltas.get(paddle_arm.hand_pivot, Transform3D.IDENTITY)
 
+## How free each arm is this frame (1 = free, 0 = on the paddle), eased so a hand near the
+## paddle does not flicker between the two.
+func _update_hold(delta: float, paddle_arm) -> void:
+	for name in ["right_arm_node", "left_arm_node"]:
+		var arm = _rig._player.get(name)
+		if arm == null: continue
+		var goal: float = 0.0 if (arm == paddle_arm or _holds_paddle(arm)) else 1.0
+		var cur: float = float(_free.get(arm, goal))
+		_free[arm] = move_toward(cur, goal, delta / HOLD_EASE) if delta > 0.0 else goal
+
+func _free_w(arm) -> float:
+	return float(_free.get(arm, 1.0))
+
+## A hand on the paddle (the grip, or the support hand on the throat in two-handed holds).
+func _holds_paddle(arm) -> bool:
+	var paddle: Node3D = _rig._player.get("paddle_node")
+	if paddle == null or arm == null or arm.get("hand_pivot") == null: return false
+	var pxf: Transform3D = paddle.global_transform if _rig._raw else paddle.get_global_transform_interpolated()
+	var a: Vector3 = pxf.origin
+	var b: Vector3 = pxf * Vector3(0.0, 0.42, 0.0)
+	var h: Vector3 = _plain(arm.hand_pivot)
+	var ab: Vector3 = b - a
+	var u: float = clampf((h - a).dot(ab) / maxf(ab.length_squared(), 1e-6), 0.0, 1.0)
+	return h.distance_to(a + ab * u) < HOLD_DIST
+
 static func _turn_about(pivot: Vector3, axis: Vector3, angle: float) -> Transform3D:
 	var b: = Basis(axis, angle)
 	return Transform3D(b, pivot - b * pivot)
@@ -79,8 +113,9 @@ static func _turn_about(pivot: Vector3, axis: Vector3, angle: float) -> Transfor
 ## Rebuild the deltas. Call with the deltas cleared, so the rig's reads are the plain ones.
 func update(delta: float, swinging: bool, paddle_arm) -> void:
 	_deltas.clear()
+	_update_hold(delta, paddle_arm)
 	_gait(delta, swinging, paddle_arm)
-	_react(delta, paddle_arm)
+	_react(delta, paddle_arm, swinging)
 	_partner_tap(delta, paddle_arm)
 
 func _gait(delta: float, swinging: bool, paddle_arm) -> void:
@@ -146,13 +181,16 @@ func _gait(delta: float, swinging: bool, paddle_arm) -> void:
 		var arm: Node3D = pair[0]
 		if arm == null or arm.get("upper_pivot") == null: continue
 		var swing: = Transform3D.IDENTITY
-		if arm != paddle_arm and not between:
+		var free: float = _free_w(arm)
+		if free > 0.0 and not between:
 			var shoulder: Vector3 = _rig._xf(arm.upper_pivot).origin
 			var hand: Vector3 = _rig._xf(arm.hand_pivot).origin
 			var sgn: float = signf(side.cross(hand - shoulder).dot(fwd))
 			if sgn != 0.0:
-				swing = _turn_about(shoulder, side, deg_to_rad(SWING_DEG) * amt * float(pair[1]) * sgn)
+				swing = _turn_about(shoulder, side, deg_to_rad(SWING_DEG) * amt * float(pair[1]) * sgn * free)
 		var d: = twist * swing
+		# Ball in play: the shown paddle and the hands on it stay where gameplay has them.
+		if _expressions != null and _expressions.live(): d = Transform3D.IDENTITY.interpolate_with(d, free)
 		for n in [arm.upper_pivot, arm.forearm_pivot, arm.hand_pivot]:
 			if n != null: _deltas[n] = d
 
@@ -169,13 +207,35 @@ func reaction() -> String:
 func paddle_spin() -> float:
 	return _spin
 
-func _react(delta: float, paddle_arm) -> void:
+func _react(delta: float, paddle_arm, swinging: bool) -> void:
 	_spin = 0.0
 	var player = _rig._player
 	if _reactions == null: _reactions = CardReactionsScript.new(player)
+	if _expressions == null: _expressions = CardExpressionsScript.new(player)
+	if _tap == null: _tap = CardPartnerTapScript.new(player)
 	if not enabled() or _rig._raw: return
 	var ch: Dictionary = _reactions.update(delta)
+	# Standing expressions: fade with travel speed, and give way to reactions, taps, strokes
+	# and hands busy with the ball.
+	var want: float = 1.0 - smoothstep(0.3, 1.2, _speed)
+	if not ch.is_empty() or _tapping or swinging or _tap._hands_busy(player): want = 0.0
+	_expr_amount = move_toward(_expr_amount, want, delta / 0.2)
+	var ex: Dictionary = _expressions.update(delta, _expr_amount)
+	if ch.is_empty(): ch = ex
+	elif not ex.is_empty():   # the expression fades out under the reaction (no snap)
+		for k in ex: ch[k] = float(ch.get(k, 0.0)) + float(ex[k])
+	last_channels = ch
 	if ch.is_empty(): return
+	# Ball in play: the shown paddle stays exactly where gameplay has it.
+	_apply_channels(ch, paddle_arm, _expressions.live() and _reactions.current() == "")
+
+## The standing expression showing now ("" when none).
+func expression() -> String:
+	return _expressions.current() if _expressions != null and enabled() and _expr_amount > 0.05 else ""
+
+## Channels (card_reactions.gd / card_expressions.gd) -> card deltas, on top of the gait ones.
+func _apply_channels(ch: Dictionary, paddle_arm, keep_paddle_arm: bool = false) -> void:
+	var player = _rig._player
 	var body: Node3D = player.body_pivot
 	var torso: Node3D = body.get_node_or_null("TorsoMesh")
 	if torso == null: return
@@ -193,6 +253,7 @@ func _react(delta: float, paddle_arm) -> void:
 		var sgn: float = signf(side.cross(_plain(torso) - hip_p).dot(fwd))
 		if sgn != 0.0: lean = _turn_about(hip_p, side, deg_to_rad(float(ch.torso)) * sgn)
 	var upper: = bob * lean
+	var lifted: = upper * Transform3D(Basis.IDENTITY, Vector3.UP * float(ch.get("shrug", 0.0)))
 	var add: = func(n: Node3D, d: Transform3D) -> void:
 		if n == null: return
 		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
@@ -209,10 +270,15 @@ func _react(delta: float, paddle_arm) -> void:
 		if absf(float(ch.head)) > 1e-3:
 			var sgn: float = signf(side.cross(Vector3.UP).dot(fwd))
 			nod = _turn_about(_plain(head), side, deg_to_rad(float(ch.head)) * sgn)
-		add.call(head, upper * nod)
+		if absf(float(ch.get("look", 0.0))) > 1e-3:
+			var sgn: float = signf(Vector3.UP.cross(fwd).dot(player._get_forehand_axis()))
+			if sgn != 0.0: nod = _turn_about(_plain(head), Vector3.UP, deg_to_rad(float(ch.look)) * sgn) * nod
+		add.call(head, lifted * nod)
 	for arm_name in ["right_arm_node", "left_arm_node"]:
 		var arm: Node3D = player.get(arm_name)
 		if arm == null or arm.get("upper_pivot") == null: continue
+		var keep: float = (1.0 - _free_w(arm)) if keep_paddle_arm else 0.0
+		if keep >= 0.999: continue
 		var lift: = Transform3D.IDENTITY
 		var bend: = Transform3D.IDENTITY
 		if arm == paddle_arm:   # the other hand carries the ball between points
@@ -226,9 +292,11 @@ func _react(delta: float, paddle_arm) -> void:
 				var sgn: float = signf(side.cross(hand - elbow).dot(Vector3.UP))
 				if sgn != 0.0: bend = _turn_about(elbow, side, deg_to_rad(float(ch.elbow)) * sgn)
 			_spin = deg_to_rad(float(ch.spin))
-		add.call(arm.upper_pivot, upper * lift)
-		add.call(arm.forearm_pivot, upper * lift * bend)
-		add.call(arm.hand_pivot, upper * lift * bend)
+		var du: Transform3D = (lifted * lift).interpolate_with(Transform3D.IDENTITY, keep)
+		var dl: Transform3D = (lifted * lift * bend).interpolate_with(Transform3D.IDENTITY, keep)
+		add.call(arm.upper_pivot, du)
+		add.call(arm.forearm_pivot, dl)
+		add.call(arm.hand_pivot, dl)
 
 # ------------------------------------------------------------------ partner paddle tap
 
@@ -248,7 +316,6 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	_tapping = false
 	_paddle_aim = Transform3D.IDENTITY
 	var player = _rig._player
-	if _tap == null: _tap = CardPartnerTapScript.new(player)
 	if not enabled() or _rig._raw or paddle_arm == null: return
 	var tap: Dictionary = _tap.update(delta, _stop_reaction)
 	if tap.is_empty(): return

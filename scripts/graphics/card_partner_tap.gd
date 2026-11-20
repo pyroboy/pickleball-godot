@@ -57,6 +57,8 @@ static func _vel(p) -> Vector3:
 	return v if v is Vector3 else Vector3.ZERO
 
 func _hands_busy(p) -> bool:
+	if _game == null: _game = _player.get_parent()
+	if _game == null: return false
 	var bpc = _game.get("between_point_controller")
 	if bpc == null or not is_instance_valid(bpc) or not bpc.is_active(): return false
 	if not str(bpc.get("phase")) in BUSY_PHASES: return false
