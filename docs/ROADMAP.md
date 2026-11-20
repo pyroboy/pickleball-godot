@@ -33,6 +33,9 @@ Status: done, in progress, next, later.
 - [x] PerfMonitor autoload, spike log, F3 graph, `tools/perf_report.py`
 - [x] Seeded benchmark + pose trace (`tools/bench.sh`, `tools/pose_diff.py`)
 - [x] Physics catch-up cap, IK once per player per tick, READY recheck at 10 Hz, AI re-plan cap
+- [x] Human contact planner stutter (2026-11-19): `legal_ball` (NVZ foot / mesh scan) ran per
+      posture x per flight segment in the planner fallbacks; now once per bounce count per call.
+      Worst planner call on lobs 143 -> 8 ms on the Mac, choices identical (pose diff IDENTICAL).
 - [ ] On-device iPhone baseline (fps, frame-time spikes) in 4-player rallies
 - [x] 30 Hz physics / AI tick with physics interpolation (decided 2026-11-18, kept after
       playtest). Halves per-frame cost on the Mac bench (rally frame 9.4 -> 3.9 ms). It

@@ -78,6 +78,14 @@ static func legal_ball(player, ball, future_bounces: int = 0, volley_override: i
 			return false
 	return true
 
+# Perf: legal_ball(…, 0) runs the stateful NVZ foot check (foot and body mesh
+# scans). Its answer cannot change within one planner call and repeating it is
+# idempotent, so each call evaluates every bounce count at most once, lazily at
+# the first place the original loop asked for it.
+static func _legal_cached(cache: Dictionary, player, ball, future_bounces: int, volley_override: int) -> bool:
+	if not cache.has(future_bounces): cache[future_bounces] = legal_ball(player, ball, future_bounces, volley_override)
+	return cache[future_bounces]
+
 static func predicted_fault_time(player, ball, flight: Dictionary) -> float:
 
 
@@ -184,10 +192,11 @@ static func _perf_select(player, ball, flight: Dictionary, previous_id: int = -1
 	# Lazily project each reached sample once. Array[float] retains the exact
 	# scalar value; a Vector/PackedFloat32 cache would introduce rounding.
 	var sample_forward: Array[float] = []
+	var legal: Dictionary = {}
 	for def in PostureLibrary.instance().all_definitions():
 		if not def.has_zone: continue
 		var candidate: Dictionary = {}
-		if absf(forward_now - def.zone_forward_offset) <= LIVE_WINDOW and legal_ball(player, ball, 0, volley_override) and point_fits(player, def, ball.global_position):
+		if absf(forward_now - def.zone_forward_offset) <= LIVE_WINDOW and _legal_cached(legal, player, ball, 0, volley_override) and point_fits(player, def, ball.global_position):
 			candidate = {"point": ball.global_position, "time": 0.0, "bounces": 0}
 		else:
 			for i in range(samples.size() - 1):
@@ -210,7 +219,7 @@ static func _perf_select(player, ball, flight: Dictionary, previous_id: int = -1
 				var point: Vector3 = a.pos.lerp(b.pos, fraction)
 				var time: float = lerpf(a.time, b.time, fraction)
 				if time >= fault_time: continue
-				if not legal_ball(player, ball, segment_bounces, volley_override) or not point_fits(player, def, point): continue
+				if not _legal_cached(legal, player, ball, segment_bounces, volley_override) or not point_fits(player, def, point): continue
 				candidate = {"point": point, "time": time, "bounces": segment_bounces}
 				break
 		if candidate.is_empty(): continue
@@ -345,6 +354,7 @@ static func _perf_select_floor_swept(player, ball, flight: Dictionary, previous_
 	var forehand: Vector3 = player._get_forehand_axis()
 	var forward: Vector3 = player._get_forward_axis()
 	var floor_bounds: Rect2 = ActivationZones.floor_bounds()
+	var legal: Dictionary = {}
 	for index in range(mini(samples.size() - 1, 59)):
 		var a: Dictionary = samples[index]
 		var b: Dictionary = samples[index + 1]
@@ -352,7 +362,7 @@ static func _perf_select_floor_swept(player, ball, flight: Dictionary, previous_
 		if float(a.time) >= fault_time: break
 		var count: int = int(a.bounces)
 		if int(b.bounces) != count and int(b.bounces) != count + 1: continue
-		if not legal_ball(player, ball, count, volley_override) or require_bounce and count + ball.bounces_since_last_hit == 0: continue
+		if not _legal_cached(legal, player, ball, count, volley_override) or require_bounce and count + ball.bounces_since_last_hit == 0: continue
 		var local: Vector3 = a.pos - player.global_position
 		var step: Vector3 = b.pos - a.pos
 		var origin := Vector3(local.dot(forehand), a.pos.y - player.COURT_FLOOR_Y, local.dot(forward))
@@ -445,17 +455,28 @@ static func _perf_select_swept_extended(player, ball, flight: Dictionary, previo
 	var flight_bounds := AABB(samples[0].pos, Vector3.ZERO)
 	for index in range(1, mini(samples.size(), 60)):
 		flight_bounds = flight_bounds.expand(samples[index].pos)
+	# The segment filter below does not depend on the posture. Run it once, at
+	# the first posture that reaches the loop (as the per-posture scan did).
+	var segments: Array[int] = []
+	var segments_ready := false
 	for base in PostureLibrary.instance().all_definitions():
 		if not base.has_zone: continue
 		var shoulder: Vector3 = Body.shoulder_world(player, base)
 		if shoulder.distance_squared_to(shoulder.clamp(flight_bounds.position, flight_bounds.end)) > PaddleReach.MAX_HEAD_DISTANCE * PaddleReach.MAX_HEAD_DISTANCE: continue
 		var wrist_offset: Vector3 = WristReach.head_to_wrist_offset(Path.paddle_basis(player, base), base)
-		for index in range(mini(samples.size() - 1, 59)):
+		if not segments_ready:
+			segments_ready = true
+			var legal: Dictionary = {}
+			for index in range(mini(samples.size() - 1, 59)):
+				var a: Dictionary = samples[index]
+				var b: Dictionary = samples[index + 1]
+				if a.bounces != b.bounces or not _legal_cached(legal, player, ball, int(b.bounces), volley_override): continue
+				if require_bounce and int(b.bounces) + ball.bounces_since_last_hit == 0: continue
+				if float(a.time) >= fault_time: break
+				segments.append(index)
+		for index in segments:
 			var a: Dictionary = samples[index]
 			var b: Dictionary = samples[index + 1]
-			if a.bounces != b.bounces or not legal_ball(player, ball, int(b.bounces), volley_override): continue
-			if require_bounce and int(b.bounces) + ball.bounces_since_last_hit == 0: continue
-			if float(a.time) >= fault_time: break
 			var reach_interval: Vector2 = _clip_sphere(a.pos - shoulder, b.pos - a.pos, PaddleReach.MAX_HEAD_DISTANCE, Vector2(0.0, 1.0))
 			if reach_interval.x > reach_interval.y: continue
 			# Existing sampled extended candidates already handle balanced lean.
