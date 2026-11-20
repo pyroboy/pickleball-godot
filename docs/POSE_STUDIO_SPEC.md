@@ -830,6 +830,18 @@ serves, ready / ready_frustrated in rallies; tension, confidence and fatigue did
 scores, full stamina), so those show only in the motion bench expr:<name> segments.
 Bench seed 1 60 s and motion bench: IDENTICAL.
 
+Stand straight between points (built 2026-11-21, card layer, visual only; "relaxed stand" above):
+the gameplay legs keep the athletic crouch (balance and reach read them). Between points (ball
+dead, POINT_SCORED), standing still (fades out 0.3-1.0 m/s), not bending for / passing the ball and
+not swinging, the cards shift the hips over the middle of the feet (up to 15 cm), lift the body
+until the straighter leg is at 99.7% of its length (about 9 deg of knee, up to 20 cm) and place each
+knee on a two-bone solve from the lifted hip to the planted ankle, bending the way it did. Rises and
+sinks over 0.35 s; sinks back to the athletic stance when the game goes to WAITING (serve coming).
+Autoplay seed 1, 150 s: fully standing frames knee p50 8.9 deg, p90 29.7, max 47.8 (wide or
+staggered feet: straight legs would need the feet to step in, a gameplay change); gameplay legs
+69 deg between points; every player back to the athletic stance when SERVING starts.
+Motion bench: knee / knee game / raise columns. Bench seed 1 60 s and motion bench: IDENTICAL.
+
 ## 6. Decisions
 
 Decided by the user:

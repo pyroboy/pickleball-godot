@@ -17,6 +17,8 @@ Per segment (card motion is what the pixel cards draw on top of the gameplay pos
   bob       largest body lift, cm; spin: largest paddle spin, deg
   expr      the standing expression shown most in the segment (expr:<name> segments force one)
   head/look/torso  largest head nod, head turn and torso lean, deg; shrug cm
+  knee      mean drawn knee bend of the more bent leg, deg (0 = straight); knee game: the gameplay legs
+  raise     largest body lift from standing straight, cm
 With a base run: changes per segment, and the gameplay joints (body, hands, shoulders, feet,
 paddle) compared frame by frame: IDENTICAL means the change is visual only.
 """
@@ -77,6 +79,9 @@ def metrics(rows):
     m["expr"] = max(set(names), key=names.count) if names else None
     for k in ("head", "look", "torso"): m[k] = max(abs(r.get(k, 0.0)) for r in rows)
     m["shrug"] = max(abs(r.get("shrug", 0.0)) for r in rows) * 100
+    m["knee"] = sum(r.get("knee", 0.0) for r in rows) / len(rows)
+    m["knee_game"] = sum(r.get("knee_game", 0.0) for r in rows) / len(rows)
+    m["raise"] = max(r.get("raise", 0.0) for r in rows) * 100
     m.update(swing=swing * 100, twist=twist, in_step=(100.0 * ok / n) if n else None, steps=steps,
              slide=slide * 1000, pop=pop * 1000)
     return m
@@ -86,6 +91,7 @@ COLS = [("speed", "speed m/s", "{:.2f}"), ("w_mean", "w mean", "{:.2f}"), ("w_ma
         ("steps", "steps", "{:d}"), ("slide", "slide mm", "{:.1f}"), ("pop", "pop mm", "{:.1f}"),
         ("react", "react s", "{:.2f}"), ("paddle", "paddle cm", "{:.1f}"), ("bob", "bob cm", "{:.1f}"), ("spin", "spin deg", "{:.0f}"),
         ("head", "head deg", "{:.0f}"), ("look", "look deg", "{:.0f}"), ("torso", "torso deg", "{:.0f}"), ("shrug", "shrug cm", "{:.1f}"),
+        ("knee", "knee deg", "{:.0f}"), ("knee_game", "knee game", "{:.0f}"), ("raise", "raise cm", "{:.1f}"),
         ("expr", "expr", "{}")]
 
 def fmt(c, v):

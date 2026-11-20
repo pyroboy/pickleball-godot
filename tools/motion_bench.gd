@@ -151,6 +151,17 @@ func _sample(_delta: float) -> void:
 		row["shrug"] = snappedf(float(lc.get("shrug", 0.0)), 0.0001)
 		row["head"] = snappedf(float(lc.get("head", 0.0)), 0.01)
 		row["torso"] = snappedf(float(lc.get("torso", 0.0)), 0.01)
+		row["raise"] = snappedf(m.stand_raise, 0.0001)
+		var bends := []
+		for side in ["right", "left"]:
+			var leg = _p.get(side + "_leg_node")
+			for drawn in [true, false]:
+				var h: Vector3 = _drawn(leg.thigh_pivot) if drawn else leg.thigh_pivot.get_global_transform_interpolated().origin
+				var k: Vector3 = _drawn(leg.shin_pivot) if drawn else leg.shin_pivot.get_global_transform_interpolated().origin
+				var a: Vector3 = _drawn(leg.foot_pivot) if drawn else leg.foot_pivot.get_global_transform_interpolated().origin
+				bends.append(180.0 - rad_to_deg((h - k).angle_to(a - k)))
+		row["knee"] = snappedf(maxf(bends[0], bends[2]), 0.1)        # drawn, the more bent leg
+		row["knee_game"] = snappedf(maxf(bends[1], bends[3]), 0.1)   # gameplay legs
 		row["spin"] = snappedf(rad_to_deg(m.paddle_spin()), 0.1)
 		var body_raw: Vector3 = _p.body_pivot.get_global_transform_interpolated().origin
 		row["bob"] = snappedf(_drawn(_p.body_pivot).y - body_raw.y, 0.0001)

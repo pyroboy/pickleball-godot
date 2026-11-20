@@ -13,6 +13,9 @@ class_name CardMotionLayer
 ## step. Only when travelling along the facing (not in a side shuffle). Off during strokes,
 ## pose editors and between-point carries. While the ball is in play the paddle arm never moves
 ## (the shown paddle is where gameplay has it); only the free arm swings and the chest turns.
+## Stand straight between points (_stand_straight): the gameplay legs keep the athletic crouch;
+## the cards lift the body and straighten the knees, feet where they are, and sink back into the
+## athletic stance when the next rally is coming.
 ## Standing expressions (card_expressions.gd): idle / ready waiting / ready, coloured by mood.
 ## Partner paddle tap (card_partner_tap.gd) when partners pass within reach after a point.
 ## Reactions (stage 10, card_reactions.gd): fist pump, bounce, paddle twirl, head drop, played
@@ -32,6 +35,10 @@ const TAP_PADDLE_REACH: = 0.30  # m from the hand to the paddle head centre
 const TAP_PUSH: = 0.05        # m: the tap's push along the reach
 const HOLD_EASE: = 0.1        # s to switch an arm between free and on the paddle
 const HOLD_DIST: = 0.14       # m: a hand this close to the paddle shaft / throat holds it
+const STAND_EASE: = 0.35      # s to rise / sink
+const STAND_BEND: = 0.997     # hip-to-ankle as a share of leg length when standing (about 9 deg of knee)
+const STAND_MAX_RAISE: = 0.20 # m
+const STAND_MAX_SHIFT: = 0.15 # m the hips may shift to centre over the feet
 const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no frame pops)
 
 const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
@@ -53,6 +60,8 @@ var _tap = null               # CardPartnerTap: partner paddle tap between point
 var _tapping: = false
 var _expressions = null       # CardExpressions: idle / ready moods while standing
 var _expr_amount: = 0.0
+var _stand_w: = 0.0           # 0 athletic crouch .. 1 standing straight (between points)
+var stand_raise: = 0.0        # m the body is lifted this frame (bench)
 var _free: Dictionary = {}    # arm -> 1 free .. 0 on the paddle (eased)
 var last_channels: Dictionary = {}   # reaction / expression channels applied this frame (bench)
 var _paddle_aim: = Transform3D.IDENTITY   # tap: paddle turned about the shown hand toward the partner
@@ -117,6 +126,7 @@ func update(delta: float, swinging: bool, paddle_arm) -> void:
 	_gait(delta, swinging, paddle_arm)
 	_react(delta, paddle_arm, swinging)
 	_partner_tap(delta, paddle_arm)
+	_stand_straight(delta, swinging)
 
 func _gait(delta: float, swinging: bool, paddle_arm) -> void:
 	var player = _rig._player
@@ -379,4 +389,91 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 		if shaft.length_squared() > 1e-6 and want.length_squared() > 1e-6:
 			var b: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), want.normalized()), w))
 			_paddle_aim = Transform3D(b, grip - b * grip)
+
+# ------------------------------------------------------------------ stand straight between points
+
+## True when this frame's legs are drawn straightened (0..1 weight above 0).
+func standing() -> float:
+	return _stand_w
+
+func _drawn(n: Node3D) -> Vector3:
+	var p: Vector3 = _plain(n)
+	var d = _deltas.get(n)
+	return p if d == null else d * p
+
+func _stand_straight(delta: float, swinging: bool) -> void:
+	stand_raise = 0.0
+	var player = _rig._player
+	var want: = 0.0
+	if enabled() and not _rig._raw and not swinging and _expressions != null and _expressions._context() == "idle" \
+			and not (_tap != null and _tap._hands_busy(player)):
+		want = 1.0 - smoothstep(0.3, 1.0, _speed)
+	_stand_w = move_toward(_stand_w, want, delta / STAND_EASE) if delta > 0.0 else want
+	if _stand_w <= 1e-3: return
+	var legs: Array = []
+	for name in ["right_leg_node", "left_leg_node"]:
+		var leg = player.get(name)
+		if leg == null or leg.get("thigh_pivot") == null or leg.get("shin_pivot") == null or leg.get("foot_pivot") == null: return
+		legs.append(leg)
+	# Stand centred: the hips shift over the middle of the feet (weight shift), so both legs can
+	# straighten; then they rise until the more stretched leg is straight (soft knee).
+	var mid: Vector3 = (_drawn(legs[0].foot_pivot) + _drawn(legs[1].foot_pivot)) * 0.5
+	var pelvis: Vector3 = (_drawn(legs[0].thigh_pivot) + _drawn(legs[1].thigh_pivot)) * 0.5
+	var shift: Vector3 = mid - pelvis
+	shift.y = 0.0
+	shift = shift.limit_length(STAND_MAX_SHIFT) * _stand_w
+	var rise: = INF
+	var info: Array = []
+	for leg in legs:
+		var hip: Vector3 = _drawn(leg.thigh_pivot) + shift
+		var knee: Vector3 = _drawn(leg.shin_pivot)
+		var ankle: Vector3 = _drawn(leg.foot_pivot)
+		var l1: float = _plain(leg.thigh_pivot).distance_to(_plain(leg.shin_pivot))
+		var l2: float = _plain(leg.shin_pivot).distance_to(_plain(leg.foot_pivot))
+		var reach: float = (l1 + l2) * STAND_BEND
+		var off: Vector3 = hip - ankle
+		var flat: float = Vector2(off.x, off.z).length()
+		if flat >= reach: rise = 0.0
+		else: rise = minf(rise, maxf(0.0, sqrt(reach * reach - flat * flat) - off.y))
+		info.append([leg, hip, knee, ankle, l1, l2])
+	if rise == INF or rise <= 1e-4: return
+	rise = minf(rise, STAND_MAX_RAISE) * _stand_w
+	stand_raise = rise
+	var up: = Transform3D(Basis.IDENTITY, Vector3.UP * rise + shift)
+	var add: = func(n: Node3D, d: Transform3D) -> void:
+		if n == null: return
+		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
+	var body: Node3D = player.body_pivot
+	add.call(body, up)
+	var hips: Node3D = body.get_node_or_null("HipsMesh")
+	if hips != null: add.call(hips, up)
+	var torso: Node3D = body.get_node_or_null("TorsoMesh")
+	if torso != null:
+		add.call(torso, up)
+		var head: Node3D = torso.get_node_or_null("HeadMesh")
+		if head != null: add.call(head, up)
+	for name in ["right_arm_node", "left_arm_node"]:
+		var arm = player.get(name)
+		if arm == null or arm.get("upper_pivot") == null: continue
+		for n in [arm.upper_pivot, arm.forearm_pivot, arm.hand_pivot]: add.call(n, up)
+	# Knees: two-bone placement from the raised hip to the planted ankle, bending the way they did.
+	for it in info:
+		var leg = it[0]
+		var hip: Vector3 = it[1] + Vector3.UP * rise
+		var knee0: Vector3 = it[2]
+		var ankle: Vector3 = it[3]
+		var l1: float = it[4]
+		var l2: float = it[5]
+		add.call(leg.thigh_pivot, up)
+		var axis: Vector3 = ankle - hip
+		var d: float = clampf(axis.length(), 1e-4, l1 + l2 - 1e-4)
+		var dir: Vector3 = axis.normalized()
+		var pole: Vector3 = knee0 - (it[1] - shift)
+		pole -= dir * pole.dot(dir)
+		if pole.length_squared() < 1e-8: pole = Vector3.UP.cross(dir).cross(dir)
+		pole = pole.normalized()
+		var a: float = (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+		var h: float = sqrt(maxf(l1 * l1 - a * a, 0.0))
+		var knee: Vector3 = hip + dir * a + pole * h
+		_deltas[leg.shin_pivot] = Transform3D(Basis.IDENTITY, knee - knee0) * _deltas.get(leg.shin_pivot, Transform3D.IDENTITY)
 
