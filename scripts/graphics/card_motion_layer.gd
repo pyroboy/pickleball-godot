@@ -12,6 +12,7 @@ class_name CardMotionLayer
 ## the shoulders counter-turn against the hips, both driven by the real feet so they stay in
 ## step. Only when travelling along the facing (not in a side shuffle). Off during strokes,
 ## pose editors and between-point carries.
+## Partner paddle tap (card_partner_tap.gd) when partners pass within reach after a point.
 ## Reactions (stage 10, card_reactions.gd): fist pump, bounce, paddle twirl, head drop, played
 ## at rally end on the paddle arm, torso, head and a small body bob.
 ## PICKLEBALL_CARD_MOTION=0 turns the layer off (A/B checks).
@@ -23,9 +24,14 @@ const SPEED_FULL: = 3.0       # m/s: full amplitude
 const STRIDE_REF: = 0.32      # metres of front-back foot split read as a full stride
 const WEIGHT_RATE: = 5.0      # 1/s fade in and out
 const SPEED_HALF_LIFE: = 0.08
+const TAP_TURN_DEG: = 35.0    # chest turn toward the partner for a paddle tap
+const TAP_LEAN_DEG: = 16.0    # lean toward a partner who is farther away (up to 1.7 m)
+const TAP_PADDLE_REACH: = 0.30  # m from the hand to the paddle head centre
+const TAP_PUSH: = 0.05        # m: the tap's push along the reach
 const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no frame pops)
 
 const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
+const CardPartnerTapScript = preload("res://scripts/graphics/card_partner_tap.gd")
 
 static var _env_off: int = -1
 
@@ -38,6 +44,9 @@ var _amt: = 0.0               # sprung swing amount, -1..1
 var _amt_v: = 0.0
 var _reactions = null         # CardReactions: between-point reactions (stage 10)
 var _spin: = 0.0
+var _tap = null               # CardPartnerTap: partner paddle tap between points
+var _tapping: = false
+var _paddle_aim: = Transform3D.IDENTITY   # tap: paddle turned about the shown hand toward the partner
 var _prev_pos: = Vector3.INF
 var _dir: = Vector3.ZERO      # smoothed horizontal travel direction (unit or zero)
 
@@ -58,10 +67,10 @@ func apply(n: Node3D, xf: Transform3D) -> Transform3D:
 	var d = _deltas.get(n)
 	return xf if d == null else d * xf
 
-## The shown paddle hand's delta (identity when the hand has none).
+## The shown paddle's delta: the paddle hand's, plus the tap's turn of the paddle toward the partner.
 func paddle_delta(paddle_arm) -> Transform3D:
 	if paddle_arm == null: return Transform3D.IDENTITY
-	return _deltas.get(paddle_arm.hand_pivot, Transform3D.IDENTITY)
+	return _paddle_aim * _deltas.get(paddle_arm.hand_pivot, Transform3D.IDENTITY)
 
 static func _turn_about(pivot: Vector3, axis: Vector3, angle: float) -> Transform3D:
 	var b: = Basis(axis, angle)
@@ -72,6 +81,7 @@ func update(delta: float, swinging: bool, paddle_arm) -> void:
 	_deltas.clear()
 	_gait(delta, swinging, paddle_arm)
 	_react(delta, paddle_arm)
+	_partner_tap(delta, paddle_arm)
 
 func _gait(delta: float, swinging: bool, paddle_arm) -> void:
 	var player = _rig._player
@@ -219,4 +229,87 @@ func _react(delta: float, paddle_arm) -> void:
 		add.call(arm.upper_pivot, upper * lift)
 		add.call(arm.forearm_pivot, upper * lift * bend)
 		add.call(arm.hand_pivot, upper * lift * bend)
+
+# ------------------------------------------------------------------ partner paddle tap
+
+## True while this card taps paddles with its partner.
+func tapping() -> bool:
+	return _tapping
+
+func _stop_reaction(p) -> void:
+	var m = self
+	if p != _rig._player:
+		var host: Node = p.get_parent()
+		var rig: Node = host.get_node_or_null("PixelCards_%d" % p.get_instance_id()) if host != null else null
+		m = rig.get("_motion") if rig != null else null
+	if m != null and m._reactions != null: m._reactions.stop()
+
+func _partner_tap(delta: float, paddle_arm) -> void:
+	_tapping = false
+	_paddle_aim = Transform3D.IDENTITY
+	var player = _rig._player
+	if _tap == null: _tap = CardPartnerTapScript.new(player)
+	if not enabled() or _rig._raw or paddle_arm == null: return
+	var tap: Dictionary = _tap.update(delta, _stop_reaction)
+	if tap.is_empty(): return
+	_tapping = true
+	var w: float = float(tap.w)
+	if w <= 1e-4: return
+	var body: Node3D = player.body_pivot
+	var torso: Node3D = body.get_node_or_null("TorsoMesh")
+	if torso == null: return
+	var fwd: Vector3 = body.get_global_transform_interpolated().basis * player._get_forward_axis()
+	fwd.y = 0.0
+	var to_p: Vector3 = tap.partner.global_position - player.global_position
+	to_p.y = 0.0
+	if fwd.length_squared() < 1e-6 or to_p.length_squared() < 1e-6: return
+	# Chest turns toward the partner (limited), then the paddle hand reaches the meeting point.
+	var yaw: float = clampf(fwd.normalized().signed_angle_to(to_p.normalized(), Vector3.UP), -deg_to_rad(TAP_TURN_DEG), deg_to_rad(TAP_TURN_DEG)) * w
+	var hips: Node3D = body.get_node_or_null("HipsMesh")
+	var hip_p: Vector3 = _plain(hips if hips else body)
+	var turn: = _turn_about(hip_p, Vector3.UP, yaw)
+	# Farther apart: lean toward the partner so the paddles still meet.
+	var to_dir: Vector3 = to_p.normalized()
+	var lean_deg: float = TAP_LEAN_DEG * clampf((to_p.length() - 0.9) / 0.8, 0.0, 1.0) * w
+	if lean_deg > 0.01:
+		var axis: Vector3 = to_dir.cross(Vector3.UP).normalized()
+		var sgn: float = signf(axis.cross(_plain(torso) - hip_p).dot(to_dir))
+		if sgn != 0.0: turn = _turn_about(hip_p, axis, deg_to_rad(lean_deg) * sgn) * turn
+	var add: = func(n: Node3D, d: Transform3D) -> void:
+		if n == null: return
+		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
+	add.call(torso, turn)
+	var head: Node3D = torso.get_node_or_null("HeadMesh")
+	if head != null: add.call(head, turn)
+	var aim: = Transform3D.IDENTITY
+	var shoulder: Vector3 = turn * _plain(paddle_arm.upper_pivot)
+	var hand: Vector3 = turn * _plain(paddle_arm.hand_pivot)
+	# The hand stops a paddle short of the meeting point, so the paddle heads meet there.
+	var meet: Vector3 = Vector3(tap.target)
+	var to_meet: Vector3 = meet - shoulder
+	var hand_goal: Vector3 = meet - to_meet.normalized() * TAP_PADDLE_REACH if to_meet.length() > TAP_PADDLE_REACH + 0.05 else shoulder + to_meet * 0.5
+	var from: Vector3 = hand - shoulder
+	var to: Vector3 = hand_goal - shoulder
+	if from.length_squared() > 1e-6 and to.length_squared() > 1e-6:
+		var q: = Quaternion(from.normalized(), to.normalized())
+		var b: = Basis(Quaternion.IDENTITY.slerp(q, w))
+		aim = Transform3D(b, shoulder - b * shoulder)
+		# The tap: a short push along the reach.
+		aim = Transform3D(Basis.IDENTITY, to.normalized() * TAP_PUSH * float(tap.nudge)) * aim
+	for arm_name in ["right_arm_node", "left_arm_node"]:
+		var arm: Node3D = player.get(arm_name)
+		if arm == null or arm.get("upper_pivot") == null: continue
+		var d: Transform3D = (aim * turn) if arm == paddle_arm else turn
+		for n in [arm.upper_pivot, arm.forearm_pivot, arm.hand_pivot]: add.call(n, d)
+	# The paddle head, not just the hand, points at the meeting point.
+	var paddle: Node3D = player.get("paddle_node")
+	if paddle != null:
+		var pxf: Transform3D = paddle.get_global_transform_interpolated()
+		var hd: Transform3D = aim * turn
+		var grip: Vector3 = hd * pxf.origin
+		var shaft: Vector3 = hd.basis * pxf.basis.y
+		var want: Vector3 = Vector3(tap.target) - grip
+		if shaft.length_squared() > 1e-6 and want.length_squared() > 1e-6:
+			var b: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), want.normalized()), w))
+			_paddle_aim = Transform3D(b, grip - b * grip)
 

@@ -800,6 +800,18 @@ Not done: relaxed stand / no more "always ready", later reactions (arms up, hop,
 hips or knees, partner paddle tap, match-end sequence), face variants, emote icons, sound and
 camera framing, a Reactions workspace in the studio. Look not yet checked by the user.
 
+Partner paddle tap (built 2026-11-21, card layer, visual only): `scripts/graphics/card_partner_tap.gd`.
+Starts when partners are within 1.5 m now and still at the tap moment (velocity look-ahead), ball
+dead, within 5 s of the point end, neither bending for / lifting / passing / catching the ball;
+replaces both partners' reactions; once per team per point; both start on the same frame.
+0.7 s: chest turns up to 35 deg toward the partner, lean up to 16 deg when farther, the paddle hand
+stops a paddle short of the meeting point (midpoint, 1.15 m up) and the paddle turns to point at
+it, a 5 cm push at 0.3 s. Autoplay seed 1, 150 s, 7 points: 3 taps, in sync, none during a live
+ball; paddle heads met at 4 and 10 cm, one near-miss at 29 cm (partners crossing fast). Partners
+usually end a point 2-3 m apart, so most points have no tap: making partners walk to each other
+is a gameplay change (between-point movement, owned by the between-point session): ask the user.
+Bench seed 1 60 s and motion bench, motion on vs off: IDENTICAL.
+
 ## 6. Decisions
 
 Decided by the user:
