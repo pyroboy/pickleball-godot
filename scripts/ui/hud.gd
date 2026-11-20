@@ -40,6 +40,8 @@ var _score_chrome: HudChrome
 var _guidance_chrome: HudChrome
 var _pill_chrome: HudChrome   # portrait corner score pill: team dots
 var _pill_label: Label        # "7-5-2" score-score-server
+var _board: DigitalScoreboard  # retro LED score board (replaces the pill / big score)
+const SHOW_STATUS_BOX := false   # portrait corner status box (archived; true brings it back)
 var _pill_text: = ""
 var _toolbar: HBoxContainer
 var _guide: PanelContainer
@@ -250,6 +252,10 @@ func _build_panels() -> void :
 	_score_panel.add_child(_pill_chrome)
 	_pill_chrome.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_pill_chrome.hide()
+	_board = DigitalScoreboard.new()
+	_board.name = "DigitalScoreboard"
+	add_child(_board)
+	_board.hide()
 	_guidance_chrome = HudChrome.new()
 	_guidance_chrome.name = "GuidanceIcons"
 	_guidance_chrome.kind = HudChrome.Kind.GUIDANCE
@@ -359,8 +365,10 @@ func _team_label_text(team: int) -> String:
 	if game != null and game.get("doubles_mode") == true: owner = "YOUR TEAM" if team == 0 else "OPPONENTS"
 	return owner + ("\n" if _portrait else " · ") + ("BLUE" if team == 0 else "RED")
 
-func show_rally_result(headline: String, detail: String) -> void:
+func show_rally_result(headline: String, detail: String, headline_color: Color = UiTheme.INK) -> void:
+	_rally_headline.add_theme_color_override("font_color", headline_color)
 	_rally_headline.text = headline
+	PerfMonitor.note("rally_banner", {"headline": headline, "detail": detail, "board": [_board._scores[0], _board._scores[1]] if is_instance_valid(_board) else []})
 	_rally_detail.text = detail
 	_rally_banner.modulate.a = 1.0
 	_rally_banner.visible = _gameplay_visible
@@ -530,6 +538,7 @@ func set_score(left: int, right: int) -> void :
 	_blue_score = left
 	_red_score = right
 	score.text = "%d   :   %d" % [left, right]
+	if is_instance_valid(_board): _board.set_scores(left, right)
 	_refresh_pill()
 
 ## Corner pill text: serving score, receiving score, server number (e.g. 7-5-2).
@@ -549,9 +558,20 @@ func _refresh_pill() -> void :
 		first = int(ds.serving_team)
 	if _practice_exchange_context or _wall_context: text = score.text.replace("   ", "")
 	_pill_chrome.first_team = first
+	if is_instance_valid(_board):
+		var doubles: bool = game != null and game.get("doubles_mode") == true and game.get("doubles_state") != null
+		_board.set_server(_server if not doubles else int(game.doubles_state.serving_team), int(game.doubles_state.server_number) if doubles else 0)
+		_board.set_names(_board_name(0), _board_name(1))
 	if text != _pill_text:
 		_pill_text = text
 		_pill_label.text = text
+
+func _board_name(team: int) -> String:
+	if _wall_context: return "RET" if team == 0 else "TGT"
+	var game := get_parent()
+	if game != null and game.get("pvp_mode") == true: return "P1" if team == 0 else "P2"
+	if game != null and game.get("doubles_mode") == true: return "YOU" if team == 0 else "OPP"
+	return "YOU" if team == 0 else "AI"
 
 ## "right" / "left" service side for the current server, or "" when unknown.
 func _serve_side_text(game: Node) -> String:
@@ -612,6 +632,7 @@ func set_match_context(server: int, rally_active: bool) -> void :
 		_blue_label.text = "RETURNS"
 		_red_label.text = "TARGETS"
 		score.text = "%d   :   %d" % [game.practice_launcher.wall_practice.returns, game.practice_launcher.wall_practice.targets]
+		if is_instance_valid(_board): _board.set_scores(game.practice_launcher.wall_practice.returns, game.practice_launcher.wall_practice.targets)
 		_refresh_pill()
 		_serve_label.text = "SOLO · NO SCORE"
 		_serve_label.add_theme_color_override("font_color", UiTheme.MUTED)
@@ -694,7 +715,7 @@ func set_charge(ratio: float, charging: bool) -> void :
 		elif focus.exhausted:
 			_charge_label.text = "REAL TIME · %s %d%%" % [short_intent, roundi(_charge_bar.value * 100.0)]
 	_charge_label.add_theme_color_override("font_color", UiTheme.ACCENT if charging else UiTheme.MUTED)
-	_charge_bar.modulate.a = 1.0 if charging else 0.45
+	_charge_bar.modulate.a = (1.0 if charging else 0.45) if SHOW_STATUS_BOX or not _portrait else 0.0
 	var practice = _active_exchange_practice()
 	var demo: bool = practice != null and practice.demo_enabled
 	if demo:
@@ -752,11 +773,15 @@ func set_gameplay_elements_visible(p_visible: bool) -> void :
 ## Portrait shows one score surface (the corner pill): the big score, team and match
 ## labels and the singles serving ball stay hidden. Landscape keeps the desktop panel.
 func _apply_score_surface() -> void :
-	var show_pill: bool = _portrait and _gameplay_visible
-	_pill_label.visible = show_pill
-	_pill_chrome.visible = show_pill
+	# The LED board is the score surface in both layouts; the pill text and the big
+	# score label stay hidden (the panel keeps its rect for banner placement).
+	_pill_label.visible = false
+	_pill_chrome.visible = false
+	if is_instance_valid(_board): _board.visible = _gameplay_visible
+	_score_panel.self_modulate.a = 0.0 if _portrait else 1.0
 	_serve_label.visible = _gameplay_visible
-	for widget in [score, _match_label, _blue_label, _red_label]:
+	score.visible = false
+	for widget in [_match_label, _blue_label, _red_label]:
 		widget.visible = _gameplay_visible and not _portrait
 	if is_instance_valid(_serve_ball) and _portrait: _serve_ball.hide()
 
@@ -774,6 +799,7 @@ func _layout_desktop() -> void :
 		_layout_singles_feedback()
 		return
 	_restore_desktop_fonts()
+	for control in [_guidance_chrome, state, _charge_label, _charge_bar, _controls_hint]: control.modulate.a = 1.0   # landscape keeps its status panel
 	var width: = viewport_size.x
 	var height: = viewport_size.y
 	var margin: = 20.0 if width >= 900.0 else 12.0
@@ -784,6 +810,7 @@ func _layout_desktop() -> void :
 	_place(_blue_label, Rect2(margin + 22, margin + 38, 138, 22))
 	_place(_red_label, Rect2(margin + score_width - 160, margin + 38, 138, 22))
 	_place(score, Rect2(margin + 20, margin + 55, score_width - 40, 55))
+	if is_instance_valid(_board): _place(_board, Rect2(margin + 20, margin + 58, score_width - 40, 54))
 	_place(_serve_label, Rect2(margin + 16, margin + 113, score_width - 32, 20))
 	_place(difficulty, Rect2(margin + 4, margin + 150, 270, 26))
 	_place(_spin_label, Rect2(margin + 4, margin + 179, 300, 26))
@@ -937,9 +964,10 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_debug_toolbar.hide()
 	debug_mode = false
 	# Corner pill (top-left) with the server line under it; the rest of the top is court.
-	var pill_w: float = 250 * s
-	var pill_h: float = 62 * s
+	var pill_w: float = 300 * s
+	var pill_h: float = 92 * s
 	_place(_score_panel, Rect2(x, y, pill_w, pill_h))
+	if is_instance_valid(_board): _place(_board, Rect2(x, y, pill_w, pill_h))
 	_place(_pill_label, Rect2(x + 40 * s, y + 4 * s, pill_w - 80 * s, pill_h - 10 * s))
 	_pill_label.add_theme_font_size_override("font_size", maxi(12, roundi(34 * s)))
 	_place(_match_label, Rect2(x + w * 0.28, y + 10 * s, w * 0.44, 20 * s))
@@ -1004,6 +1032,11 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 
 	_place(_status_panel, Rect2(x, y + 112 * s, guidance_width, 148 * s))
 	_place(_guidance_chrome, _status_panel.get_rect())
+	# Archived (user's call): the portrait corner status box (guidance icons, state
+	# line, charge text/bar, controls hint) distracted from play. Kept, not drawn:
+	# alpha 0 so other code toggling visibility cannot bring it back.
+	for control in [_guidance_chrome, state, _charge_label, _charge_bar, _controls_hint]:
+		control.modulate.a = 1.0 if SHOW_STATUS_BOX else 0.0
 	_place(state, Rect2(x + 64 * s, y + 116 * s, caption_width, 41 * s))
 	_place(_charge_label, Rect2(x + 64 * s, y + 164 * s, caption_width, 38 * s))
 	_place(_charge_bar, Rect2(x + 64 * s, y + 205 * s, caption_width, 3 * s))

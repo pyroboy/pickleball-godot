@@ -70,18 +70,31 @@ func update_difficulty(difficulty: int) -> void :
 
 func show_rally_result(winner: int, side_out: bool, complete: bool = false) -> void:
 	if not is_instance_valid(_hud) or not is_instance_valid(_game): return
+	# Name the team every time, in its colour: who won the rally and what changed.
 	var owner: String = _hud.team_name(winner)
-	var headline := "Sideout" if side_out else "Point!"
-	var detail := "%s serve · score unchanged" % owner if side_out else "%s +1 · %d – %d" % [owner, _game.score_left, _game.score_right]
+	var other: String = _hud.team_name(1 - winner) if winner in [0, 1] else ""
+	var color: Color = Color("4eb8ff") if winner == 0 else Color("ff6278")
+	var plural: bool = owner not in ["You", "Opponents"]   # "Your team scores", "Opponents score"
+	var score_line := "%s %d  –  %d %s" % [_hud.team_name(0), _game.score_left, _game.score_right, _hud.team_name(1)]
+	var headline := "SIDE OUT" if side_out else ("%s SCORE%s" % [owner.to_upper(), "S" if plural else ""])
+	var detail := ("%s serve%s now" % [owner, "s" if plural else ""]) if side_out else score_line
 	if _game.get("doubles_mode") == true and not complete:
 		var outcome: Dictionary = _game.doubles_controller.last_outcome
 		if not bool(outcome.get("point_scored", false)):
-			headline = "Sideout" if side_out else "Second server"
-			detail = "%s serves · %s" % [_game.actor_label(_game.get_server_actor()), _game.doubles_state.score_call()]
+			if side_out:
+				headline = "SIDE OUT"
+				detail = "%s serve%s now" % [owner, "s" if plural else ""]
+			else:
+				# Serving team lost the rally but keeps serve: the winner did NOT score.
+				color = Color("ffd25a")
+				headline = "SECOND SERVER"
+				detail = "%s win%s the rally · %s keep%s serving" % [owner, "s" if plural else "", other, "s" if other not in ["You", "Opponents"] else ""]
+		else:
+			detail = score_line
 	if complete:
-		headline = "%s win%s!" % [owner, "" if owner in ["You", "Opponents"] else "s"]
-		detail = "Final · %d – %d" % [_game.score_left, _game.score_right]
-	_hud.show_rally_result(headline, detail)
+		headline = "%s WIN%s!" % [owner.to_upper(), "S" if plural else ""]
+		detail = "Final · " + score_line
+	_hud.show_rally_result(headline, detail, color)
 	_rally_visible_timer = 2.8
 	_rally_generation = _game._point_reset_generation
 	_sync_match_context()
