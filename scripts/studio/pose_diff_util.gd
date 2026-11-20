@@ -10,12 +10,22 @@ extends RefCounted
 
 const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 const KEYFRAMES := [["windup", "windup_body"], ["finish", "follow_through_body"]]
+const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
+const GripStore = preload("res://scripts/mobile_paddle_grip_store.gd")
+## Serves (v00..v06) are code-built and tuned by this file, not a .tres.
+const SERVE_TUNING := "data/serve_tuning.json"
+
+static func is_serve_key(key: String) -> bool:
+	return key.begins_with("v")
 
 static func key_of(def: Resource) -> String:
-	return ("b%02d" % def.base_pose_id) if def is BasePoseDefinition else ("s%02d" % def.posture_id)
+	if def is BasePoseDefinition: return "b%02d" % def.base_pose_id
+	if ServeStore.is_serve(def): return "v%02d" % ServeStore.style_id(def)
+	return "s%02d" % def.posture_id
 
 ## Mobile editor working-copy key ("stroke:13" / "base:4") for a pose key.
 static func copy_key(key: String) -> String:
+	if is_serve_key(key): return "serve:" + str(int(key.substr(1)))
 	return ("base:" if key.begins_with("b") else "stroke:") + str(int(key.substr(1)))
 
 ## The library resource the game holds for s13 / b04, or null.
@@ -24,14 +34,24 @@ static func live_def(key: String) -> Resource:
 	var id := int(key.substr(1))
 	if key.begins_with("s"): return PostureLibrary.instance().get_def(id)
 	if key.begins_with("b"): return BasePoseLibrary.instance().get_def(id)
+	if is_serve_key(key): return ServeStore.get_def(id)
 	return null
 
 static func file_of(key: String) -> String:
+	if is_serve_key(key): return SERVE_TUNING
 	var live := live_def(key)
 	return live.resource_path.trim_prefix("res://") if live else ""
 
 ## Fresh copy of the pose file (resource cache ignored), normalized like the editor's copy.
 static func load_disk(key: String) -> Resource:
+	if is_serve_key(key):   # the code-built serve + the tuning file as it is now (+ grip, as the live one)
+		if live_def(key) == null: return null
+		ServeStore._tuning = null
+		var d: Resource = ServeStore.packaged_default(int(key.substr(1)))
+		if d != null:
+			GripStore.apply_to_definition(d)
+			PaddleRotation.normalize_pose(d)
+		return d
 	var live := live_def(key)
 	if live == null or live.resource_path == "": return null
 	var r: Resource = ResourceLoader.load(live.resource_path, "", ResourceLoader.CACHE_MODE_IGNORE)
@@ -92,6 +112,11 @@ static func diff(cur: Resource, disk: Resource, base: bool) -> Array:
 ## Copy the file on disk into the live library resource (same identity the game holds).
 ## Returns false if the key or file is unknown. Callers drop the editor's working copy.
 static func reload_live(key: String) -> bool:
+	if is_serve_key(key):   # rebuilt from the tuning file on the next get_def
+		if live_def(key) == null: return false
+		ServeStore._tuning = null
+		ServeStore._live.erase(int(key.substr(1)))
+		return true
 	var live := live_def(key)
 	if live == null: return false
 	var fresh: Resource = ResourceLoader.load(live.resource_path, "", ResourceLoader.CACHE_MODE_IGNORE)
