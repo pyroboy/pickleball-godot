@@ -185,6 +185,9 @@ static func solve_plan(physics: ShotPhysics, origin: Vector3, context: Dictionar
 		shot.spin_mode = 0
 		launch = physics.solve_drop_launch(origin, shot.charge, team, 0, shot.target)
 	if not valid_launch(origin, launch, team):
+		var perf_fail = Engine.get_main_loop().root.get_node_or_null("PerfMonitor") if Engine.get_main_loop() is SceneTree else null
+		if perf_fail != null: perf_fail.note("ai_unsolved", {"actor": int(context.get("actor_id", -1)), "kind": str(planned.get("kind", "")),
+			"origin": [snappedf(origin.x, 0.01), snappedf(origin.y, 0.01), snappedf(origin.z, 0.01)]})
 		return {}
 	if str(shot.intent) == "DROP": launch = _with_net_margin(origin, launch, team)
 	launch["tactic"] = shot.kind
