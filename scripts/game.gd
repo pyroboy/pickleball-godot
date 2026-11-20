@@ -58,6 +58,7 @@ const SERVE_ZONE_CENTER_TOLERANCE: = 0.2
 const _RallyScorer = preload("res://scripts/rally_scorer.gd")
 const _ShotPhysics = preload("res://scripts/shot_physics.gd")
 const _ShotProfile = preload("res://scripts/shot_profile.gd")
+const _HumanShotChoice = preload("res://scripts/human_shot_choice.gd")
 const _InputHandler = preload("res://scripts/input_handler.gd")
 const _AimController = preload("res://scripts/aim_controller.gd")
 const _ScoreboardUI = preload("res://scripts/scoreboard_ui.gd")
@@ -994,7 +995,25 @@ func _perform_player_swing(charge_ratio: float) -> void :
 	var reach_intent := {"target": aim_controller.get_target(), "charge": charge_ratio,
 		"spin_mode": selected_spin_mode, "aim_mode": selected_shot_intent,
 		"shot_intent": "GROUNDSTROKE", "arc": trajectory_arc_offset}
-	if human == null or not human.request_swing(charge_ratio):
+	# Tap = touch shot placed short, hold = power shot placed deep (docs/CONTROLS_PLAN.md).
+	var restore_choice: Array = []
+	if _HumanShotChoice.ENABLED and human != null and not _is_practice() and aim_controller != null:
+		var preparation: Dictionary = human.preparation_contact()
+		var root: Vector3 = preparation.get("target_root", player_left.global_position) if not preparation.is_empty() else player_left.global_position
+		var contact_height: float = Vector3(preparation.point).y if not preparation.is_empty() else ball.global_position.y
+		var choice: Dictionary = _HumanShotChoice.choose(charge_ratio, absf(root.z), contact_height, _pending_auto_shot_type == "SMASH", aim_controller.get_target(), aim_controller._end_sign)
+		restore_choice = [selected_shot_intent, selected_spin_mode]
+		selected_shot_intent = choice.intent
+		selected_spin_mode = choice.spin
+		aim_controller.get_target()   # sync the aim context to the new intent first
+		aim_controller.target = choice.target
+		if _pending_auto_shot_type != "RETURN": _pending_shot_type = choice.shot_type
+		PerfMonitor.note("human_input", {"touch": choice.touch, "name": choice.name, "zone": choice.zone, "charge": snappedf(charge_ratio, 0.01),
+			"hold_s": snappedf(charge_ratio * PickleballConstants.MAX_SERVE_CHARGE_TIME, 0.01), "h": snappedf(contact_height, 0.01), "target": [snappedf(choice.target.x, 0.01), snappedf(choice.target.z, 0.01)]})
+	var swing_ok: bool = human != null and human.request_swing(charge_ratio)
+	if not restore_choice.is_empty():
+		selected_shot_intent = restore_choice[0]; selected_spin_mode = restore_choice[1]
+	if not swing_ok:
 		if selected_movement_intent == "AUTO" and driver != null and driver.maybe_start_reach(charge_ratio, reach_intent):
 			scoreboard_ui.set_state_text("Grounded reach")
 			return

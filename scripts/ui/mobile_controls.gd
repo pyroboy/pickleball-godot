@@ -4,6 +4,7 @@ extends Control
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HitTiming = preload("res://scripts/ui/hit_timing_feedback.gd")
+const HumanShots = preload("res://scripts/human_shot_choice.gd")
 const TIMING_RING_WIDTH_FRACTION: = 0.54
 const TIMING_RING_MIN_GAP_FRACTION: = 0.16
 const TIMING_RING_SMOOTH_SECONDS: = 0.045
@@ -349,7 +350,7 @@ func aim_direction() -> Vector2:
 	return _charge_vector.normalized() * ((travel - DEADZONE) / (1.0 - DEADZONE)) if travel > DEADZONE else Vector2.ZERO
 
 func _shot_button_at(point: Vector2) -> int:
-	if _is_serve_context(): return -1
+	if _is_serve_context() or HumanShots.ENABLED: return -1   # tap/hold replaces the shot buttons
 	for index in _guide_nodes.size():
 		if point.distance_to(_guide_nodes[index]) <= _shot_button_radius: return index
 	return -1
@@ -405,8 +406,25 @@ func _update_serve_rotation(point: Vector2) -> void :
 
 func _hit_label() -> String:
 	if _gesture_is_serve or _is_serve_context(): return str(_selected_serve_option(true).get("label", "Flat")).to_upper()
+	var preview: Dictionary = _shot_preview()
+	if not preview.is_empty(): return "TAP " + _shot_word(preview.tap)
 	if _smash_state() > 0: return "SMASH"
 	return "FLAT"
+
+## What a tap and a hold will play on the incoming ball (empty when not in a rally
+## or nothing is coming). Same rule as the shot itself (human_shot_choice.gd).
+func _shot_preview() -> Dictionary:
+	if not HumanShots.ENABLED or game == null or game.game_state != 2 or game._is_practice(): return {}
+	var actor = game.get_human_actor()
+	var human = actor.posture.human_contact if actor != null and actor.posture != null else null
+	if human == null: return {}
+	var preparation: Dictionary = human.preparation_contact()
+	if preparation.is_empty(): return {}
+	var root: Vector3 = preparation.get("target_root", actor.global_position)
+	return HumanShots.names_for(absf(root.z), Vector3(preparation.point).y, _smash_state() == 2)
+
+static func _shot_word(key: String) -> String:
+	return {"SPEED_UP": "SPEED-UP"}.get(key, key)
 
 ## 0 none, 1 smash spot reachable (hold HIT steps under the ball), 2 smash from here.
 func _smash_state() -> int:
@@ -477,6 +495,8 @@ func _draw() -> void :
 	_caption("CANCEL" if _cancel_armed else _hit_label(), _charge_center + Vector2(0, -2 * _s), 19, hit_color, 19)
 	var serve_locked: bool = _is_serve_context() and bool(_serve_timing.get("locked", false))
 	var subcaption: String = "HOLD + AIM"
+	var preview: Dictionary = {} if _is_serve_context() else _shot_preview()
+	if not preview.is_empty(): subcaption = "HOLD " + _shot_word(preview.hold)
 	var footer: = "HIT"
 	if smash == 2: footer = "SMASH"
 	elif smash == 1: subcaption = "HOLD: STEP IN"
@@ -654,6 +674,7 @@ func _cache_hit_guide() -> void :
 		_guide_caption_rects.append(rect)
 
 func _draw_hit_guide() -> void :
+	if HumanShots.ENABLED: return
 	for index in 3:
 		var chosen: bool = _charge_id != -1 and _gesture_sector == GUIDE_LABELS[index]
 		var color: Color = UiTheme.ACCENT if chosen else UiTheme.MUTED
