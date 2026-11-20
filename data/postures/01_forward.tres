@@ -44,7 +44,8 @@ values = {
 "weight_shift": 0.8,
 "body_position_offset": Vector3(0, 0, 0.04),
 "elbow_swivel_weight": 1.0,
-"right_elbow_swivel_deg": -28.31304144
+"right_elbow_swivel_deg": -28.31304144,
+"shoulder_protraction_m": 0.0
 }
 
 [sub_resource type="Resource" id="Resource_0wkbi"]
@@ -88,7 +89,8 @@ values = {
 "weight_shift": -0.25,
 "body_position_offset": Vector3(0, 0, -0.12),
 "elbow_swivel_weight": 1.0,
-"right_elbow_swivel_deg": -50.5137432
+"right_elbow_swivel_deg": -50.5137432,
+"shoulder_protraction_m": 0.0
 }
 
 [resource]
@@ -110,23 +112,23 @@ zone_y_max = 1.2757
 zone_forward_offset = 0.4197
 right_elbow_path = null
 left_elbow_path = null
-right_elbow_pole = Vector3(0.48, -0.35, -0.22)
-right_shoulder_rotation_deg = Vector3(0, -8, 0)
+right_elbow_pole = Vector3(0.47497535, -0.35219204, -0.21559067)
+right_shoulder_rotation_deg = Vector3(-0.4101728, -7.7747808, -0.115409404)
 left_hand_mode = 4
-left_hand_offset = Vector3(-0.15, 0, -0.22)
-left_elbow_pole = Vector3(-0.48, -0.35, -0.22)
-left_shoulder_rotation_deg = Vector3(0, 8, 0)
+left_hand_offset = Vector3(-0.415873, -0.222966, -0.28506568)
+left_elbow_pole = Vector3(-0.55229604, -0.23994727, -0.10989954)
+left_shoulder_rotation_deg = Vector3(-10.998977, 8.616566, 2.1224267)
 stance_width = 0.48
 front_foot_forward = 0.16
 back_foot_back = -0.12
 right_foot_yaw_deg = 5.0
 left_foot_yaw_deg = 5.0
 lead_foot = 1
-crouch_amount = 0.06
-weight_shift = 0.2
-hip_yaw_deg = -2.0
-head_yaw_deg = 2.0
-head_pitch_deg = -28.0
+crouch_amount = 0.108733906
+weight_shift = 0.094946523
+hip_yaw_deg = -1.819338942
+head_yaw_deg = 23.07283835
+head_pitch_deg = 28.3700777
 head_track_ball_weight = 0.8
 charge_paddle_offset = Vector3(0, 0.02, -0.1)
 charge_hip_coil_deg = 2.0
@@ -145,5 +147,13 @@ charge_duration = 0.32
 notes = "Three body/paddle keyframes tuned for shared trajectory contact. Backhand uses left paddle hand; support hand is released. Low strokes lift, center volleys block, overheads finish downward."
 last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
-right_elbow_swivel_deg = -45.1222343
+right_elbow_swivel_deg = -56.5173448
 elbow_swivel_weight = 1.0
+torso_yaw_deg = 1.288843362
+torso_pitch_deg = -14.62444636
+torso_roll_deg = 5.07612372
+spine_curve_deg = 4.75756465
+shoulder_protraction_m = 0.000253989
+body_position_offset = Vector3(0.0144611625, -0.048250925, -0.04004935)
+body_pitch_deg = 8.99590583
+body_roll_deg = 5.07023873

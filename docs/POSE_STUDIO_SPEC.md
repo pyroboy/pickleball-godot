@@ -645,6 +645,22 @@ Pose files matched the backup; nothing committed. Run in this order (each step e
 Later, not queued: reference image overlay, mirror forehand -> backhand animation,
 copy / paste a key across poses ("paste as change"), A/B snapshots.
 
+### Stage 6d. Contact points in AutoPose and serves in the studio (built 2026-11-21, user asked; no bench by user decision)
+- Contact points: with Gameplay edit on, the Contact paddle hand and paddle-tip handles are free
+  (re-pin with their lock). Dragging one of them moves the contact point (paddle position and face
+  fields, gameplay); dragging any other handle keeps the paddle fixed and reshapes the body.
+  Checked by link on s13 / s00 / s05: hand and tip within 1 mm of the mouse, other handles
+  0 mm paddle drift; Gameplay edit off locks them again.
+- Serves: workspace "Serves" (keys v00-v06). The diff is against the code-built serve plus
+  `data/serve_tuning.json`; Save writes each changed field as a "set" value in its stage of that
+  file (`tools/pose_studio/serve_tuning.py`, which also removes an "add" for the same field);
+  charge_* go to windup, ft_* to finish; no versions for serves yet. Checked by link: serves open
+  with 0 changes, a wind-up and a finish edit save, the diff is empty after save and reselect.
+- Fixed in `scripts/mobile_serve_pose_store.gd`: `packaged_default` shared the wind-up / finish
+  key values with the cached code default, so tuning "add" values piled up on every rebuild and
+  editor edits leaked into the cache. Each copy now owns its key values. May change how serves
+  look in game if a rebuild happened during play (not measured; no bench by user decision).
+
 ### Stage 7. Backhand-face variation of the front poses
 Poses s01 Forward, s15 Mid-low Forward, s06 Low Forward (ask about s12 Volley Ready).
 Paddle rolled 180 degrees so the backhand face meets the ball; same contact point and

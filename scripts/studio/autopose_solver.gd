@@ -230,8 +230,8 @@ func _p(list: Array, field: String, region: String, scale: float, comps := -1) -
 	var ed = _engine
 	if ed._edit.get(field) == null or _pose0.get(field) == null: return
 	if stage != 1 and not (field in Keyframe.FIELDS or field in ed.POS or field in ed.ROT): return   # would write the shared base
-	if stage == 1 and (field in ed.POS or field in studio.FACE_FIELDS): return   # Contact paddle: gameplay
-	if field in studio.GAMEPLAY_FIELDS and not (stage != 1 and field in ed.POS): return   # wind-up / finish POS = deltas
+	if stage == 1 and (field in ed.POS or field in studio.FACE_FIELDS) and not _paddle_free: return   # Contact paddle: gameplay (free with Gameplay edit)
+	if field in studio.GAMEPLAY_FIELDS and not (field in ed.POS and (stage != 1 or _paddle_free)): return   # wind-up / finish POS = deltas; Contact POS only when freed
 	var d: Dictionary = studio._descriptor(field)
 	if d.is_empty(): return
 	for c in (range(3) if comps == 3 else [-1]):
@@ -250,7 +250,7 @@ func _build_params(main: String) -> Array:
 		_p(list, side + "_shoulder_rotation_deg", "arm", 10.0, 3)
 		_p(list, side + "_elbow_swivel_deg", "arm", 15.0)   # the drawn elbow (scripts/elbow_swivel.gd)
 	var paddle := func(list: Array) -> void:
-		if stage == 1: return
+		if stage == 1 and not _paddle_free: return   # Contact paddle moves only with Gameplay edit
 		for f in _engine.POS: _p(list, f, "paddle", 0.05)
 		_p(list, "paddle_pitch_base_deg", "paddle", 10.0); _p(list, "paddle_yaw_base_deg", "paddle", 10.0)
 	var chest := func(list: Array) -> void:
@@ -312,8 +312,9 @@ func begin(h: String, opts: Dictionary = {}) -> Dictionary:
 	stage = _engine._stage
 	var main: String = "left" if studio.main_hand_id() == "left_hand" else "right"
 	var sup: String = "right" if main == "left" else "left"
-	if stage == 1 and not _engine._base and (h == main + "_hand" or h == "paddle_tip" or h == "paddle"):
-		return {"ok": false, "error": "pinned at Contact: the paddle hand and paddle are the contact point (gameplay)", "locked": true}
+	var unpin_paddle: bool = (opts.get("unpin", []) is Array and (opts.get("unpin") as Array).has("paddle")) and bool(studio.gameplay_edit)
+	if stage == 1 and not _engine._base and (h == main + "_hand" or h == "paddle_tip" or h == "paddle") and not unpin_paddle:
+		return {"ok": false, "error": "pinned at Contact: the paddle hand and paddle are the contact point (gameplay); Gameplay edit frees it", "locked": true}
 	var t0 := Time.get_ticks_usec()
 	_player = studio.preview.player
 	_pose0 = studio.preview.pose

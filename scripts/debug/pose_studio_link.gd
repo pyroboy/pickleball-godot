@@ -334,8 +334,8 @@ func _c_select(r: Dictionary) -> Dictionary:
 		await _frames(2)
 		return {"key": key, "stage": _stage_name(_ed._stage),
 			"stages": ["windup", "contact", "finish"] if _ed._has_motion() else ["contact"]}
-	var ws := 1 if key.begins_with("b") else 0
-	if _ed._serve or _ed._base != (ws == 1): _ed._select_workspace(ws)
+	var ws := 1 if key.begins_with("b") else 2 if PoseDiff.is_serve_key(key) else 0
+	if _ed._serve != (ws == 2) or _ed._base != (ws == 1): _ed._select_workspace(ws)
 	_sel = key
 	_ed._group.select(6)
 	_reselect(1)

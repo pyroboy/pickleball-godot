@@ -359,8 +359,8 @@ func _build_top_bar(main: Control) -> void:
 	title.add_theme_color_override("font_color", Ui.MUTED)
 	bar.add_child(title)
 	_workspace = OptionButton.new(); _workspace.name = "Workspace"; _workspace.focus_mode = Control.FOCUS_NONE
-	_workspace.add_item("Strokes"); _workspace.add_item("Body stances")
-	_workspace.tooltip_text = "Pose type: strokes or body stances"
+	_workspace.add_item("Strokes"); _workspace.add_item("Body stances"); _workspace.add_item("Serves")
+	_workspace.tooltip_text = "Pose type: strokes, body stances or serves (serves save to data/serve_tuning.json)"
 	_workspace.item_selected.connect(_on_workspace)
 	bar.add_child(_workspace)
 	_pose_title = Theme_.header_label("PoseTitle", "")
@@ -687,6 +687,7 @@ func _copy_key(k: String) -> String: return PoseDiff.copy_key(k)
 func _key_from_copy(ck: String) -> String:
 	if ck.begins_with("stroke:"): return "s%02d" % int(ck.substr(7))
 	if ck.begins_with("base:"): return "b%02d" % int(ck.substr(5))
+	if ck.begins_with("serve:"): return "v%02d" % int(ck.substr(6))
 	return ""
 
 func _index_of(k: String) -> int:
@@ -765,8 +766,8 @@ func select_pose(k: String) -> bool:
 	if _compare != null: compare_end()
 	var live := PoseDiff.live_def(k)
 	if live == null: _set_status("Unknown pose " + k); return false
-	var ws := 1 if k.begins_with("b") else 0
-	if engine._serve or engine._base != (ws == 1): engine._select_workspace(ws)
+	var ws := 1 if k.begins_with("b") else 2 if PoseDiff.is_serve_key(k) else 0
+	if engine._serve != (ws == 2) or engine._base != (ws == 1): engine._select_workspace(ws)
 	engine._group.select(6)
 	key = k
 	var idx := _index_of(k)
@@ -958,6 +959,8 @@ func _update_dirty_flag() -> void:
 ## Field rows that differ from the file: [{stage, field, text}] (pose_diff_util).
 func diff() -> Array:
 	if not _ok() or key == "": return []
+	# Serves: always a fresh build (code + tuning file); a cached one can share key data with the copy.
+	if PoseDiff.is_serve_key(key): return PoseDiff.diff(engine._current, PoseDiff.load_disk(key), false)
 	if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
 	return PoseDiff.diff(engine._current, _disk[key], engine._base)
 
@@ -977,7 +980,8 @@ func save(message: String = "", author: String = "user") -> Dictionary:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null: return {"ok": false, "error": "cannot write " + path}
 	f.store_string(JSON.stringify({"key": key, "changes": changes})); f.close()
-	var r := run_cli(PackedStringArray(["save", key, "--changes", path, "--message=" + msg, "--author", author]))
+	var r := run_cli(PackedStringArray(["apply", "--style", str(int(key.substr(1))), "--changes", path]), "res://tools/pose_studio/serve_tuning.py") \
+		if PoseDiff.is_serve_key(key) else run_cli(PackedStringArray(["save", key, "--changes", path, "--message=" + msg, "--author", author]))
 	DirAccess.remove_absolute(path)
 	if not r.get("ok", false):
 		_set_status("Save failed: " + str(r.get("error", "?")))
@@ -1016,6 +1020,10 @@ func reload(k: String = "") -> bool:
 	if not PoseDiff.reload_live(k): return false
 	engine._copies.erase(_copy_key(k)); engine._dirty.erase(_copy_key(k))
 	_disk[k] = PoseDiff.load_disk(k)
+	if PoseDiff.is_serve_key(k) and engine._serve:
+		var st := stage
+		engine._select_workspace(2)   # its serve list holds the old serve objects: rebuild from the store
+		if k == key: _reselect(st)
 	if k == key:
 		_reselect(stage)
 		_remember()
@@ -1024,8 +1032,8 @@ func reload(k: String = "") -> bool:
 	return true
 
 ## python3 tools/pose_notes.py <args> --json; one JSON object back ({ok:false,error} on failure).
-func run_cli(args: PackedStringArray) -> Dictionary:
-	var script := ProjectSettings.globalize_path("res://tools/pose_notes.py")
+func run_cli(args: PackedStringArray, tool := "res://tools/pose_notes.py") -> Dictionary:
+	var script := ProjectSettings.globalize_path(tool)
 	var full := PackedStringArray([script]); full.append_array(args); full.append("--json")
 	var out: Array = []
 	var code := -1
@@ -1171,7 +1179,7 @@ func _on_joint_selected(id: String) -> void:
 	_update_joint_label()
 
 func _on_workspace(i: int) -> void:
-	select_pose("b00" if i == 1 else "s00")
+	select_pose("b00" if i == 1 else "v00" if i == 2 else "s00")
 
 func _on_list_selected() -> void:
 	if _list_guard: return
@@ -1296,7 +1304,7 @@ func _poll_external() -> void:
 	if ek != "" and ek != key:
 		key = ek; stage = engine._stage
 		if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
-		_workspace.select(1 if key.begins_with("b") else 0)
+		_workspace.select(1 if key.begins_with("b") else 2 if PoseDiff.is_serve_key(key) else 0)
 		_remember(); _fill_list(); _inspector.rebuild(); _after_change(false)
 		pose_selected.emit(key)
 		return
@@ -1403,7 +1411,7 @@ func _all_keys() -> Array:
 
 func _list_defs() -> Array:
 	var base := key.begins_with("b")
-	var defs: Array = BasePoseLibrary.instance().all_definitions() if base else PostureLibrary.instance().all_definitions()
+	var defs: Array = BasePoseLibrary.instance().all_definitions() if base else PoseDiff.ServeStore.all_definitions() if PoseDiff.is_serve_key(key) else PostureLibrary.instance().all_definitions()
 	var out := defs.duplicate()
 	out.sort_custom(func(a, b): return PoseDiff.key_of(a) < PoseDiff.key_of(b))
 	return out
@@ -1658,7 +1666,7 @@ func gameplay_locked(field: String) -> bool:
 
 func set_gameplay_edit(on: bool) -> void:
 	gameplay_edit = on
-	if not on: autopose_paddle_free = false   # the Contact paddle pins again when Gameplay edit goes off
+	autopose_paddle_free = on   # Gameplay edit on frees the Contact paddle for AutoPose (re-pin with its lock); off pins it again
 	_refresh_ap_pins()
 	if _gameplay_btn:
 		_gameplay_btn.set_pressed_no_signal(on)
@@ -1783,11 +1791,11 @@ func set_autopose_pin(id: String, on = null) -> Dictionary:
 	var nm: String = String(ViewportInput.AP_NAMES.get(id, id))
 	var want: bool = (not autopose_pinned(id)) if on == null else bool(on)
 	if _contact_paddle_handle(id):
-		if not want:
-			_set_status("The Contact paddle stays pinned: it is the contact point (gameplay), and AutoPose only changes animation. Use the hand gizmo with Gameplay edit on to move it.")
-			return {"ok": false, "error": "Contact paddle is pinned (gameplay): AutoPose never moves it", "locked": true, "pinned": true}
-		autopose_paddle_free = false
-		_set_status("Contact paddle is pinned.")
+		if not want and not gameplay_edit:
+			_set_status("The Contact paddle is the contact point (gameplay). Turn on Gameplay edit to move it with AutoPose.")
+			return {"ok": false, "error": "Contact paddle is pinned (gameplay): turn on Gameplay edit to unpin it", "locked": true, "pinned": true}
+		autopose_paddle_free = not want
+		_set_status("Contact paddle unpinned: AutoPose drags may move the contact point (gameplay)." if not want else "Contact paddle pinned.")
 	else:
 		if want: autopose_pins[id] = true
 		else: autopose_pins.erase(id)
@@ -1879,14 +1887,14 @@ func _apply_autopose_view() -> void:
 	engine._sync_selected_gizmo()
 
 ## Why a handle cannot be dragged at this key ("" = it can). Gameplay rule: at Contact the paddle
-## hand and paddle tip are the contact point, so AutoPose never moves them (Gameplay edit or not:
-## AutoPose only changes animation; the hand gizmo with Gameplay edit on moves the contact point).
+## hand and paddle tip are the contact point: AutoPose moves them only with Gameplay edit on and the
+## paddle unpinned (user decision 2026-11-21: edit contact points in AutoPose).
 func autopose_lock_reason(h: String) -> String:
 	if not _ok() or key == "": return "no pose"
 	if h == "paddle_tip" and not tip_available(): return "no paddle on this pose"
 	var main := "left" if main_hand_id() == "left_hand" else "right"
-	if engine._stage == 1 and not engine._base and (h == main + "_hand" or h == "paddle_tip"):
-		return "Contact paddle (gameplay): drag the elbow, chest or hips instead"
+	if engine._stage == 1 and not engine._base and (h == main + "_hand" or h == "paddle_tip") and not (gameplay_edit and autopose_paddle_free):
+		return "Contact paddle (gameplay): turn on Gameplay edit to move the contact point"
 	return ""
 
 func _autopose_hint() -> String:
@@ -1907,7 +1915,7 @@ func _autopose_hint() -> String:
 		parts.append("Shift = depth · Esc / right-click cancels")
 		return " · ".join(parts)
 	var t := "AutoPose · drag a handle, the body follows · lock icon (or Alt+click) pins · Shift = depth · Esc / right-click cancels · P leaves"
-	if contact: t += " · Contact: paddle pinned (gameplay)"
+	if contact: t += (" · Contact point free (Gameplay edit): dragging the hand or tip moves it" if gameplay_edit and autopose_paddle_free else " · Contact: paddle pinned (Gameplay edit frees it)")
 	return t
 
 ## Start a viewport AutoPose drag on handle `h` (the solver's begin). Refused when locked, not at
@@ -1921,7 +1929,11 @@ func autopose_drag_begin(h: String) -> Dictionary:
 	if _compare != null: compare_end()
 	if _txn != null: end_edit()
 	var ap = autopose_solver()
-	var b: Dictionary = ap.begin(h, autopose_options())
+	var opts := autopose_options()
+	# The contact point moves only when its own handle (paddle hand / tip) is dragged; other
+	# handles reshape the body around it, as without Gameplay edit.
+	if not _contact_paddle_handle(h): (opts.unpin as Array).erase("paddle")
+	var b: Dictionary = ap.begin(h, opts)
 	if not b.get("ok", false): return b
 	var mob: float = ap.handle_mobility()
 	if mob < AP_MIN_MOBILITY:

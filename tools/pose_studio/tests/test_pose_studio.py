@@ -726,5 +726,27 @@ class PoseNotesCliTests(unittest.TestCase):
         self.assertIn("0 ratings", self.run_cli("ratings"))
 
 
+class ServeTuningTests(unittest.TestCase):
+    """tools/pose_studio/serve_tuning.py: studio serve edits -> data/serve_tuning.json "set" values."""
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        import serve_tuning
+        self.st = serve_tuning
+
+    def test_set_replaces_add_and_routes_paddle_deltas(self):
+        data = {"0": {"windup": {"add": {"weight_shift": -0.2, "body_yaw_deg": 12}}}}
+        changed, skipped = self.st.apply(data, 0, [
+            {"stage": "windup", "field": "weight_shift", "text": "-0.45"},
+            {"stage": "contact", "field": "ft_paddle_offset", "text": "Vector3(0, 0.1, 0.25)"},
+            {"stage": "finish", "field": "gone", "text": None, "removed": True}])
+        self.assertEqual(data["0"]["windup"], {"add": {"body_yaw_deg": 12}, "set": {"weight_shift": -0.45}})
+        self.assertEqual(data["0"]["finish"]["set"], {"ft_paddle_offset": [0.0, 0.1, 0.25]})
+        self.assertEqual((len(changed), skipped), (2, ["gone"]))
+
+    def test_godot_text_values(self):
+        self.assertIs(self.st.parse_godot("true"), True)
+        self.assertEqual(self.st.parse_godot("3"), 3)
+        self.assertEqual(self.st.parse_godot("Vector2(1, 2)"), [1.0, 2.0])
+
 if __name__ == "__main__":
     unittest.main()

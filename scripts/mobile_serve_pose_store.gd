@@ -92,6 +92,14 @@ static func packaged_default(style: int) -> PostureDefinition:
 	var def: PostureDefinition = _default(style)
 	if def == null: return null
 	var result: PostureDefinition = def.duplicate(true)
+	# duplicate(true) can leave the wind-up / finish key's values Dictionary shared with the cached
+	# code default: tuning "add" values then pile up on every call and edits leak into the cache.
+	for prop in ["windup_body", "follow_through_body"]:
+		var body: Resource = result.get(prop)
+		if body != null:
+			var own: Resource = body.duplicate()
+			own.values = body.values.duplicate(true)
+			result.set(prop, own)
 	if style == 0: PoseStore._apply_fields(result, JSON.parse_string(ApprovedFlat.JSON_TEXT).fields)
 	_apply_tuning(result, style)
 	return result
