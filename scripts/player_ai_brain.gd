@@ -1820,11 +1820,13 @@ func contact_intent_is_current(intent: Dictionary, certificate: Dictionary = {})
 func finish_contact_intent(_intent: Dictionary) -> void:
 	pass
 
+var last_settle_decline: String = ""   # bench evidence: why the last settle returned nothing
 func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dictionary:
-	if not contact_intent_is_current(intent, certificate) or not _game_node.contact_authority.validates_settlement(_player, certificate): return {}
+	last_settle_decline = ""
+	if not contact_intent_is_current(intent, certificate) or not _game_node.contact_authority.validates_settlement(_player, certificate): last_settle_decline = "not_current"; return {}
 	var body = _player._get_ball_ref()
 	var endpoint_pose: PostureDefinition = _player.posture.transition_pose_blend
-	if endpoint_pose == null: return {}
+	if endpoint_pose == null: last_settle_decline = "no_pose"; return {}
 	var practice = _exchange_practice()
 	if practice and practice.needs_bounce() and not body.ball_bounced_since_last_hit: return {}
 	var launch: Dictionary
@@ -1843,8 +1845,12 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 	else:
 		if plan.is_empty(): plan = MatchTactics.plan(context, _tactic_rng.randf(), _tactic_rng.randf())
 		launch = MatchTactics.solve_plan(_game_node.shot_physics, body.global_position, context, plan)
-	if launch.is_empty(): return {}
-	if not _game_node.contact_authority.intended_velocity_leaves_surface(_player, certificate, launch.velocity, "authored"): return {"accepted": false, "passive_fallback": true}
+	if launch.is_empty(): last_settle_decline = "unsolved_" + str(plan.get("kind", "")); return {}
+	# Contact rule (match_contact_authority.contact_launch): the planned trajectory
+	# wins while the face is within tolerance; too far off is a pop-up mishit.
+	launch = _game_node.contact_authority.contact_launch(_player, certificate, launch, "authored")
+	if launch.is_empty(): return {"accepted": false, "passive_fallback": true}
+	var mishit: bool = bool(launch.get("mishit", false))
 	var accepted: Dictionary = launch.get("motion_plan", {"kind": str(launch.get("tactic", "")), "charge": .25,
 		"intent": str(launch.get("profile", {}).get("shot_intent", "AUTO")), "shot_type": str(launch.get("profile", {}).get("shot_type", "GROUNDSTROKE")), "target": launch.get("target", body.global_position), "arc": 0.0})
 	motion_context = intent.motion_context.duplicate(true)
@@ -1852,7 +1858,7 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 	var timing_error: float = -maxf(float(intent.selected_time), 0.0)
 	if int(intent.deadline_flight) == body.flight_id and float(intent.deadline) >= 0.0: timing_error = float(intent.observation_time) - float(intent.deadline)
 	timing_error -= (1.0 - float(certificate.evidence.fraction)) * float(certificate.control_seconds)
-	if not practice and _game_node.has_method("apply_contact_execution"):
+	if not practice and not mishit and _game_node.has_method("apply_contact_execution"):
 		_commit_execution_for_motion(body)
 		launch = _game_node.apply_contact_execution(_player, launch, float(motion_context.charge), timing_error, false, certificate)
 		last_contact_execution = {"incoming_flight": body.flight_id, "commit_token": _execution_commit_token,
@@ -1860,7 +1866,9 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 			"observation_time": intent.observation_time, "fraction": certificate.evidence.fraction,
 			"full_delta": certificate.physical_seconds, "control_delta": certificate.control_seconds,
 			"timing_error_seconds": timing_error, "profile": launch.get("profile", {}).duplicate(true)}
-	if not _game_node.contact_authority.intended_velocity_leaves_surface(_player, certificate, launch.velocity, "executed"): return {"accepted": false, "passive_fallback": true}
+	if not mishit:
+		launch = _game_node.contact_authority.contact_launch(_player, certificate, launch, "executed")
+		if launch.is_empty(): return {"accepted": false, "passive_fallback": true}
 	_player.hitting.committed_motion_context = motion_context
 	MotionContext.apply_feet(_player, motion_context)
 	_player.hitting.begin_settled_recovery(float(motion_context.charge), endpoint_pose)

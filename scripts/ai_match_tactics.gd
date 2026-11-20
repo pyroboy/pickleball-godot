@@ -192,6 +192,24 @@ static func solve_plan(physics: ShotPhysics, origin: Vector3, context: Dictionar
 	launch["motion_plan"] = shot
 	return launch
 
+## Mishit: the paddle face was too far off for the planned shot (see
+## match_contact_authority.contact_launch). The ball pops up soft and high to
+## mid-court, an attackable ball, instead of deflecting into the net.
+## No RNG: placement follows the contact.
+static func popup_launch(physics: ShotPhysics, origin: Vector3, team: int) -> Dictionary:
+	var direction: float = -1.0 if team == 0 else 1.0
+	var lane: float = clampf(origin.x * 0.4, -1.6, 1.6)
+	for depth in [3.6, 3.0, 4.4]:
+		var target := Vector3(lane, Flight.FLOOR_REST_Y, direction * depth)
+		for arc in [0.3, 0.2, 0.42]:
+			var launch: Dictionary = physics.solve_aimed_launch(origin, target, 0.06, team, 0, "AUTO", "LOB", arc)
+			if valid_launch(origin, launch, team) and launch.velocity.y > 0.0:
+				launch = _with_net_margin(origin, launch, team)
+				launch["tactic"] = "POPUP"
+				launch["motion_plan"] = {"kind": "POPUP", "charge": 0.06, "intent": "AUTO", "shot_type": "LOB", "target": target, "arc": arc}
+				return launch
+	return {}
+
 ## Soft shots are aimed just over the tape, and the execution error then nets
 ## some of them (bench: 8 of 82 resets). Add lift until the planned flight
 ## clears the net by SOFT_NET_MARGIN, keeping the launch only if it still lands in.
