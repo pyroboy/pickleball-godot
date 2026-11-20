@@ -33,6 +33,7 @@ class_name PixelCardRig
 ##   cards_meta.json and swap `atlas` in _set_far() instead of the shader snap.
 ## Debug: PICKLEBALL_CARD_DEBUG=nocards,bones,axes (comma list) or PixelCardRig.set_debug().
 
+const ElbowSwivel = preload("res://scripts/elbow_swivel.gd")
 const STYLE_KEY: = "video.character_style"   # 1 = pixel cards (default), 0 = classic 3D
 const CLASSIC_LAYER: = 20                     # 1-based render layer hidden from the camera
 const CELL_DEG: = 22.5
@@ -192,6 +193,7 @@ func _ready() -> void:
 		var arm: Node3D = _player.get(side[0] + "_arm_node")
 		var leg: Node3D = _player.get(side[0] + "_leg_node")
 		if arm and arm.get("upper_pivot"):
+			_elbow_arm[arm.forearm_pivot] = arm
 			_add("upper_arm", arm.upper_pivot, arm.forearm_pivot, side[1], meta, "body", null, arm.upper_pivot)
 			_add("forearm", arm.forearm_pivot, arm.hand_pivot, side[1], meta, "body", null, arm.upper_pivot)
 			_add("hand", arm.hand_pivot, null, side[1], meta, "body", arm.forearm_pivot, arm.upper_pivot, arm)
@@ -395,6 +397,17 @@ func _accent_rank() -> int:
 # ------------------------------------------------------------------ per frame
 
 var _raw: bool = false
+var _elbow_arm: Dictionary = {}   # forearm pivot (elbow) -> arm: the elbow is drawn at the authored swivel
+
+## A joint's drawn position: the node's, except an elbow turned to the pose's authored swivel
+## (scripts/elbow_swivel.gd; the solved arm itself stays as gameplay uses it).
+func _pos(n: Node3D) -> Vector3:
+	var p: Vector3 = _xf(n).origin
+	var arm = _elbow_arm.get(n)
+	if arm == null or not arm.has_meta(ElbowSwivel.VISUAL_TURN_META): return p
+	var fore: Transform3D = _xf(n)
+	var wrist_end: Vector3 = fore * Vector3(0.0, 0.0, -float(arm.forearm_length) * float(arm.visual_stretch))
+	return ElbowSwivel.visual_elbow(arm, _xf(arm.upper_pivot).origin, p, wrist_end, -1.0 if _raw else Engine.get_physics_interpolation_fraction())
 
 func _xf(n: Node3D) -> Transform3D:
 	return n.global_transform if _raw else n.get_global_transform_interpolated()
@@ -514,10 +527,10 @@ func _process(delta: float) -> void:
 	var tex_h: float = _atlas_px.y
 	var i: int = 0
 	for c in _cards:
-		var a: Vector3 = _xf(c.a).origin
+		var a: Vector3 = _pos(c.a)
 		var b: Vector3
-		if c.limb: b = _xf(c.b).origin
-		elif c.prev != null: b = a + (a - _xf(c.prev).origin).normalized() * 0.06
+		if c.limb: b = _pos(c.b)
+		elif c.prev != null: b = a + (a - _pos(c.prev)).normalized() * 0.06
 		else: b = a
 		var mid: Vector3 = (a + b) * 0.5
 		var z: Vector3 = (cam_pos - mid).normalized()

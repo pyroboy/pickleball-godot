@@ -27,6 +27,11 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 @export var right_hand_offset: Vector3 = Vector3.ZERO
 @export var right_elbow_pole: Vector3 = Vector3.ZERO
 @export var right_shoulder_rotation_deg: Vector3 = Vector3.ZERO
+## Elbow swivel (scripts/elbow_swivel.gd): the paddle elbow's turn around the arm in degrees,
+## used with weight elbow_swivel_weight (0 = the older pole + wrist correction, 1 = this angle).
+@export var right_elbow_swivel_deg: float = 0.0
+@export var left_elbow_swivel_deg: float = 0.0
+@export_range(0.0, 1.0) var elbow_swivel_weight: float = 0.0
 
 
 @export_group("Left Arm IK")
@@ -114,6 +119,9 @@ func _copy_fields_to(other) -> void :
 	other.right_hand_offset = right_hand_offset
 	other.right_elbow_pole = right_elbow_pole
 	other.right_shoulder_rotation_deg = right_shoulder_rotation_deg
+	other.right_elbow_swivel_deg = right_elbow_swivel_deg
+	other.left_elbow_swivel_deg = left_elbow_swivel_deg
+	other.elbow_swivel_weight = elbow_swivel_weight
 	other.left_hand_mode = left_hand_mode
 	other.left_hand_offset = left_hand_offset
 	other.left_elbow_pole = left_elbow_pole
@@ -153,6 +161,8 @@ func _apply_body_fields(target, source, mix: float) -> void :
 	target.right_hand_offset = source.right_hand_offset.lerp(right_hand_offset, mix)
 	target.right_elbow_pole = PostureDefinition.blend_elbow_pole(source.right_elbow_pole, right_elbow_pole, mix, true)
 	target.right_shoulder_rotation_deg = source.right_shoulder_rotation_deg.lerp(right_shoulder_rotation_deg, mix)
+	var swivel: Array = load("res://scripts/elbow_swivel.gd").blend(source, self, mix)
+	target.right_elbow_swivel_deg = swivel[0]; target.left_elbow_swivel_deg = swivel[1]; target.elbow_swivel_weight = swivel[2]
 
 	target.left_hand_mode = source.left_hand_mode if source.left_hand_mode != 0 or mix < 0.5 else left_hand_mode
 	target.left_hand_offset = source.left_hand_offset.lerp(left_hand_offset, mix)

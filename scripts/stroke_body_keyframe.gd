@@ -10,6 +10,7 @@ const FIELDS: Array[String] = [
 	"main_grip_rotation_deg", "paddle_in_hand_rotation_deg", "support_grip_rotation_deg", "support_grip_slide_m", "support_index_closure", 
 	"support_grip_style", 
 	"right_elbow_pole", "left_elbow_pole", "left_hand_mode", 
+	"right_elbow_swivel_deg", "left_elbow_swivel_deg", "elbow_swivel_weight", 
 	"paddle_pitch_signed_deg", "paddle_yaw_signed_deg", "paddle_roll_signed_deg", 
 	"paddle_pitch_sign_source", "paddle_yaw_sign_source", "paddle_roll_sign_source", 
 ]

@@ -111,6 +111,7 @@ func _swing_trace(ed) -> Dictionary:
 	var clear := INF
 	var inward := 0
 	var up_steps: Array = []
+	var wrists: Array = []  # per step: _wrist_metrics()
 	var elbow_up: Array = []  # per step: [elbow height above shoulder m, upward share of the elbow bulge]
 	# Serves spend most of the first half waiting for the ball; trace only the real swing
 	# (strike + follow-through) so per-step changes are comparable to strokes.
@@ -133,10 +134,11 @@ func _swing_trace(ed) -> Dictionary:
 		fields.append([_r(pz.main_grip_rotation_deg), _r(pz.paddle_in_hand_rotation_deg), _r(pz.paddle_pitch_base_deg), _r(pz.paddle_yaw_base_deg), _r(pz.paddle_roll_base_deg), _rv(pz.right_elbow_pole)])
 		heads.append(_local(p, p.paddle_node.get_node("Head").global_position))
 		var sh: Vector3 = _local(p, arm.upper_pivot.global_position)
-		var e: Vector3 = _local(p, arm.forearm_pivot.global_position)
+		var e: Vector3 = _local(p, preload("res://scripts/elbow_swivel.gd").visual_elbow_now(arm))
 		var w: Vector3 = _local(p, arm.hand_pivot.global_position)
 		elbows.append(e)
 		bends.append(_bend(sh, e, w))
+		wrists.append(_wrist_metrics(p, e, w))
 		var torso: Vector3 = _local(p, p.body_pivot.get_node("TorsoMesh").global_position)
 		clear = minf(clear, Vector2(e.x - torso.x, e.z - torso.z).length())
 		# Elbow pointing in toward the torso (relative to the shoulder-wrist line) reads as a twisted arm.
@@ -183,6 +185,10 @@ func _swing_trace(ed) -> Dictionary:
 		"max_elbow_bend_step_deg": _r(snap), "snap_at": snap_at, "max_elbow_jump_m": _r(jump),
 		"min_elbow_torso_clearance_m": _r(clear), "elbow_inward_steps": inward,
 		"forearm_roll_range_deg": [_r(roll_min), _r(roll_max)], "max_forearm_roll_step_deg": _r(roll_step),
+		"max_wrist_angle_deg": _r(wrists.map(func(v): return v.angle).max()),
+		"max_abs_wrist_flex_deg": _r(wrists.map(func(v): return absf(v.flex)).max()),
+		"max_wrist_step_deg": _r(_max_step(wrists.map(func(v): return v.angle))),
+		"wrist_angles": wrists.map(func(v): return v.angle), "wrist_flex": wrists.map(func(v): return v.flex),
 		"max_elbow_above_shoulder_m": _r(elbow_up.map(func(v): return v[0]).max()),
 		"traced_from": _r(from), "elbow_up_steps": up_steps, "elbow_up": elbow_up, "rolls": rolls.map(func(v): return _r(v)), "bends": bends.map(func(v): return _r(v)), "grip_inhand_pitch_yaw_roll": fields}
 
@@ -198,6 +204,11 @@ func _yaw(a: Vector3, b: Vector3) -> float:
 
 func _bend(a: Vector3, mid: Vector3, b: Vector3) -> float:
 	return 180.0 - rad_to_deg((a - mid).angle_to(b - mid))
+
+func _max_step(a: Array) -> float:
+	var m := 0.0
+	for k in range(1, a.size()): m = maxf(m, absf(a[k] - a[k - 1]))
+	return m
 
 func _r(v: float) -> float: return snappedf(v, 0.01)
 func _rv(v: Vector3) -> Array: return [_r(v.x), _r(v.y), _r(v.z)]
@@ -216,7 +227,7 @@ func _body_metrics(p) -> Dictionary:
 	var ra: Vector3 = _local(p, R.foot_pivot.global_position)
 	var ls: Vector3 = _local(p, p.left_arm_node.upper_pivot.global_position)
 	var rs: Vector3 = _local(p, p.right_arm_node.upper_pivot.global_position)
-	var re: Vector3 = _local(p, p.right_arm_node.forearm_pivot.global_position)
+	var re: Vector3 = _local(p, preload("res://scripts/elbow_swivel.gd").visual_elbow_now(p.right_arm_node))
 	var rw: Vector3 = _local(p, p.right_arm_node.hand_pivot.global_position)
 	var paddle: Vector3 = _local(p, p.paddle_node.get_node("Head").global_position)
 	# Segment-weighted centre of gravity (arms left out; they are light and move a lot).
@@ -236,7 +247,10 @@ func _body_metrics(p) -> Dictionary:
 	var across: Vector3 = (rs - ls)
 	across = (across - spine.normalized() * across.dot(spine.normalized())).normalized()
 	var upper: Vector3 = (re - rs).normalized()
+	var wrist: Dictionary = _wrist_metrics(p, re, rw)
 	return {
+		"wrist_angle_deg": wrist.angle, "wrist_flex_deg": wrist.flex, "wrist_deviation_deg": wrist.deviation,
+		"paddle_tip_pitch_deg": wrist.tip_pitch, "face_to_net_deg": wrist.face_to_net,
 		"elbow_above_shoulder_m": _r(re.y - rs.y),
 		"upper_arm_elevation_deg": _r(rad_to_deg(upper.angle_to(down))),
 		"elbow_flare_deg": _r(rad_to_deg(asin(clampf(upper.dot(across), -1.0, 1.0)))),
@@ -254,6 +268,28 @@ func _body_metrics(p) -> Dictionary:
 		"right_elbow_bend": _r(_bend(rs, re, rw)),
 		"paddle_head": _rv(paddle), "paddle_from_shoulder": _r(paddle.distance_to(rs)),
 	}
+
+# Direction in the player-local frame (x forehand side, y up, z toward the net).
+func _ldir(p, v: Vector3) -> Vector3:
+	return Vector3(v.dot(p._get_forehand_axis()), v.y, v.dot(p._get_forward_axis())).normalized()
+
+# How the paddle sits in the hand. Paddle local y = handle -> head, z = face normal.
+# angle: forearm (elbow -> wrist) vs handle, 0 = paddle in line with the forearm.
+# flex: forearm out of the paddle face plane (wrist bent back/forward across the face).
+# deviation: angle inside the face plane (wrist cocked up/down along the paddle edge).
+# tip_pitch: paddle tip above (+) / below (-) horizontal. face_to_net: face normal vs the net
+# direction (0 = square to the net, 90 = face pointing sideways or up/down).
+func _wrist_metrics(p, e: Vector3, w: Vector3) -> Dictionary:
+	var b: Basis = p.paddle_node.global_basis
+	var axis: Vector3 = _ldir(p, b.y)
+	var face_x: Vector3 = _ldir(p, b.x)
+	var face_n: Vector3 = _ldir(p, b.z)
+	var fore: Vector3 = (w - e).normalized()
+	var flex: float = rad_to_deg(asin(clampf(fore.dot(face_n), -1.0, 1.0)))
+	var dev: float = rad_to_deg(atan2(fore.dot(face_x), fore.dot(axis)))
+	return {"angle": _r(rad_to_deg(fore.angle_to(axis))), "flex": _r(flex), "deviation": _r(dev),
+		"tip_pitch": _r(rad_to_deg(asin(clampf(axis.y, -1.0, 1.0)))),
+		"face_to_net": _r(rad_to_deg(acos(clampf(absf(face_n.z), 0.0, 1.0))))}
 
 func _path_metrics(def: Resource, serve := false) -> Dictionary:
 	var ys: Array = []

@@ -3,6 +3,7 @@
 # with before/after against a git ref, in ONE Godot run.
 # Usage: tools/pose_review.sh s00 [b11 v00 ...]  (s = stroke, b = body stance, v = serve style 0-6) [--base REF]   (REF default HEAD; --base none = no compare)
 #        tools/pose_review.sh all
+# POSE_REVIEW_OUT=<abs dir> writes elsewhere (lets several reviews run at once).
 # Output: logs/pose_review/  <key>_<view>.png sheets (rows = stages, cols = before | after)
 #         and a metrics table printed here (also logs/pose_review/report.txt).
 set -uo pipefail
@@ -19,7 +20,7 @@ if [ -z "${GODOT:-}" ]; then
   done
 fi
 [ -x "${GODOT:-}" ] || { echo "Godot not found, set GODOT=/path/to/Godot"; exit 1; }
-OUT="$PWD/logs/pose_review"; rm -rf "$OUT"; mkdir -p "$OUT/raw" "$OUT/before/postures" "$OUT/before/base_poses"
+OUT="${POSE_REVIEW_OUT:-$PWD/logs/pose_review}"; rm -rf "$OUT"; mkdir -p "$OUT/raw" "$OUT/before/postures" "$OUT/before/base_poses"
 ONLY=""; [ "${IDS[0]}" = all ] || ONLY="--pose-only=$(IFS=,; echo "${IDS[*]}")"
 BEFORE=""
 if [ "$BASE" != none ]; then
