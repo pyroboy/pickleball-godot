@@ -861,7 +861,7 @@ func align_paddle_to_contact(delta: float) -> void :
 		_exchange_align_flight = ball.flight_id
 		_exchange_align_head = head
 	head = _exchange_align_head
-	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact, shoulder, 
+	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact - _hitting_face_offset(base), shoulder,
 		_player.COURT_FLOOR_Y + 0.06)
 	var rate: float = 42.0 if ball.global_position.distance_to(contact) < 0.55 else 22.0
 	var blend: float = 1.0 - exp( - maxf(delta, 0.0) * rate)
@@ -896,6 +896,16 @@ func align_paddle_to_contact(delta: float) -> void :
 	_player.posture.transition_pose_blend = pose
 	_player.posture.force_posture_update(pose)
 	_player.paddle_node.global_position = aligned - _player.paddle_node.global_transform.basis.y * PaddleDimensions.HEAD_CENTER_Y
+# Head centre sits behind the ball along the hitting face (ball radius + half
+# the head thickness), like the dive / grounded reach. Aimed at the ball centre,
+# a rising soft ball met an open face on its underside and the shot was dropped
+# (bench: 31 of 694 hits, nearly all ended the point in the net).
+func _hitting_face_offset(pose: PostureDefinition) -> Vector3:
+	var normal: Vector3 = preload("res://scripts/stroke_swing_path.gd").paddle_basis(_player, pose).z.normalized()
+	var toward_net: Vector3 = Vector3(0.0, 0.3, -signf(_player.global_position.z) if absf(_player.global_position.z) > 0.01 else 1.0)
+	if normal.dot(toward_net) < 0.0: normal = -normal
+	return normal * (_Ball.BALL_RADIUS + PaddleDimensions.HEAD_HALF_THICKNESS)
+
 func _ball_at_reachable_indicator(ball: RigidBody3D) -> bool:
 	if not ai_selected_contact_reachable or not _on_own_half(ball.global_position):
 		return false
