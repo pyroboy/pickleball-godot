@@ -41,7 +41,9 @@ values = {
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": 19.0,
-"weight_shift": -0.68
+"weight_shift": -0.68,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -2.64199785
 }
 
 [sub_resource type="Resource" id="Resource_7ou54"]
@@ -82,7 +84,9 @@ values = {
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": 19.0,
-"weight_shift": -0.68
+"weight_shift": -0.68,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -2.64199785
 }
 
 [resource]
@@ -134,3 +138,5 @@ windup_body = SubResource("Resource_7ou54")
 follow_through_body = SubResource("Resource_l3baf")
 charge_duration = 0.32
 notes = "Right-dominant groundstroke; contact shaft below wrist, broad face through ball. Raised natural standing rig. Contact head coordinates unchanged."
+right_elbow_swivel_deg = -2.64199785
+elbow_swivel_weight = 1.0

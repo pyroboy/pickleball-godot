@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 9
+display_name = "Groundstroke Base"
+canonical_intent = 6
+stroke_overlay_mix = 0.72
+stance_width = 0.5
+front_foot_forward = 0.15
+back_foot_back = -0.16
+crouch_amount = 0.15
+torso_yaw_deg = 10.0
+torso_pitch_deg = 6.0
+body_yaw_deg = 14.0

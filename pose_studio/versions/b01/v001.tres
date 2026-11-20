@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 1
+display_name = "Split Step"
+stroke_overlay_mix = 0.92
+recovery_time = 0.1
+split_step_hop_height = 0.05
+left_hand_mode = 1
+stance_width = 0.52
+front_foot_forward = 0.02
+back_foot_back = -0.02
+crouch_amount = 0.2
+torso_pitch_deg = 8.0
+body_pitch_deg = 6.0

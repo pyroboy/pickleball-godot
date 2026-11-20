@@ -9,13 +9,13 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": 0.0,
+"body_yaw_deg": -8,
 "crouch_amount": 0.19,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 0.0,
-"hip_yaw_deg": 0.0,
+"hip_yaw_deg": -5,
 "lead_foot": 1,
 "left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -40,8 +40,11 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 6.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": 0.0,
-"weight_shift": 0.65
+"torso_yaw_deg": -8,
+"weight_shift": 0.65,
+"body_position_offset": Vector3(0, 0, 0.04),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 32.6911671
 }
 
 [sub_resource type="Resource" id="Resource_8stg2"]
@@ -50,13 +53,13 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": 0.0,
+"body_yaw_deg": 10,
 "crouch_amount": 0.26,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 0.0,
-"hip_yaw_deg": 0.0,
+"hip_yaw_deg": 5,
 "lead_foot": 1,
 "left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -81,8 +84,11 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 6.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": 0.0,
-"weight_shift": -0.45
+"torso_yaw_deg": 10,
+"weight_shift": -0.45,
+"body_position_offset": Vector3(0, 0, -0.12),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -8.40205646
 }
 
 [resource]
@@ -128,7 +134,7 @@ head_track_ball_weight = 0.8
 charge_paddle_offset = Vector3(0, 0.06, -0.12)
 charge_hip_coil_deg = 2.0
 charge_back_foot_load = 0.45
-ft_paddle_offset = Vector3(0, 0.24, 0.02)
+ft_paddle_offset = Vector3(0, 0.12, 0.08)
 ft_hip_uncoil_deg = 2.0
 ft_front_foot_load = 0.65
 ft_duration_strike = 0.1
@@ -142,3 +148,5 @@ charge_duration = 0.24
 notes = "Three body/paddle keyframes tuned for shared trajectory contact. Backhand uses left paddle hand; support hand is released. Low strokes lift, center volleys block, overheads finish downward."
 last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
+right_elbow_swivel_deg = -8.40205646
+elbow_swivel_weight = 1.0

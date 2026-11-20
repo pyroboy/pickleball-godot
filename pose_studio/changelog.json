@@ -1,0 +1,4898 @@
+{
+ "versions": [
+  {
+   "pose": "b21",
+   "n": 3,
+   "time": "2026-11-21T00:26:20",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.17009342, -0.37358356, 0.09920126)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-11.02226388"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b20",
+   "n": 3,
+   "time": "2026-11-21T00:26:20",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24125542, -0.19453949, -0.01980728)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-25.07016495"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b19",
+   "n": 3,
+   "time": "2026-11-21T00:26:19",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.23377609, -0.2567398, 0.029561281)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-22.05810446"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b18",
+   "n": 3,
+   "time": "2026-11-21T00:26:19",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.23399973, -0.24663031, 0.018431127)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-23.10105557"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b17",
+   "n": 3,
+   "time": "2026-11-21T00:26:19",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.11403565, -0.44081855, 0.15191436)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-3.43773239"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b16",
+   "n": 3,
+   "time": "2026-11-21T00:26:19",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.22707242, -0.15391815, -0.0523054)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-24.1151884"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b15",
+   "n": 3,
+   "time": "2026-11-21T00:26:19",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.14649263, -0.40768802, 0.12154843)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-8.17750375"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b14",
+   "n": 3,
+   "time": "2026-11-21T00:26:18",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.23592609, -0.21873868, -0.021135181)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-25.4810162"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b13",
+   "n": 3,
+   "time": "2026-11-21T00:26:18",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.3021501, -0.32171047, 0.110862166)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "91.0550345"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b12",
+   "n": 3,
+   "time": "2026-11-21T00:26:18",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.05435215, -0.5232401, 0.5016714)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-9.98916788"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b11",
+   "n": 3,
+   "time": "2026-11-21T00:26:18",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.075089425, -0.53958106, 0.2431078)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "40.6393216"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b10",
+   "n": 3,
+   "time": "2026-11-21T00:26:18",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.23566279, -0.23498464, -0.00042438507)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-23.654166"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b09",
+   "n": 3,
+   "time": "2026-11-21T00:26:17",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.21383256, -0.33062124, 0.04155895)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-24.73744424"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b08",
+   "n": 3,
+   "time": "2026-11-21T00:26:17",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.22243729, -0.28061378, 0.035859525)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-20.43555546"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b07",
+   "n": 3,
+   "time": "2026-11-21T00:26:17",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.17070502, -0.37572002, 0.09702174)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-11.73663592"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b06",
+   "n": 3,
+   "time": "2026-11-21T00:26:17",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.2000057, -0.30105418, 0.07309667)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-23.69915816"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b05",
+   "n": 3,
+   "time": "2026-11-21T00:26:17",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.16548401, -0.38257253, 0.10250391)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-10.87340759"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b04",
+   "n": 3,
+   "time": "2026-11-21T00:26:16",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.120650835, -0.43347937, 0.1451291)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-4.26496222"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b03",
+   "n": 3,
+   "time": "2026-11-21T00:26:16",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.23921114, -0.23650861, 0.0141917765)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-23.53727926"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b02",
+   "n": 3,
+   "time": "2026-11-21T00:26:16",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.21595767, -0.29598606, 0.04537466)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-19.2011234"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b01",
+   "n": 3,
+   "time": "2026-11-21T00:26:16",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.17307222, -0.37263572, 0.09436633)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-12.15838644"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "b00",
+   "n": 3,
+   "time": "2026-11-21T00:26:16",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.225006, -0.2895165, 0.035981715)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-22.4090225"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "s20",
+   "n": 3,
+   "time": "2026-11-21T00:26:15",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.12268584, -0.27890825, -0.03567317)",
+     "b": "Vector3(0.0887, -0.1526, 0.1226)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-7.24569519"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 3,
+   "time": "2026-11-21T00:26:15",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.48140728, -0.22835892, -0.41741845)",
+     "b": "Vector3(-0.1, -0.9, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9068442"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9068442"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9068442"
+    }
+   ]
+  },
+  {
+   "pose": "s18",
+   "n": 2,
+   "time": "2026-11-21T00:26:14",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "s18",
+   "n": 1,
+   "time": "2026-11-21T00:26:14",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_roll_deg",
+     "a": "0.0",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "8.0",
+     "b": "18"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "6.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "14"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "6.0",
+     "b": "20"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0,0,-0.4)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "14"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.12, 0.28, 0.02)",
+     "b": "Vector3(-0.12,0.1,0.02)"
+    },
+    {
+     "stage": "contact",
+     "field": "body_roll_deg",
+     "a": null,
+     "b": "-4"
+    },
+    {
+     "stage": "finish",
+     "field": "body_roll_deg",
+     "a": "0.0",
+     "b": "-4"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "14"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-15"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(-0.15,0,0.5)"
+    }
+   ]
+  },
+  {
+   "pose": "s18",
+   "n": 0,
+   "time": "2026-11-21T00:26:14",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s17",
+   "n": 2,
+   "time": "2026-11-21T00:26:13",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "s17",
+   "n": 1,
+   "time": "2026-11-21T00:26:13",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-22",
+     "b": "-42"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-6",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.02, -0.24, 0.02)",
+     "b": "Vector3(-0.1, -0.9, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.6"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.3, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, -0.15, -0.25)",
+     "b": "Vector3(0.04, -0.3, -0.25)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.12, 0.32, 0.02)",
+     "b": "Vector3(-0.05, 0.0, 0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-12",
+     "b": "15"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-2",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.24, 0.24)",
+     "b": "Vector3(0.1, -0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.1, 0, 0.12)"
+    }
+   ]
+  },
+  {
+   "pose": "s17",
+   "n": 0,
+   "time": "2026-11-21T00:26:13",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s16",
+   "n": 2,
+   "time": "2026-11-21T00:26:13",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    }
+   ]
+  },
+  {
+   "pose": "s16",
+   "n": 1,
+   "time": "2026-11-21T00:26:13",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_roll_deg",
+     "a": "-14",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "8.0",
+     "b": "18"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.36"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "6.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "18",
+     "b": "13"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "6.0",
+     "b": "20"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0,0,-0.4)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.36"
+    },
+    {
+     "stage": "contact",
+     "field": "torso_pitch_deg",
+     "a": "18",
+     "b": "13"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.12, 0.32, 0.02)",
+     "b": "Vector3(-0.12,0.1,0.02)"
+    },
+    {
+     "stage": "contact",
+     "field": "body_roll_deg",
+     "a": "-14",
+     "b": "-4"
+    },
+    {
+     "stage": "finish",
+     "field": "body_roll_deg",
+     "a": "-14",
+     "b": "-4"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.36"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.2,-0.8,-0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_pitch_deg",
+     "a": "18",
+     "b": "13"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-15"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(-0.15,0,0.6)"
+    }
+   ]
+  },
+  {
+   "pose": "s16",
+   "n": 0,
+   "time": "2026-11-21T00:26:13",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s15",
+   "n": 3,
+   "time": "2026-11-21T00:26:12",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9614174"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9614174"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.39175785, 0.27038455, 0.0265899)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "82.9614174"
+    }
+   ]
+  },
+  {
+   "pose": "s14",
+   "n": 3,
+   "time": "2026-11-21T00:26:11",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.20282152, -0.15651387, -0.2203254)",
+     "b": "Vector3(-0.1, -0.9, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "34.8642054"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.4605444, 0.47971976, 0.08830279)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "115.2226958"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.20726842, 0.23867118, -0.072416484)",
+     "b": "Vector3(0.1, -0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "70.0496551"
+    }
+   ]
+  },
+  {
+   "pose": "s13",
+   "n": 3,
+   "time": "2026-11-21T00:26:10",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.10147089, -0.4001925, -0.4448833)",
+     "b": "Vector3(0.45, -0.45, -0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-20.0441788"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.2967504, -0.10200232, -0.2146607)",
+     "b": "Vector3(0.45, -0.45, -0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-33.0638427"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.07061952, -0.08677447, -0.0582487)",
+     "b": "Vector3(0.3, -0.5, 0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-4.08706482"
+    }
+   ]
+  },
+  {
+   "pose": "s12",
+   "n": 3,
+   "time": "2026-11-21T00:26:10",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.47774827, -0.20231116, -0.079602085)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-55.0183007"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48546368, -0.10606587, 0.0235226)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-50.2452484"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3594261, -0.12284589, 0.13796817)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-28.92024355"
+    }
+   ]
+  },
+  {
+   "pose": "s11",
+   "n": 3,
+   "time": "2026-11-21T00:26:09",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-11.69306785"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.2960409, -0.4275695, 0.6152475)",
+     "b": "Vector3(0.15, -0.55, 0.3)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-11.69306785"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.35086393, -0.43953758, 0.5997567)",
+     "b": "Vector3(0.28, -0.5, 0.35)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "2.20524525"
+    }
+   ]
+  },
+  {
+   "pose": "s10",
+   "n": 3,
+   "time": "2026-11-21T00:26:08",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.19750555, -0.52717996, 0.003829062)",
+     "b": "Vector3(0.25, -0.55, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "42.42898144"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.6298151, -0.5247904, 0.25724924)",
+     "b": "Vector3(0.25, -0.55, 0.05)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-6.16647194"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.12520055, -0.14367378, 0.96846807)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-84.3471194"
+    }
+   ]
+  },
+  {
+   "pose": "s09",
+   "n": 3,
+   "time": "2026-11-21T00:26:07",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.078229904, -0.26400805, 0.18198894)",
+     "b": "Vector3(-0.18193507, -0.033608317, 0.0686183)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-32.879069"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.078229904, -0.26400805, 0.18198894)",
+     "b": "Vector3(-0.18193507, -0.033608317, 0.0686183)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-32.8790656"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.078229904, -0.26400805, 0.18198894)",
+     "b": "Vector3(-0.18193507, -0.033608317, 0.0686183)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-32.8790656"
+    }
+   ]
+  },
+  {
+   "pose": "s08",
+   "n": 3,
+   "time": "2026-11-21T00:26:07",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1365727, -0.11555225, -0.16642603)",
+     "b": "Vector3(0, 0, 0)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-2.64199785"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1365727, -0.11555225, -0.16642603)",
+     "b": null
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-2.64199785"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1365727, -0.11555225, -0.16642603)",
+     "b": "Vector3(0, 0, 0)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-2.64199785"
+    }
+   ]
+  },
+  {
+   "pose": "s07",
+   "n": 3,
+   "time": "2026-11-21T00:26:06",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.4449616, -0.21255195, -0.17881607)",
+     "b": "Vector3(-0.1, -0.6, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "70.3562965"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.261545, -0.3245991, -0.07716726)",
+     "b": "Vector3(0.06, -0.3, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "41.9858388"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.15827292, -0.098634124, -0.070750475)",
+     "b": "Vector3(0.1, -0.6, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "45.8381269"
+    }
+   ]
+  },
+  {
+   "pose": "s06",
+   "n": 3,
+   "time": "2026-11-21T00:26:05",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-8.40205646"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.123619124, -0.3627236, -0.078296855)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-8.40205646"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.15444511, -0.18139833, 0.0028592944)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "32.6911671"
+    }
+   ]
+  },
+  {
+   "pose": "s05",
+   "n": 3,
+   "time": "2026-11-21T00:26:05",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.08567235, -0.50316846, -0.18342993)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "16.1072714"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.21288526, -0.48442435, -0.034215584)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-13.7852248"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.07968444, -0.26315904, 0.052111745)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-21.1683767"
+    }
+   ]
+  },
+  {
+   "pose": "s04",
+   "n": 3,
+   "time": "2026-11-21T00:26:04",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.45845872, 0.16086733, -0.8096154)",
+     "b": "Vector3(0.55, 0.6, -0.15)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-36.00428695"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-36.00428695"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.35831404, -0.024155974, 0.25142777)",
+     "b": "Vector3(0.3, -0.2, 0.3)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-33.6825622"
+    }
+   ]
+  },
+  {
+   "pose": "s03",
+   "n": 3,
+   "time": "2026-11-21T00:26:03",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3739317, -0.07182717, -0.70652753)",
+     "b": "Vector3(0.55, 0.6, -0.15)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-25.44876575"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.46897006, -0.07804179, 0.46865457)",
+     "b": "Vector3(0.35, 0.9, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-31.3331001"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3394087, -0.05408138, 0.2460041)",
+     "b": "Vector3(0.3, -0.2, 0.3)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-31.84305567"
+    }
+   ]
+  },
+  {
+   "pose": "s02",
+   "n": 3,
+   "time": "2026-11-21T00:26:03",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.673239, 0.31883204, 0.21901615)",
+     "b": "Vector3(-0.18, -0.4, 0.07)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-163.5491256"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_path",
+     "a": "PackedVector3Array(-0.673239, 0.31883204, 0.21901613, -0.16814831, -0.028282043, 0.08219122, -0.15448812, -0.022991374, 0.09566465, -0.14096278, -0.017743392, 0.10902231, -0.12758054, -0.012545168, 0.12224793, -0.11434968, -0.007403783, 0.13532524, -0.101278454, -0.0023263106, 0.14823796, -0.08837513, 0.0026801717, 0.16096982, -0.075647965, 0.007608588, 0.17350455, -0.06310524, 0.012451861, 0.18582587, -0.050755203, 0.017202916, 0.19791752, -0.038606126, 0.021854673, 0.20976323, -0.026666274, 0.02640006, 0.2213467, -0.014943908, 0.030831996, 0.2326517, -0.0034472938, 0.03514341, 0.24366191, 0.007815304, 0.03932722, 0.2543611, 0.018835623, 0.043376353, 0.26473296, 0.029605394, 0.04728373, 0.27476123, 0.04011636, 0.05104228, 0.28442964, 0.050360247, 0.05464492, 0.29372194, 0.0603288, 0.058084577, 0.3026218, 0.070013754, 0.061354175, 0.31111303, 0.079406835, 0.064446636, 0.3191793, 0.088499784, 0.06735488, 0.32680434, 0.09728435, 0.07007184, 0.3339719, 0.10575224, 0.07259043, 0.34066564, 0.113895215, 0.07490358, 0.34686938, 0.121704996, 0.07700421, 0.3525668, 0.12917332, 0.07888524, 0.35774165, 0.13629195, 0.08053961, 0.36237764, 0.14305258, 0.08196022, 0.36645848, 0.22978637, -0.14348137, 0.5510861, 0.15563764, 0.084188156, 0.37316456, 0.16178714, 0.08521782, 0.3763152, 0.16788718, 0.08622793, 0.3794158, 0.17392951, 0.08721741, 0.38246244, 0.17990588, 0.08818518, 0.38545108, 0.185808, 0.08913017, 0.3883778, 0.19162762, 0.09005129, 0.3912385, 0.19735648, 0.09094748, 0.39402932, 0.2029863, 0.09181764, 0.3967462, 0.20850883, 0.09266071, 0.39938515, 0.21391581, 0.09347561, 0.40194222, 0.21919894, 0.09426126, 0.40441343, 0.22435, 0.095016584, 0.40679476, 0.2293607, 0.095740505, 0.40908223, 0.23422278, 0.09643194, 0.41127187, 0.23892799, 0.09708982, 0.4133597, 0.24346805, 0.09771306, 0.4153417, 0.24783468, 0.09830059, 0.41721392, 0.25201967, 0.09885132, 0.41897234, 0.25601467, 0.0993642, 0.420613, 0.25981152, 0.09983812, 0.4221319, 0.26340187, 0.10027202, 0.42352507, 0.2667775, 0.100664824, 0.4247885, 0.26993012, 0.10101545, 0.42591825, 0.2728515, 0.10132282, 0.42691028, 0.27553335, 0.10158586, 0.42776063, 0.2779674, 0.10180349, 0.4284653, 0.28014538, 0.10197463, 0.42902032, 0.28205907, 0.102098204, 0.4294217, 0.28370017, 0.10217314, 0.42966545, 0.14721695, -0.096443415, 0.49228203)",
+     "b": "PackedVector3Array(-0.18193507194519043, -0.033608317375183105, 0.0686182975769043, -0.1681483057407248, -0.028282042209538047, 0.08219122064473794, -0.1544881188711489, -0.022991374735651906, 0.09566464862236379, -0.1409627757025152, -0.017743391398572478, 0.10902230881606356, -0.12758054060087604, -0.012545168643347544, 0.122247928532119, -0.11434967793228386, -0.0074037829150248955, 0.1353252350768118, -0.10127845206279106, -0.0023263106586523166, 0.1482379557564237, -0.08837512735845009, 0.0026801716807224084, 0.16096981787723644, -0.07564796818531332, 0.007608587658051481, 0.17350454874553178, -0.0631052389094332, 0.012451860828287125, 0.18582587566759137, -0.05075520389686213, 0.017202914746381553, 0.19791752594969703, -0.038606127513652506, 0.021854672967286975, 0.20976322689813037, -0.026666274125856777, 0.026400059045955597, 0.2213467058191732, -0.014943908099527337, 0.030831996537339645, 0.23265169001910724, -0.0034472938007166004, 0.03514340899639133, 0.24366190680421412, 0.007815304404523044, 0.03932721997806285, 0.2543610834807758, 0.01883562215013914, 0.04337635303730642, 0.26473294735507374, 0.029605395070079293, 0.047283731729074276, 0.27476122573338985, 0.04011635879829109, 0.05104227960831861, 0.2844296459220057, 0.05036024896872213, 0.05464492022999165, 0.2937219352272032, 0.06032880121531998, 0.05808457714904558, 0.3026218209552639, 0.07001375117203222, 0.06135417392043266, 0.3111130304124697, 0.0794068344728065, 0.06444663409910505, 0.31917929090510216, 0.08849978675159031, 0.06735488124001499, 0.32680432973944307, 0.0972843436423313, 0.07007183889811469, 0.3339718742217742, 0.10575224077897705, 0.07259043062835636, 0.34066565165837726, 0.11389521379547508, 0.07490357998569225, 0.34686938935553396, 0.12170499832577308, 0.0770042105250745, 0.352566814619526, 0.12917333000381856, 0.0788852458014554, 0.35774165475663516, 0.13629194446355916, 0.0805396093697871, 0.36237763707314313, 0.14305257733894247, 0.08196022478502184, 0.3664584888753316, 0.14944696426391602, 0.08314001560211182, 0.3699679374694824, 0.15563763777084397, 0.08418815629117385, 0.3731645791591952, 0.16178713039209042, 0.08521782073776779, 0.3763152013600066, 0.16788717776160303, 0.08622793162001045, 0.3794158180461035, 0.17392951551332933, 0.08721741161601866, 0.382462443191673, 0.17990587928121693, 0.08818518340390924, 0.38545109077090206, 0.1858080046992134, 0.089130169661799, 0.38837777475797763, 0.19162762740126638, 0.09005129306780474, 0.39123850912708674, 0.19735648302132333, 0.09094747630004327, 0.3940293078524163, 0.20298630719333197, 0.09181764203663145, 0.39674618490815344, 0.2085088355512398, 0.09266071295568606, 0.39938515426848503, 0.21391580372899444, 0.09347561173532394, 0.40194222990759815, 0.21919894736054354, 0.09426126105366191, 0.40441342579967965, 0.22435000207983458, 0.09501658358881675, 0.4067947559189167, 0.22936070352081522, 0.0957405020189053, 0.40908223423949613, 0.23422278731743293, 0.09643193902204439, 0.411271874735605, 0.23892798910363547, 0.0970898172763508, 0.41335969138143036, 0.24346804451337026, 0.0977130594599414, 0.4153416981511591, 0.24783468918058504, 0.09830058825093296, 0.4172139090189782, 0.25201965873922727, 0.09885132632744231, 0.41897233795907474, 0.25601468882324463, 0.09936419636758628, 0.42061299894563564, 0.25981151506658473, 0.09983812104948168, 0.4221319059528479, 0.263401873103195, 0.10027202305124532, 0.42352507295489855, 0.26677749856702315, 0.10066482505099404, 0.4247885139259745, 0.2699301270920167, 0.10101544972684462, 0.42591824284026286, 0.2728514943121233, 0.10132281975691389, 0.4269102736719505, 0.27553333586129053, 0.10158585781931866, 0.4277606203952244, 0.2779673873734659, 0.1018034865921758, 0.4284652969842717, 0.28014538448259707, 0.10197462875360204, 0.42902031741327923, 0.28205906282263166, 0.10209820698171428, 0.4294216956564341, 0.28370015802751714, 0.10217314395462927, 0.42966544568792325, 0.28506040573120117, 0.10219836235046387, 0.42974758148193365)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.22978637, -0.14348137, 0.5510861)",
+     "b": "Vector3(0.14944696426391602, 0.08314001560211182, 0.3699679374694824)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-41.0669427"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.14721695, -0.096443415, 0.49228203)",
+     "b": "Vector3(0.28506040573120117, 0.10219836235046387, 0.4297475814819336)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "44.1347051"
+    }
+   ]
+  },
+  {
+   "pose": "s01",
+   "n": 3,
+   "time": "2026-11-21T00:26:02",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.43035805, -0.20326006, -0.20399979)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-50.5137432"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.43974543, -0.079346895, -0.096523225)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-45.1222343"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.34676853, -0.06410426, 0.024123669)",
+     "b": "Vector3(0.48, -0.35, -0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-28.31304144"
+    }
+   ]
+  },
+  {
+   "pose": "s00",
+   "n": 3,
+   "time": "2026-11-21T00:26:01",
+   "author": "claude",
+   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.2495337, -0.31707132, -0.10798621)",
+     "b": "Vector3(0.06393641233444214, 0.0897594690322876, 0.1332421600818634)"
+    },
+    {
+     "stage": "windup",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "83.2413596"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.09240022, -0.19088471, 0.53819704)",
+     "b": "Vector3(-0.5, -0.5, 0)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "38.5206482"
+    },
+    {
+     "stage": "contact",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.34575656, 0.12305343, 0.5561093)",
+     "b": "Vector3(-0.5, 0.5, 0)"
+    },
+    {
+     "stage": "finish",
+     "field": "elbow_swivel_weight",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "-95.295578"
+    }
+   ]
+  },
+  {
+   "pose": "b21",
+   "n": 2,
+   "time": "2026-11-21T00:15:51",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.17009342, -0.37358356, 0.09920126)"
+    }
+   ]
+  },
+  {
+   "pose": "b21",
+   "n": 1,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b21",
+   "n": 0,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b20",
+   "n": 2,
+   "time": "2026-11-21T00:15:51",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.24125542, -0.19453949, -0.01980728)"
+    }
+   ]
+  },
+  {
+   "pose": "b20",
+   "n": 1,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b20",
+   "n": 0,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b19",
+   "n": 2,
+   "time": "2026-11-21T00:15:51",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.23377609, -0.2567398, 0.029561281)"
+    }
+   ]
+  },
+  {
+   "pose": "b19",
+   "n": 1,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b19",
+   "n": 0,
+   "time": "2026-11-21T00:15:51",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b18",
+   "n": 2,
+   "time": "2026-11-21T00:15:50",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.23399973, -0.24663031, 0.018431127)"
+    }
+   ]
+  },
+  {
+   "pose": "b18",
+   "n": 1,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b18",
+   "n": 0,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b17",
+   "n": 2,
+   "time": "2026-11-21T00:15:50",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.11403565, -0.44081855, 0.15191436)"
+    }
+   ]
+  },
+  {
+   "pose": "b17",
+   "n": 1,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b17",
+   "n": 0,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b16",
+   "n": 2,
+   "time": "2026-11-21T00:15:50",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.22707242, -0.15391815, -0.0523054)"
+    }
+   ]
+  },
+  {
+   "pose": "b16",
+   "n": 1,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b16",
+   "n": 0,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b15",
+   "n": 2,
+   "time": "2026-11-21T00:15:50",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.14649263, -0.40768802, 0.12154843)"
+    }
+   ]
+  },
+  {
+   "pose": "b15",
+   "n": 1,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b15",
+   "n": 0,
+   "time": "2026-11-21T00:15:50",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b14",
+   "n": 2,
+   "time": "2026-11-21T00:15:49",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.23592609, -0.21873868, -0.021135181)"
+    }
+   ]
+  },
+  {
+   "pose": "b14",
+   "n": 1,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b14",
+   "n": 0,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b13",
+   "n": 2,
+   "time": "2026-11-21T00:15:49",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(-0.3021501, -0.32171047, 0.110862166)"
+    }
+   ]
+  },
+  {
+   "pose": "b13",
+   "n": 1,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b13",
+   "n": 0,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b12",
+   "n": 2,
+   "time": "2026-11-21T00:15:49",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.05435215, -0.5232401, 0.5016714)"
+    }
+   ]
+  },
+  {
+   "pose": "b12",
+   "n": 1,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b12",
+   "n": 0,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b11",
+   "n": 2,
+   "time": "2026-11-21T00:15:49",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(-0.075089425, -0.53958106, 0.2431078)"
+    }
+   ]
+  },
+  {
+   "pose": "b11",
+   "n": 1,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b11",
+   "n": 0,
+   "time": "2026-11-21T00:15:49",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b10",
+   "n": 2,
+   "time": "2026-11-21T00:15:48",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.23566279, -0.23498464, -0.00042438507)"
+    }
+   ]
+  },
+  {
+   "pose": "b10",
+   "n": 1,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b10",
+   "n": 0,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b09",
+   "n": 2,
+   "time": "2026-11-21T00:15:48",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.21383256, -0.33062124, 0.04155895)"
+    }
+   ]
+  },
+  {
+   "pose": "b09",
+   "n": 1,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b09",
+   "n": 0,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b08",
+   "n": 2,
+   "time": "2026-11-21T00:15:48",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.22243729, -0.28061378, 0.035859525)"
+    }
+   ]
+  },
+  {
+   "pose": "b08",
+   "n": 1,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b08",
+   "n": 0,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b07",
+   "n": 2,
+   "time": "2026-11-21T00:15:48",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.17070502, -0.37572002, 0.09702174)"
+    }
+   ]
+  },
+  {
+   "pose": "b07",
+   "n": 1,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b07",
+   "n": 0,
+   "time": "2026-11-21T00:15:48",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b06",
+   "n": 2,
+   "time": "2026-11-21T00:15:47",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.2000057, -0.30105418, 0.07309667)"
+    }
+   ]
+  },
+  {
+   "pose": "b06",
+   "n": 1,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b06",
+   "n": 0,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b05",
+   "n": 2,
+   "time": "2026-11-21T00:15:47",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.16548401, -0.38257253, 0.10250391)"
+    }
+   ]
+  },
+  {
+   "pose": "b05",
+   "n": 1,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b05",
+   "n": 0,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b04",
+   "n": 2,
+   "time": "2026-11-21T00:15:47",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.120650835, -0.43347937, 0.1451291)"
+    }
+   ]
+  },
+  {
+   "pose": "b04",
+   "n": 1,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b04",
+   "n": 0,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b03",
+   "n": 2,
+   "time": "2026-11-21T00:15:47",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.23921114, -0.23650861, 0.0141917765)"
+    }
+   ]
+  },
+  {
+   "pose": "b03",
+   "n": 1,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b03",
+   "n": 0,
+   "time": "2026-11-21T00:15:47",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b02",
+   "n": 2,
+   "time": "2026-11-21T00:15:46",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.21595767, -0.29598606, 0.04537466)"
+    }
+   ]
+  },
+  {
+   "pose": "b02",
+   "n": 1,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b02",
+   "n": 0,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b01",
+   "n": 2,
+   "time": "2026-11-21T00:15:46",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.17307222, -0.37263572, 0.09436633)"
+    }
+   ]
+  },
+  {
+   "pose": "b01",
+   "n": 1,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b01",
+   "n": 0,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b00",
+   "n": 2,
+   "time": "2026-11-21T00:15:46",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(0.225006, -0.2895165, 0.035981715)"
+    }
+   ]
+  },
+  {
+   "pose": "b00",
+   "n": 1,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "b00",
+   "n": 0,
+   "time": "2026-11-21T00:15:46",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s20",
+   "n": 2,
+   "time": "2026-11-21T00:14:44",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.0887, -0.1526, 0.1226)",
+     "b": "Vector3(0.12268584, -0.27890825, -0.03567317)"
+    }
+   ]
+  },
+  {
+   "pose": "s20",
+   "n": 1,
+   "time": "2026-11-21T00:14:44",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s20",
+   "n": 0,
+   "time": "2026-11-21T00:14:44",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s19",
+   "n": 2,
+   "time": "2026-11-21T00:14:43",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.9, 0.05)",
+     "b": "Vector3(-0.48140728, -0.22835892, -0.41741845)"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 1,
+   "time": "2026-11-21T00:14:43",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-22",
+     "b": "-42"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-6",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.02, -0.24, 0.02)",
+     "b": "Vector3(-0.1, -0.9, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.6"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.3, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, -0.15, -0.25)",
+     "b": "Vector3(0.04, -0.3, -0.25)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.12, 0.28, 0.02)",
+     "b": "Vector3(-0.05, 0.0, 0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-12",
+     "b": "15"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-2",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.24, 0.24)",
+     "b": "Vector3(0.1, -0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.1, 0, 0.25)"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 0,
+   "time": "2026-11-21T00:14:43",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s15",
+   "n": 2,
+   "time": "2026-11-21T00:14:41",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(-0.39175785, 0.27038455, 0.0265899)"
+    }
+   ]
+  },
+  {
+   "pose": "s15",
+   "n": 1,
+   "time": "2026-11-21T00:14:41",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "5"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.12)"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_roll_base_deg",
+     "a": "180.0",
+     "b": "115"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0, 0.24, 0.02)",
+     "b": "Vector3(0, 0.1, 0.08)"
+    },
+    {
+     "stage": "contact",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "-5"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.04)"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0"
+    }
+   ]
+  },
+  {
+   "pose": "s15",
+   "n": 0,
+   "time": "2026-11-21T00:14:41",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s14",
+   "n": 2,
+   "time": "2026-11-21T00:14:40",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.9, 0.05)",
+     "b": "Vector3(-0.20282152, -0.15651387, -0.2203254)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.6, 0.2)",
+     "b": "Vector3(-0.4605444, 0.47971976, 0.08830279)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.9, 0.2)",
+     "b": "Vector3(-0.20726842, 0.23867118, -0.072416484)"
+    }
+   ]
+  },
+  {
+   "pose": "s14",
+   "n": 1,
+   "time": "2026-11-21T00:14:40",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-22",
+     "b": "-42"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-6",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.02, -0.24, 0.02)",
+     "b": "Vector3(-0.1, -0.9, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.1)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.3, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, 0.08, -0.2)",
+     "b": "Vector3(0.04, -0.12, -0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.12, 0.32, 0.02)",
+     "b": "Vector3(0.12, 0.12, 0.02)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-12",
+     "b": "15"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-2",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.24, 0.24)",
+     "b": "Vector3(0.1, -0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.1, 0, 0.1)"
+    }
+   ]
+  },
+  {
+   "pose": "s14",
+   "n": 0,
+   "time": "2026-11-21T00:14:40",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s13",
+   "n": 2,
+   "time": "2026-11-21T00:14:39",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.45, -0.45, -0.2)",
+     "b": "Vector3(0.10147089, -0.4001925, -0.4448833)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.45, -0.45, -0.2)",
+     "b": "Vector3(0.2967504, -0.10200232, -0.2146607)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.5, 0.1)",
+     "b": "Vector3(-0.07061952, -0.08677447, -0.0582487)"
+    }
+   ]
+  },
+  {
+   "pose": "s13",
+   "n": 1,
+   "time": "2026-11-21T00:14:39",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "15"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.09944612363575232",
+     "b": "0.3"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-2.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.35792205, 0.051168732, 0.08444444)",
+     "b": "Vector3(0.45, -0.45, -0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "20"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0,0,-0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.35792205, 0.051168732, 0.08444444)",
+     "b": "Vector3(0.45, -0.45, -0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0, -0.0325, -0.065)",
+     "b": "Vector3(0.1, -0.12, -0.45)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0, 0.065, 0.026)",
+     "b": "Vector3(-0.3, 0.1, 0.08)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.0744461236357523",
+     "b": "0.22"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-2.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.37792206, 0.051168732, 0.08444444)",
+     "b": "Vector3(0.3, -0.5, 0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-15"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(-0.1,0,0.15)"
+    }
+   ]
+  },
+  {
+   "pose": "s13",
+   "n": 0,
+   "time": "2026-11-21T00:14:39",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s12",
+   "n": 2,
+   "time": "2026-11-21T00:14:38",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.47774827, -0.20231116, -0.079602085)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.48546368, -0.10606587, 0.0235226)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.3594261, -0.12284589, 0.13796817)"
+    }
+   ]
+  },
+  {
+   "pose": "s12",
+   "n": 1,
+   "time": "2026-11-21T00:14:38",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "5"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.12)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "-5"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.04)"
+    }
+   ]
+  },
+  {
+   "pose": "s12",
+   "n": 0,
+   "time": "2026-11-21T00:14:38",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s11",
+   "n": 2,
+   "time": "2026-11-21T00:14:37",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.55, 0.3)",
+     "b": "Vector3(-0.2960409, -0.4275695, 0.6152475)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.28, -0.5, 0.35)",
+     "b": "Vector3(0.35086393, -0.43953758, 0.5997567)"
+    }
+   ]
+  },
+  {
+   "pose": "s11",
+   "n": 1,
+   "time": "2026-11-21T00:14:37",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18, -0.4, 0.07)",
+     "b": "Vector3(-0.18, -0.55, 0.07)"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.18)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(1.25, 0.45, 0.05)",
+     "b": "Vector3(1.25, 0.2, 0.05)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.3, 0.37)",
+     "b": "Vector3(0.15, -0.55, 0.3)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.28, -0.12, 0.43)",
+     "b": "Vector3(0.28, -0.5, 0.35)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.22)"
+    }
+   ]
+  },
+  {
+   "pose": "s11",
+   "n": 0,
+   "time": "2026-11-21T00:14:37",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s10",
+   "n": 2,
+   "time": "2026-11-21T00:14:35",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.25, -0.55, 0.0)",
+     "b": "Vector3(0.19750555, -0.52717996, 0.003829062)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.25, -0.55, 0.05)",
+     "b": "Vector3(0.6298151, -0.5247904, 0.25724924)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.12520055, -0.14367378, 0.96846807)"
+    }
+   ]
+  },
+  {
+   "pose": "s10",
+   "n": 1,
+   "time": "2026-11-21T00:14:35",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.25, -0.55, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.18)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.25, -0.55, 0.05)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-1.514, 0.34, 0.2857)",
+     "b": "Vector3(-1.514, -0.25, 0.2857)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.22)"
+    }
+   ]
+  },
+  {
+   "pose": "s10",
+   "n": 0,
+   "time": "2026-11-21T00:14:35",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s09",
+   "n": 2,
+   "time": "2026-11-21T00:14:34",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18193507, -0.033608317, 0.0686183)",
+     "b": "Vector3(-0.078229904, -0.26400805, 0.18198894)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18193507, -0.033608317, 0.0686183)",
+     "b": "Vector3(-0.078229904, -0.26400805, 0.18198894)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18193507, -0.033608317, 0.0686183)",
+     "b": "Vector3(-0.078229904, -0.26400805, 0.18198894)"
+    }
+   ]
+  },
+  {
+   "pose": "s09",
+   "n": 1,
+   "time": "2026-11-21T00:14:34",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s09",
+   "n": 0,
+   "time": "2026-11-21T00:14:34",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s08",
+   "n": 2,
+   "time": "2026-11-21T00:14:33",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0, 0, 0)",
+     "b": "Vector3(-0.1365727, -0.11555225, -0.16642603)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": null,
+     "b": "Vector3(-0.1365727, -0.11555225, -0.16642603)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0, 0, 0)",
+     "b": "Vector3(-0.1365727, -0.11555225, -0.16642603)"
+    }
+   ]
+  },
+  {
+   "pose": "s08",
+   "n": 1,
+   "time": "2026-11-21T00:14:33",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s08",
+   "n": 0,
+   "time": "2026-11-21T00:14:33",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s07",
+   "n": 2,
+   "time": "2026-11-21T00:14:32",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.6, 0.05)",
+     "b": "Vector3(-0.4449616, -0.21255195, -0.17881607)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.3, 0.2)",
+     "b": "Vector3(-0.261545, -0.3245991, -0.07716726)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.6, 0.2)",
+     "b": "Vector3(-0.15827292, -0.098634124, -0.070750475)"
+    }
+   ]
+  },
+  {
+   "pose": "s07",
+   "n": 1,
+   "time": "2026-11-21T00:14:32",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-22",
+     "b": "-42"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-6",
+     "b": "-4"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.02, -0.24, 0.02)",
+     "b": "Vector3(-0.1, -0.6, 0.05)"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-12",
+     "b": "15"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-2",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.15, -0.24, 0.24)",
+     "b": "Vector3(0.1, -0.6, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "10"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.1, 0, 0.1)"
+    }
+   ]
+  },
+  {
+   "pose": "s07",
+   "n": 0,
+   "time": "2026-11-21T00:14:32",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s06",
+   "n": 2,
+   "time": "2026-11-21T00:14:31",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.123619124, -0.3627236, -0.078296855)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(-0.15444511, -0.18139833, 0.0028592944)"
+    }
+   ]
+  },
+  {
+   "pose": "s06",
+   "n": 1,
+   "time": "2026-11-21T00:14:31",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "5"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.12)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0, 0.24, 0.02)",
+     "b": "Vector3(0, 0.12, 0.08)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "-5"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.04)"
+    }
+   ]
+  },
+  {
+   "pose": "s06",
+   "n": 0,
+   "time": "2026-11-21T00:14:31",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s05",
+   "n": 2,
+   "time": "2026-11-21T00:14:30",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24,-0.7,-0.22)",
+     "b": "Vector3(-0.08567235, -0.50316846, -0.18342993)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24,-0.7,-0.22)",
+     "b": "Vector3(0.21288526, -0.48442435, -0.034215584)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24,-0.7,-0.22)",
+     "b": "Vector3(0.07968444, -0.26315904, 0.052111745)"
+    }
+   ]
+  },
+  {
+   "pose": "s05",
+   "n": 1,
+   "time": "2026-11-21T00:14:30",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "8.0",
+     "b": "18"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.26",
+     "b": "0.4"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "6.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24, -0.35, -0.22)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "6.0",
+     "b": "20"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0,0,-0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24, -0.35, -0.22)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "contact",
+     "field": "crouch_amount",
+     "a": "0.23",
+     "b": "0.36"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.19",
+     "b": "0.32"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-10.0",
+     "b": "-20"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.24, -0.35, -0.22)",
+     "b": "Vector3(0.24,-0.7,-0.22)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-15"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(-0.1,0,0.1)"
+    }
+   ]
+  },
+  {
+   "pose": "s05",
+   "n": 0,
+   "time": "2026-11-21T00:14:30",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s04",
+   "n": 2,
+   "time": "2026-11-21T00:14:29",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.55, 0.6, -0.15)",
+     "b": "Vector3(0.45845872, 0.16086733, -0.8096154)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.2, 0.3)",
+     "b": "Vector3(0.35831404, -0.024155974, 0.25142777)"
+    }
+   ]
+  },
+  {
+   "pose": "s04",
+   "n": 1,
+   "time": "2026-11-21T00:14:29",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s04",
+   "n": 0,
+   "time": "2026-11-21T00:14:29",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s03",
+   "n": 2,
+   "time": "2026-11-21T00:14:28",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.55, 0.6, -0.15)",
+     "b": "Vector3(0.3739317, -0.07182717, -0.70652753)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.35, 0.9, 0.2)",
+     "b": "Vector3(0.46897006, -0.07804179, 0.46865457)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.2, 0.3)",
+     "b": "Vector3(0.3394087, -0.05408138, 0.2460041)"
+    }
+   ]
+  },
+  {
+   "pose": "s03",
+   "n": 1,
+   "time": "2026-11-21T00:14:28",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s03",
+   "n": 0,
+   "time": "2026-11-21T00:14:28",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s02",
+   "n": 2,
+   "time": "2026-11-21T00:14:27",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18, -0.4, 0.07)",
+     "b": "Vector3(-0.673239, 0.31883204, 0.21901615)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_path",
+     "a": "PackedVector3Array(-0.18193507194519043, -0.033608317375183105, 0.0686182975769043, -0.1681483057407248, -0.028282042209538047, 0.08219122064473794, -0.1544881188711489, -0.022991374735651906, 0.09566464862236379, -0.1409627757025152, -0.017743391398572478, 0.10902230881606356, -0.12758054060087604, -0.012545168643347544, 0.122247928532119, -0.11434967793228386, -0.0074037829150248955, 0.1353252350768118, -0.10127845206279106, -0.0023263106586523166, 0.1482379557564237, -0.08837512735845009, 0.0026801716807224084, 0.16096981787723644, -0.07564796818531332, 0.007608587658051481, 0.17350454874553178, -0.0631052389094332, 0.012451860828287125, 0.18582587566759137, -0.05075520389686213, 0.017202914746381553, 0.19791752594969703, -0.038606127513652506, 0.021854672967286975, 0.20976322689813037, -0.026666274125856777, 0.026400059045955597, 0.2213467058191732, -0.014943908099527337, 0.030831996537339645, 0.23265169001910724, -0.0034472938007166004, 0.03514340899639133, 0.24366190680421412, 0.007815304404523044, 0.03932721997806285, 0.2543610834807758, 0.01883562215013914, 0.04337635303730642, 0.26473294735507374, 0.029605395070079293, 0.047283731729074276, 0.27476122573338985, 0.04011635879829109, 0.05104227960831861, 0.2844296459220057, 0.05036024896872213, 0.05464492022999165, 0.2937219352272032, 0.06032880121531998, 0.05808457714904558, 0.3026218209552639, 0.07001375117203222, 0.06135417392043266, 0.3111130304124697, 0.0794068344728065, 0.06444663409910505, 0.31917929090510216, 0.08849978675159031, 0.06735488124001499, 0.32680432973944307, 0.0972843436423313, 0.07007183889811469, 0.3339718742217742, 0.10575224077897705, 0.07259043062835636, 0.34066565165837726, 0.11389521379547508, 0.07490357998569225, 0.34686938935553396, 0.12170499832577308, 0.0770042105250745, 0.352566814619526, 0.12917333000381856, 0.0788852458014554, 0.35774165475663516, 0.13629194446355916, 0.0805396093697871, 0.36237763707314313, 0.14305257733894247, 0.08196022478502184, 0.3664584888753316, 0.14944696426391602, 0.08314001560211182, 0.3699679374694824, 0.15563763777084397, 0.08418815629117385, 0.3731645791591952, 0.16178713039209042, 0.08521782073776779, 0.3763152013600066, 0.16788717776160303, 0.08622793162001045, 0.3794158180461035, 0.17392951551332933, 0.08721741161601866, 0.382462443191673, 0.17990587928121693, 0.08818518340390924, 0.38545109077090206, 0.1858080046992134, 0.089130169661799, 0.38837777475797763, 0.19162762740126638, 0.09005129306780474, 0.39123850912708674, 0.19735648302132333, 0.09094747630004327, 0.3940293078524163, 0.20298630719333197, 0.09181764203663145, 0.39674618490815344, 0.2085088355512398, 0.09266071295568606, 0.39938515426848503, 0.21391580372899444, 0.09347561173532394, 0.40194222990759815, 0.21919894736054354, 0.09426126105366191, 0.40441342579967965, 0.22435000207983458, 0.09501658358881675, 0.4067947559189167, 0.22936070352081522, 0.0957405020189053, 0.40908223423949613, 0.23422278731743293, 0.09643193902204439, 0.411271874735605, 0.23892798910363547, 0.0970898172763508, 0.41335969138143036, 0.24346804451337026, 0.0977130594599414, 0.4153416981511591, 0.24783468918058504, 0.09830058825093296, 0.4172139090189782, 0.25201965873922727, 0.09885132632744231, 0.41897233795907474, 0.25601468882324463, 0.09936419636758628, 0.42061299894563564, 0.25981151506658473, 0.09983812104948168, 0.4221319059528479, 0.263401873103195, 0.10027202305124532, 0.42352507295489855, 0.26677749856702315, 0.10066482505099404, 0.4247885139259745, 0.2699301270920167, 0.10101544972684462, 0.42591824284026286, 0.2728514943121233, 0.10132281975691389, 0.4269102736719505, 0.27553333586129053, 0.10158585781931866, 0.4277606203952244, 0.2779673873734659, 0.1018034865921758, 0.4284652969842717, 0.28014538448259707, 0.10197462875360204, 0.42902031741327923, 0.28205906282263166, 0.10209820698171428, 0.4294216956564341, 0.28370015802751714, 0.10217314395462927, 0.42966544568792325, 0.28506040573120117, 0.10219836235046387, 0.42974758148193365)",
+     "b": "PackedVector3Array(-0.673239, 0.31883204, 0.21901613, -0.16814831, -0.028282043, 0.08219122, -0.15448812, -0.022991374, 0.09566465, -0.14096278, -0.017743392, 0.10902231, -0.12758054, -0.012545168, 0.12224793, -0.11434968, -0.007403783, 0.13532524, -0.101278454, -0.0023263106, 0.14823796, -0.08837513, 0.0026801717, 0.16096982, -0.075647965, 0.007608588, 0.17350455, -0.06310524, 0.012451861, 0.18582587, -0.050755203, 0.017202916, 0.19791752, -0.038606126, 0.021854673, 0.20976323, -0.026666274, 0.02640006, 0.2213467, -0.014943908, 0.030831996, 0.2326517, -0.0034472938, 0.03514341, 0.24366191, 0.007815304, 0.03932722, 0.2543611, 0.018835623, 0.043376353, 0.26473296, 0.029605394, 0.04728373, 0.27476123, 0.04011636, 0.05104228, 0.28442964, 0.050360247, 0.05464492, 0.29372194, 0.0603288, 0.058084577, 0.3026218, 0.070013754, 0.061354175, 0.31111303, 0.079406835, 0.064446636, 0.3191793, 0.088499784, 0.06735488, 0.32680434, 0.09728435, 0.07007184, 0.3339719, 0.10575224, 0.07259043, 0.34066564, 0.113895215, 0.07490358, 0.34686938, 0.121704996, 0.07700421, 0.3525668, 0.12917332, 0.07888524, 0.35774165, 0.13629195, 0.08053961, 0.36237764, 0.14305258, 0.08196022, 0.36645848, 0.22978637, -0.14348137, 0.5510861, 0.15563764, 0.084188156, 0.37316456, 0.16178714, 0.08521782, 0.3763152, 0.16788718, 0.08622793, 0.3794158, 0.17392951, 0.08721741, 0.38246244, 0.17990588, 0.08818518, 0.38545108, 0.185808, 0.08913017, 0.3883778, 0.19162762, 0.09005129, 0.3912385, 0.19735648, 0.09094748, 0.39402932, 0.2029863, 0.09181764, 0.3967462, 0.20850883, 0.09266071, 0.39938515, 0.21391581, 0.09347561, 0.40194222, 0.21919894, 0.09426126, 0.40441343, 0.22435, 0.095016584, 0.40679476, 0.2293607, 0.095740505, 0.40908223, 0.23422278, 0.09643194, 0.41127187, 0.23892799, 0.09708982, 0.4133597, 0.24346805, 0.09771306, 0.4153417, 0.24783468, 0.09830059, 0.41721392, 0.25201967, 0.09885132, 0.41897234, 0.25601467, 0.0993642, 0.420613, 0.25981152, 0.09983812, 0.4221319, 0.26340187, 0.10027202, 0.42352507, 0.2667775, 0.100664824, 0.4247885, 0.26993012, 0.10101545, 0.42591825, 0.2728515, 0.10132282, 0.42691028, 0.27553335, 0.10158586, 0.42776063, 0.2779674, 0.10180349, 0.4284653, 0.28014538, 0.10197463, 0.42902032, 0.28205907, 0.102098204, 0.4294217, 0.28370017, 0.10217314, 0.42966545, 0.14721695, -0.096443415, 0.49228203)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.14944696426391602, 0.08314001560211182, 0.3699679374694824)",
+     "b": "Vector3(0.22978637, -0.14348137, 0.5510861)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.28506040573120117, 0.10219836235046387, 0.4297475814819336)",
+     "b": "Vector3(0.14721695, -0.096443415, 0.49228203)"
+    }
+   ]
+  },
+  {
+   "pose": "s02",
+   "n": 1,
+   "time": "2026-11-21T00:14:27",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.18193507194519043, -0.033608317375183105, 0.0686182975769043)",
+     "b": "Vector3(-0.18, -0.4, 0.07)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.093, -0.45, -1.02)",
+     "b": "Vector3(0.093, -0.55, -1.02)"
+    }
+   ]
+  },
+  {
+   "pose": "s02",
+   "n": 0,
+   "time": "2026-11-21T00:14:27",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s01",
+   "n": 2,
+   "time": "2026-11-21T00:14:26",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.43035805, -0.20326006, -0.20399979)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.43974543, -0.079346895, -0.096523225)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.34676853, -0.06410426, 0.024123669)"
+    }
+   ]
+  },
+  {
+   "pose": "s01",
+   "n": 1,
+   "time": "2026-11-21T00:14:26",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "5"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "10"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, -0.12)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "0.0",
+     "b": "-5"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-8"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0, 0, 0.04)"
+    }
+   ]
+  },
+  {
+   "pose": "s01",
+   "n": 0,
+   "time": "2026-11-21T00:14:26",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s00",
+   "n": 2,
+   "time": "2026-11-21T00:14:25",
+   "author": "claude",
+   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06393641233444214, 0.0897594690322876, 0.1332421600818634)",
+     "b": "Vector3(0.2495337, -0.31707132, -0.10798621)"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.5, -0.5, 0)",
+     "b": "Vector3(-0.09240022, -0.19088471, 0.53819704)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.5, 0.5, 0)",
+     "b": "Vector3(0.34575656, 0.12305343, 0.5561093)"
+    }
+   ]
+  },
+  {
+   "pose": "s00",
+   "n": 1,
+   "time": "2026-11-21T00:14:25",
+   "author": "user",
+   "message": "working copy at first studio start",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  },
+  {
+   "pose": "s00",
+   "n": 0,
+   "time": "2026-11-21T00:14:25",
+   "author": "user",
+   "message": "HEAD",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": []
+  }
+ ],
+ "ratings": [],
+ "notes": []
+}

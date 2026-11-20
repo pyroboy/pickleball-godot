@@ -47,7 +47,9 @@ values = {
 "torso_pitch_deg": -6.0,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -30.0,
-"weight_shift": -0.6
+"weight_shift": -0.6,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -32.8790656
 }
 
 [sub_resource type="Resource" id="Resource_41jbr"]
@@ -94,7 +96,9 @@ values = {
 "torso_pitch_deg": -6.0,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -30.0,
-"weight_shift": -0.6
+"weight_shift": -0.6,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -32.879069
 }
 
 [resource]
@@ -156,3 +160,5 @@ charge_duration = 0.32
 notes = "Right-dominant two-handed backhand. Connected leftward unit turn and outboard takeback; original front contact head and zone unchanged. Support index follows the back face. See docs/two-handed-backhand-and-ready.md for measured grip/shoulder art limits."
 last_tuned_by = "Codex"
 last_tuned_at = "2026-10-02"
+right_elbow_swivel_deg = -32.8790656
+elbow_swivel_weight = 1.0

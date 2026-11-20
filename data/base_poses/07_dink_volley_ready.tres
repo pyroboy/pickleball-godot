@@ -14,3 +14,5 @@ back_foot_back = -0.06
 crouch_amount = 0.2
 torso_pitch_deg = 9.0
 body_pitch_deg = 6.0
+right_elbow_swivel_deg = -11.73663592
+elbow_swivel_weight = 1.0

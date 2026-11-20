@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 19
+display_name = "Crossover Run"
+stroke_overlay_mix = 0.7
+stance_width = 0.56
+front_foot_forward = 0.18
+back_foot_back = -0.18
+crouch_amount = 0.08
+torso_pitch_deg = 8.0
+body_pitch_deg = 10.0
+right_elbow_pole = Vector3(0.23377609, -0.2567398, 0.029561281)
