@@ -158,10 +158,17 @@ func _run() -> void:
 	_scorer.on_ball_hit_post(Vector3(3.35, 0.5, 0))
 	_check(_ended_with("NET_POST", 0), "hitting the post loses the point")
 
-	# Body hits.
+	# Body hits. body_struck (cosmetic: ball deflection, hit fx, Ouch bubble) fires
+	# only when the scorer accepted the body-hit fault.
+	var struck: Array = []
+	_scorer.body_struck.connect(func(actor, evidence): struck.append([actor, evidence]))
 	_rally(0, 0)
 	_scorer.on_actor_body_contact(1, {"hit": true, "kind": "body", "actor_id": 1, "part": "torso", "point": Vector3(0, 1, -3)})
 	_check(_ended_with("BODY_HIT", 0), "ball striking a player's body loses them the point")
+	_check(struck.size() == 1 and struck[0][0] == 1 and struck[0][1].get("point") == Vector3(0, 1, -3), "accepted body hit emits body_struck once with its evidence")
+	_scorer.on_actor_body_contact(1, {"hit": true, "kind": "body", "actor_id": 1, "part": "torso", "point": Vector3(0, 1, -3)})
+	_check(struck.size() == 1, "a repeat contact after the point ended emits nothing")
+	struck.clear()
 	_rally(0, 0)
 	_scorer.on_actor_body_contact(1, {"hit": true, "kind": "legal_paddle", "actor_id": 1})
 	_check(_ended.is_empty(), "a paddle contact is not a body hit")
@@ -170,6 +177,7 @@ func _run() -> void:
 	_rally(0, 2)
 	_scorer.on_actor_body_contact(1, {"hit": true, "kind": "body", "actor_id": 1})
 	_check(_ended.is_empty(), "a ball that already bounced twice cannot body-hit")
+	_check(struck.is_empty(), "rejected contacts emit no body_struck")
 
 	# Double contact.
 	_rally(1, 0)

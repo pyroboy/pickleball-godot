@@ -305,6 +305,7 @@ func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, inc
 		if _query_work >= MAX_FRAME_TRIANGLE_QUERIES:
 			return {"hit": false, "blocked": true, "ambiguous": true, "fraction": start, "reason": "frame_contact_budget"}
 		if not _frame_current.has(ActorIdentity.actor_id(player)): continue   # out of ball reach this tick
+		if Engine.get_physics_frames() <= int(_mishit_free.get(ActorIdentity.actor_id(player), -1)): continue   # pop-up leaving a mishit paddle
 		var current: Dictionary = _frame_current[ActorIdentity.actor_id(player)]
 		var previous: Dictionary = _snapshots.get(ActorIdentity.actor_id(player), current) if _flight == incoming_flight else current
 		var departing: int = int(_last_contact.get("mesh_id", -1)) if _evidence_actor(_last_contact) == ActorIdentity.actor_id(player) else -1
@@ -1227,16 +1228,6 @@ func _process_ordered_live(pending: Dictionary, control_seconds: float) -> void:
 	if unresolved_continuation.is_empty(): ball.reapply_prepared_aero(held)
 	_update_separation()
 
-# The paddle hand decides whether the planned shot is played. On fast two-handed
-# backhands the support wrist bends past its budget; the contact happens and looks the
-# same either way, but refusing the plan let the ball deflect off the paddle into the
-# net (bench: 38 of 43 unplanned returns of fast balls were netted).
-func _paddle_arm_certified(actor, report: Dictionary) -> bool:
-	var arms: Array = report.get("arms", [])
-	var pose: PostureDefinition = actor.posture.transition_pose_blend if actor.posture != null else null
-	if arms.size() < 2 or pose == null: return bool(report.get("valid", false))
-	return bool(arms[1 if pose.paddle_hand == 1 else 0].get("valid", false))
-
 func validates_settlement(actor, certificate: Dictionary) -> bool:
 	return not _settlement_scope.is_empty() and _settlement_scope == certificate and int(certificate.get("epoch", -1)) == _interval_reset_epoch and int(certificate.get("frame", -1)) == Engine.get_physics_frames() and int(certificate.get("actor_id", -1)) == ActorIdentity.actor_id(actor) and int(certificate.get("instance", -1)) == actor.get_instance_id() and int(certificate.get("flight", -1)) == game.ball.flight_id
 
@@ -1252,13 +1243,16 @@ func _contact_callback_boundary(authority_epoch: int, ball_epoch: int, event_cur
 func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_permission: Dictionary) -> Dictionary:
 	var id: int = ActorIdentity.actor_id(actor)
 	var entry: Dictionary = _intents.eligible(id, actor.get_instance_id(), _intent_interval, int(_stroke_state(actor).serial))
-	if entry.is_empty(): return {}
+	if entry.is_empty(): _note_decline(actor, "no_eligible_intent"); return {}
 	var controller = _controller_for_intent(actor, str(entry.intent.get("kind", "")))
-	if controller == null or not _event_permission_valid(actor, entry, event_permission): return {}
+	if controller == null or not _event_permission_valid(actor, entry, event_permission): _note_decline(actor, "controller_or_permission"); return {}
 	var previous: Dictionary = _snapshots.get(id, _current_snapshot(actor))
-	if not _paddle_arm_certified(actor, previous.get("endpoint_anatomy", {})) or not _paddle_arm_certified(actor, _frame_current[id].get("endpoint_anatomy", {})):
+	var stretch: float = maxf(_arm_stretch(previous.get("endpoint_anatomy", {})), _arm_stretch(_frame_current[id].get("endpoint_anatomy", {})))
+	if stretch > ARM_STRETCH_TOLERANCE:
 		last_evidence["intended_decline"] = "uncertified_published_endpoint_anatomy"
+		_note_decline(actor, "endpoint_anatomy", {"stretch": snappedf(stretch, 0.001), "prev": _anatomy_brief(previous.get("endpoint_anatomy", {})), "cur": _anatomy_brief(_frame_current[id].get("endpoint_anatomy", {}))})
 		return {}
+	_contact_stretch = {"actor_id": id, "frame": Engine.get_physics_frames(), "value": stretch}
 	var actual_frame: Transform3D = History._linear_frame(previous.paddle, _frame_current[id].paddle, float(evidence.fraction))
 	if absf(actual_frame.basis.determinant()) < 1e-6: return {"unresolved": true, "reason": "collapsed intended paddle frame"}
 	entry = _intents.claim(id, actor.get_instance_id(), _intent_interval, int(_stroke_state(actor).serial))
@@ -1276,6 +1270,7 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	var stamina_before: float = actor.stamina.value
 	var event_context: Dictionary = game.team_coordination._public_context().duplicate(true) if event_permission.has("advisory_context") else {}
 	var result: Dictionary = controller.settle_contact_intent(entry.intent, _settlement_scope.duplicate(true))
+	if result.is_empty(): _note_decline(actor, "controller_declined")
 	_settlement_scope.clear()
 	var boundary: Dictionary = _contact_callback_boundary(epoch, ball_epoch, not result.get("interrupted", false))
 	if boundary.get("reset", false): return {"accepted": true, "reset": true}
@@ -1294,31 +1289,98 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	if settlement_receipts.size() > 256: settlement_receipts.pop_front()
 	return result
 
+# Bench evidence: a paddle contact whose planned shot was not applied (it becomes a
+# plain physical bounce). Only notes AI actors holding a plan, once per event.
+static func _anatomy_brief(report: Dictionary) -> Array:
+	var out: Array = []
+	for arm in report.get("arms", []):
+		var ch: Dictionary = arm.get("channels", {})
+		out.append({"ok": arm.get("valid", false), "up": snappedf(float(arm.get("upper_link_error", 0.0)), 0.0001), "fore": snappedf(float(arm.get("fore_link_error", 0.0)), 0.0001),
+			"sock": snappedf(float(arm.get("wrist_socket_error", 0.0)), 0.0001), "budget_ok": ch.get("within_animation_budget", null), "reach": snappedf(float(arm.get("reach", 0.0)), 0.01), "len": snappedf(float(arm.get("link_budget", 0.0)), 0.01), "reason": arm.get("reason", "")})
+	return out
+
+func _note_decline(actor, stage: String, extra: Dictionary = {}) -> void:
+	if not actor.is_ai or actor.ai_brain == null or actor.ai_brain._planned_shot.is_empty(): return
+	PerfMonitor.note("intent_declined", {"actor": ActorIdentity.actor_id(actor), "stage": stage, "plan": str(actor.ai_brain._planned_shot.get("kind", "")),
+		"ball": _note_point(game.ball.global_position), "decline": str(actor.ai_brain.last_settle_decline), "extra": extra})
+
 static func _note_point(point: Vector3) -> Array:
 	return [snappedf(point.x, 0.01), snappedf(point.y, 0.01), snappedf(point.z, 0.01)]
 
-func intended_velocity_leaves_surface(actor, certificate: Dictionary, velocity: Vector3, stage: String) -> bool:
-	if not validates_settlement(actor, certificate): return false
+## ---- Contact rule (global, AI and human) -------------------------------------
+## The ball must really meet the paddle (settlement only runs on a certified paddle
+## contact). Given that, the planned trajectory wins over strict paddle geometry:
+##  - face angle: the angle between the face normal and the ball's planned departure
+##    (relative to the moving paddle) may be up to FACE_TOLERANCE_DEG. Past
+##    FACE_CLEAN_DEG the shot keeps its plan but gets deliberate error that grows
+##    with the angle (direction up to MAX_ERROR_DEG, speed up to MAX_SPEED_ERROR).
+##  - arm: the displayed paddle arm may be stretched up to ARM_STRETCH_TOLERANCE (m)
+##    or past its wrist animation limits; that also adds error.
+##  - beyond the face tolerance it is a real mishit: a soft pop-up to mid-court.
+## The error uses its own RNG seeded per contact (bench stays reproducible, the
+## seeded AI RNG is untouched).
+const FACE_CLEAN_DEG := 70.0
+const FACE_TOLERANCE_DEG := 115.0
+const ARM_STRETCH_TOLERANCE := 0.12
+const MAX_ERROR_DEG := 8.0
+const MAX_SPEED_ERROR := 0.10
+const MISHIT_FREE_TICKS := 6
+var _mishit_free: Dictionary = {}   # actor id -> last physics tick the ball passes through them
+var _contact_stretch: Dictionary = {}
+var _contact_rng := RandomNumberGenerator.new()
+
+static func _arm_stretch(report: Dictionary) -> float:
+	if report.get("valid", false): return 0.0
+	if report.get("arms", []).is_empty(): return INF
+	var worst := 0.0
+	for arm in report.arms:
+		if arm.get("valid", false): continue
+		if arm.has("reason") and str(arm.reason) != "": return INF
+		worst = maxf(worst, maxf(float(arm.get("upper_link_error", INF)), maxf(float(arm.get("fore_link_error", INF)), float(arm.get("wrist_socket_error", INF)))))
+	return worst
+
+## Face angle (degrees) between the paddle normal and the planned departure
+## relative to the paddle surface; INF when the evidence is unusable.
+func face_angle(certificate: Dictionary, velocity: Vector3) -> float:
 	var evidence: Dictionary = certificate.evidence
-	var seconds: float = certificate.physical_seconds
 	var normal: Vector3 = evidence.normal
-	var surface_velocity: Vector3 = Vector3(evidence.surface_displacement) / seconds
-	var feasible: bool = velocity.is_finite() and normal.is_finite() and surface_velocity.is_finite() and normal.length_squared() > .5 and (velocity - surface_velocity).dot(normal) >= 0.0
-	if not feasible:
-		# Bench evidence for tools/shot_report.py: the planned shot is dropped here
-		# and the ball deflects off the paddle.
+	var surface_velocity: Vector3 = Vector3(evidence.surface_displacement) / float(certificate.physical_seconds)
+	var relative: Vector3 = velocity - surface_velocity
+	if not velocity.is_finite() or not normal.is_finite() or not surface_velocity.is_finite() or normal.length_squared() <= .5 or relative.length_squared() < 1e-8: return INF
+	return rad_to_deg(acos(clampf(relative.normalized().dot(normal.normalized()), -1.0, 1.0)))
+
+## Returns the launch to apply (possibly with deliberate error, or a pop-up marked
+## "mishit"), or {} when the contact is not this actor's valid settlement.
+func contact_launch(actor, certificate: Dictionary, launch: Dictionary, stage: String) -> Dictionary:
+	if not validates_settlement(actor, certificate) or launch.is_empty(): return {}
+	var id: int = ActorIdentity.actor_id(actor)
+	var velocity: Vector3 = launch.velocity
+	var angle: float = face_angle(certificate, velocity)
+	if angle > FACE_TOLERANCE_DEG:
 		var pose: PostureDefinition = actor.posture.transition_pose_blend if actor.posture != null else null
-		PerfMonitor.note("shot_dropped", {"actor": ActorIdentity.actor_id(actor), "stage": stage, "posture": pose.posture_id if pose != null else -1,
-			"normal": [snappedf(normal.x, 0.01), snappedf(normal.y, 0.01), snappedf(normal.z, 0.01)],
-			"launch_along_normal": snappedf(velocity.dot(normal), 0.01), "surface_along_normal": snappedf(surface_velocity.dot(normal), 0.01),
-			"launch": [snappedf(velocity.x, 0.1), snappedf(velocity.y, 0.1), snappedf(velocity.z, 0.1)],
-			"ball": [snappedf(game.ball.global_position.x, 0.01), snappedf(game.ball.global_position.y, 0.01), snappedf(game.ball.global_position.z, 0.01)],
-			"head": _note_point(PaddleReach.head_world(actor)), "blade_axis": _note_point(actor.paddle_node.global_basis.y.normalized()), "face_axis": _note_point(actor.paddle_node.global_basis.z.normalized()), "planned": _note_point(actor.ai_brain.ai_predicted_contact_position) if actor.is_ai and actor.ai_brain != null else [], "planned_in": snappedf(actor.ai_brain.ai_selected_contact_time, 0.01) if actor.is_ai and actor.ai_brain != null else -1.0,
-			"root": [snappedf(actor.global_position.x, 0.01), snappedf(actor.global_position.z, 0.01)], "incoming": [snappedf(game.ball.linear_velocity.x, 0.1), snappedf(game.ball.linear_velocity.y, 0.1), snappedf(game.ball.linear_velocity.z, 0.1)]})
-		last_evidence["intended_fallback"] = {"actor_id": ActorIdentity.actor_id(actor), "fraction": evidence.fraction,
-			"stage": stage, "velocity": velocity, "normal": normal, "surface_velocity": surface_velocity,
-			"relative_normal_velocity": (velocity - surface_velocity).dot(normal)}
-	return feasible
+		PerfMonitor.note("shot_dropped", {"actor": id, "stage": stage, "posture": pose.posture_id if pose != null else -1,
+			"face_deg": snappedf(angle, 0.1) if is_finite(angle) else -1.0, "ball": _note_point(game.ball.global_position), "launch": _note_point(velocity)})
+		var popup: Dictionary = preload("res://scripts/ai_match_tactics.gd").popup_launch(game.shot_physics, game.ball.global_position, ActorIdentity.court_side(actor))
+		if popup.is_empty(): return {}
+		_mishit_free[id] = Engine.get_physics_frames() + MISHIT_FREE_TICKS
+		popup["mishit"] = true
+		popup["profile"] = popup.get("profile", {}).duplicate(true); popup.profile["mishit"] = true
+		PerfMonitor.note("mishit_popup", {"actor": id, "face_deg": snappedf(angle, 0.1) if is_finite(angle) else -1.0, "origin": _note_point(game.ball.global_position), "vel": _note_point(popup.velocity)})
+		return popup
+	if angle > 90.0: _mishit_free[id] = Engine.get_physics_frames() + MISHIT_FREE_TICKS   # leaves through the face plane
+	if stage != "executed": return launch
+	var stretch: float = float(_contact_stretch.value) if int(_contact_stretch.get("actor_id", -1)) == id and int(_contact_stretch.get("frame", -1)) == Engine.get_physics_frames() else 0.0
+	var misfit: float = maxf(clampf((angle - FACE_CLEAN_DEG) / (FACE_TOLERANCE_DEG - FACE_CLEAN_DEG), 0.0, 1.0), 0.6 * clampf(stretch / ARM_STRETCH_TOLERANCE, 0.0, 1.0))
+	if misfit <= 0.0: return launch
+	_contact_rng.seed = hash([game.ball.flight_id, id, Engine.get_physics_frames()])
+	var out: Dictionary = launch.duplicate(true)
+	var direction: Vector3 = velocity.normalized()
+	var axis: Vector3 = direction.cross(Vector3.UP if absf(direction.y) < 0.95 else Vector3.RIGHT).normalized().rotated(direction, _contact_rng.randf_range(0.0, TAU))
+	var error_deg: float = MAX_ERROR_DEG * misfit * _contact_rng.randf_range(0.35, 1.0)
+	var speed: float = velocity.length() * (1.0 + MAX_SPEED_ERROR * misfit * _contact_rng.randf_range(-1.0, 1.0))
+	out.velocity = direction.rotated(axis, deg_to_rad(error_deg)) * speed
+	PerfMonitor.note("contact_inaccuracy", {"actor": id, "face_deg": snappedf(angle, 0.1), "stretch": snappedf(stretch, 0.001), "misfit": snappedf(misfit, 0.01), "error_deg": snappedf(error_deg, 0.1)})
+	return out
 
 func _prepare_event_intent(actor, evidence: Dictionary) -> Dictionary:
 	var id: int = ActorIdentity.actor_id(actor)

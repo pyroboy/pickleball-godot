@@ -541,6 +541,9 @@ func _setup_subsystems() -> void :
 	var match_feel = preload("res://scripts/fx/match_feel.gd").new()
 	add_child(match_feel)
 	match_feel.setup(self)
+	var body_hit_fx = preload("res://scripts/fx/body_hit_fx.gd").new()
+	add_child(body_hit_fx)
+	body_hit_fx.setup(self)
 
 
 	game_shots = _GameShots.new()
@@ -1235,7 +1238,12 @@ func settle_human_contact_intent(actor, intent: Dictionary, certificate: Diction
 		launch = shot_physics.solve_aimed_launch(ball.global_position, shot_target,
 			charge_ratio, actor.court_side, committed_mode, committed_intent, str(intent.motion_context.get("shot_type", _pending_shot_type)), float(intent.motion_context.get("arc", trajectory_arc_offset)), true)
 		if launch.is_empty(): return false
-	if launch.is_empty() or not contact_authority.intended_velocity_leaves_surface(actor, certificate, launch.velocity, "authored"): return false
+	if launch.is_empty(): return false
+	# Contact rule (match_contact_authority.contact_launch): the planned trajectory
+	# wins while the face is within tolerance; too far off is a pop-up mishit.
+	launch = contact_authority.contact_launch(actor, certificate, launch, "authored")
+	if launch.is_empty(): return false
+	var mishit: bool = bool(launch.get("mishit", false))
 	if contact_error > planner.IMPACT_DISTANCE and practice_launcher and (practice_launcher.is_wall() or practice_launcher.is_exchange() and (not practice_launcher.allow_attacks or practice_launcher.demo_enabled)):
 		var local_ball: Vector3 = actual_paddle.affine_inverse() * ball.global_position
 		var local_incoming: Vector3 = actual_paddle.basis.inverse() * ball.linear_velocity
@@ -1248,9 +1256,11 @@ func settle_human_contact_intent(actor, intent: Dictionary, certificate: Diction
 		launch.profile["contact_quality"] = quality
 		launch.profile["peripheral_contact"] = true
 		launch.profile["accuracy_region_reliable"] = false
-	if not (practice_launcher and (practice_launcher.is_wall() or practice_launcher.is_exchange() and (not practice_launcher.allow_attacks or practice_launcher.demo_enabled))):
+	if not mishit and not (practice_launcher and (practice_launcher.is_wall() or practice_launcher.is_exchange() and (not practice_launcher.allow_attacks or practice_launcher.demo_enabled))):
 		launch = apply_contact_execution(actor, launch, charge_ratio, float(intent.elapsed) - (1.0 - float(certificate.evidence.fraction)) * float(intent.control_seconds) - float(intent.strike_time), false, certificate)
-	if not contact_authority.intended_velocity_leaves_surface(actor, certificate, launch.velocity, "executed"): return false
+	if not mishit:
+		launch = contact_authority.contact_launch(actor, certificate, launch, "executed")
+		if launch.is_empty(): return false
 	launch["profile"] = launch.profile.duplicate(true)
 	launch.profile["motion_profile"] = str(intent.motion_context.get("profile", "LEGACY"))
 	_pending_shot_type = str(launch.profile.get("shot_type", _pending_shot_type))

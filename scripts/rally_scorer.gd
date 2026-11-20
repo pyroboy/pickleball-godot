@@ -26,6 +26,10 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 signal rally_ended(winner: int, reason: String, detail: String)
 ## Ball is dead, but scoring waits for any unfinished volley momentum.
 signal rally_pending(winner: int, reason: String, detail: String)
+## A body-hit fault was accepted (the rally is over or pending for it). Cosmetic
+## listeners only (fx/body_hit_fx.gd): evidence holds "point"/"normal" when the
+## contact authority found it; empty for a physics-capsule contact.
+signal body_struck(actor_id: int, evidence: Dictionary)
 const SurfaceContacts = preload("res://scripts/player_surface_contacts.gd")
 var _pending_result: Dictionary = {}
 var _scene_rule_epoch := 0
@@ -301,6 +305,7 @@ func on_actor_body_contact(actor_id: int, evidence: Dictionary) -> void:
 		"own_shot": int(_ball.get("last_hit_actor_id")) == actor_id if "last_hit_actor_id" in _ball else false})
 	_emit({"valid": false, "winner": 1 - _team(actor_id), "reason": FAULT_BODY_HIT,
 		"detail": "%s: ball struck the player" % ("BLUE" if _team(actor_id) == 0 else "RED"), "contact": evidence})
+	if not _active: body_struck.emit(actor_id, evidence)
 
 func _on_ball_hit_player_body(player_num: int) -> void :
 	if not _active:
@@ -318,10 +323,22 @@ func _on_ball_hit_player_body(player_num: int) -> void :
 		"reason": FAULT_BODY_HIT, 
 		"detail": "%s: Ball struck the player" % hitter_name.to_upper(), 
 	})
+	if not _active and _ball != null:
+		var struck = _nearest_team_actor_to_ball(player_num)
+		if struck != null: body_struck.emit(ActorIdentity.actor_id(struck), {})
 
 
 
 
+
+func _nearest_team_actor_to_ball(team: int):
+	var best = null
+	var best_d: float = INF
+	for actor in ActorIdentity.players(_actor_registry, [_player_left, _player_right]):
+		if not is_instance_valid(actor) or ActorIdentity.team_id(actor) != team: continue
+		var d: float = actor.global_position.distance_squared_to(_ball.global_position)
+		if d < best_d: best = actor; best_d = d
+	return best
 
 func check_out_of_bounds(bounce_pos: Vector3) -> Dictionary:
 	if _ball == null:
