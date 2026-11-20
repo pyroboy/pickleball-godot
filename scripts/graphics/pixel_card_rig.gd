@@ -31,9 +31,12 @@ class_name PixelCardRig
 ## - far tier: players beyond FAR_DIST sample the atlas at reduced texel density.
 ##   TODO(art): when a dedicated half-size far atlas is baked, add a "far" entry to
 ##   cards_meta.json and swap `atlas` in _set_far() instead of the shader snap.
+## - visual-only body motion (arm swing, shoulder counter-turn): CardMotionLayer deltas,
+##   applied in _xf() after the interpolated read; the paddle skin reads paddle_delta()
 ## Debug: PICKLEBALL_CARD_DEBUG=nocards,bones,axes (comma list) or PixelCardRig.set_debug().
 
 const ElbowSwivel = preload("res://scripts/elbow_swivel.gd")
+const CardMotion = preload("res://scripts/graphics/card_motion_layer.gd")
 const STYLE_KEY: = "video.character_style"   # 1 = pixel cards (default), 0 = classic 3D
 const CLASSIC_LAYER: = 20                     # 1-based render layer hidden from the camera
 const CELL_DEG: = 22.5
@@ -397,6 +400,7 @@ func _accent_rank() -> int:
 # ------------------------------------------------------------------ per frame
 
 var _raw: bool = false
+var _motion = null   # CardMotionLayer: visual-only joint deltas for this frame
 var _elbow_arm: Dictionary = {}   # forearm pivot (elbow) -> arm: the elbow is drawn at the authored swivel
 
 ## A joint's drawn position: the node's, except an elbow turned to the pose's authored swivel
@@ -410,7 +414,19 @@ func _pos(n: Node3D) -> Vector3:
 	return ElbowSwivel.visual_elbow(arm, _xf(arm.upper_pivot).origin, p, wrist_end, -1.0 if _raw else Engine.get_physics_interpolation_fraction())
 
 func _xf(n: Node3D) -> Transform3D:
-	return n.global_transform if _raw else n.get_global_transform_interpolated()
+	var xf: Transform3D = n.global_transform if _raw else n.get_global_transform_interpolated()
+	if _motion != null and _motion.has_motion(): return _motion.apply(n, xf)
+	return xf
+
+## Visual-only paddle spin about its shaft this frame, radians (reactions; the paddle skin applies it).
+func paddle_spin() -> float:
+	if _motion == null or not visible: return 0.0
+	return _motion.paddle_spin()
+
+## The shown paddle hand's visual-only delta this frame (the paddle skin applies it).
+func paddle_delta() -> Transform3D:
+	if _motion == null or not visible: return Transform3D.IDENTITY
+	return _motion.paddle_delta(_paddle_arm)
 
 ## Anticipation hold (coil while charging / before contact) and contact pop, as a
 ## signed length factor: +k stretches the cards along their length, -k squashes.
@@ -513,6 +529,8 @@ func _process(delta: float) -> void:
 	# Pose editors (desktop and mobile) pause physics and pose the skeleton directly,
 	# so interpolated transforms hold the last physics tick; read the live ones there.
 	_raw = get_tree().paused or (_player.posture != null and _player.posture.editor_preview_mode)
+	if _motion == null: _motion = CardMotion.new(self)
+	_motion.clear()
 	var body_cell: int = _cell_for("body", _player.body_pivot, cam_pos)
 	var torso_node: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
 	var torso_cell: int = _cell_for("torso", torso_node, cam_pos) if torso_node else body_cell
@@ -522,6 +540,9 @@ func _process(delta: float) -> void:
 	_update_far(cam_pos.distance_to(torso_pos))
 	var squash: float = _squash(delta)
 	_update_paddle_arm()
+	var _mt: = Time.get_ticks_usec()
+	_motion.update(delta, _swing_active, _paddle_arm)
+	PerfMonitor.record("card.motion", Time.get_ticks_usec() - _mt)
 	var want_dbg: bool = show_bones or show_axes
 	if want_dbg:
 		_dbg_pts.clear()

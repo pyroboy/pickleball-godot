@@ -189,7 +189,13 @@ func _follow(delta: float = 0.0) -> void:
 		_lag_tip = Vector3.INF
 		global_transform = _paddle.global_transform
 		return
-	global_transform = _wrist_lag(_paddle.get_global_transform_interpolated(), delta)
+	# The card rig's visual-only motion (arm swing, shoulder turn) moves the shown hand.
+	var rig: Node = get_parent().get_node_or_null("PixelCards_%d" % _player.get_instance_id()) if get_parent() else null
+	var shown: Transform3D = _paddle.get_global_transform_interpolated()
+	if rig != null and rig.has_method("paddle_delta"): shown = rig.paddle_delta() * shown
+	global_transform = _wrist_lag(shown, delta)
+	var spin: float = rig.paddle_spin() if rig != null and rig.has_method("paddle_spin") else 0.0
+	if spin != 0.0: global_transform = global_transform * Transform3D(Basis(Vector3.UP, spin), Vector3.ZERO)
 
 ## Wrist lag: the shown paddle turns about the main grip so its head follows a damped
 ## pendulum (spring to the real head, damping, gravity) instead of the real head. Lag grows
