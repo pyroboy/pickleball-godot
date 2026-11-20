@@ -676,9 +676,54 @@ stays centre. Order:
    centre line), hookup behind a setting.
 5. Extend to the other poses.
 
+Step 1 findings (read-only, 2026-11-21):
+- The contact face normal is geometric: from the touched paddle triangle toward the ball
+  (`player_surface_history.gd:124,170`). There is no forehand / backhand face sign anywhere, so
+  a 180 degree roll just makes the other face the hitting face. `contact_launch`
+  (`match_contact_authority.gd:1354`) and `shot_contact_quality.gd:9-11` are unaffected.
+- Centre pose choice: human `posture_commit_selector.gd:121` scores by `local_lat` (signed
+  offset along the forehand axis, + = forehand side) and height; AI `player_ai_brain.gd:496`.
+  The sign of `local_lat` is the natural input for the step 4 rule.
+- Use `paddle_roll_base_deg` (`posture_definition.gd:53`), not grip: it rolls the paddle in
+  world space and keeps the contact point; grip moves the hand seat. Current bases: s01 0,
+  s15 115, s06 180 (already backhand face, so its variant is about 0), s12 -30. Wind-up and
+  finish need their own `charge_paddle_rotation_deg` / `ft_paddle_rotation_deg` and keys.
+- No pose can hold a variant today (one `.tres` per id, `posture_library.gd:54`). Needed: an
+  optional override block on `PostureDefinition` (roll, grip, arm fields, wind-up and finish
+  keys), a resolver at selection behind a setting, studio handling, and a check that
+  `MobilePoseStore` overrides carry it.
+- Real risk: the blend from Ready sweeping the head through the ball (step 2 roll graph).
+
+Variant data built 2026-11-21: `PostureDefinition.backhand_face_variant` (field -> value
+overrides) and `backhand_face_def()` (cached copy with them applied; unknown fields warn and are
+skipped). No pose has one yet and nothing in the game reads it. Bench seed 1, 40 s: IDENTICAL.
+Next: step 2, draft s01 in the studio (needs a studio toggle to show and edit the variant).
+
 ### Stage 8. Visual-only body layer (design note first)
 Cards follow their own copy of the pose, as the paddle skin does for the paddle, so idle
 motion, arm swing and reactions never move gameplay meshes. Stages 9 and 10 depend on it.
+
+Design note (2026-11-21, from a read-only audit):
+- Today the card rig (`pixel_card_rig.gd`, a sibling node, priority 1000) reads interpolated
+  pivot transforms of torso, head, hips, arm and leg pivots. Every read goes through `_xf()` /
+  `_pos()` (:404-413); `_pos()` already bends the elbow for drawing only (`elbow_visual_turn`).
+- The paddle skin (`paddle_skin.gd:164-254`) is the pattern: read the interpolated gameplay
+  transform, add a delta held in its own state (wrist lag), write only to the skin node.
+- Plan: a per-joint visual delta table on the rig, applied in `_xf()` / `_pos()` after the
+  interpolated read, each delta turning about its parent joint (hips, torso, shoulder, hip).
+  A small `CardMotionLayer` owns it and integrates idle, arm swing and reactions in the rig's
+  `_process`. The paddle skin applies the same hand delta in `_follow` (:192) so the paddle
+  stays in the hand. Route `body_pivot.global_position` (:493) and `_cell_for` through it too.
+- Gameplay fields untouched; no nodes under BodyPivot. New motion is visual-only by design, so
+  `pose_diff.py` must stay IDENTICAL.
+- Not visual-only today: idle sway, breath bob, lean and crouch bob write BodyPivot directly
+  (`player_body_animation.gd:39-135`) and so move gameplay meshes. Moving them into the layer
+  is a gameplay change: ask the user, bench it.
+
+Built 2026-11-21: `scripts/graphics/card_motion_layer.gd`, applied in `PixelCardRig._xf()`;
+`paddle_skin._follow` applies `rig.paddle_delta()`. `PICKLEBALL_CARD_MOTION=0` turns it off.
+Bench seed 1, 40 s, motion off vs on: 0 script errors, poses IDENTICAL. Idle sway, lean and
+crouch bob still write BodyPivot (not moved; that needs the user's go-ahead and a bench).
 
 ### Stage 9. Movement
 - Read-only audit by data first: do arms and torso move while walking and running; does
@@ -690,6 +735,41 @@ motion, arm swing and reactions never move gameplay meshes. Stages 9 and 10 depe
   stop, walk, pick up, throw, jump. "Stride" means the long step into a shot.
 - Gait constants moved to a data file with identical values, then tuned.
 - One-shot actions (pick up, throw, jump, lunge) authored as three keys like strokes.
+
+Audit findings (read-only, 2026-11-21):
+- Legs: procedural IK in `player_leg_ik.gd` (constants :20-41 and :129-145, plus inline values
+  at :628-658); gait choice in `footwork_motion_state.gd:80-139` (stance, walk, jog, run,
+  shuffle, crossover, drop_step). Stride constants are duplicated in
+  `player_body_animation.gd:20-25`.
+- Arms: frozen in the active pose while moving; no arm swing. Torso: velocity lean up to
+  14 degrees and ball tracking, no counter-rotation with the stride.
+- Idle: small sway and breath bob below 0.1 m/s (`player_body_animation.gd:122-135`).
+- Already exist: split step (`split_step_timing.gd`, `player_leg_ik.gd:327`), lunge, jump,
+  air smash, landing poses (`base_pose_library.gd:116-151`), pick up
+  (`between_point_controller.gd:317-343`).
+- Gameplay reads feet: planted-foot balance penalty (`shot_contact_quality.gd:15-45`), reach
+  limits (`held_preparation_reach.gd`, `stroke_body_pose.gd`), `is_support_ready`. So leg and
+  gait tuning is a gameplay change (bench); arm swing and torso counter-rotation should go in
+  the Stage 8 layer and stay visual-only.
+
+Built 2026-11-21 in the Stage 8 layer: free-arm swing (26 deg at a full stride) and a shoulder
+counter-turn (8 deg), driven by the real front-back foot split so they stay in step, faded in
+from 0.35 to 3.0 m/s. Off during strokes (charge / follow-through), between-point (ball carry)
+and pose editors; the paddle arm only turns with the shoulders. Probe, autoplay seed 1, 40 s,
+4 players: weight reaches 1.0, free hand moves up to 0.20-0.21 m, the swing flips side 12-26
+times, active on 10-22% of frames. Look not yet checked by the user. Leg and gait tuning
+(gameplay) not started.
+
+Motion bench (built 2026-11-21): `tools/motion_bench.sh <name> [base]`, about 5 s. One player walks
+stand, walk, stop, run, stop, backpedal, shuffle right / left / right, diagonal, settle on a
+frozen court (AI, ball and scoring stopped; the player moves through its own physics step via a
+stand-in for the special-movement hook). Report per segment: speed, card-motion weight, free-hand
+swing, shoulder twist, in-step %, steps, planted-foot slide, drawn-hand pop; with a base run, the
+changes and gameplay joints IDENTICAL / DIVERGED. Repeat runs match exactly.
+First findings, fixed: arms swung in a side shuffle (now off unless travelling along the facing);
+the drawn hand popped 78 mm a frame while running (now a sprung swing: 20 mm, same as with motion
+off); swing 26 -> 20 deg, twist 8 -> 7 deg. Still open for the user's eye: 20-29 cm swing on the
+diagonal run and while stopping from it, in-step 72-80% there (spring lag).
 
 ### Stage 10. Reactions and no more "always ready"
 - Relaxed stand (upright, paddle down), relaxed walk, small idle changes; ready only when

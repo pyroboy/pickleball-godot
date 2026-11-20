@@ -28,6 +28,10 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   reads), or the user asks. Then compare runs with `python3 tools/pose_diff.py` (expect
   `IDENTICAL` for visual-only work). Never add nodes or meshes under a player's
   `BodyPivot`; gameplay scans every mesh there.
+- Animation-only work (card motion, movement, reactions): `tools/motion_bench.sh <name> [base]`
+  (about 5 s): one player walks a fixed course on a frozen court; per-segment arm swing, twist,
+  steps, foot slide, hand pops, and gameplay joints vs base (`IDENTICAL` = visual only). Use it
+  instead of `tools/bench.sh` when the change can't alter gameplay.
 - The headless smoke check below starts at the title screen, so it does not compile
   gameplay scripts; `tools/bench.sh` loads the match and catches those errors.
 - Pose work: `tools/pose_review.sh s00 [b11 ...]` captures poses in the mobile editor preview
