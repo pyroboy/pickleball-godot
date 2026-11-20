@@ -13,6 +13,9 @@ static var bench_human: int = _arg_int("--bench-human=", -1)
 ## --pressure-team=N (bench only): team N plays every rally ball as a full-power
 ## drive, or a smash when high, to measure how the other team defends hard balls.
 static var pressure_team: int = _arg_int("--pressure-team=", -1)
+## --end-change-at=N (bench only): doubles teams change ends at N points instead of
+## 6/8/11, so the change-ends sequence can be measured in a short run.
+static var end_change_at: int = _arg_int("--end-change-at=", -1)
 
 static func _arg_int(prefix: String, fallback: int) -> int:
 	for arg in OS.get_cmdline_user_args():

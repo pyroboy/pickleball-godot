@@ -47,14 +47,18 @@ func is_banner_active() -> bool:
 	return _banner_active
 
 # Fade in (0.35 s), hold, fade out (0.45 s) over `seconds` in total.
-func show_banner(title: String, sub: String = "", seconds: float = 3.0, dim_alpha: float = 0.45) -> void:
+func show_banner(title: String, sub: String = "", seconds: float = 3.0, dim_alpha: float = 0.45, title_size: int = 46, sub_size: int = 22) -> void:
 	_kill()
+	_title.add_theme_font_size_override("font_size", title_size)
+	_sub.add_theme_font_size_override("font_size", sub_size)
+	_title.add_theme_constant_override("outline_size", maxi(8, title_size / 6))
 	_title.text = title
 	_sub.text = sub
+	PerfMonitor.note("banner", {"title": title, "sub": sub, "seconds": seconds})
 	_sub.visible = sub != ""
 	_banner_active = true
-	var fade_in := 0.35
-	var fade_out := 0.45
+	var fade_in := minf(0.35, seconds * 0.2)
+	var fade_out := minf(0.45, seconds * 0.25)
 	var hold := maxf(0.0, seconds - fade_in - fade_out)
 	_tween = create_tween().set_parallel(false)
 	_tween.tween_property(_dim, "color:a", dim_alpha, fade_in)

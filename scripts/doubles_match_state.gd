@@ -1,4 +1,5 @@
 extends RefCounted
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 ## Pure standard side-out doubles ledger. It never moves a rig or awards contact.
 ## USA Pickleball 2026: 5.B, 5.C, 6.B.2, 21.B. First local mode is single-game 11.
 ## actor_id is unique; team_id and physical end are independent identities.
@@ -161,6 +162,7 @@ func _apply_winner(winning_team: int) -> Dictionary:
 		server_number = 1
 		side_out = true
 	var threshold := 6 if target_score == 11 else (8 if target_score == 15 else 11)
+	if RuntimePolicy.end_change_at > 0: threshold = RuntimePolicy.end_change_at
 	if not ends_changed and not match_over and maxi(int(scores[0]), int(scores[1])) >= threshold: end_change_pending = true
 	return {"accepted": true, "point_scored": point, "side_out": side_out, "previous_server": previous_server,
 		"serving_team": serving_team, "server_actor": server_actor, "server_number": server_number,

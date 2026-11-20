@@ -558,9 +558,15 @@ func _update_cinematic_banners(g: Node, state: int) -> void:
 	var ds = g.get("doubles_state")
 	if ds == null: return
 	var pending: bool = bool(ds.end_change_pending)
-	if pending and not _cine_end_pending and not bool(g.get("match_over")):
-		_banner.show_banner("CHANGE ENDS", "Walk to the other side", 3.0)
-	_cine_end_pending = pending
+	# Big "CHANGE COURT" banner for 2 s with the score, as the players set off.
+	var between = g.get("between_point_controller")
+	var walking: bool = pending and between != null and str(between.phase) == "END_WALK"
+	if walking and not _cine_end_pending and not bool(g.get("match_over")):
+		var hud = g.get("hud")
+		var left_name: String = hud.team_name(0) if hud != null and hud.has_method("team_name") else "Blue"
+		var right_name: String = hud.team_name(1) if hud != null and hud.has_method("team_name") else "Red"
+		_banner.show_banner("CHANGE COURT", "%s %d  –  %d %s" % [left_name, int(ds.scores[0]), int(ds.scores[1]), right_name], 2.0, 0.35, 84, 34)
+	_cine_end_pending = walking
 	if state == 0 and _is_match_point(g):
 		if not _cine_match_point_shown and not pending:
 			_cine_match_point_shown = true

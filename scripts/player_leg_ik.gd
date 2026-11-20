@@ -540,6 +540,18 @@ func _reset_feet(targets: Array[Vector3], reset_heading: bool = true) -> void :
 
 
 
+## Plant a ready stance facing the current ready direction at once (no stepping
+## turn). Change of ends: a player reaching their new spot faces the net immediately.
+func face_ready_now(def: PostureDefinition) -> void:
+	if def == null: def = _heading_def
+	if def == null: return
+	_ready_facing_deg = _ready_facing_for(def)
+	var base: = Vector3(_player.global_position.x, ANKLE_HEIGHT, _player.global_position.z)
+	_reset_feet(_stance_targets(def, base))
+	_last_body_position = base
+	# Feet face the new direction too, or the legs step around to turn them.
+	_right_yaw = _landing_yaw(0); _left_yaw = _landing_yaw(1)
+
 func initialize_serve_stance(def: PostureDefinition) -> void :
 	clear_shot_context()
 	_finish_split_pose()

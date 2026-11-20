@@ -24,6 +24,7 @@ const TIMEOUT: = 15.0
 const HAND_BALL_OFFSET: = Vector3(0, 0.075, 0)
 var _end_route = preload("res://scripts/between_end_change_route.gd").new()
 var end_change_status: Dictionary = {}
+var _end_faced: Array = []
 var _game: Node
 var _active: = false
 var phase: = "IDLE"
@@ -221,6 +222,12 @@ func velocity_for(actor_id: int) -> Vector3:
 	var distance: float = offset.length()
 
 
+	if phase in ["END_WALK", "END_TURN"] and team < _end_faced.size() and int(_end_faced[team]) > 0:
+		_motion_velocity[team] = Vector3.ZERO   # arrived and facing the net: stand still
+		return _motion_velocity[team]
+	if phase == "END_WALK" and _end_route.active:
+		_motion_velocity[team] = _end_route.velocity_for(team, maxf(get_physics_process_delta_time(), 1e-05))
+		return _motion_velocity[team]
 	var chasing: bool = team == retriever and (phase == "APPROACH" or (phase == "PASS" and _air_catch))
 	if not chasing:
 		_motion_velocity[team] = offset.normalized() * minf(CARRY_SPEED, distance * 8.0) if distance > 0.025 else Vector3.ZERO
@@ -430,9 +437,21 @@ func _perf_physics_process(delta: float) -> void:
 		"END_WALK":
 			var route: Dictionary = _end_route.advance(delta)
 			end_change_status = route
-			for index in _players.size(): _targets[index] = _end_route.target_for(index)
+			# Whoever reaches their spot stops, then faces the net at once on the next
+			# tick (no turning on the spot, no waiting for the others).
+			# _end_faced: 0 walking, 1 stopping, 2 facing the net.
+			for index in _players.size():
+				var state: int = int(_end_faced[index])
+				if state == 0 and _end_route.remaining(index) <= _end_route.ARRIVE: state = 1
+				if state == 1 and _players[index].current_velocity.length() < .05 and _players[index].leg_ik != null:
+					state = 2
+					_players[index].leg_ik.face_ready_now(null)
+					_carry_heading[index] = _players[index].leg_ik.locomotion_hip_yaw_deg
+					_carry_heading_tick[index] = Engine.get_physics_frames()
+				_end_faced[index] = state
+				_targets[index] = _players[index].global_position if state > 0 else _end_route.target_for(index)
 			if route.arrived:
-				_set_phase("END_TURN")
+				if not _end_faced.has(0) and not _end_faced.has(1): _set_phase("END_TURN")
 			elif not route.active:
 				_set_phase("END_BLOCKED")
 		"END_TURN":
@@ -440,6 +459,7 @@ func _perf_physics_process(delta: float) -> void:
 			end_change_status = {"arrived": true, "committed": false, "reason": "supported visual rest-frame rebase pending"}
 		"CARRY":
 			if _game.doubles_mode and _game.doubles_state.end_change_pending and _end_route.begin(_game, _players):
+				_end_faced = []; _end_faced.resize(_players.size()); _end_faced.fill(0)
 				_elapsed_limit = TIMEOUT + _end_route.deadline_seconds
 				for index in _players.size(): _targets[index] = _end_route.target_for(index)
 				_set_phase("END_WALK")
@@ -681,7 +701,8 @@ func _facing_yaw(team: int) -> float:
 	if not _active or _players[team].leg_ik == null: return 0.0
 	if int(_carry_heading_tick[team]) != Engine.get_physics_frames():
 		var difference: float = wrapf(_players[team].leg_ik.locomotion_hip_yaw_deg - float(_carry_heading[team]), -180.0, 180.0)
-		_carry_heading[team] += clampf(difference, -160.0 * _players[team].get_physics_process_delta_time(), 160.0 * _players[team].get_physics_process_delta_time())
+		var turn_rate: float = 330.0 if phase == "END_TURN" else 160.0   # change of ends: brisk turn-around
+		_carry_heading[team] += clampf(difference, -turn_rate * _players[team].get_physics_process_delta_time(), turn_rate * _players[team].get_physics_process_delta_time())
 		_carry_heading_tick[team] = Engine.get_physics_frames()
 	return float(_carry_heading[team])
 
@@ -857,6 +878,7 @@ func _perf_set_phase(value: String) -> void:
 	phase = value
 	phase_elapsed = 0.0
 	phase_changed.emit(value)
+	PerfMonitor.note("between_phase", {"phase": value})
 	var text: = "Ball pickup · Skip to serve"
 	if value in ["PASS_PREP", "PASS", "HELPER_WAIT", "CATCH"]: text = "Ball handover · Skip to serve"
 	elif value == "CARRY": text = "Getting ready to serve · Skip to serve"
@@ -967,7 +989,13 @@ func _nearest_retriever(point: Vector3) -> int:
 	return best
 
 func ready_facing_for_actor(actor) -> float:
-	return 180.0 if phase == "END_TURN" else 0.0
+	if phase == "END_TURN": return 180.0
+	# Change of ends: whoever reaches their new spot turns around right away instead
+	# of standing until the last player arrives.
+	if phase == "END_WALK" and (_end_route.active or _end_route.arrived):
+		var index: int = index_for_actor(actor)
+		if index >= 0 and _end_route.remaining(index) <= _end_route.ARRIVE: return 180.0
+	return 0.0
 
 func _try_commit_end_change() -> void:
 	if not _all_support_ready(): return
