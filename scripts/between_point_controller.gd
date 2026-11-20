@@ -748,10 +748,14 @@ func _perf_make_pose(team: int, bend: float) -> PostureDefinition:
 	pose.left_elbow_pole = Vector3( - 0.58, - 0.35, - 0.07)
 	pose.left_hand_mode = 4
 	pose.left_hand_offset = Vector3.ZERO
-	pose.crouch_amount = lerpf(0.16, 0.64, bend)
+	# Between points a player stands up: feet under the hips, no crouch (the athletic READY
+	# stance comes back in SET_SERVE). A pickup bends from there.
+	pose.crouch_amount = lerpf(0.0, 0.64, bend)
 	pose.body_pitch_deg = lerpf(0.0, 8.0, bend)
 	pose.torso_pitch_deg = lerpf(0.0, 12.0, bend)
-	pose.stance_width = lerpf(0.36, 0.5, bend)
+	pose.stance_width = lerpf(0.28, 0.5, bend)
+	pose.front_foot_forward = lerpf(0.02, pose.front_foot_forward, bend)
+	pose.back_foot_back = lerpf(-0.02, pose.back_foot_back, bend)
 	pose.head_track_ball_weight = 0.4
 	preload("res://scripts/player_carry_presentation.gd").apply(pose, bend)
 	var facing: float = _facing_yaw(team)

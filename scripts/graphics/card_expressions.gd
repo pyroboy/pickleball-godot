@@ -5,7 +5,7 @@ class_name CardExpressions
 ##
 ## Context picks the family:
 ##   idle     the ball is dead between points (after the reactions): relaxed, paddle down
-##   waiting  a serve is coming (WAITING / SERVING): ready, on the toes
+##   waiting  a serve is coming (set-serve, WAITING, SERVING): ready, on the toes
 ##   live     the ball is in play: ready. The paddle arm is never moved here (arm, elbow and
 ##            spin are zeroed) so the shown paddle stays where gameplay has it.
 ## Mood picks the flavour (each 0..1, updated at rally end; fatigue from stamina):
@@ -85,6 +85,9 @@ func current() -> String:
 func _context() -> String:
 	var ball = _game.get("ball") if _game != null else null
 	if ball != null and bool(ball.get("is_in_play")): return "live"
+	# Set-serve: everyone takes the athletic stance for the coming rally.
+	var bpc = _game.get("between_point_controller") if _game != null else null
+	if bpc != null and is_instance_valid(bpc) and bpc.is_active() and str(bpc.get("phase")) == "SET_SERVE": return "waiting"
 	var st = _game.get("game_state") if _game != null else null
 	if st != null and "GameState" in _game and (int(st) == int(_game.GameState.WAITING) or int(st) == int(_game.GameState.SERVING)):
 		return "waiting"

@@ -842,6 +842,17 @@ staggered feet: straight legs would need the feet to step in, a gameplay change)
 69 deg between points; every player back to the athletic stance when SERVING starts.
 Motion bench: knee / knee game / raise columns. Bench seed 1 60 s and motion bench: IDENTICAL.
 
+Relaxed stand in gameplay (2026-11-21, user's call: no ball in play, no athletic stance needed):
+`between_point_controller._perf_make_pose` now stands players up between points: crouch 0 (was
+0.16), stance 0.28 m (was 0.36), feet 2 cm front / back (was READY's stagger); a pickup still
+bends from there; SET_SERVE blends everyone back to READY as before. The cards treat SET_SERVE as
+"serve coming" too (athletic, ready-waiting expression). Autoplay seed 1, 150 s: gameplay knees
+between points 69 -> 30 deg (average incl. pickups); fully standing drawn knees p50 8.9, p90 8.9
+(was 29.7) deg. Bench 3 seeds x 90 s, before / after: poses DIVERGED from the first between-point
+(BodyPivot 8 mm, expected); seeds 2 and 3 same points, endings and phase times; seed 1 3 points
+instead of 4 (between 7.2 s vs 6.7 s, rally 17.1 vs 14.6 s). Per 100 shots: point endings 3.4 vs
+4.1, shot-plan mix unchanged within noise.
+
 ## 6. Decisions
 
 Decided by the user:
