@@ -1943,6 +1943,11 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 	if launch.has("profile"):
 		launch.profile = launch.profile.duplicate(true); launch.profile["motion_profile"] = motion_context.profile
 	body.linear_velocity = launch.velocity; body.angular_velocity = launch.omega
+	# Shot name for the on-court label (scripts/shot_names.gd); gameplay never reads it.
+	var named_profile: Dictionary = launch.get("profile", {}).duplicate()
+	named_profile["tactic"] = str(launch.get("tactic", ""))
+	if launch.get("mishit", false): named_profile["mishit"] = true
+	body.set_meta("shot_profile", named_profile)
 	if not body.hit_by_actor(_player): return {"accepted": true, "interrupted": true}
 	var event: Dictionary = body.paddle_contact_context()
 	if int(certificate.epoch) != _game_node.contact_authority._interval_reset_epoch: return {"accepted": true, "interrupted": true}

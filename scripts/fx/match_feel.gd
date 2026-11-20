@@ -13,6 +13,7 @@ const FLASH_SECONDS := 0.16
 const SMASH_MIN_SPEED := 13.0      # m/s, moving down at least SMASH_MIN_DROP
 const SMASH_MIN_DROP := 1.5
 const PaddleDimensions = preload("res://scripts/paddle_dimensions.gd")
+const ShotNames = preload("res://scripts/shot_names.gd")
 const ARC_SECONDS := 0.15          # how much of the paddle path the ribbon shows
 const ARC_FADE := 0.28
 const ARC_SAMPLES := 16
@@ -44,6 +45,7 @@ var _arc_color: Array[Color] = []
 var _arc_material: Array[StandardMaterial3D] = []
 var _next_arc := 0
 var _clock := 0.0
+var _rally_hits := 1   # the serve is hit 1 (served before PLAYING, so not seen here)
 var _labels: Array[Label3D] = []
 var _label_age: Array[float] = []
 var _next_label := 0
@@ -143,10 +145,20 @@ func _handle_hit() -> void:
 	var velocity: Vector3 = ball.linear_velocity
 	var speed: float = velocity.length()
 	var hitter = _game.get_player_by_actor_id(ball.get_last_hit_actor_id())
-	var kind: String = _classify(velocity, hitter)
+	# Name the shot from what it carries (plan / stroke style), consumed per hit so a
+	# plain deflection is named from its flight instead of the previous shot.
+	_rally_hits += 1
+	var profile: Dictionary = ball.get_meta("shot_profile", {}) if ball.has_meta("shot_profile") else {}
+	if ball.has_meta("shot_profile"): ball.remove_meta("shot_profile")
+	var depth: float = absf(hitter.global_position.z) if hitter != null else 6.0
+	# Handled a frame after the hit: step the ball back to its contact height.
+	var contact_height: float = ball.global_position.y - velocity.y * get_process_delta_time()
+	var name_key: String = ShotNames.classify(profile, velocity, bool(ball.was_volley), _rally_hits, depth, contact_height)
+	var kind: String = "SMASH" if name_key == "SMASH" else ""
+	PerfMonitor.note("shot_name", {"name": name_key, "hit": _rally_hits, "zone": ShotNames.zone(depth), "h": snappedf(contact_height, 0.01), "v": snappedf(velocity.length(), 0.1), "tactic": str(profile.get("tactic", "")), "type": str(profile.get("shot_type", "")), "motion": str(profile.get("motion_profile", ""))})
 	if hitter != null:
-		_spawn_arc(hitter, kind)
-		if kind != "": _spawn_label(hitter, kind)
+		_spawn_arc(hitter, kind, ShotNames.color(name_key))
+		_spawn_label(hitter, name_key)
 		if Vector2(hitter.current_velocity.x, hitter.current_velocity.z).length() > 3.5:
 			_spawn_dust(hitter.global_position, 0.5)   # lunge
 	if speed < FLASH_MIN_SPEED: return
@@ -171,6 +183,7 @@ func _classify(velocity: Vector3, hitter) -> String:
 	return ""
 
 func _on_rally_ended(winner: int, reason: String, _detail: String) -> void:
+	_rally_hits = 1
 	if reason not in [RallyScorer.FAULT_KITCHEN_VOLLEY, RallyScorer.FAULT_MOMENTUM] or winner not in [0, 1]: return
 	var faulting: Array = _game.get_team_players(1 - winner)
 	if faulting.is_empty(): return
@@ -330,7 +343,7 @@ func _head_of(player) -> Vector3:
 	var transform: Transform3D = paddle.get_global_transform_interpolated()
 	return transform.origin + transform.basis.y * PaddleDimensions.HEAD_CENTER_Y
 
-func _spawn_arc(hitter, kind: String) -> void:
+func _spawn_arc(hitter, kind: String, arc_color: Color = Color.WHITE) -> void:
 	var player_index: int = _players.find(hitter)
 	if player_index < 0: return
 	var points := PackedVector3Array()
@@ -348,7 +361,7 @@ func _spawn_arc(hitter, kind: String) -> void:
 	var mesh := _arc_meshes[slot_index]
 	mesh.clear_surfaces()
 	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-	var color: Color = SHOT_COLORS.get(kind, Color.WHITE)
+	var color: Color = arc_color
 	var count: int = points.size()
 	for index in count:
 		var direction: Vector3 = points[mini(index + 1, count - 1)] - points[maxi(index - 1, 0)]
@@ -368,8 +381,8 @@ func _spawn_label(hitter, kind: String) -> void:
 	var label := _labels[_next_label]
 	_label_age[_next_label] = 0.0
 	_next_label = (_next_label + 1) % _labels.size()
-	label.text = kind
-	label.modulate = SHOT_COLORS.get(kind, Color.WHITE)
+	label.text = ShotNames.display(kind)
+	label.modulate = ShotNames.color(kind)
 	label.global_position = hitter.global_position + Vector3(0.0, 2.15, 0.0)
 	label.visible = true
 
