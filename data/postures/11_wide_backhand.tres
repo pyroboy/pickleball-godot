@@ -30,7 +30,7 @@ values = {
 "paddle_roll_signed_deg": 0,
 "paddle_yaw_sign_source": 1,
 "paddle_yaw_signed_deg": 18,
-"right_elbow_pole": Vector3(0.28, -0.12, 0.43),
+"right_elbow_pole": Vector3(0.28, -0.5, 0.35),
 "right_foot_offset": Vector3(0.36, 0, -0.1),
 "right_foot_yaw_deg": 10,
 "right_hand_offset": Vector3(0, 0, 0),
@@ -41,7 +41,10 @@ values = {
 "torso_pitch_deg": 18,
 "torso_roll_deg": 0,
 "torso_yaw_deg": 10,
-"weight_shift": 0.72
+"weight_shift": 0.72,
+"body_position_offset": Vector3(0, 0, 0.22),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 2.20524525
 }
 
 [sub_resource type="Resource" id="Resource_ly5iw"]
@@ -71,7 +74,7 @@ values = {
 "paddle_roll_signed_deg": 77,
 "paddle_yaw_sign_source": 1,
 "paddle_yaw_signed_deg": -22,
-"right_elbow_pole": Vector3(-0.18, -0.4, 0.07),
+"right_elbow_pole": Vector3(-0.18, -0.55, 0.07),
 "right_foot_offset": Vector3(0.36, 0, -0.1),
 "right_foot_yaw_deg": -20,
 "right_hand_offset": Vector3(0, 0, 0),
@@ -83,7 +86,10 @@ values = {
 "torso_pitch_deg": 10,
 "torso_roll_deg": 0,
 "torso_yaw_deg": -20,
-"weight_shift": -0.68
+"weight_shift": -0.68,
+"body_position_offset": Vector3(0, 0, -0.18),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -11.69306785
 }
 
 [resource]
@@ -115,7 +121,7 @@ ft_duration_sweep = 0.28
 ft_ease_curve = 2
 ft_front_foot_load = 0.8
 ft_hip_uncoil_deg = 8
-ft_paddle_offset = Vector3(1.25, 0.45, 0.05)
+ft_paddle_offset = Vector3(1.25, 0.2, 0.05)
 ft_paddle_rotation_deg = Vector3(-12.641, -21.263, 103.063)
 has_zone = true
 head_pitch_deg = -28
@@ -148,7 +154,7 @@ paddle_yaw_base_deg = 1.2387
 paddle_yaw_sign_source = 1
 paddle_yaw_signed_deg = 0
 right_elbow_path = PackedVector3Array()
-right_elbow_pole = Vector3(0.15, -0.3, 0.37)
+right_elbow_pole = Vector3(0.15, -0.55, 0.3)
 right_foot_offset = Vector3(0.36, 0, -0.1)
 right_foot_yaw_deg = 6
 right_hand_offset = Vector3(0, -0.05, 0)
@@ -174,3 +180,5 @@ zone_y_min = 0.8716
 windup_body = SubResource("Resource_ly5iw")
 follow_through_body = SubResource("Resource_od0sf")
 notes = "Right-dominant groundstroke; contact shaft below wrist, broad face through ball. Raised natural standing rig. Contact head coordinates unchanged."
+right_elbow_swivel_deg = -11.69306785
+elbow_swivel_weight = 1.0

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 2
+display_name = "Recovery Ready"
+stroke_overlay_mix = 0.86
+recovery_time = 0.16
+left_hand_mode = 1
+stance_width = 0.42
+front_foot_forward = 0.05
+back_foot_back = -0.05
+crouch_amount = 0.14
+torso_pitch_deg = 5.0
+body_pitch_deg = 5.0
+right_elbow_pole = Vector3(0.21595767, -0.29598606, 0.04537466)

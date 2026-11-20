@@ -9,13 +9,13 @@ values = {
 "back_foot_back": -0.4,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": -12,
+"body_yaw_deg": 15,
 "crouch_amount": 0.5,
 "front_foot_forward": 0.4,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": -20.0,
-"hip_yaw_deg": -2,
+"hip_yaw_deg": 10,
 "lead_foot": 0,
 "left_elbow_pole": Vector3(-0.4, -0.35, 0.1),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -30,7 +30,7 @@ values = {
 "paddle_roll_signed_deg": -45,
 "paddle_yaw_sign_source": 1,
 "paddle_yaw_signed_deg": 8.0,
-"right_elbow_pole": Vector3(0.15, -0.24, 0.24),
+"right_elbow_pole": Vector3(0.1, -0.9, 0.2),
 "right_foot_offset": Vector3(0, 0, 0),
 "right_foot_yaw_deg": 10.0,
 "right_hand_offset": Vector3(0, 0, 0),
@@ -40,8 +40,11 @@ values = {
 "stance_width": 0.42,
 "torso_pitch_deg": 20,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": -8,
-"weight_shift": 0.65
+"torso_yaw_deg": 10,
+"weight_shift": 0.8,
+"body_position_offset": Vector3(0.1, 0, 0.25),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 82.9068442
 }
 
 [sub_resource type="Resource" id="Resource_hp666"]
@@ -50,13 +53,13 @@ values = {
 "back_foot_back": -0.4,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": -22,
+"body_yaw_deg": -42,
 "crouch_amount": 0.5,
 "front_foot_forward": 0.4,
 "head_pitch_deg": -38.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 32.0,
-"hip_yaw_deg": -6,
+"hip_yaw_deg": -4,
 "lead_foot": 0,
 "left_elbow_pole": Vector3(-0.4, -0.35, 0.1),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -71,7 +74,7 @@ values = {
 "paddle_roll_signed_deg": -35,
 "paddle_yaw_sign_source": 1,
 "paddle_yaw_signed_deg": -10.0,
-"right_elbow_pole": Vector3(0.02, -0.24, 0.02),
+"right_elbow_pole": Vector3(-0.1, -0.9, 0.05),
 "right_foot_offset": Vector3(0, 0, 0),
 "right_foot_yaw_deg": -20.0,
 "right_hand_offset": Vector3(0, 0, 0),
@@ -82,7 +85,10 @@ values = {
 "torso_pitch_deg": 20,
 "torso_roll_deg": 0.0,
 "torso_yaw_deg": -10,
-"weight_shift": -0.45
+"weight_shift": -0.6,
+"body_position_offset": Vector3(0, 0, -0.2),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 82.9068442
 }
 
 [resource]
@@ -109,7 +115,7 @@ zone_y_max = 0.595
 zone_forward_offset = 0.4
 right_elbow_path = null
 left_elbow_path = null
-right_elbow_pole = Vector3(0.06, -0.3, 0.2)
+right_elbow_pole = Vector3(0.06, -0.6, 0.2)
 left_hand_mode = 4
 left_hand_offset = Vector3(-0.1, 0, -0.24)
 left_elbow_pole = Vector3(-0.4, -0.35, 0.1)
@@ -127,11 +133,11 @@ body_yaw_deg = -18.0
 head_yaw_deg = -2.0
 head_pitch_deg = -38.0
 head_track_ball_weight = 0.8
-charge_paddle_offset = Vector3(0.04, -0.15, -0.25)
+charge_paddle_offset = Vector3(0.04, -0.3, -0.25)
 charge_body_rotation_deg = -8.0
 charge_hip_coil_deg = -8.0
 charge_back_foot_load = 0.45
-ft_paddle_offset = Vector3(0.12, 0.28, 0.02)
+ft_paddle_offset = Vector3(-0.05, 0.0, 0.1)
 ft_hip_uncoil_deg = 8.0
 ft_front_foot_load = 0.65
 ft_duration_strike = 0.1
@@ -147,3 +153,5 @@ last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
 right_foot_offset = Vector3(0, 0, 0)
 left_foot_offset = Vector3(0, 0, 0)
+right_elbow_swivel_deg = 82.9068442
+elbow_swivel_weight = 1.0

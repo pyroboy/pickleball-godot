@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="BasePoseDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://ymyvjra6pqx5" path="res://scripts/base_pose_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+base_pose_id = 21
+display_name = "Decel Plant"
+stroke_overlay_mix = 0.88
+recovery_time = 0.14
+left_hand_mode = 1
+stance_width = 0.55
+front_foot_forward = 0.22
+back_foot_back = -0.12
+crouch_amount = 0.18
+weight_shift = 0.18
+torso_pitch_deg = 10.0
+body_pitch_deg = 12.0

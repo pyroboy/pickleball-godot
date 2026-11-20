@@ -7,6 +7,9 @@ const SEGMENTS := 96
 var preview
 var mode := 0
 var enabled := false
+# Desktop Pose Studio only (phone: false): keep the handles drawn, dimmed, while editing is off
+# (scrub / playback between keys). Picking still needs `enabled`.
+var show_disabled := false
 var bindings: Array = [{}, {}, {}]
 var caption := ""
 var ui_scale := 1.0
@@ -94,8 +97,8 @@ func _perf_process(_delta: float) -> void:
 func sync_scene() -> void:
 	if not is_instance_valid(scene_root): return
 	var point := origin()
-	var active := visible and is_visible_in_tree() and enabled and point.is_finite() and anchor().is_finite()
-	var state: Array = [point, preview.camera.global_transform, preview.camera.fov, size, visible, active, mode, bindings.duplicate(true), world_axes.duplicate(), _axis, ui_scale]
+	var active := visible and is_visible_in_tree() and (enabled or show_disabled) and point.is_finite() and anchor().is_finite()
+	var state: Array = [point, preview.camera.global_transform, preview.camera.fov, size, visible, active, mode, bindings.duplicate(true), world_axes.duplicate(), _axis, ui_scale, enabled]
 	if state == _last_visual_state: return
 	_last_visual_state = state
 	scene_root.visible = active
@@ -113,7 +116,7 @@ func sync_scene() -> void:
 			var frame := _axis_frame(normal)
 			_arrows[axis].basis = frame.scaled(Vector3.ONE * _length)
 			_rings[axis].basis = frame.scaled(Vector3.ONE * world_radius(axis))
-			_materials[axis].emission_energy_multiplier = .9 if _axis == axis else .38
+			_materials[axis].emission_energy_multiplier = .9 if _axis == axis else .38 if enabled else .12
 	preview.viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	queue_redraw()
 
