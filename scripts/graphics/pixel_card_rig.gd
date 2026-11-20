@@ -437,9 +437,12 @@ func _squash(delta: float) -> float:
 		_popped = true
 		_pop = POP_AMOUNT
 		_pop_v = 0.0
-	_pop_v += (-900.0 * _pop - 36.0 * _pop_v) * d
+	# Implicit spring step: stable at any frame time. The explicit step blew up past
+	# ~0.04 s frames (hit spikes) and stretched the cards across the screen.
+	_pop_v = (_pop_v - 900.0 * _pop * d) / (1.0 + 36.0 * d + 900.0 * d * d)
 	_pop += _pop_v * d
-	return _pop - ANTICIPATION_AMOUNT * _ant
+	_pop = clampf(_pop, -POP_AMOUNT, POP_AMOUNT)
+	return clampf(_pop - ANTICIPATION_AMOUNT * _ant, -0.15, 0.15)
 
 func _update_far(dist: float) -> void:
 	var want: bool = _far

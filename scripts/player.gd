@@ -519,13 +519,16 @@ func _perf_physics_process(delta: float) -> void:
 				posture.set_trajectory_points(debug_visual._last_trajectory_points)
 			if awareness_grid:
 				awareness_grid.set_trajectory_points(debug_visual._last_trajectory_points)
-	if posture:
-		posture.update_paddle_tracking(false)
 	# Perf LOD: an AI the ball is not coming toward re-poses its arms/legs on
 	# alternate ticks (movement still runs every tick). Accumulated time is passed
 	# on the update tick so pose blends keep their speed.
 	_lod_delta += delta
 	var lod_skip: bool = _rig_lod_skip()
+	# On a skipped tick the paddle stays where the last aligned pose put it. Running
+	# the legacy tracking here moved it to a different spot every other tick, so
+	# waiting AI players flickered between two poses (bench: 20 cm paddle jumps).
+	if posture and not lod_skip:
+		posture.update_paddle_tracking(false)
 	if is_ai and ai_brain and not lod_skip:
 		ai_brain.align_paddle_to_contact(_lod_delta)
 	PaddleReach.clamp_paddle_for_player(self)
