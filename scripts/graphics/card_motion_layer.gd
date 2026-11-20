@@ -12,6 +12,8 @@ class_name CardMotionLayer
 ## the shoulders counter-turn against the hips, both driven by the real feet so they stay in
 ## step. Only when travelling along the facing (not in a side shuffle). Off during strokes,
 ## pose editors and between-point carries.
+## Reactions (stage 10, card_reactions.gd): fist pump, bounce, paddle twirl, head drop, played
+## at rally end on the paddle arm, torso, head and a small body bob.
 ## PICKLEBALL_CARD_MOTION=0 turns the layer off (A/B checks).
 
 const SWING_DEG: = 20.0       # free-arm swing at a full stride and full speed
@@ -23,6 +25,8 @@ const WEIGHT_RATE: = 5.0      # 1/s fade in and out
 const SPEED_HALF_LIFE: = 0.08
 const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no frame pops)
 
+const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
+
 static var _env_off: int = -1
 
 var _rig   # PixelCardRig
@@ -32,6 +36,8 @@ var _speed: = 0.0
 var _stride: = 0.0
 var _amt: = 0.0               # sprung swing amount, -1..1
 var _amt_v: = 0.0
+var _reactions = null         # CardReactions: between-point reactions (stage 10)
+var _spin: = 0.0
 var _prev_pos: = Vector3.INF
 var _dir: = Vector3.ZERO      # smoothed horizontal travel direction (unit or zero)
 
@@ -64,6 +70,10 @@ static func _turn_about(pivot: Vector3, axis: Vector3, angle: float) -> Transfor
 ## Rebuild the deltas. Call with the deltas cleared, so the rig's reads are the plain ones.
 func update(delta: float, swinging: bool, paddle_arm) -> void:
 	_deltas.clear()
+	_gait(delta, swinging, paddle_arm)
+	_react(delta, paddle_arm)
+
+func _gait(delta: float, swinging: bool, paddle_arm) -> void:
 	var player = _rig._player
 	var body: Node3D = player.body_pivot
 	var bxf: Transform3D = _rig._xf(body)
@@ -135,3 +145,78 @@ func update(delta: float, swinging: bool, paddle_arm) -> void:
 		var d: = twist * swing
 		for n in [arm.upper_pivot, arm.forearm_pivot, arm.hand_pivot]:
 			if n != null: _deltas[n] = d
+
+# ------------------------------------------------------------------ reactions (stage 10)
+
+func _plain(n: Node3D) -> Vector3:
+	return (n.global_transform if _rig._raw else n.get_global_transform_interpolated()).origin
+
+## The reaction playing now ("" when none).
+func reaction() -> String:
+	return _reactions.current() if _reactions != null and enabled() else ""
+
+## Paddle spin about its shaft this frame, radians (the paddle skin applies it).
+func paddle_spin() -> float:
+	return _spin
+
+func _react(delta: float, paddle_arm) -> void:
+	_spin = 0.0
+	var player = _rig._player
+	if _reactions == null: _reactions = CardReactionsScript.new(player)
+	if not enabled() or _rig._raw: return
+	var ch: Dictionary = _reactions.update(delta)
+	if ch.is_empty(): return
+	var body: Node3D = player.body_pivot
+	var torso: Node3D = body.get_node_or_null("TorsoMesh")
+	if torso == null: return
+	var fwd: Vector3 = body.get_global_transform_interpolated().basis * player._get_forward_axis()
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-6: return
+	fwd = fwd.normalized()
+	var side: = fwd.cross(Vector3.UP).normalized()
+	var hips: Node3D = body.get_node_or_null("HipsMesh")
+	var hip_p: Vector3 = _plain(hips if hips else body)
+	var bob: = Transform3D(Basis.IDENTITY, Vector3.UP * float(ch.bob))
+	# Each turn's sign is found from the joints, so + always means the same thing on screen.
+	var lean: = Transform3D.IDENTITY
+	if absf(float(ch.torso)) > 1e-3:
+		var sgn: float = signf(side.cross(_plain(torso) - hip_p).dot(fwd))
+		if sgn != 0.0: lean = _turn_about(hip_p, side, deg_to_rad(float(ch.torso)) * sgn)
+	var upper: = bob * lean
+	var add: = func(n: Node3D, d: Transform3D) -> void:
+		if n == null: return
+		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
+	add.call(body, bob)
+	if hips != null: add.call(hips, bob)
+	for leg_name in ["right_leg_node", "left_leg_node"]:
+		var leg: Node3D = player.get(leg_name)
+		if leg != null and leg.get("thigh_pivot") != null:
+			for n in [leg.thigh_pivot, leg.shin_pivot, leg.foot_pivot]: add.call(n, bob)
+	add.call(torso, upper)
+	var head: Node3D = torso.get_node_or_null("HeadMesh")
+	if head != null:
+		var nod: = Transform3D.IDENTITY
+		if absf(float(ch.head)) > 1e-3:
+			var sgn: float = signf(side.cross(Vector3.UP).dot(fwd))
+			nod = _turn_about(_plain(head), side, deg_to_rad(float(ch.head)) * sgn)
+		add.call(head, upper * nod)
+	for arm_name in ["right_arm_node", "left_arm_node"]:
+		var arm: Node3D = player.get(arm_name)
+		if arm == null or arm.get("upper_pivot") == null: continue
+		var lift: = Transform3D.IDENTITY
+		var bend: = Transform3D.IDENTITY
+		if arm == paddle_arm:   # the other hand carries the ball between points
+			var shoulder: Vector3 = _plain(arm.upper_pivot)
+			var elbow: Vector3 = _plain(arm.forearm_pivot)
+			var hand: Vector3 = _plain(arm.hand_pivot)
+			if absf(float(ch.arm)) > 1e-3:
+				var sgn: float = signf(side.cross(hand - shoulder).dot(Vector3.UP))
+				if sgn != 0.0: lift = _turn_about(shoulder, side, deg_to_rad(float(ch.arm)) * sgn)
+			if absf(float(ch.elbow)) > 1e-3:
+				var sgn: float = signf(side.cross(hand - elbow).dot(Vector3.UP))
+				if sgn != 0.0: bend = _turn_about(elbow, side, deg_to_rad(float(ch.elbow)) * sgn)
+			_spin = deg_to_rad(float(ch.spin))
+		add.call(arm.upper_pivot, upper * lift)
+		add.call(arm.forearm_pivot, upper * lift * bend)
+		add.call(arm.hand_pivot, upper * lift * bend)
+

@@ -418,6 +418,11 @@ func _xf(n: Node3D) -> Transform3D:
 	if _motion != null and _motion.has_motion(): return _motion.apply(n, xf)
 	return xf
 
+## Visual-only paddle spin about its shaft this frame, radians (reactions; the paddle skin applies it).
+func paddle_spin() -> float:
+	if _motion == null or not visible: return 0.0
+	return _motion.paddle_spin()
+
 ## The shown paddle hand's visual-only delta this frame (the paddle skin applies it).
 func paddle_delta() -> Transform3D:
 	if _motion == null or not visible: return Transform3D.IDENTITY

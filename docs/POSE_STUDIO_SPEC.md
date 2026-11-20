@@ -785,6 +785,21 @@ diagonal run and while stopping from it, in-step 72-80% there (spring lag).
 - Coordinate with the session that owns between-point code.
 Check: reaction start and end times stay inside the between-point window (from logs).
 
+Built 2026-11-21 (first batch, card layer, visual only): `scripts/graphics/card_reactions.gd`,
+played by `CardMotionLayer._react`. Reactions: fist_pump, bounce, paddle_twirl (winners),
+head_drop (the player who erred), head_drop_small (losing side). Channels: paddle-arm lift and
+elbow bend, torso lean, head nod, body bob, paddle spin (the paddle skin applies it). Only the
+paddle arm moves (the other hand carries the ball). Picked on `rally_scorer.rally_ended` from won /
+lost, who hit last, team streak and score margin; never the same twice in a row; own fixed-seed
+RNG per actor (no global RNG draws); 0.12-0.32 s staggered start; fades out in 0.15 s when the ball
+is next in play. Duration 0.95-1.45 s.
+Checks: motion bench react:<name> segments (paddle hand 11-52 cm, bob up to 3.5 cm, gameplay
+joints IDENTICAL); autoplay seed 1, 150 s, 8 points: reactions start at every point end and end
+within 1.1-1.9 s, next ball in play 7-8.5 s later, none cut off, no back-to-back repeats.
+Not done: relaxed stand / no more "always ready", later reactions (arms up, hop, wave, hands on
+hips or knees, partner paddle tap, match-end sequence), face variants, emote icons, sound and
+camera framing, a Reactions workspace in the studio. Look not yet checked by the user.
+
 ## 6. Decisions
 
 Decided by the user:

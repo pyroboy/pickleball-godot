@@ -194,6 +194,8 @@ func _follow(delta: float = 0.0) -> void:
 	var shown: Transform3D = _paddle.get_global_transform_interpolated()
 	if rig != null and rig.has_method("paddle_delta"): shown = rig.paddle_delta() * shown
 	global_transform = _wrist_lag(shown, delta)
+	var spin: float = rig.paddle_spin() if rig != null and rig.has_method("paddle_spin") else 0.0
+	if spin != 0.0: global_transform = global_transform * Transform3D(Basis(Vector3.UP, spin), Vector3.ZERO)
 
 ## Wrist lag: the shown paddle turns about the main grip so its head follows a damped
 ## pendulum (spring to the real head, damping, gravity) instead of the real head. Lag grows

@@ -22,6 +22,7 @@ const COURSE := [
 	["settle", 1.2, 0.0, 0.0],
 ]
 
+var _course: Array = []   # COURSE plus one standing segment per reaction ("react:<name>")
 var _out := ""
 var _actor := 0
 var _game: Node
@@ -67,6 +68,10 @@ func _initialize() -> void:
 		if a.begins_with("--mb-out="): _out = a.trim_prefix("--mb-out=")
 		if a.begins_with("--mb-actor="): _actor = int(a.trim_prefix("--mb-actor="))
 	_t0 = Time.get_ticks_msec()
+	_course = COURSE.duplicate(true)
+	var R = load("res://scripts/graphics/card_reactions.gd")
+	for name in R.REACTIONS:
+		_course.append(["react:" + name, R.duration(name) + 0.4, 0.0, 0.0])
 	_game = (load("res://scenes/game.tscn") as PackedScene).instantiate()
 	root.add_child.call_deferred(_game)
 	var d := Driver.new()
@@ -87,6 +92,9 @@ func _freeze_match() -> void:
 	ball.is_in_play = false
 	ball.global_position = Vector3(0.0, 1.0, -40.0 if _p.global_position.z > 0.0 else 40.0)
 	_game.set_physics_process(false)
+	var scorer = _game.get("rally_scorer")
+	if scorer != null and scorer.has_signal("rally_ended"):
+		for c in scorer.rally_ended.get_connections(): scorer.rally_ended.disconnect(c.callable)   # no stray reactions
 	var bpc = _game.get("between_point_controller")
 	if bpc != null and is_instance_valid(bpc):
 		bpc.set("_active", false)
@@ -104,7 +112,11 @@ func _physics(delta: float) -> void:
 			_phase = "run"
 		return
 	if _phase != "run": return
-	var seg: Array = COURSE[_seg]
+	var seg: Array = _course[_seg]
+	if _seg_t == 0.0 and str(seg[0]).begins_with("react:") and _rig != null and _rig.get("_motion") != null:
+		var m = _rig._motion
+		if m._reactions == null: m._reactions = m.CardReactionsScript.new(_p)
+		m._reactions.play(str(seg[0]).trim_prefix("react:"))
 	var target: Vector3 = _fh * float(seg[2]) + _fwd * float(seg[3])
 	_vel = _vel.move_toward(target, ACCEL * delta)
 	_move.vel = _vel
@@ -112,7 +124,7 @@ func _physics(delta: float) -> void:
 	if _seg_t >= float(seg[1]):
 		_seg_t = 0.0
 		_seg += 1
-		if _seg >= COURSE.size():
+		if _seg >= _course.size():
 			_phase = "done"
 			_finish()
 
@@ -124,10 +136,14 @@ func _v(v: Vector3) -> Array: return [snappedf(v.x, 0.0001), snappedf(v.y, 0.000
 func _sample(_delta: float) -> void:
 	if _phase != "run" or _p == null: return
 	var m = _rig.get("_motion") if _rig != null else null
-	var row := {"seg": COURSE[_seg][0], "speed": snappedf(_vel.length(), 0.001)}
+	var row := {"seg": _course[_seg][0], "speed": snappedf(_vel.length(), 0.001)}
 	if m != null:
 		row["w"] = snappedf(m._weight, 0.001)
 		row["stride"] = snappedf(m._stride, 0.001)
+		row["react"] = m.reaction()
+		row["spin"] = snappedf(rad_to_deg(m.paddle_spin()), 0.1)
+		var body_raw: Vector3 = _p.body_pivot.get_global_transform_interpolated().origin
+		row["bob"] = snappedf(_drawn(_p.body_pivot).y - body_raw.y, 0.0001)
 	var paddle_arm = _rig.get("_paddle_arm") if _rig != null else null
 	var arms := {}
 	for side in ["right", "left"]:
@@ -135,7 +151,8 @@ func _sample(_delta: float) -> void:
 		if arm == null: continue
 		var raw: Vector3 = arm.hand_pivot.get_global_transform_interpolated().origin
 		var drawn: Vector3 = _drawn(arm.hand_pivot)
-		arms[side] = {"free": arm != paddle_arm, "drawn": _v(drawn), "off": snappedf((drawn - raw).dot(_fwd), 0.0001)}
+		arms[side] = {"free": arm != paddle_arm, "drawn": _v(drawn), "off": snappedf((drawn - raw).dot(_fwd), 0.0001),
+			"moved": snappedf((drawn - raw).length(), 0.0001)}
 	row["arms"] = arms
 	var feet := {}
 	for side in ["right", "left"]:
@@ -172,7 +189,7 @@ func _sample(_delta: float) -> void:
 	_frames.append(row)
 
 func _finish() -> void:
-	var out := {"course": COURSE, "frames": _frames, "wall_ms": Time.get_ticks_msec() - _t0,
+	var out := {"course": _course, "frames": _frames, "wall_ms": Time.get_ticks_msec() - _t0,
 		"perf": {"card_motion_us_mean": snappedf(_cost_sum / maxf(_cost_n, 1.0), 0.1), "card_motion_us_max": _cost_max}}
 	if _out != "":
 		var f := FileAccess.open(_out, FileAccess.WRITE)
