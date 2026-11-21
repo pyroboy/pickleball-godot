@@ -302,7 +302,6 @@ func refresh() -> void:
 func tick() -> void:
 	var ed = _ed()
 	if ed == null: return
-	if speed_graph: speed_graph.tick()
 	if loop and motion() and not ed._playing:
 		if ed._variant_mode != 0: ed._play_variant(ed._variant_mode)
 		else: ed._toggle_play()

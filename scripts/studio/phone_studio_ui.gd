@@ -14,6 +14,7 @@ const StudioTheme = preload("res://scripts/studio/studio_theme.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
 const Queue = preload("res://scripts/studio/phone_sync_queue.gd")
 const ScrubTrack = preload("res://scripts/studio/studio_timeline.gd").ScrubTrack
+const SpeedGraph = preload("res://scripts/studio/studio_speed_graph.gd")
 const STAGE_COLORS := [Color("bd80ff"), Color("ffdc62"), Color("58dfdb")]
 const STAGE_SHORT := ["W", "C", "F"]
 const FONT := 28
@@ -77,6 +78,8 @@ var _layer_btns := {}        # "ghosts" | "arc" | "contact" -> Button
 var _region_btns := {}       # region -> [Button x3]
 var _swing: VBoxContainer     # swing sheet (replaces the lower third): curve, speed, timing
 var _curve_btns: Array[Button] = []
+var _speed: VBoxContainer       # speed sheet (replaces the lower third): the speed ramp graph
+var _speed_graph                # its graph (studio_speed_graph.gd, finger-sized)
 var _swing_info: Label
 var _path_info: Label
 var _path_del: Button
@@ -122,6 +125,9 @@ func build(owner_studio) -> void:
 	_swing = VBoxContainer.new(); _swing.name = "SwingSheet"; _swing.visible = false
 	col.add_child(_swing)
 	_build_swing(_swing)
+	_speed = VBoxContainer.new(); _speed.name = "SpeedSheet"; _speed.visible = false
+	col.add_child(_speed)
+	_build_speed(_speed)
 	_build_drawer()
 	_build_star_popup()
 	resized.connect(_fit)
@@ -146,6 +152,7 @@ func _fit() -> void:
 	_third = third
 	_sheet.custom_minimum_size.y = third
 	_swing.custom_minimum_size.y = third
+	_speed.custom_minimum_size.y = third
 	_fit_lower()
 
 ## The lower panel is as tall as its content (timeline, stars, tabs, the notes / versions shown),
@@ -272,11 +279,12 @@ func _build_scene_overlay() -> void:
 	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
 	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
 	views.add_child(_btn("Swing", func(): _open_sheet("swing"), 124, 64))
+	var spb := _btn("Speed", func(): _open_sheet("speed"), 124, 64); spb.name = "SpeedButton"; views.add_child(spb)
 	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 130, 64))
 	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
 	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
 	_scene.add_child(views)
-	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -478; views.offset_right = -GAP; views.offset_top = 72
+	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -610; views.offset_right = -GAP; views.offset_top = 72
 	_layers = VBoxContainer.new(); _layers.name = "Layers"; _layers.visible = false
 	_layers.add_theme_constant_override("separation", 8)
 	_layers.anchor_left = 1.0; _layers.anchor_right = 1.0; _layers.offset_left = -346; _layers.offset_right = -146; _layers.offset_top = 72 + 64 + 8
@@ -489,18 +497,23 @@ func _open_sheet(id: String) -> void:
 	if id.begins_with("pathkey:"):
 		_sel_path = float(id.get_slice(":", 1)); id = "swing"
 	elif id == "swing": _sel_path = -1.0
+	if id == "speed":
+		_handle = ""
+		_lower.visible = false; _sheet.visible = false; _swing.visible = false; _speed.visible = true
+		if not _layer_on("arc"): _toggle_layer("arc")
+		_speed_graph.update_spans(); return
 	if id == "swing":
 		_handle = ""
-		_lower.visible = false; _sheet.visible = false; _swing.visible = true
+		_lower.visible = false; _sheet.visible = false; _speed.visible = false; _swing.visible = true
 		if not _layer_on("arc"): _toggle_layer("arc")
 		_refresh_swing(); return
 	_handle = id
-	_lower.visible = false; _swing.visible = false; _sheet.visible = true
+	_lower.visible = false; _swing.visible = false; _speed.visible = false; _sheet.visible = true
 	_refresh_sheet()
 
 func _close_sheet() -> void:
 	_handle = ""
-	_sheet.visible = false; _swing.visible = false; _lower.visible = true
+	_sheet.visible = false; _swing.visible = false; _speed.visible = false; _lower.visible = true
 
 # ---------------------------------------------------------------- swing (trajectory)
 
@@ -510,7 +523,9 @@ func _close_sheet() -> void:
 func _build_swing(sheet: VBoxContainer) -> void:
 	var bg := PanelContainer.new(); bg.add_theme_stylebox_override("panel", _row_box()); bg.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sheet.add_child(bg)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); bg.add_child(v)
+	var sc := ScrollContainer.new(); sc.name = "SwingScroll"; sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sc.size_flags_vertical = Control.SIZE_EXPAND_FILL; bg.add_child(sc)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); v.size_flags_horizontal = Control.SIZE_EXPAND_FILL; sc.add_child(v)
 	var head := HBoxContainer.new()
 	var t := _label("Swing path", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
@@ -522,6 +537,8 @@ func _build_swing(sheet: VBoxContainer) -> void:
 		var b := _btn(c[0], _set_curve.bind(c[1]), 0, 64); b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.add_theme_font_size_override("font_size", SMALL); _curve_btns.append(b); r.add_child(b)
 	v.add_child(r)
+	var sp := _btn("Speed ramp…", func(): _open_sheet("speed"), 0, 64); sp.add_theme_font_size_override("font_size", SMALL)
+	v.add_child(sp)
 	var keys := HBoxContainer.new(); keys.add_theme_constant_override("separation", 8)
 	for st in [0, 2]:
 		var b := _btn("Edit " + ("Wind-up" if st == 0 else "Finish"), _edit_key.bind(st), 0, 64)
@@ -537,6 +554,26 @@ func _build_swing(sheet: VBoxContainer) -> void:
 	v.add_child(pr)
 	_swing_info = _label("", SMALL, Ui.MUTED); _swing_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(_swing_info)
+
+## Speed sheet: the speed ramp graph (same as the desktop timeline's), the whole lower third.
+## Drag a part's diamond up / down; Reset puts every free part back to its authored ease.
+func _build_speed(sheet: VBoxContainer) -> void:
+	var bg := PanelContainer.new(); bg.add_theme_stylebox_override("panel", _row_box()); bg.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sheet.add_child(bg)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); bg.add_child(v)
+	var head := HBoxContainer.new(); head.add_theme_constant_override("separation", 8)
+	var t := _label("Speed ramp", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; head.add_child(t)
+	var rs := _btn("Reset", func(): _speed_graph.reset_all(); _show_toast("Speed back to the authored ease"), 130, 64)
+	rs.name = "SpeedReset"; rs.add_theme_font_size_override("font_size", SMALL); head.add_child(rs)
+	head.add_child(_btn("Swing", func(): _open_sheet("swing"), 130, 64))
+	head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
+	var how := _label("Drag a diamond up = faster there, down = slower. Strike speed is gameplay: change it in the desktop studio. Faint line = real paddle m/s.", SMALL, Ui.MUTED)
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
+	_speed_graph = SpeedGraph.new(); _speed_graph.name = "PhoneSpeedGraph"; _speed_graph.studio = studio
+	_speed_graph.set_scale_k(2.2); _speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_speed_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike speed is gameplay timing: change it in the desktop studio"))
+	v.add_child(_speed_graph)
 
 func _set_curve(value: float) -> void:
 	var r: Dictionary = studio.set_swing_curve(value)

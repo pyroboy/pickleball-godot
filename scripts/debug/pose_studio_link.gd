@@ -756,7 +756,7 @@ func _c_mouse(r: Dictionary) -> Dictionary:
 	var base: Control = pv
 	var at := Vector2.ZERO
 	if str(r.get("target", "")) != "":   # a named studio control instead of the preview
-		base = _studio._root.find_child(str(r.target), true, false) as Control
+		base = (_studio.phone_ui if _studio.phone and _studio.phone_ui else _studio._root).find_child(str(r.target), true, false) as Control
 		if base == null: return _err("no control named " + str(r.target))
 		if base is Tree and r.has("item"):   # centre of the row whose metadata is `item`
 			var row: TreeItem = null

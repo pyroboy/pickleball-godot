@@ -2505,7 +2505,7 @@ func ui_dump() -> Dictionary:
 			"autopose": _view_input.autopose_state() if _view_input else {}, "momentum": _view_input.arc_state() if _view_input else {}}
 	return {"ok": true, "ready": is_ready, "key": key, "stage": STAGES[stage], "dirty": _ok() and engine._dirty.has(engine._key),
 		"unsaved": unsaved_keys(), "quit_dialog": _quit_dlg != null and _quit_dlg.visible, "undo": _undo.size(), "redo": _redo.size(), "window": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
-		"preview": pv, "timeline": _timeline.state(), "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
+		"preview": pv, "timeline": _timeline.state(), "phone_speed_graph": phone_ui._speed_graph.state() if phone and phone_ui and phone_ui._speed_graph else {}, "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
 		"controls": tree}
 
 func _dump(n: Node) -> Array:
@@ -2548,7 +2548,7 @@ func _dump(n: Node) -> Array:
 ## Act on a named control like a user: press (button / toggle), set (range, line edit,
 ## checkbox), select (option button, pose list by key or index, tab container).
 func ui_action(control_name: String, action: String, value = null) -> Dictionary:
-	var c: Node = _root.find_child(control_name, true, false)
+	var c: Node = (phone_ui if phone and phone_ui else _root).find_child(control_name, true, false)
 	if c == null: return {"ok": false, "error": "no control named " + control_name}
 	match action:
 		"press":
