@@ -12,7 +12,6 @@ var _player_left: CharacterBody3D
 var _player_right: CharacterBody3D
 var _camera_rig: Node
 var _practice: Node
-var _posture_editor: Control
 var _sound_panel: Control
 var _reaction_button: Node
 
@@ -40,14 +39,13 @@ var trajectory_arc_offset: float = 0.0
 var _key_states: Dictionary = {}
 var _sound_test_states: Dictionary = {}
 
-func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, camera: Node, practice: Node, editor: Control, sound_panel: Control, reaction: Node) -> void :
+func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, camera: Node, practice: Node, sound_panel: Control, reaction: Node) -> void :
 	_game = game
 	_ball = ball
 	_player_left = p_left
 	_player_right = p_right
 	_camera_rig = camera
 	_practice = practice
-	_posture_editor = editor
 	_sound_panel = sound_panel
 	_reaction_button = reaction
 
@@ -79,15 +77,6 @@ func _perf_process(delta: float) -> void:
 		_swing_was_pressed = Input.is_action_pressed("ui_accept")
 		_handle_sound_controls()
 		_game.game_sound_tune._handle_sound_panel_input()
-		return
-	var editor_v2 = _game.get("posture_editor_v2") if _game else null
-	if editor_v2 and editor_v2.visible:
-		_deferred_rally_hold = false
-		serve_is_charging = false
-		serve_charge_time = 0.0
-		_swing_was_pressed = Input.is_action_pressed("ui_accept")
-		if _player_left and _player_left.hitting:
-			_player_left.hitting.clear_charge_visual()
 		return
 	_handle_camera_and_movement_controls()
 	_handle_practice_controls()
@@ -144,7 +133,7 @@ func _unhandled_key_input(event: InputEvent) -> void :
 		get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_F2 and _game.hud.debug_available and not _game.hud._portrait and not OS.has_feature("mobile"):
 		_game.hud.set_debug_mode(true)
-		_game._toggle_posture_editor_v2()
+		_game.open_mobile_pose_editor()
 		get_viewport().set_input_as_handled()
 	elif event.keycode == KEY_E:
 		if _game and not _game._tool_state_active():
@@ -164,17 +153,9 @@ func _unhandled_key_input(event: InputEvent) -> void :
 		get_viewport().set_input_as_handled()
 
 func _handle_camera_and_movement_controls() -> void :
-	var editor_v2 = _game.get("posture_editor_v2") if _game else null
-	if editor_v2 and editor_v2.visible:
-		_deferred_rally_hold = false
-		return
-
 	if _just_pressed(KEY_O) and _camera_rig:
 		if _camera_rig.has_method("toggle_auto_orbit"): _camera_rig.toggle_auto_orbit()
 
-
-	if _posture_editor and _posture_editor.visible:
-		return
 
 	if _just_pressed(KEY_P) and _camera_rig:
 		if _camera_rig.has_method("cycle_third_person"): _camera_rig.cycle_third_person()
@@ -229,14 +210,6 @@ func _handle_swing_charge(delta: float) -> void :
 			serve_charge_time = 0.0
 			_swing_was_pressed = Input.is_action_pressed("ui_accept")
 			return
-	if _posture_editor and _posture_editor.visible:
-		_deferred_rally_hold = false
-		serve_is_charging = false
-		serve_charge_time = 0.0
-		_swing_was_pressed = Input.is_action_pressed("ui_accept")
-		if _player_left and _player_left.hitting:
-			_player_left.hitting.clear_charge_visual()
-		return
 
 	var swing_pressed: bool = Input.is_action_pressed("ui_accept")
 	if swing_pressed and ( not _swing_was_pressed or _deferred_rally_hold):
@@ -272,9 +245,6 @@ func _handle_swing_charge(delta: float) -> void :
 			trajectory_arc_offset = 0.0
 
 func _update_aim_and_arc(delta: float) -> void :
-
-	if _posture_editor and _posture_editor.visible:
-		return
 
 
 	if _game.game_state == 0 and _game.human_may_serve():

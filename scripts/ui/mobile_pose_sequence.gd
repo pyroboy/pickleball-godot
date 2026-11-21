@@ -3,7 +3,7 @@ extends RefCounted
 const Clock = preload("res://scripts/stroke_playback_clock.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
-const Runtime = preload("res://scripts/posture_editor_v2/runtime_motion_preview.gd")
+const Runtime = preload("res://scripts/runtime_motion_preview.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
 const Styles = preload("res://scripts/serve_style.gd")
 const Held = preload("res://scripts/held_hit_motion.gd")

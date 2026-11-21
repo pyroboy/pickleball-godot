@@ -134,11 +134,8 @@ var serve_aim_offset_x: float = 0.0
 var trajectory_arc_offset: float = 0.0
 
 
-var posture_editor_ui
-var posture_editor_v2
 var mobile_pose_editor
 var _mobile_poses_saved := false
-var _transport_bar: Control
 var reaction_button
 var _in_slow_mo: bool = false
 var _ball_frozen: bool = false
@@ -468,7 +465,7 @@ func _setup_game() -> void :
 
 	input_handler = _InputHandler.new()
 	add_child(input_handler)
-	input_handler.setup(self, ball, player_left, player_right, camera_rig, practice_launcher, posture_editor_ui, game_sound_tune.sound_tune_panel if game_sound_tune else null, reaction_button)
+	input_handler.setup(self, ball, player_left, player_right, camera_rig, practice_launcher, game_sound_tune.sound_tune_panel if game_sound_tune else null, reaction_button)
 
 	mobile_controls = preload("res://scripts/ui/mobile_controls.gd").new()
 	hud.add_child(mobile_controls)
@@ -657,7 +654,7 @@ func _create_ui() -> void :
 	var HudScript = preload("res://scripts/ui/hud.gd")
 	hud = HudScript.new()
 	add_child(hud)
-	hud.pose_editor_requested.connect(_toggle_posture_editor_v2)
+	hud.pose_editor_requested.connect(open_mobile_pose_editor)
 	hud.pause_requested.connect( func(): PauseController.open())
 
 	if scoreboard_ui:
@@ -684,41 +681,6 @@ func _create_ui() -> void :
 		player_left.posture.incoming_stage_changed.connect(_on_player_stage_changed)
 		player_left.posture.grade_flashed.connect(_on_player_grade_flashed)
 	reaction_button.auto_fire_requested.connect(_on_reaction_auto_fire)
-
-	if not RuntimePolicy.developer_tools:
-		return
-
-
-	posture_editor_ui = load("res://scripts/posture_editor_ui.gd").new()
-	posture_editor_ui.name = "PostureEditorUI"
-	posture_editor_ui.visible = false
-	posture_editor_ui.editor_opened.connect(_on_editor_opened)
-	posture_editor_ui.editor_closed.connect(_on_editor_closed)
-	canvas.add_child(posture_editor_ui)
-
-
-
-
-
-	posture_editor_v2 = load("res://scripts/posture_editor_v2.gd").new()
-	posture_editor_v2.name = "PostureEditorV2"
-	posture_editor_v2.editor_opened.connect(_on_editor_v2_opened)
-	posture_editor_v2.editor_closed.connect(_on_editor_v2_closed)
-	canvas.add_child(posture_editor_v2)
-	if player_left:
-		posture_editor_v2.set_player(player_left)
-	if camera_rig != null:
-		camera_rig.is_mouse_over_editor_ui_cb = Callable(posture_editor_v2, "contains_screen_point")
-		posture_editor_v2.set_camera_rig(camera_rig)
-
-
-
-	_transport_bar = posture_editor_ui.build_transport_bar()
-	_transport_bar.visible = false
-	canvas.add_child(_transport_bar)
-
-
-
 
 func _set_game_state(new_state: GameState) -> void :
 	if new_state == game_state:
@@ -752,8 +714,6 @@ func _physics_process(delta: float) -> void:
 func _perf_physics_process(delta: float) -> void:
 	if team_coordination != null: team_coordination.begin_physics_frame(delta)
 	if _tool_state_active():
-		if camera_rig and posture_editor_v2 and posture_editor_v2.visible:
-			camera_rig.update(delta)
 		return
 	if _settle_retry_team >= 0: _retry_point_settlement()
 
@@ -799,14 +759,7 @@ func _perf_physics_process(delta: float) -> void:
 		game_drop_test.tick()
 
 
-	if camera_rig != null:
-		if posture_editor_v2 and posture_editor_v2.visible and player_left:
-			camera_rig.editor_focus_point = player_left.global_position
-		elif posture_editor_ui and posture_editor_ui.visible:
-			camera_rig.editor_focus_point = posture_editor_ui.get_current_paddle_position()
-		else:
-			camera_rig.editor_focus_point = Vector3.INF
-		# camera_rig.update now runs every rendered frame in camera_rig._process.
+	# camera_rig.update runs every rendered frame in camera_rig._process.
 
 
 	if game_state == GameState.WAITING and (game_drop_test == null or not game_drop_test.is_active()):
@@ -1755,124 +1708,8 @@ func _print_sound_tunings() -> void :
 
 
 
-func _toggle_posture_editor() -> void :
-	if posture_editor_ui == null:
-		push_warning("[POSTURE EDITOR] posture_editor_ui is null — editor not initialized")
-		return
-	var was_visible = posture_editor_ui.visible
-	posture_editor_ui.visible = not was_visible
-	if not was_visible:
-		_on_editor_opened()
-		if RuntimePolicy.developer_tools: print("[POSTURE EDITOR] ON")
-	else:
-		_on_editor_closed()
-		if RuntimePolicy.developer_tools: print("[POSTURE EDITOR] OFF")
-
-func _toggle_posture_editor_v2() -> void :
-	if posture_editor_v2 == null:
-		push_warning("[POSTURE EDITOR V2] posture_editor_v2 is null — editor not initialized")
-		return
-	if not posture_editor_v2.visible and game_sound_tune.sound_tune_panel.visible:
-		_toggle_sound_panel()
-	posture_editor_v2.toggle()
-	if posture_editor_v2.visible:
-		if RuntimePolicy.developer_tools: print("[POSTURE EDITOR V2] ON")
-	else:
-		if RuntimePolicy.developer_tools: print("[POSTURE EDITOR V2] OFF")
-
-func _on_editor_v2_opened() -> void :
-	_suspend_tool_gameplay()
-	if scoreboard_ui:
-		scoreboard_ui.hide_all_hud()
-	if reaction_button:
-		reaction_button.hide()
-	if _transport_bar:
-		_transport_bar.hide()
-	if camera_rig != null and player_left != null:
-		camera_rig.begin_editor_view(player_left)
-
-	if player_left and player_left.posture:
-		player_left.posture.set_ghosts_visible(true)
-
-func _on_editor_v2_closed() -> void :
-	_resume_tool_gameplay()
-	if scoreboard_ui:
-		scoreboard_ui.show_all_hud()
-		scoreboard_ui.set_debug_visuals_active(debug_visuals_visible)
-	if reaction_button and ai_difficulty == 0:
-		reaction_button.enter_idle()
-	if camera_rig != null:
-		camera_rig.end_editor_view()
-
-	if player_left and player_left.posture:
-		player_left.posture.set_ghosts_visible(debug_visuals_visible)
-
+# camera_rig.set_gameplay_camera_mode still writes this when orbit mode 3 is active.
 var _editor_previous_camera_mode: int = 0
-var _editor_previous_camera_pos: Vector3 = Vector3.ZERO
-var _editor_previous_camera_rot: Vector3 = Vector3.ZERO
-var _editor_previous_window_mode: int = Window.MODE_WINDOWED
-var _editor_previous_window_size: Vector2i = Vector2i.ZERO
-var _editor_previous_window_position: Vector2i = Vector2i.ZERO
-var _editor_window_geometry_saved: bool = false
-
-func _expand_window_for_editor() -> void :
-	var window: Window = get_window()
-	if window == null:
-		return
-	_editor_previous_window_mode = window.mode
-	if _editor_previous_window_mode != Window.MODE_WINDOWED:
-		_editor_window_geometry_saved = false
-		return
-	_editor_previous_window_size = window.size
-	_editor_previous_window_position = window.position
-	_editor_window_geometry_saved = true
-	window.mode = Window.MODE_MAXIMIZED
-
-func _restore_window_after_editor() -> void :
-	var window: Window = get_window()
-	if window == null:
-		return
-	window.mode = _editor_previous_window_mode as Window.Mode
-	if not _editor_window_geometry_saved:
-		return
-	window.size = _editor_previous_window_size
-	window.position = _editor_previous_window_position
-	_editor_window_geometry_saved = false
-
-func _on_editor_opened() -> void :
-	if scoreboard_ui:
-		scoreboard_ui.hide_all_hud()
-	if reaction_button:
-		reaction_button.visible = false
-	if player_left and player_left.posture:
-		player_left.posture.set_ghosts_visible(true)
-	if _transport_bar:
-		_transport_bar.visible = true
-	_expand_window_for_editor()
-	if camera_rig != null and camera_rig.camera != null:
-		_editor_previous_camera_mode = camera_rig.orbit_mode
-		_editor_previous_camera_pos = camera_rig.camera.position
-		_editor_previous_camera_rot = camera_rig.camera.rotation_degrees
-		camera_rig.orbit_mode = 3
-		camera_rig.orbit_pitch = 0.24
-		camera_rig.orbit_angle = PI
-		camera_rig.orbit_auto = false
-		if RuntimePolicy.developer_tools: print("[EDITOR] Camera adjusted for editing")
-
-func _on_editor_closed() -> void :
-	if scoreboard_ui:
-		scoreboard_ui.show_all_hud()
-	if player_left and player_left.posture:
-		player_left.posture.set_ghosts_visible(debug_visuals_visible)
-	if _transport_bar:
-		_transport_bar.visible = false
-	_restore_window_after_editor()
-	if camera_rig != null and camera_rig.camera != null:
-		camera_rig.orbit_mode = _editor_previous_camera_mode
-		if _editor_previous_camera_mode == 0:
-			camera_rig.camera.position = _editor_previous_camera_pos
-			camera_rig.camera.rotation_degrees = _editor_previous_camera_rot
-		if RuntimePolicy.developer_tools: print("[EDITOR] Camera restored")
 
 
 
@@ -1957,7 +1794,7 @@ var _tool_suspended_nodes: Dictionary = {}
 var _tool_ball_was_frozen: bool = false
 
 func _tool_state_active() -> bool:
-	return is_instance_valid(mobile_pose_editor) or (posture_editor_v2 != null and posture_editor_v2.visible) or (game_sound_tune != null and game_sound_tune.sound_tune_panel != null and game_sound_tune.sound_tune_panel.visible)
+	return is_instance_valid(mobile_pose_editor) or (game_sound_tune != null and game_sound_tune.sound_tune_panel != null and game_sound_tune.sound_tune_panel.visible)
 
 func close_active_tool() -> bool:
 	if movement_actions != null and movement_actions.is_open():
@@ -1965,9 +1802,6 @@ func close_active_tool() -> bool:
 		return true
 	if is_instance_valid(mobile_pose_editor):
 		mobile_pose_editor.close()
-		return true
-	if posture_editor_v2 and posture_editor_v2.visible:
-		posture_editor_v2.close()
 		return true
 	if game_sound_tune and game_sound_tune.sound_tune_panel.visible:
 		_toggle_sound_panel()
@@ -1979,8 +1813,6 @@ func close_active_tool() -> bool:
 
 func _toggle_sound_panel() -> void :
 	if game_sound_tune == null: return
-	if posture_editor_v2 and posture_editor_v2.visible:
-		return
 	var panel: Control = game_sound_tune.sound_tune_panel
 	panel.visible = not panel.visible
 	if panel.visible:

@@ -72,7 +72,7 @@ static func _default(style: int) -> PostureDefinition:
 	if not _defaults.has(style):
 		# Dynamic loading keeps the runtime Motion -> Store dependency acyclic.
 		# Explicit use_saved=false makes these snapshots independent of disk/live edits.
-		var preview: Script = load("res://scripts/posture_editor_v2/runtime_motion_preview.gd")
+		var preview: Script = load("res://scripts/runtime_motion_preview.gd")
 		var contact: PostureDefinition = preview.sample_serve(style, 0.5, 1.0, 1.0, null, false)
 		var windup: PostureDefinition = preview.sample_serve(style, 0.0, 1.0, 1.0, null, false)
 		var finish: PostureDefinition = preview.sample_serve(style, 1.0, 1.0, 1.0, null, false)
@@ -169,7 +169,7 @@ static func _write_endpoint(def: PostureDefinition, pose: PostureDefinition, sta
 static func sample(def: PostureDefinition, progress: float) -> PostureDefinition:
 	var style := style_id(def)
 	if style < 0: return null
-	var preview: Script = load("res://scripts/posture_editor_v2/runtime_motion_preview.gd")
+	var preview: Script = load("res://scripts/runtime_motion_preview.gd")
 	var sampled: PostureDefinition = preview.sample_serve(style, progress, 1.0, 1.0, def, false)
 	sampled.set_meta("mobile_serve_planted_stance", true)
 	return sampled

@@ -10,7 +10,7 @@ extends Node
 
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
-const RuntimePreview = preload("res://scripts/posture_editor_v2/runtime_motion_preview.gd")
+const RuntimePreview = preload("res://scripts/runtime_motion_preview.gd")
 const Styles = preload("res://scripts/serve_style.gd")
 const VIEWS := ["front", "side"]
 const STAGES := ["windup", "contact", "finish"]
