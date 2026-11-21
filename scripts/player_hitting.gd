@@ -1,6 +1,7 @@
 class_name PlayerHitting extends Node
 const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const PlaybackClock = preload("res://scripts/stroke_playback_clock.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const SwingPath = preload("res://scripts/stroke_swing_path.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 
@@ -612,9 +613,12 @@ func _animate_authored_swing(posture_id: int, charge_ratio: float, settled_endpo
 	if settled_endpoint == null: apply.call(0.5 if at_contact else 0.0)
 	var transition: = _tween_transition_for_curve(def.ft_ease_curve)
 	var easing: Tween.EaseType = PlaybackClock.ease_for_curve(def.ft_ease_curve)
+	# Speed ramp (Pose Studio): a custom part runs on linear time through its own timing curve.
 	if not at_contact:
-		paddle_swing_tween.tween_method(apply, 0.0, 0.5, PlaybackClock.strike_duration(def)).set_trans(transition).set_ease(easing)
-	paddle_swing_tween.tween_method(apply, 0.5, 1.0, PlaybackClock.sweep_duration(def)).set_trans(transition).set_ease(easing)
+		if Ramp.custom(def, Ramp.STRIKE): paddle_swing_tween.tween_method(func(x: float): apply.call(0.5 * Ramp.normalized(def, Ramp.STRIKE, x)), 0.0, 1.0, PlaybackClock.strike_duration(def))
+		else: paddle_swing_tween.tween_method(apply, 0.0, 0.5, PlaybackClock.strike_duration(def)).set_trans(transition).set_ease(easing)
+	if Ramp.custom(def, Ramp.FINISH): paddle_swing_tween.tween_method(func(x: float): apply.call(0.5 + 0.5 * Ramp.normalized(def, Ramp.FINISH, x)), 0.0, 1.0, PlaybackClock.sweep_duration(def))
+	else: paddle_swing_tween.tween_method(apply, 0.5, 1.0, PlaybackClock.sweep_duration(def)).set_trans(transition).set_ease(easing)
 	paddle_swing_tween.tween_callback(func(): stroke_contact_active = false)
 
 	paddle_swing_tween.tween_interval(PlaybackClock.hold_duration(def))

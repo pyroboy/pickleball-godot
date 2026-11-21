@@ -1,5 +1,6 @@
 extends RefCounted
 const BodyTurn = preload("res://scripts/rally_body_turn.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const JointPreview = preload("res://scripts/live_joint_preparation_path.gd")
 const PlannedGrip = preload("res://scripts/held_preparation_reach.gd")
 const MotionContext = preload("res://scripts/rally_motion_context.gd")
@@ -550,7 +551,8 @@ func _advance_swing(delta: float, ball) -> void :
 		if not contact.is_empty() and contact.posture == swing_def.posture_id:
 			swing_def = contact.def
 		var factor: float = clampf(elapsed / strike_time, 0, 1)
-		visual_pose = BodyTurn.sample(DriveMotion.sample_drive(swing_def, factor * 0.5, charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context))
+		var strike_progress: float = 0.5 * Ramp.normalized(swing_def, Ramp.STRIKE, factor) if Ramp.custom(swing_def, Ramp.STRIKE) else factor * 0.5
+		visual_pose = BodyTurn.sample(DriveMotion.sample_drive(swing_def, strike_progress, charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context))
 		if _strike_start_pose:
 			visual_pose = Path.blend_pose(visual_pose, _strike_start_pose, pow(1.0 - factor, 2.0))
 		if _released_joint_path: visual_pose = JointPreview.sample(player, visual_pose, preceding_pose, -1.0)

@@ -3,6 +3,7 @@ extends RefCounted
 const Clock = preload("res://scripts/stroke_playback_clock.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Runtime = preload("res://scripts/runtime_motion_preview.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
@@ -104,7 +105,7 @@ func sample(seconds: float) -> Dictionary:
 			windup = variant.sample_amount(source,0.0,0.0)
 			if preparation_elapsed > Held.WINDUP_SECONDS:
 				pose = variant.sample_amount(source,0.0,smoothstep(Held.WINDUP_SECONDS,Held.STRONG_SECONDS,preparation_elapsed))
-		var u := smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
+		var u: float = Ramp.lead(source,preparation_elapsed/Held.WINDUP_SECONDS) if Ramp.custom(source,Ramp.LEAD) else smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
 		if pose == null:
 			pose = ReadyCurve.sample(ready,windup,u)
 		phase = "Charging · Ready → Wind-up" if preparation_elapsed <= Held.WINDUP_SECONDS else "Charging · Wind-up → Strong"

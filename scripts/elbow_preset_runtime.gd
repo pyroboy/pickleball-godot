@@ -5,6 +5,7 @@ const Anatomy = preload("res://scripts/arm_anatomy.gd")
 const Visual = preload("res://scripts/player_arm_visual.gd")
 const Size = preload("res://scripts/paddle_dimensions.gd")
 const Codec = preload("res://scripts/elbow_preset_bake.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const POSITION_EPS := 0.00002
 const ROTATION_EPS := 0.000174532925 # 0.01 degrees; geometry congruence, not a broad retarget.
 const SAMPLE_META := "elbow_preset_sample"
@@ -84,10 +85,12 @@ static func clock_coordinate(source,progress: float) -> float:
 	var span: float=strike if p<0.5 else sweep
 	var transition: Tween.TransitionType=Tween.TRANS_QUAD if source.ft_ease_curve==1 else Tween.TRANS_SINE if source.ft_ease_curve==2 else Tween.TRANS_EXPO
 	var ease: Tween.EaseType=Tween.EASE_IN_OUT if source.ft_ease_curve==2 else Tween.EASE_OUT
+	var part: int=Ramp.STRIKE if p<0.5 else Ramp.FINISH
+	var ramped: bool=source is PostureDefinition and Ramp.custom(source,part)
 	var low:=0.0;var high:=1.0
 	for iteration in range(28):
 		var middle: float=(low+high)*0.5
-		var value: float=Tween.interpolate_value(initial,0.5,middle*span,span,transition,ease)
+		var value: float=(initial+0.5*Ramp.normalized(source,part,middle)) if ramped else Tween.interpolate_value(initial,0.5,middle*span,span,transition,ease)
 		if value<p:low=middle
 		else:high=middle
 	var u: float=(low+high)*0.5

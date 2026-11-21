@@ -3,6 +3,7 @@ extends RefCounted
 ## The caller owns the existing input clock; this class never charges a shot.
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const Variants = preload("res://scripts/stroke_windup_variants.gd")
 const ReadyMotion = preload("res://scripts/incoming_ready_motion.gd")
 const Orientation = preload("res://scripts/stroke_preparation_orientation.gd")
@@ -26,7 +27,7 @@ func sample(base: PostureDefinition, ready: PostureDefinition, held_seconds: flo
 	var windup: PostureDefinition = Path.sample(base, 0.0)
 	var pose: PostureDefinition
 	if elapsed <= WINDUP_SECONDS:
-		var progress: float = smoothstep(0.0, WINDUP_SECONDS, elapsed)
+		var progress: float = Ramp.lead(base, elapsed / WINDUP_SECONDS) if Ramp.custom(base, Ramp.LEAD) else smoothstep(0.0, WINDUP_SECONDS, elapsed)
 		pose = ReadyCurve.sample(ready, windup, progress)
 		report = {"stage": "ready_to_windup", "held_seconds": elapsed, "strong_weight": 0.0, "applied_distance_m": 0.0}
 	else:

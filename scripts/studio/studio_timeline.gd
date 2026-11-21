@@ -13,6 +13,9 @@ const TICK := 1.0 / 30.0
 const SPEEDS := [1.0, 0.5, 0.25]
 const SPEED_TEXT := ["1x", "½x", "¼x"]
 const BallActions = preload("res://scripts/ball_actions.gd")
+const SpeedGraph = preload("res://scripts/studio/studio_speed_graph.gd")
+var speed_graph
+var _speed_spacer: Control
 
 var studio
 var stage_buttons: Array[Button] = []
@@ -95,6 +98,14 @@ func build(owner_studio) -> void:
 	time_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	srow.add_child(time_label)
 	_size_time_label.call_deferred()
+	# Speed ramp graph: same time axis as the scrubber (a spacer matches the time label).
+	var grow := HBoxContainer.new(); grow.name = "SpeedRow"; grow.add_theme_constant_override("separation", Theme_.SP2)
+	add_child(grow)
+	speed_graph = SpeedGraph.new(); speed_graph.name = "SpeedGraph"; speed_graph.studio = studio
+	speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grow.add_child(speed_graph)
+	_speed_spacer = Control.new(); _speed_spacer.name = "SpeedSpacer"; _speed_spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	grow.add_child(_speed_spacer)
 	for sg in ["pose_selected", "stage_changed", "pose_edited", "pose_reloaded"]:
 		studio.connect(sg, update_marks.unbind(1))
 
@@ -156,6 +167,7 @@ func _size_time_label() -> void:
 	for t in ["00.000 / 00.000 s · tick 000", "Body stance (one key)", "Key: Wind-up", "Static pose"]:
 		w = maxf(w, font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x)
 	time_label.custom_minimum_size.x = ceilf(w) + 2
+	if _speed_spacer: _speed_spacer.custom_minimum_size.x = time_label.custom_minimum_size.x
 
 func _tool(parent: Node, n: String, icon_name: String, tip: String) -> Button:
 	var b := Theme_.tool_button(n, "", icon_name, tip)
@@ -234,6 +246,7 @@ func update_marks() -> void:
 	var act := _is_action()
 	scrubber.marks_draggable = act or _stroke_marks_draggable()
 	scrubber.fixed_marks = [] if act else [0]
+	if speed_graph: speed_graph.update_spans()
 	if not motion() or not ed._timeline._configure():
 		scrubber.set_marks([], 0.0); return
 	var s = ed._timeline.sequence
@@ -289,6 +302,7 @@ func refresh() -> void:
 func tick() -> void:
 	var ed = _ed()
 	if ed == null: return
+	if speed_graph: speed_graph.tick()
 	if loop and motion() and not ed._playing:
 		if ed._variant_mode != 0: ed._play_variant(ed._variant_mode)
 		else: ed._toggle_play()
@@ -300,7 +314,8 @@ func state() -> Dictionary:
 	return {"playing": ed != null and ed._playing, "loop": loop, "speed": SPEEDS[speed_index],
 		"variant": ed._variant_mode if ed else 0, "active": tl != null and tl.active,
 		"t": (tl.elapsed / maxf(tl.sequence.duration, 0.001)) if tl and tl.active else 0.0,
-		"seconds": tl.elapsed if tl and tl.active else 0.0, "marks": scrubber.marks}
+		"seconds": tl.elapsed if tl and tl.active else 0.0, "marks": scrubber.marks,
+		"speed_graph": speed_graph.state() if speed_graph else {}}
 
 ## Scrub track: a Range (0..1) drawn as a rail with stage markers, progress and a playhead.
 ## Click or drag anywhere on it to scrub. 28 pt tall.

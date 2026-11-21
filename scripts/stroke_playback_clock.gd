@@ -2,6 +2,7 @@ extends RefCounted
 ## Shared gameplay time contract. Never changes Engine.time_scale.
 const Grip = preload("res://scripts/grip_transition.gd")
 const ReadyMotion = preload("res://scripts/incoming_ready_motion.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 static func transition_for_curve(curve: int) -> Tween.TransitionType:
 	return Tween.TRANS_QUAD if curve == 1 else Tween.TRANS_SINE if curve == 2 else Tween.TRANS_EXPO
 static func ease_for_curve(curve: int) -> Tween.EaseType:
@@ -27,10 +28,10 @@ static func state(def: PostureDefinition, seconds: float, finish: PostureDefinit
 	var progress := 0.0
 	var recovery := 0.0
 	if t <= d.strike:
-		progress = Tween.interpolate_value(0.0, 0.5, t, d.strike, transition_for_curve(def.ft_ease_curve), ease_for_curve(def.ft_ease_curve))
+		progress = 0.5 * Ramp.normalized(def, Ramp.STRIKE, t / d.strike) if Ramp.custom(def, Ramp.STRIKE) else Tween.interpolate_value(0.0, 0.5, t, d.strike, transition_for_curve(def.ft_ease_curve), ease_for_curve(def.ft_ease_curve))
 	elif t <= d.stroke:
 		phase = "Sweep"
-		progress = Tween.interpolate_value(0.5, 0.5, t-d.strike, d.sweep, transition_for_curve(def.ft_ease_curve), ease_for_curve(def.ft_ease_curve))
+		progress = 0.5 + 0.5 * Ramp.normalized(def, Ramp.FINISH, (t-d.strike) / d.sweep) if Ramp.custom(def, Ramp.FINISH) else Tween.interpolate_value(0.5, 0.5, t-d.strike, d.sweep, transition_for_curve(def.ft_ease_curve), ease_for_curve(def.ft_ease_curve))
 	else:
 		progress = 1.0
 		phase = "Hold"

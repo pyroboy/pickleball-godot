@@ -189,6 +189,14 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 ## ready_path_offsets[i] (forehand, up, forward metres) off the Ready -> Wind-up path.
 @export var ready_path_times: PackedFloat32Array = PackedFloat32Array()
 @export var ready_path_offsets: PackedVector3Array = PackedVector3Array()
+## Speed ramp per motion part (stroke_speed_ramp.gd): relative speed at the part's start / end,
+## 1 = its average speed. -1 (both) = the authored ease. Durations and keys never move.
+@export_range(-1.0, 3.0) var speed_lead_start: float = -1.0
+@export_range(-1.0, 3.0) var speed_lead_end: float = -1.0
+@export_range(-1.0, 3.0) var speed_strike_start: float = -1.0
+@export_range(-1.0, 3.0) var speed_strike_end: float = -1.0
+@export_range(-1.0, 3.0) var speed_finish_start: float = -1.0
+@export_range(-1.0, 3.0) var speed_finish_end: float = -1.0
 @export var windup_body: Resource
 @export var follow_through_body: Resource
 @export var charge_duration: float = 0.3
@@ -350,6 +358,12 @@ func lerp_with(other, w: float):
 	o.ready_curve_peak = lerpf(ready_curve_peak, other.ready_curve_peak, t)
 	o.ready_path_times = (ready_path_times if t < 0.5 else other.ready_path_times).duplicate()
 	o.ready_path_offsets = (ready_path_offsets if t < 0.5 else other.ready_path_offsets).duplicate()
+	o.speed_lead_start = speed_lead_start if t < 0.5 else other.speed_lead_start
+	o.speed_lead_end = speed_lead_end if t < 0.5 else other.speed_lead_end
+	o.speed_strike_start = speed_strike_start if t < 0.5 else other.speed_strike_start
+	o.speed_strike_end = speed_strike_end if t < 0.5 else other.speed_strike_end
+	o.speed_finish_start = speed_finish_start if t < 0.5 else other.speed_finish_start
+	o.speed_finish_end = speed_finish_end if t < 0.5 else other.speed_finish_end
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)

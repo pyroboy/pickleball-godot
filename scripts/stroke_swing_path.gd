@@ -9,6 +9,7 @@ const BodyPose = preload("res://scripts/stroke_body_pose.gd")
 const Orientation = preload("res://scripts/stroke_preparation_orientation.gd")
 const ContactCurve = preload("res://scripts/contact_paddle_curve.gd")
 const ElbowPreset = preload("res://scripts/elbow_preset_runtime.gd")
+const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 
 
 static func endpoint(def: PostureDefinition, stage: int) -> PostureDefinition:
@@ -178,6 +179,8 @@ static func world_transform(player, pose: PostureDefinition) -> Transform3D:
 	head = PaddleReach.clamp_head_with_floor(head, BodyPose.shoulder_world(player, pose, null, false), player.COURT_FLOOR_Y + pose.paddle_floor_clearance)
 	return apply_in_hand_transform(Transform3D(basis, head - basis.y * PaddleSize.HEAD_CENTER_Y), pose)
 static func release_progress(def: PostureDefinition, phase: int, factor: float) -> float:
+	var part: int = Ramp.FINISH if phase == 1 else Ramp.STRIKE
+	if Ramp.custom(def, part): return Ramp.normalized(def, part, factor) * 0.5 + (0.5 if phase == 1 else 0.0)
 	var transition: Tween.TransitionType = Tween.TRANS_EXPO
 	if def.ft_ease_curve == 1: transition = Tween.TRANS_QUAD
 	elif def.ft_ease_curve == 2: transition = Tween.TRANS_SINE

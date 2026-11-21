@@ -63,7 +63,7 @@ const COL_STARS := 4
 ## Copy of GAMEPLAY in tools/pose_check.py (fields gameplay reads beyond the look); keep in sync.
 const GAMEPLAY_FIELDS := ["paddle_forehand_mul", "paddle_forward_mul", "paddle_y_offset", "has_zone", "zone_x_min",
 	"zone_x_max", "zone_y_min", "zone_y_max", "zone_forward_offset", "paddle_floor_clearance",
-	"charge_duration", "ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold"]
+	"charge_duration", "ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "speed_strike_start", "speed_strike_end"]
 ## Paddle face at Contact: the contact quality reads it, so the Gameplay edit lock covers it too.
 const FACE_FIELDS := ["paddle_pitch_base_deg", "paddle_yaw_base_deg", "paddle_roll_base_deg", "paddle_in_hand_rotation_deg",
 	"paddle_pitch_signed_deg", "paddle_yaw_signed_deg", "paddle_roll_signed_deg",
