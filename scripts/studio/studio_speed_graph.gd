@@ -13,8 +13,8 @@ extends Control
 ##   easing keys  press the curve to add a point it passes through (up to 4 per part): drag it
 ##                anywhere between its neighbours, for a hesitation or a burst. Right-click
 ##                (desktop) or Delete point removes it.
-## Presets (apply_preset) shape the selected part (the last one touched): Original, Linear, Ease
-## in, Ease out, Ease in-out, Whip. Hollow handles = the original ease, untouched.
+## Presets (apply_preset) shape the WHOLE motion, Ready to Finish, as one ease: Original, Linear,
+## Ease in, Ease out, Ease in-out, Whip. Hollow handles = the original ease, untouched.
 ## The Strike follows the Gameplay edit lock (its ease handles at Wind-up and Contact too).
 ## Data: stroke_speed_ramp.gd (speed_<part>_start / _end = the slopes, speed_<part>_points with
 ## z = 1 = the easing keys). One undo step per drag.
@@ -33,7 +33,6 @@ const COLORS := [Color("9aa3b5"), Color("ffdc62"), Color("58dfdb")]             
 const KEY_COLORS := [Color("c9d2e0"), Color("bd80ff"), Color("ffdc62"), Color("58dfdb")]   # Ready, W, C, F
 const KEY_NAMES := ["Ready", "Wind-up", "Contact", "Finish"]
 const TITLES := [["Ready → Wind-up", "Wind-up", "Prep"], ["Strike", "Hit"], ["Follow-through", "Finish", "End"]]
-const PRESETS := {"linear": Vector2(1, 1), "in": Vector2(0, 2), "out": Vector2(2, 0), "inout": Vector2(0, 0), "whip": Vector2(0, 3)}
 const SETTLE_FRAMES := 12      # idle frames after the last edit before the exact arc rebuild
 
 signal locked_pressed          # a press on a locked handle: the phone shows a toast
@@ -43,7 +42,7 @@ var studio
 var k := 1.0                   # size scale: 1 desktop, larger on the phone (finger-sized handles)
 var lock_note := "locked · Gameplay edit"   # under the Strike title while it is locked
 var selected := Vector2i(-1, -1)   # (part, key index) of the last pressed easing key
-var sel_part := -1             # the part presets apply to (the last one touched); -1 = every free part
+var sel_part := -1             # the part last touched (its column is tinted)
 var write_usec := 0            # cost of the last edit applied to the pose (preview update included)
 var write_count := 0
 
@@ -276,21 +275,39 @@ func reset_all() -> void:
 	_select(Vector2i(-1, -1))
 	queue_redraw()
 
-## A named ease on the selected part (every free part when none is selected): "original",
-## "linear", "in" (slow start), "out" (slow end), "inout", "whip" (slow, then as fast as it goes).
-func apply_preset(name: String) -> bool:
-	var parts: Array = [sel_part] if sel_part >= 0 else [0, 1, 2]
-	var did := false
+## A named ease over the WHOLE motion, Ready to Finish, as one curve: "original" (every part back
+## to its own ease), "linear", "in" (slow start, building to the end), "out" (fast start, settling),
+## "inout" (slow, fast through the middle, slow), "whip" (slow for long, then a burst to the end).
+## The keys stay where they are in time, so the preset gives each key the slope its whole-motion
+## curve has at that key's moment; the parts' easing keys are cleared. Locked parts are skipped:
+## returns how many were (0 = the whole curve took it), -1 for an unknown name.
+func apply_preset(name: String) -> int:
+	if name != "original" and not WHOLE.has(name): return -1
+	if _spans.size() < 3: return -1
+	var skipped := 0
+	var total: float = maxf(_spans[2][1], 0.001)
 	studio.begin_edit("easing preset")
-	for part in parts:
-		if _part_locked(part): continue
-		if name == "original": reset_part(part)
-		elif PRESETS.has(name): _apply({part: {"e": PRESETS[name], "keys": []}})
-		did = true
+	for part in 3:
+		if _part_locked(part): skipped += 1; continue
+		if name == "original": reset_part(part); continue
+		var t0: float = _spans[part][0] / total; var t1: float = _spans[part][1] / total
+		# whole-motion slope (level per time) -> this part's own slope (its progress per its time)
+		var scale: float = (t1 - t0) / maxf(_cum[part + 1] - _cum[part], 0.001)
+		_apply({part: {"e": Vector2(clampf(_whole_slope(name, t0) * scale, 0.0, Ramp.MAX_SPEED), clampf(_whole_slope(name, t1) * scale, 0.0, Ramp.MAX_SPEED)), "keys": []}})
 	studio.end_edit()
 	_select(Vector2i(-1, -1))
 	queue_redraw()
-	return did
+	return skipped
+
+## Slope at time t (0..1 of the whole motion) of the named whole-motion ease.
+const WHOLE := ["linear", "in", "out", "inout", "whip"]
+static func _whole_slope(name: String, t: float) -> float:
+	match name:
+		"in": return 2.0 * t                      # t^2
+		"out": return 2.0 * (1.0 - t)             # 1 - (1 - t)^2
+		"inout": return 6.0 * t * (1.0 - t)       # smoothstep
+		"whip": return 3.0 * t * t                # t^3
+	return 1.0                                    # linear
 
 func _select(v: Vector2i) -> void:
 	if v == selected: return

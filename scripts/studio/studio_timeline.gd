@@ -96,7 +96,7 @@ func build(owner_studio) -> void:
 	ks.add_child(keys_bake)
 	var es := Theme_.segment(row, "EaseSeg")
 	ease_preset = OptionButton.new(); ease_preset.name = "EasePreset"; ease_preset.focus_mode = Control.FOCUS_NONE
-	ease_preset.tooltip_text = "Easing preset for the part last touched in the easing curve below (every free part until one is)"
+	ease_preset.tooltip_text = "Easing preset for the whole swing, Ready to Finish, as one curve (the keys stay put in time). The Strike is skipped unless Gameplay edit is on."
 	for p in ["Ease preset…", "Original", "Linear", "Ease in", "Ease out", "Ease in-out", "Whip"]: ease_preset.add_item(p)
 	ease_preset.item_selected.connect(func(i):
 		if i > 0 and speed_graph: speed_graph.apply_preset(["original", "linear", "in", "out", "inout", "whip"][i - 1])

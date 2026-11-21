@@ -639,8 +639,8 @@ func _build_speed(sheet: VBoxContainer) -> void:
 	_speed_unlock = _btn("Unlock Strike", _toggle_strike_unlock, 0, 60); _speed_unlock.name = "SpeedUnlock"
 	_speed_unlock.add_theme_font_size_override("font_size", SMALL)
 	v.add_child(_speed_graph)
-	# Presets for the part last touched (all free parts until one is).
-	_preset_label = _label("Ease preset for: all parts", SMALL, Ui.MUTED); v.add_child(_preset_label)
+	# Presets ease the whole swing, Ready to Finish, as one curve.
+	_preset_label = _label("Ease preset · whole swing, Ready to Finish", SMALL, Ui.MUTED); v.add_child(_preset_label)
 	var pr := HBoxContainer.new(); pr.add_theme_constant_override("separation", 6)
 	for p in [["Original", "original"], ["Linear", "linear"], ["In", "in"], ["Out", "out"], ["In-out", "inout"], ["Whip", "whip"]]:
 		var b := _btn(p[0], _apply_preset.bind(p[1]), 0, 60); b.name = "Preset_" + p[1]
@@ -652,7 +652,9 @@ func _build_speed(sheet: VBoxContainer) -> void:
 
 const SPEED_HOW := "Steep = fast, flat = slow. Drag the end of a key's bar to ease out of / into it. Tap the curve to add a key."
 func _apply_preset(name: String) -> void:
-	if not _speed_graph.apply_preset(name): _show_toast("That part is locked: Unlock Strike first")
+	var skipped: int = _speed_graph.apply_preset(name)
+	if skipped > 0: _show_toast("Applied, except the Strike (locked). Unlock Strike to ease the whole swing.")
+	else: _show_toast("Whole swing: " + {"original": "original easing", "linear": "linear", "in": "ease in", "out": "ease out", "inout": "ease in-out", "whip": "whip"}.get(name, name))
 
 func _toggle_strike_unlock() -> void:
 	studio.strike_speed_unlocked = not studio.strike_speed_unlocked
@@ -666,8 +668,7 @@ func _refresh_speed() -> void:
 	var sel: Vector2i = _speed_graph.selected
 	_speed_del.visible = sel.x >= 0
 	_speed_how.text = SPEED_HOW if sel.x < 0 else "Key selected: drag it, or Delete key. Tap the curve elsewhere for another."
-	var part: int = _speed_graph.sel_part
-	_preset_label.text = "Ease preset for: " + (["Ready → Wind-up", "Strike", "Follow-through"][part] if part >= 0 else "all parts")
+	pass
 
 func _set_curve(value: float) -> void:
 	var r: Dictionary = studio.set_swing_curve(value)
