@@ -8,9 +8,8 @@ class_name PixelCardRig
 ## player, not under BodyPivot, because gameplay scans every BodyPivot mesh.
 ## The classic body meshes stay alive (gameplay reads their transforms and
 ## bounds) but move to a render layer the gameplay camera does not draw.
-## Default on via Settings "video.character_style" = 1; set 0, or run with
-## PICKLEBALL_CLASSIC_BODIES=1, for the classic 3D bodies. To retire the old
-## 3D bodies later, delete this switch, not the meshes gameplay still reads.
+## The only look (the classic 3D bodies were retired 2026-11-21): the meshes stay because
+## gameplay still reads them (surface contacts, reach, the checker's torso test).
 ## Card art: assets/pixel_cards (baked by the art generator in the main repo's
 ## docs/pixel_art_test/generator/make_cards.py).
 ##
@@ -37,7 +36,6 @@ class_name PixelCardRig
 
 const ElbowSwivel = preload("res://scripts/elbow_swivel.gd")
 const CardMotion = preload("res://scripts/graphics/card_motion_layer.gd")
-const STYLE_KEY: = "video.character_style"   # 1 = pixel cards (default), 0 = classic 3D
 const CLASSIC_LAYER: = 20                     # 1-based render layer hidden from the camera
 const CELL_DEG: = 22.5
 const HYSTERESIS_DEG: = 4.0
@@ -126,13 +124,8 @@ var _dbg_mesh: ImmediateMesh = null
 var _dbg_pts: PackedVector3Array = PackedVector3Array()
 var _dbg_cols: PackedColorArray = PackedColorArray()
 
-static func enabled() -> bool:
-	# PICKLEBALL_CLASSIC_BODIES=1 forces classic bodies (benchmarks / A-B checks) without touching saved settings.
-	if OS.get_environment("PICKLEBALL_CLASSIC_BODIES") == "1": return false
-	return int(Settings.get_value(STYLE_KEY, 1)) == 1
-
 static func attach(player) -> PixelCardRig:
-	if player == null or player.body_pivot == null or not enabled(): return null
+	if player == null or player.body_pivot == null: return null
 	# Cards live OUTSIDE the player: gameplay scans every mesh under BodyPivot
 	# (surface contacts, geometry certificates), so cards there would change play.
 	var host: Node = player.get_parent()

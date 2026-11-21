@@ -5,7 +5,6 @@ const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const Geometry = preload("res://scripts/paddle_clearance.gd")
 const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
-const PixelCards = preload("res://scripts/graphics/pixel_card_rig.gd")
 # Ball pickup / throw keys authored in the Pose Studio (data/ball_actions): timing + key deltas.
 const Actions = preload("res://scripts/ball_actions.gd")
 signal active_changed(active: bool)
@@ -65,7 +64,6 @@ var _serve_cup_entry: Vector3
 var _entry_poses: Array = [null, null]
 var _entry_wrists: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _arm_paths: Array = []
-var _presentation_admission: Dictionary = {}
 var _planned_catch_time: float = 0.0
 var missed_physical_catches: int = 0
 var pass_catch_declined: bool = false
@@ -190,7 +188,6 @@ func begin(presentations: Array = []) -> bool:
 func cancel() -> void :
 	for player in _players:
 		if is_instance_valid(player) and player.has_meta("between_bounded_admission"): player.remove_meta("between_bounded_admission")
-	_presentation_admission.clear()
 	if not _active: return
 	_active = false
 	_end_route.cancel()
@@ -935,32 +932,10 @@ func _complete(skipped: bool, result: String) -> void :
 	_game._reset_ball( not skipped)
 	finished.emit(skipped)
 
-func _catch_presentation_valid(player) -> bool:
-	# Only a proven actual hand intersection reaches this edge. Cosmetic
-	# preparation may fail, but it cannot award possession from an invalid rig.
-	# Pixel cards: the certified 3D hand/sleeve surfaces are hidden; skip.
-	if PixelCards.enabled(): return true
-	var identity: int = player.get_actor_id()
-	if not _presentation_admission.has(identity): _presentation_admission[identity] = load("res://scripts/between_pose_admission.gd").new(player)
-	var report: Dictionary = _presentation_admission[identity].displayed_report()
-	player.set_meta("between_catch_admission", report)
-	return bool(report.valid)
-
-func prepare_pose_admission(player) -> Dictionary:
-	var _pt := Time.get_ticks_usec()
-	var _pr = _perf_prepare_pose_admission(player)
-	PerfMonitor.record("bp.prepare_pose_admission", Time.get_ticks_usec() - _pt)
-	return _pr
-
-func _perf_prepare_pose_admission(player) -> Dictionary:
-	if PixelCards.enabled(): return {}
-	var identity: int = player.get_actor_id()
-	if not _presentation_admission.has(identity): _presentation_admission[identity] = load("res://scripts/between_pose_admission.gd").new(player)
-	return _presentation_admission[identity].begin(self)
-
-func finish_pose_admission(player, token: Dictionary) -> void:
-	var identity: int = player.get_actor_id()
-	if _presentation_admission.has(identity): _presentation_admission[identity].finish(self, token)
+func _catch_presentation_valid(_player) -> bool:
+	# Only a proven actual hand intersection reaches this edge (the caller tests the
+	# ball against the hand). The cards draw no 3D hand / sleeve to certify beyond that.
+	return true
 
 func present_arm_path(player, pose) -> void:
 	var _pt := Time.get_ticks_usec()
@@ -972,24 +947,13 @@ func _perf_present_arm_path(player, pose) -> void:
 	var index: int = _players.find(player)
 	if index < 0: return
 	_arm_paths[index].apply(self, pose)
-	if phase == "SETTLE" and not PixelCards.enabled():
-		var sleeve: Script = load("res://scripts/live_ready_clearance.gd")
-		if not sleeve.clearance_report(player).valid:
-			var transaction = sleeve.Transaction.new(player)
-			var correction: Dictionary = sleeve.search(player, transaction, pose)
-			if not correction.is_empty(): sleeve.apply(player, correction)
-			player.set_meta("between_entry_clearance", {"feasible": not correction.is_empty()})
 
 
 func cup_can_fit_body_offset(actor_id: int, offset: Vector3) -> bool:
 	var team: int = index_for_actor_id(actor_id)
 	if team < 0: return false
-	if not _active or phase != "SET_SERVE" or team != _carry_team: return false
-	# Pixel cards don't draw the 3D hand/cup, so the exact cup-pose search
-	# (thousands of candidates per tick) has nothing to protect.
-	if PixelCards.enabled(): return true
-	var center: Vector3 = _wrists[team] + _carry_direction.normalized() * HandPresentation.RETRIEVAL_BALL_DEPTH
-	return _arm_paths[team].cup_kinematic_fit(_players[team].left_arm_node, center, offset)
+	# Any reach body offset keeps the cup: the cards draw no 3D hand / cup to protect.
+	return _active and phase == "SET_SERVE" and team == _carry_team
 
 
 func index_for_actor_id(actor_id: int) -> int:

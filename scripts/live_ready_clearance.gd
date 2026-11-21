@@ -1,6 +1,7 @@
 extends RefCounted
-## Isolated candidate. Exact displayed sleeve/torso surface test and bounded
-## READY-only correction search. No authored pose/resource is modified.
+## Exact displayed sleeve / torso surface test (skinned torso triangles, closed-body inside test)
+## and a bounded body-shift search, used by between-point arm paths, the checker
+## (debug/pose_data.gd) and runtime_court_frame. No authored pose/resource is modified.
 const Surface = preload("res://scripts/player_surface_contacts.gd")
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
 const Hands = preload("res://scripts/player_hand_presentation.gd")
@@ -9,7 +10,6 @@ const Paddle = preload("res://scripts/paddle_dimensions.gd")
 const SwingPath = preload("res://scripts/stroke_swing_path.gd")
 const Geometry = preload("res://scripts/contact_surface_geometry.gd")
 const REQUIRED_GAP := 0.001
-const CERTIFICATE_FLOAT_RESERVE := 0.00001
 const WRIST_RESERVE := 0.98
 const JointSeam := 0.12
 const MAX_SHIFT := 0.10
@@ -18,7 +18,6 @@ const STEP := 0.005
 # geometry and sweeping both elbows at 5 deg with triangle-level collision tests (up to
 # ~130 ms in one frame at point end). Now 1 cm shifts, 10 deg elbow sweep, max 12 tries.
 const SEARCH_STEP := 0.01
-const READY_RECHECK_TICKS := 6
 const SEARCH_MAX_TRIALS := 12
 const ELBOW_STEP_DEG := 10.0   # wide sweeps only; short precise calls (attempts <= 3) keep 5 deg
 static var _bvh_topologies: Dictionary = {}
@@ -361,31 +360,6 @@ class Transaction:
 static func _same_transform(a: Transform3D, b: Transform3D) -> bool:
 	return a.origin.distance_to(b.origin) <= 0.00002 and (a.basis.x - b.basis.x).length() <= 0.00002 and (a.basis.y - b.basis.y).length() <= 0.00002 and (a.basis.z - b.basis.z).length() <= 0.00002
 
-static func _displayed_arms_valid(player) -> bool:
-	for side in [0, 1]:
-		var arm = player.right_arm_node if side == 0 else player.left_arm_node
-		var wrist: Vector3 = arm.hand_mesh.global_transform * arm.articulated_hand.wrist_socket
-		var shoulder: Vector3 = arm.upper_pivot.global_position; var elbow: Vector3 = arm.forearm_pivot.global_position
-		if absf(shoulder.distance_to(elbow) - arm.upper_arm_length) > 0.00002 or absf(elbow.distance_to(wrist) - arm.forearm_length) > 0.00002: return false
-		if wrist.distance_to(arm.forearm_pivot.to_global(Vector3(0, 0, -arm.forearm_length))) > 0.00002: return false
-		var channels := Anatomy.decompose(Anatomy.forearm_reference_for_arm(arm, wrist, side == 1), arm.hand_mesh.global_basis * arm.articulated_hand.anatomical_basis, -1.0 if side == 1 else 1.0)
-		if not channels.within_animation_budget: return false
-	return true
-
-static func _presented_ready(player, pose) -> bool:
-	if pose == null or int(pose.posture_id) != 20 or not load("res://scripts/live_transition_arm_reach.gd").enabled(player, pose): return false
-	var feet = player.leg_ik
-	if feet == null or not feet.right_foot_locked or not feet.left_foot_locked or feet._active_side >= 0 or feet._airborne or feet._run_active: return false
-	if player.current_velocity.length() > 0.18: return false
-	var canonical = PostureLibrary.instance().get_def(20)
-	var paddle: Transform3D = player.paddle_node.global_transform
-	if not _same_transform(paddle, SwingPath.world_transform(player, canonical)): return false
-	var main := Transform3D(Hands.GripFrame.basis(paddle.basis, false, canonical.main_grip_rotation_deg - canonical.paddle_in_hand_rotation_deg), paddle * (Paddle.MAIN_GRIP_OFFSET + canonical.right_hand_offset))
-	var support_origin: Vector3 = paddle * (Paddle.SUPPORT_GRIP_OFFSET + Vector3.UP * canonical.support_grip_slide_m)
-	support_origin += player._get_forehand_axis() * canonical.left_hand_offset.x + Vector3.UP * canonical.left_hand_offset.y + player._get_forward_axis() * canonical.left_hand_offset.z
-	var support := Transform3D(Hands.GripFrame.basis(paddle.basis, true, canonical.support_grip_rotation_deg - canonical.paddle_in_hand_rotation_deg), support_origin)
-	return _same_transform(main, player.right_arm_node.hand_mesh.global_transform) and _same_transform(support, player.left_arm_node.hand_mesh.global_transform) and _displayed_arms_valid(player)
-
 static func _resource_changed(identity: int) -> void:
 	_resource_versions[identity] = int(_resource_versions.get(identity, 0)) + 1
 
@@ -397,173 +371,3 @@ static func _resource_version(resource: Resource) -> Array:
 		resource.changed.connect(_resource_changed.bind(identity))
 	return [identity, _resource_versions[identity], resource.get_surface_count()] if resource is Mesh else [identity, _resource_versions[identity]]
 
-static func _ready_signature(player, target: Transform3D) -> PackedByteArray:
-	var skin = player.body_pivot.get_meta("articulated_torso")
-	var values: Array = [player.global_transform, target, player.body_pivot.scale, skin._last_pelvis, skin._last_abdomen, skin._last_chest,
-		_resource_version(skin.body_mesh.mesh), _resource_version(skin.body_mesh.skin), player.paddle_node.global_transform]
-	for arm in [player.right_arm_node, player.left_arm_node]:
-		values.append([arm.transform, arm.upper_pivot.position, arm.upper_pivot.scale, arm.forearm_pivot.position, arm.forearm_pivot.scale, arm.upper_mesh.transform, arm.fore_mesh.transform, arm.hand_mesh.global_transform,
-			arm.upper_arm_length, arm.forearm_length, arm.articulated_hand.wrist_socket, arm.articulated_hand.anatomical_basis,
-			_resource_version(arm.upper_mesh.mesh), _resource_version(arm.upper_mesh.skin), _resource_version(arm.fore_mesh.mesh)])
-	for leg in [player.right_leg_node, player.left_leg_node]:
-		values.append([leg.transform, leg.thigh_pivot.position, leg.thigh_pivot.scale, leg.shin_pivot.position, leg.shin_pivot.scale, leg.foot_pivot.global_transform, leg.foot_mesh.transform,
-			leg.thigh_length, leg.shin_length, _resource_version(leg.foot_mesh.mesh)])
-	return var_to_bytes(values)
-
-static func _clipped_sleeves(arm, inverse: Transform3D) -> PackedVector3Array:
-	var result := PackedVector3Array()
-	var shoulder: Vector3 = arm.upper_pivot.global_position
-	var axis: Vector3 = (arm.forearm_pivot.global_position - shoulder).normalized()
-	for mesh in [arm.upper_mesh, arm.fore_mesh]:
-		var points := Surface.world_triangles(mesh)
-		for index in range(0, points.size() - 2, 3):
-			var polygon := PackedVector3Array([points[index], points[index + 1], points[index + 2]])
-			if mesh == arm.upper_mesh:
-				var clipped := PackedVector3Array()
-				var previous := polygon[-1]; var before := (previous - shoulder).dot(axis) >= JointSeam
-				for point in polygon:
-					var after := (point - shoulder).dot(axis) >= JointSeam
-					if before != after: clipped.append(previous.lerp(point, (JointSeam - (previous - shoulder).dot(axis)) / (point - previous).dot(axis)))
-					if after: clipped.append(point)
-					previous = point; before = after
-				polygon = clipped
-			for fan in range(1, polygon.size() - 1):
-				result.append(inverse * polygon[0]); result.append(inverse * polygon[fan]); result.append(inverse * polygon[fan + 1])
-	return result
-
-static func _clearance_certificate(player, gap: float, geometry: Dictionary) -> Dictionary:
-	if not geometry.get("valid", false): return {}
-	var key: Array = []
-	var skin = player.body_pivot.get_meta("articulated_torso")
-	for resource in [skin.body_mesh.mesh, skin.body_mesh.skin, player.right_arm_node.upper_mesh.mesh, player.right_arm_node.upper_mesh.skin, player.right_arm_node.fore_mesh.mesh, player.left_arm_node.upper_mesh.mesh, player.left_arm_node.upper_mesh.skin, player.left_arm_node.fore_mesh.mesh]: key.append(_resource_version(resource))
-	var world_body := PackedVector3Array()
-	var frame: Transform3D = geometry.inverse.affine_inverse()
-	for point in geometry.points: world_body.append(frame * point)
-	return {"gap": gap, "resources": key, "body": world_body, "main": _clipped_sleeves(player.right_arm_node, Transform3D.IDENTITY), "support": _clipped_sleeves(player.left_arm_node, Transform3D.IDENTITY)}
-
-static func _vertex_displacement(first: PackedVector3Array, second: PackedVector3Array) -> float:
-	if first.size() != second.size(): return INF
-	var maximum := 0.0
-	for index in first.size(): maximum = maxf(maximum, first[index].distance_to(second[index]))
-	return maximum
-
-static func _certificate_still_clear(player, previous: Dictionary) -> bool:
-	if previous.is_empty(): return false
-	var current := _clearance_certificate(player, 0.0, body_geometry(player))
-	if current.is_empty(): return false
-	if var_to_bytes(current.resources) != var_to_bytes(previous.resources): return false
-	var body_change := _vertex_displacement(previous.body, current.body)
-	var main_change := _vertex_displacement(previous.main, current.main)
-	var support_change := _vertex_displacement(previous.support, current.support)
-	# A point in a corresponding triangle is a convex combination of its
-	# vertices. Thus the whole surface moves by at most this maximum; minimum
-	# separation can decrease by no more than the sum of both surface bounds.
-	# Preserve ten extra micrometres for float arithmetic, never round a key.
-	return body_change + maxf(main_change, support_change) + CERTIFICATE_FLOAT_RESERVE <= float(previous.gap) - REQUIRED_GAP
-
-static func apply_presented_ready(player, pose) -> Dictionary:
-	var _pt := Time.get_ticks_usec()
-	var _pr = _perf_apply_presented_ready(player, pose)
-	PerfMonitor.record("arm.ready_clearance", Time.get_ticks_usec() - _pt)
-	return _pr
-
-static func _perf_apply_presented_ready(player, pose) -> Dictionary:
-	# Bounded post-Budget hook candidate. Never requests or resets a pose.
-	var started := Time.get_ticks_usec()
-	var report := {"eligible": false, "active": false, "feasible": false, "offset": Vector3.ZERO}
-	# Pixel cards don't draw sleeves or torso surfaces, so there is nothing to clip.
-	if load("res://scripts/graphics/pixel_card_rig.gd").enabled(): report["reason"] = "pixel cards"; return report
-	if not _presented_ready(player, pose): report["reason"] = "actual presentation is not supported seated READY"; return report
-	report.eligible = true
-	# Perf: the READY pose is pre-baked to clear the torso (data/postures/20_ready.tres
-	# elbow poles). Once clearance is confirmed, re-check at ~10 Hz instead of on every
-	# arm solve (receivers stand in READY through every serve).
-	var last_clear: int = int(player.body_pivot.get_meta("_ready_clear_tick", -1000000))
-	if Engine.get_physics_frames() - last_clear < READY_RECHECK_TICKS:
-		report.feasible = true; report["reason"] = "clear recently"; return report
-	var existing: Vector3 = player.body_pivot.get_meta("live_transition_arm_reach", {}).get("world_offset", Vector3.ZERO)
-	var canonical_body: Transform3D = player.body_pivot.global_transform.translated(-existing)
-	var previous: Dictionary = player.body_pivot.get_meta("live_ready_clearance", {})
-	var target: Transform3D = player.body_pivot.global_transform.translated(Vector3.DOWN * 0.005)
-	# The ordinary reach fitter's preferred elbow can change its minimum offset
-	# after clearance conditioning. Keep the already certified target, rather
-	# than stacking another relative shift on that changed minimum.
-	if previous.get("active", false) and _same_transform(canonical_body, previous.get("canonical_body", Transform3D.IDENTITY)):
-		target = previous.get("body_target", target)
-	var signature := _ready_signature(player, target)
-	var cache: Dictionary = player.body_pivot.get_meta("_ready_clearance_exact_cache", {})
-	if cache.get("signature", PackedByteArray()) == signature:
-		apply(player, cache.candidate)
-		report = cache.report.duplicate(true); report["cached_exact_result"] = true
-		report["microseconds"] = Time.get_ticks_usec() - started
-		player.body_pivot.set_meta("live_ready_clearance", report.duplicate(true))
-		return report
-	# Reuse a previous separated surface only with a proved displacement bound.
-	# Actual mounts and feet remain the current inputs, not cached contacts.
-	var certificate: Dictionary = cache.get("certificate", {})
-	if not certificate.is_empty() and _same_transform(target, cache.candidate.body.translated(cache.candidate.offset)):
-		var trial_owner := Transaction.new(player); var trial_saved := trial_owner._snapshot(true)
-		var trial: Dictionary = cache.candidate.duplicate(true)
-		trial.body = target; trial.offset = Vector3.ZERO; trial.paddle = player.paddle_node.global_transform
-		trial.mounts = [player.right_arm_node.hand_mesh.global_transform, player.left_arm_node.hand_mesh.global_transform]
-		trial.feet = [player.right_leg_node.foot_pivot.global_position, player.left_leg_node.foot_pivot.global_position]
-		trial.foot_bases = [player.right_leg_node.foot_pivot.global_basis, player.left_leg_node.foot_pivot.global_basis]
-		trial.knees = [player.right_leg_node.shin_pivot.global_position, player.left_leg_node.shin_pivot.global_position]
-		player.body_pivot.global_transform = target; player.paddle_node.global_transform = trial.paddle
-		var allowed := true; var adjusted: Array = []
-		for side in [0, 1]:
-			var arm = player.right_arm_node if side == 0 else player.left_arm_node
-			var leg = player.right_leg_node if side == 0 else player.left_leg_node
-			if not Foot.reach_report(leg.thigh_pivot.global_position, trial.feet[side], leg.thigh_length, leg.shin_length).feasible: allowed = false; break
-			var fit := _solve_arm(arm, trial.mounts[side], trial.arms[side].elbow, {}, side == 1, 1, false)
-			if fit.is_empty(): allowed = false; break
-			adjusted.append(fit)
-		if allowed:
-			trial.arms = adjusted; apply(player, trial)
-			allowed = _displayed_arms_valid(player) and _certificate_still_clear(player, certificate)
-		if allowed:
-			report = cache.report.duplicate(true); report["certified_displacement_reuse"] = true
-			report["microseconds"] = Time.get_ticks_usec() - started
-			player.body_pivot.set_meta("live_ready_clearance", report.duplicate(true))
-			return report
-		trial_owner._restore(trial_saved)
-	var geometry := body_geometry(player)
-	if not geometry.get("valid", false): report["reason"] = "missing torso triangles"; report["microseconds"] = Time.get_ticks_usec() - started; return report
-	if arm_clear(player.right_arm_node, geometry, REQUIRED_GAP) and arm_clear(player.left_arm_node, geometry, REQUIRED_GAP):
-		player.body_pivot.set_meta("_ready_clear_tick", Engine.get_physics_frames())
-		report.feasible = true; report["microseconds"] = Time.get_ticks_usec() - started; return report
-	var transaction := Transaction.new(player); var saved := transaction._snapshot(true)
-	var offset: Vector3 = target.origin - player.body_pivot.global_position
-	if (existing + offset).length() > load("res://scripts/live_transition_arm_reach.gd").MAX_BODY_SHIFT_M: report["reason"] = "existing body correction leaves no reserve"; return report
-	var candidate := {"body": player.body_pivot.global_transform, "offset": offset, "paddle": player.paddle_node.global_transform,
-		"mounts": [player.right_arm_node.hand_mesh.global_transform, player.left_arm_node.hand_mesh.global_transform],
-		"feet": [player.right_leg_node.foot_pivot.global_position, player.left_leg_node.foot_pivot.global_position],
-		"foot_bases": [player.right_leg_node.foot_pivot.global_basis, player.left_leg_node.foot_pivot.global_basis],
-		"knees": [player.right_leg_node.shin_pivot.global_position, player.left_leg_node.shin_pivot.global_position], "arms": []}
-	var poles: Array[Vector3] = [player.right_arm_node.forearm_pivot.global_position, player.left_arm_node.forearm_pivot.global_position]
-	player.body_pivot.global_position += offset; player.paddle_node.global_transform = candidate.paddle
-	geometry = body_geometry(player)
-	var feasible := true
-	for side in [0, 1]:
-		var arm = player.right_arm_node if side == 0 else player.left_arm_node
-		var leg = player.right_leg_node if side == 0 else player.left_leg_node
-		if not Foot.reach_report(leg.thigh_pivot.global_position, candidate.feet[side], leg.thigh_length, leg.shin_length).feasible: feasible = false; break
-		var fitted := _solve_arm(arm, candidate.mounts[side], poles[side], geometry, side == 1, 3)
-		if fitted.is_empty(): feasible = false; break
-		candidate.arms.append(fitted)
-	transaction._restore(saved)
-	if feasible:
-		apply(player, candidate)
-		report.active = true; report.feasible = true; report.offset = offset
-		report["body_after"] = player.body_pivot.transform
-		report["body_target"] = player.body_pivot.global_transform
-		report["canonical_body"] = canonical_body
-		report["clearance_at_least_m"] = REQUIRED_GAP; report["proximal_joint_seam_m"] = JointSeam
-		player.body_pivot.set_meta("live_ready_clearance", report.duplicate(true))
-		var certificate_geometry := body_geometry(player)
-		var separated := arm_clear(player.right_arm_node, certificate_geometry, REQUIRED_GAP + 0.0001) and arm_clear(player.left_arm_node, certificate_geometry, REQUIRED_GAP + 0.0001)
-		var proof := _clearance_certificate(player, REQUIRED_GAP + 0.0001, certificate_geometry) if separated else {}
-		player.body_pivot.set_meta("_ready_clearance_exact_cache", {"signature": signature, "candidate": candidate.duplicate(true), "report": report.duplicate(true), "certificate": proof})
-	else: report["reason"] = "bounded READY candidate is not physically feasible"
-	report["microseconds"] = Time.get_ticks_usec() - started
-	return report

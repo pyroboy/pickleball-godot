@@ -696,13 +696,8 @@ func _resolve_hand_impl(evidence: Dictionary, full_delta: float) -> Dictionary:
 	var player = ActorIdentity.find_actor(game, _evidence_actor(evidence))
 	if player == null: return {"stop": false, "unresolved": true, "reason": "unknown contact actor"}
 	var stroke: Dictionary = _strokes.get(ActorIdentity.actor_id(player), _stroke_state(player))
-	if evidence.get("kind", "body") in ["legal_paddle", "legal_hand"]:
-		var rig: Dictionary = ArmBudget.displayed_report(player)
-		# Pixel cards don't draw the 3D wrist, so an over-budget wrist pose is not
-		# visible; rejecting the contact would freeze the rally and pause the game.
-		if not rig.valid and not load("res://scripts/graphics/pixel_card_rig.gd").enabled():
-			last_evidence["rejected_rig"] = rig
-			return {"stop": false, "unresolved": true, "reason": "infeasible actual hitting-surface rig"}
+	# No rig rejection for legal paddle / hand contacts: the cards draw no 3D wrist, and rejecting
+	# an over-budget wrist pose froze the rally (the contact rule tolerates the arm, contact_launch).
 	var live_stroke: Dictionary = _stroke_state(player)
 	var direction_known: bool = Vector3(stroke.get("hit_direction", Vector3.ZERO)).length_squared() > 0.5 and int(live_stroke.serial) == int(stroke.serial)
 	var previous_contact: Dictionary = _last_contact.duplicate()

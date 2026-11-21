@@ -1,7 +1,6 @@
 extends RefCounted
 const Anatomy=preload("res://scripts/arm_anatomy.gd")
 const Sleeve=preload("res://scripts/live_ready_clearance.gd")
-const SleeveQuery=preload("res://scripts/between_sleeve_clearance.gd")
 const Budget=preload("res://scripts/live_arm_budget.gd")
 var actor
 var had_cup_request:bool=false
@@ -15,16 +14,13 @@ var last_upper:Basis
 var last_fore:Basis
 var last_center:Vector3
 var last_body:Transform3D
-var cup_geometry:Dictionary={}
 var catch_surface_work_remaining:int=-1
 # Per-frame cap on cup candidate fits in _fit_cup (-1 = no cap). Each fit is
 # ~0.5 ms on an M-series Mac; uncapped fallbacks reached 200+ fits (100+ ms).
 const CUP_FIT_BUDGET:=48
 var cup_fit_budget:int=-1
-# Pixel-card mode: the 3D hand/sleeve is on a hidden layer, so grip fits skip
-# the sleeve-vs-body surface checks (and their body geometry build) and take
-# the first kinematically valid elbow. Classic 3D bodies keep the full checks.
-var pixel_cards:bool=false
+# Grip fits take the first kinematically valid elbow: the cards draw no 3D sleeve
+# to keep clear of the body.
 # Perf: the carry grip barely changes between frames. Remember which cup rotation
 # step won last frame and search only a small window around it; the full
 # 145-candidate sweep runs only when the window finds nothing.
@@ -47,7 +43,6 @@ func begin_exit()->void:
  for bone in arm.articulated_hand.skeleton.get_bone_count():exit_fingers.append(arm.articulated_hand.skeleton.get_bone_pose_rotation(bone))
 func _init(player):
  actor=player
- pixel_cards=preload("res://scripts/graphics/pixel_card_rig.gd").enabled()
  var arm=actor.left_arm_node;var torso:Node3D=actor.body_pivot.get_node("TorsoMesh")
  var wrist:Vector3=arm.hand_mesh.global_transform*arm.articulated_hand.wrist_socket
  last_center=arm.hand_mesh.global_transform*arm.articulated_hand.cup_ball_center
@@ -122,7 +117,6 @@ func _fixed_hand(arm,left:bool)->void:
 func _fit_cup(arm,owner)->void:
  var transaction=Sleeve.Transaction.new(actor);var saved:Dictionary=transaction._snapshot(true)
  var model=arm.articulated_hand
- cup_geometry={} if pixel_cards else Sleeve.body_geometry(actor)
  var original:Transform3D=arm.hand_mesh.global_transform
  var center:Vector3=original*model.cup_ball_center
  var request:Dictionary=owner.hand_presentation_for(actor.get_actor_id())
@@ -309,9 +303,8 @@ func _perf_cup_candidate(arm,original:Transform3D,center:Vector3,normal:Vector3,
   if not best.is_empty() and cost>=best.cost:continue
   if catch_surface_work_remaining==0:continue
   if catch_surface_work_remaining>0:catch_surface_work_remaining-=1
-  if not pixel_cards and not SleeveQuery.arm_clear(arm,cup_geometry,Sleeve.REQUIRED_GAP):continue
   best={"basis":basis,"wrist":wrist,"elbow":elbow,"cost":cost}
-  if first_valid or pixel_cards:return best
+  return best
  return best
 
 func _cup_cone(arm,center:Vector3,goal:Basis)->Dictionary:
@@ -355,9 +348,7 @@ func _apply_receiver_exit(owner,pose)->void:
  if not fit.feasible:
   actor.set_meta("between_exit_report",{"feasible":false,"weight":weight})
   return
- # Pixel cards: no sleeve/torso surfaces to clear, keep the budget elbow.
- var clear:Dictionary={} if pixel_cards else Sleeve._solve_arm(arm,mount,fit.elbow,Sleeve.body_geometry(actor),true)
- var elbow:Vector3=clear.elbow if not clear.is_empty() else fit.elbow
+ var elbow:Vector3=fit.elbow
  arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
  arm.solve_ik(mount.origin,elbow,null,wrist)
  model.set_mesh_world_transform(mount);model.update_wrist_bridge(arm.fore_mesh.global_basis)
@@ -365,50 +356,6 @@ func _apply_receiver_exit(owner,pose)->void:
  var goal_fingers:Array=[]
  for bone in model.skeleton.get_bone_count():goal_fingers.append(model.skeleton.get_bone_pose_rotation(bone))
  for bone in range(1,model.WRIST_BRIDGE_BONE):model.skeleton.set_bone_pose_rotation(bone,exit_fingers[bone].slerp(goal_fingers[bone],weight))
- actor.set_meta("between_exit_report",{"feasible":true,"clear":not clear.is_empty(),"weight":weight})
- if not pixel_cards and not Sleeve.clearance_report(actor).valid:
-  var transaction=Sleeve.Transaction.new(actor)
-  var candidate:Dictionary=Sleeve.search(actor,transaction,pose)
-  if not candidate.is_empty():Sleeve.apply(actor,candidate)
- if weight>=1.0 and not pixel_cards:Sleeve.apply_presented_ready(actor,pose)
+ actor.set_meta("between_exit_report",{"feasible":true,"clear":false,"weight":weight})
  last_basis=basis
 
-func cup_kinematic_fit(arm,center:Vector3,offset:Vector3)->bool:
- # Necessary body-fit admission for the same finite hand-frame/elbow lattice
- # used by _cup_cone. Presentation still checks actual sleeve surfaces before
- # accepting any candidate. No actor node, ball or foot is changed here.
- var allowed:float=deg_to_rad(700.0)*actor.get_physics_process_delta_time()
- var shoulder:Vector3=arm.upper_pivot.global_position+offset
- var body:Transform3D=actor.body_pivot.global_transform
- body.origin+=offset
- var preferred:Vector3=body*(last_body.affine_inverse()*last_elbow)
- for turn in range(0,ceili(rad_to_deg(allowed)/2.5)+1):
-  var angle:float=minf(deg_to_rad(float(turn)*2.5),allowed)
-  for x in [-1.0,0.0,1.0]:
-   for y in [-1.0,0.0,1.0]:
-    for z in [-1.0,0.0,1.0]:
-     var direction:Vector3=actor._get_forehand_axis()*x+Vector3.UP*y-actor._get_forward_axis()*z
-     if direction.length_squared()<.5:continue
-     var basis:Basis=Basis(direction.normalized(),angle)*last_basis
-     var wrist:Vector3=center+basis*(arm.articulated_hand.wrist_socket-arm.articulated_hand.cup_ball_center)
-     var span:Vector3=wrist-shoulder;var length:float=span.length()
-     if length>=arm.upper_arm_length+arm.forearm_length-.0001 or length<.0001:continue
-     var axis:Vector3=span/length
-     var along:float=(arm.upper_arm_length*arm.upper_arm_length-arm.forearm_length*arm.forearm_length+length*length)/(2.0*length)
-     var circle:Vector3=shoulder+axis*along
-     var radius:float=sqrt(maxf(0.0,arm.upper_arm_length*arm.upper_arm_length-along*along))
-     var radial:Vector3=preferred-circle;radial-=axis*radial.dot(axis)
-     if radial.length_squared()<.000001:continue
-     radial=radial.normalized()
-     for index in 17:
-      var step:float=ceili(float(index)*.5)*(1.0 if index%2 else -1.0)
-      var elbow:Vector3=circle+radial.rotated(axis,deg_to_rad(step*2.5))*radius
-      var channels:Dictionary=Anatomy.decompose(Anatomy.forearm_reference(shoulder,elbow,wrist,Vector3.UP,true),basis*arm.articulated_hand.anatomical_basis,-1.0)
-      if not channels.within_animation_budget or float(channels.coupled_budget_ratio)>.98:continue
-      var upper:Basis=Basis.looking_at(axis,(elbow-shoulder).normalized())*Basis(Vector3.RIGHT,acos(clampf(along/arm.upper_arm_length,-1.0,1.0)))
-      var elbow_angle:float=PI-acos(clampf((arm.upper_arm_length*arm.upper_arm_length+arm.forearm_length*arm.forearm_length-length*length)/(2.0*arm.upper_arm_length*arm.forearm_length),-1.0,1.0))
-      var fore:Basis=upper*Basis(Vector3.RIGHT,-elbow_angle)
-      if last_upper.get_rotation_quaternion().angle_to(upper.get_rotation_quaternion())>allowed:continue
-      if last_fore.get_rotation_quaternion().angle_to(fore.get_rotation_quaternion())>allowed:continue
-      return true
- return false

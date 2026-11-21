@@ -131,8 +131,6 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 	elif _player.has_meta("elbow_preset_report"):
 		_player.remove_meta("elbow_preset_report")
 	LiveArmBudget.apply(_player, def, _hands)
-	_player.set_meta("carried_cup_report", load("res://scripts/carried_cup_continuity.gd").apply(_player, _hands))
-	_player.set_meta("ready_clearance_hook", load("res://scripts/live_ready_clearance.gd").apply_presented_ready(_player, def))
 	# Drawn elbow (pixel cards, studio, checker): from the elbow the arm ended with (LiveArmBudget may
 	# have re-solved it), turned to the authored swivel and kept outside the torso.
 	if not swivel_record.is_empty():

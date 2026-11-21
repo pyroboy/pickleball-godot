@@ -20,8 +20,8 @@ physics and timing stay locked until a deliberate "Gameplay v2".
 
 1. **Test the pixel cards on a real iPhone** and record a PerfMonitor baseline
    (`python3 tools/perf_report.py`). Nothing on device has been measured yet.
-2. **Expose Classic / Pixel in the Settings panel** (`video.character_style`, already in
-   `scripts/ui/settings.gd`), so playtesters can compare.
+2. ~~Expose Classic / Pixel in the Settings panel~~: dropped 2026-11-21, pixel cards are the only
+   look (classic 3D meshes stay hidden because gameplay reads them).
 3. **Far-court card tier:** bake a 20 degree, half-size card set and pick the tier by distance
    to the camera (far players currently reuse the near set).
 
@@ -101,7 +101,6 @@ Status: done, in progress, next, later.
         changes in the real paddle, smoothed over a frame or two); 0 deg at every contact
   - [ ] Two-handed backhand: the support hand sits 5.5 cm up the handle and can slip off
         at full lag; reduce lag while the support hand grips
-  - [ ] Classic 3D bodies (`video.character_style` = 0) show the skin too? Check
   - [ ] iPhone check (60 fps feel; lag is per frame, so it reads the same at any frame rate)
 
 ### Phase 5: UI (later)
@@ -269,8 +268,8 @@ and `RUN_SLACK` weights are first guesses, not tuned.
 - **Gameplay must stay identical.** Run the seeded bench with and without the change and
   diff the poses; the result must be `IDENTICAL`:
   ```bash
-  PICKLEBALL_CLASSIC_BODIES=1 tools/bench.sh base 30 1
-  tools/bench.sh new 30 1
+  tools/bench.sh base 30 1      # on the commit before the change
+  tools/bench.sh new 30 1       # with the change
   python3 tools/pose_diff.py logs/bench_base.pose.jsonl logs/bench_new.pose.jsonl
   ```
 - **Never add visuals under a player's `BodyPivot`.** Gameplay scans every mesh there

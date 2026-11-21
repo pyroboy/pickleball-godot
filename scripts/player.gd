@@ -689,11 +689,9 @@ func _ai_owns_physics_pose() -> bool:
 var _between_presentation_tick: int = -1
 func present_between_point_physics(owner, pose, delta: float) -> void:
 	if owner == null or pose == null or posture == null or posture.editor_preview_mode: return
-	var admission: Dictionary = owner.prepare_pose_admission(self)
 	posture.transition_pose_blend = pose
 	posture.force_posture_update(pose)
 	owner.present_arm_path(self, pose)
-	owner.finish_pose_admission(self, admission)
 	_between_last_pose = posture.capture_displayed_pose()
 	_between_pose_active = true
 	_between_presentation_tick = Engine.get_physics_frames()

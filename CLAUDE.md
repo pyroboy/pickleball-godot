@@ -6,9 +6,9 @@ are in `docs/ROADMAP.md`. Read it before planning work.
 
 - Entry scene: `scenes/title.tscn` · gameplay: `scripts/game.gd`
 - iOS export settings: `export_presets.cfg` (bundle id `com.arjomagno.arjostylepickleball.ios`)
-- Players render as 2.5D pixel cards by default: `scripts/graphics/pixel_card_rig.gd`,
-  `assets/pixel_cards/`, `shaders/pixel_card.gdshader`. Classic 3D bodies: setting
-  `video.character_style` = 0, or run with `PICKLEBALL_CLASSIC_BODIES=1`.
+- Players render as 2.5D pixel cards (the only look): `scripts/graphics/pixel_card_rig.gd`,
+  `assets/pixel_cards/`, `shaders/pixel_card.gdshader`. The classic 3D meshes stay under
+  `BodyPivot`, hidden, because gameplay reads them (contacts, reach, fingers for hand rules).
 
 ## Working rules
 
