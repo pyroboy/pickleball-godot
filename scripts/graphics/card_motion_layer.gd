@@ -29,10 +29,10 @@ const SPEED_FULL: = 3.0       # m/s: full amplitude
 const STRIDE_REF: = 0.32      # metres of front-back foot split read as a full stride
 const WEIGHT_RATE: = 5.0      # 1/s fade in and out
 const SPEED_HALF_LIFE: = 0.08
-const TAP_TURN_DEG: = 18.0    # chest turn toward the partner for a paddle tap
-const TAP_LEAN_DEG: = 7.0     # lean toward a partner who is farther away (up to 1.7 m)
-const TAP_PADDLE_REACH: = 0.30  # m from the hand to the paddle head centre
-const TAP_PUSH: = 0.015       # m: the tap's push along the reach
+const TAP_TURN_DEG: = 12.0    # chest turn toward the partner for a paddle tap
+const TAP_LEAN_DEG: = 5.0     # lean toward a partner who is farther away (up to 1.7 m)
+const TAP_PADDLE_REACH: = 0.43  # m from the hand to the paddle tip (tips meet)
+const TAP_PUSH: = 0.004       # m: the tap's push along the reach
 const HOLD_EASE: = 0.1        # s to switch an arm between free and on the paddle
 const HOLD_DIST: = 0.14       # m: a hand this close to the paddle shaft / throat holds it
 const STAND_EASE: = 0.35      # s to rise / sink
@@ -361,7 +361,7 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	var aim: = Transform3D.IDENTITY
 	var shoulder: Vector3 = turn * _plain(paddle_arm.upper_pivot)
 	var hand: Vector3 = turn * _plain(paddle_arm.hand_pivot)
-	# The hand stops a paddle short of the meeting point, so the paddle heads meet there.
+	# The hand stops a paddle short of the meeting point, so only the paddle tips meet there.
 	var meet: Vector3 = Vector3(tap.target)
 	var to_meet: Vector3 = meet - shoulder
 	var hand_goal: Vector3 = meet - to_meet.normalized() * TAP_PADDLE_REACH if to_meet.length() > TAP_PADDLE_REACH + 0.05 else shoulder + to_meet * 0.5
