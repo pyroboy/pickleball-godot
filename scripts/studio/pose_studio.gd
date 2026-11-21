@@ -19,6 +19,7 @@ signal handle_tapped(id)
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
+const SpeedRamp = preload("res://scripts/stroke_speed_ramp.gd")
 const Store = preload("res://scripts/mobile_pose_store.gd")
 const ViewSettings = preload("res://scripts/mobile_pose_view_settings.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
@@ -63,7 +64,7 @@ const COL_STARS := 4
 ## Copy of GAMEPLAY in tools/pose_check.py (fields gameplay reads beyond the look); keep in sync.
 const GAMEPLAY_FIELDS := ["paddle_forehand_mul", "paddle_forward_mul", "paddle_y_offset", "has_zone", "zone_x_min",
 	"zone_x_max", "zone_y_min", "zone_y_max", "zone_forward_offset", "paddle_floor_clearance",
-	"charge_duration", "ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "speed_strike_start", "speed_strike_end"]
+	"charge_duration", "ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "speed_strike_start", "speed_strike_end", "speed_strike_points"]
 ## Paddle face at Contact: the contact quality reads it, so the Gameplay edit lock covers it too.
 const FACE_FIELDS := ["paddle_pitch_base_deg", "paddle_yaw_base_deg", "paddle_roll_base_deg", "paddle_in_hand_rotation_deg",
 	"paddle_pitch_signed_deg", "paddle_yaw_signed_deg", "paddle_roll_signed_deg",
@@ -1229,6 +1230,30 @@ func set_path_keys(keys: Array, refresh := true) -> Dictionary:
 	if own: end_edit()
 	else: _after_change(true)
 	return {"ok": true, "keys": path_keys().size()}
+
+## Speed points of one motion part (stroke_speed_ramp.gd): [(time fraction, speed, 0)], at most
+## 4, x kept inside 0.02..0.98, speed 0..3. One undo step unless a drag's begin_edit is open.
+func set_speed_points(part: int, pts, refresh := true) -> Dictionary:
+	if not path_keys_supported(): return {"ok": false, "error": "speed points: strokes only"}
+	var field: String = SpeedRamp.POINTS[part]
+	if gameplay_locked(field):
+		_set_status("Locked: the strike's speed is gameplay timing. Turn on Gameplay edit (top bar) to change it.")
+		return {"ok": false, "error": "gameplay field locked: " + field, "locked": true}
+	var out := PackedVector3Array()
+	for p in pts:
+		if out.size() >= SpeedRamp.MAX_POINTS: break
+		var v := Vector3(p[0], p[1], 0.0) if p is Array else Vector3(p.x, p.y, 0.0)
+		out.append(Vector3(clampf(v.x, 0.02, 0.98), clampf(v.y, 0.0, SpeedRamp.MAX_SPEED), 0.0))
+	var own := _txn == null
+	if own: begin_edit("speed points")
+	var prev_group: int = engine._group.selected
+	engine._group.select(5)
+	engine._changed(field, out, refresh)
+	engine._group.select(prev_group)
+	selected_field = field
+	if own: end_edit()
+	else: _after_change(true)
+	return {"ok": true, "points": out.size()}
 
 ## Not engine._ghost_count_changed: that writes user:// view settings.
 func set_ghost_count(n: int) -> void:

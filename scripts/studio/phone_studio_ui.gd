@@ -80,6 +80,7 @@ var _swing: VBoxContainer     # swing sheet (replaces the lower third): curve, s
 var _curve_btns: Array[Button] = []
 var _speed: VBoxContainer       # speed sheet (replaces the lower third): the speed ramp graph
 var _speed_graph                # its graph (studio_speed_graph.gd, finger-sized)
+var _speed_del: Button          # Delete point (shown while a speed point is selected)
 var _swing_info: Label
 var _path_info: Label
 var _path_del: Button
@@ -565,15 +566,18 @@ func _build_speed(sheet: VBoxContainer) -> void:
 	var t := _label("Speed ramp", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; head.add_child(t)
 	var rs := _btn("Reset", func(): _speed_graph.reset_all(); _show_toast("Speed back to the authored ease"), 130, 64)
 	rs.name = "SpeedReset"; rs.add_theme_font_size_override("font_size", SMALL); head.add_child(rs)
+	_speed_del = _btn("Delete point", func(): if _speed_graph.delete_selected(): _show_toast("Speed point deleted"), 210, 64)
+	_speed_del.name = "SpeedDeletePoint"; _speed_del.add_theme_font_size_override("font_size", SMALL); _speed_del.visible = false; head.add_child(_speed_del)
 	head.add_child(_btn("Swing", func(): _open_sheet("swing"), 130, 64))
 	head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
-	var how := _label("Drag a diamond up = faster there, down = slower. Strike speed is gameplay: change it in the desktop studio. Faint line = real paddle m/s.", SMALL, Ui.MUTED)
+	var how := _label("Drag a diamond up = faster, down = slower. Tap empty graph to add a speed point (up to 4 per part), drag it anywhere. Strike speed: desktop studio. Faint line = real paddle m/s.", SMALL, Ui.MUTED)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
 	_speed_graph = SpeedGraph.new(); _speed_graph.name = "PhoneSpeedGraph"; _speed_graph.studio = studio
 	_speed_graph.set_scale_k(2.2); _speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_speed_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike speed is gameplay timing: change it in the desktop studio"))
 	v.add_child(_speed_graph)
+	_speed_graph.selection_changed.connect(func(): _speed_del.visible = _speed_graph.selected.x >= 0)
 
 func _set_curve(value: float) -> void:
 	var r: Dictionary = studio.set_swing_curve(value)

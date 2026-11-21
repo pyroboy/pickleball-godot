@@ -58,6 +58,7 @@ const STROKE_FIELDS := [
 	"ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak",
 	"paddle_path_times", "paddle_path_offsets", "ready_path_times", "ready_path_offsets",
 	"speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end",
+	"speed_lead_points", "speed_strike_points", "speed_finish_points",
 	"windup_body", "follow_through_body", "charge_duration",
 ]
 const BASE_FIELDS := [
@@ -381,7 +382,7 @@ static func _valid_fields(fields, is_base: bool, nested: bool = false) -> bool:
 		for additive in ["right_foot_pitch_deg", "left_foot_pitch_deg"]:
 			if not fields.has(additive): required.erase(additive)
 		if not is_base:
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points"]:
 				if not fields.has(additive): required.erase(additive)
 		if fields.size() != required.size() or not fields.has_all(required): return false
 	var template: Resource = BasePose.new() if is_base else Posture.new()
@@ -467,6 +468,8 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 		def.ready_path_times = PackedFloat32Array(); def.ready_path_offsets = PackedVector3Array()
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("speed_lead_start"):
 		for f in ["speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end"]: def.set(f, -1.0)
+	if def.get_script() == Posture and not fields.is_empty() and not fields.has("speed_lead_points"):
+		for f in ["speed_lead_points", "speed_strike_points", "speed_finish_points"]: def.set(f, PackedVector3Array())
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("ready_curve_bow"):
 		def.ready_curve_auto = 1.0; def.ready_curve_bow = 0.0; def.ready_curve_round = 0.5; def.ready_curve_dir_deg = 0.0; def.ready_curve_peak = 0.5
 	for field in fields:
@@ -486,7 +489,7 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 static func _decode_value(field: String, value):
 	if field == "elbow_preset_bake": return value.duplicate(true)
 	if field in ["paddle_path_times", "ready_path_times"]: return PackedFloat32Array(value)
-	if field in ["right_elbow_path", "left_elbow_path", "paddle_path_offsets", "ready_path_offsets"]:
+	if field in ["right_elbow_path", "left_elbow_path", "paddle_path_offsets", "ready_path_offsets", "speed_lead_points", "speed_strike_points", "speed_finish_points"]:
 		var path := PackedVector3Array()
 		for point in value:
 			path.append(Vector3(point[0], point[1], point[2]))
@@ -524,7 +527,7 @@ static func _prepare_approved_pose_imports(document: Dictionary, include_absent:
 			var payload: Dictionary = JSON.parse_string(approved.JSON_TEXT)
 			var fields: Dictionary = approved.applied_fields() if approved.has_method("applied_fields") else payload.fields.duplicate(true)
 			var defaults := _encode_fields(_export_packaged_default(int(id), false))
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points"]:
 				if not fields.has(additive): fields[additive] = previous.get(additive, defaults[additive])
 			for stage in ["windup_body", "follow_through_body"]:
 				# Sparse legacy keys are intentional: absence inherits Contact. Only

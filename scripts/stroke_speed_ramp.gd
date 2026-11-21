@@ -8,10 +8,17 @@ extends RefCounted
 ## average speed, 0 = at rest). Both -1 (the default) = the authored ease, unchanged: lead-in
 ## smoothstep, strike / finish the ft_ease_curve tween (the human strike is linear).
 ## Custom = cubic Hermite timing curve; ends in 0..3 keep it monotone (never runs backwards).
+## Speed points (speed_<part>_points, up to MAX_POINTS of (x, speed, 0), x = time fraction inside
+## the part): with any, the speed is a smooth monotone curve through the start, the points and
+## the end (never below 0), scaled so the part still ends exactly on its key in its duration.
+## The graph shows and edits the real (scaled) speeds.
 enum { LEAD, STRIKE, FINISH }
 const FIELDS := [["speed_lead_start", "speed_lead_end"], ["speed_strike_start", "speed_strike_end"], ["speed_finish_start", "speed_finish_end"]]
 const NAMES := ["Ready → Wind-up", "Strike", "Follow-through"]
+const POINTS := ["speed_lead_points", "speed_strike_points", "speed_finish_points"]
 const MAX_SPEED := 3.0
+const MAX_POINTS := 4
+const STEPS := 64             # integration samples for a part with speed points
 
 static func custom(def, part: int) -> bool:
 	return def != null and float(def.get(FIELDS[part][0])) >= 0.0 and float(def.get(FIELDS[part][1])) >= 0.0
@@ -26,13 +33,78 @@ static func hermite(x: float, s0: float, s1: float) -> float:
 ## Lead-in blend progress (0..1) at fraction x of the Ready -> Wind-up time.
 static func lead(def, x: float) -> float:
 	if not custom(def, LEAD): return smoothstep(0.0, 1.0, x)
+	if has_points(def, LEAD): return _integrated(def, LEAD, x)
 	var e := ends(def, LEAD)
 	return hermite(x, e.x, e.y)
+
+static func points(def, part: int) -> PackedVector3Array:
+	var v = def.get(POINTS[part]) if def != null else null
+	return v if v is PackedVector3Array else PackedVector3Array()
+
+static func has_points(def, part: int) -> bool:
+	return custom(def, part) and points(def, part).size() > 0
+
+## [[x, speed], ...] from start to end (x sorted, points kept inside 0.02..0.98).
+static func keys(def, part: int) -> Array:
+	var e := ends(def, part)
+	var out: Array = [[0.0, e.x]]
+	var mid: Array = []
+	for p in points(def, part).slice(0, MAX_POINTS): mid.append([clampf(p.x, 0.02, 0.98), clampf(p.y, 0.0, MAX_SPEED)])
+	mid.sort_custom(func(a, b): return a[0] < b[0])
+	out.append_array(mid); out.append([1.0, e.y])
+	return out
+
+## Monotone cubic (Fritsch-Carlson) through the keys: never overshoots, so never below 0.
+static func spline(k: Array, x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	var n := k.size()
+	var i := 0
+	while i < n - 2 and t > k[i + 1][0]: i += 1
+	var d := func(j: int) -> float: return (k[j + 1][1] - k[j][1]) / maxf(k[j + 1][0] - k[j][0], 0.0001)
+	var tan := func(j: int) -> float:
+		if j == 0: return d.call(0)
+		if j == n - 1: return d.call(n - 2)
+		var a: float = d.call(j - 1); var b: float = d.call(j)
+		if a * b <= 0.0: return 0.0
+		return 3.0 * (k[j + 1][0] - k[j - 1][0]) / ((2.0 * k[j + 1][0] - k[j][0] - k[j - 1][0]) / a + (k[j + 1][0] + k[j][0] - 2.0 * k[j - 1][0]) / b)
+	var h: float = maxf(k[i + 1][0] - k[i][0], 0.0001)
+	var s: float = clampf((t - k[i][0]) / h, 0.0, 1.0)
+	var m0: float = tan.call(i) * h; var m1: float = tan.call(i + 1) * h
+	var y0: float = k[i][1]; var y1: float = k[i + 1][1]
+	return maxf(0.0, (2*s*s*s - 3*s*s + 1) * y0 + (s*s*s - 2*s*s + s) * m0 + (-2*s*s*s + 3*s*s) * y1 + (s*s*s - s*s) * m1)
+
+## Progress of a part with speed points: the running integral of its speed curve, scaled to 1.
+static func _integrated(def, part: int, x: float) -> float:
+	var k := keys(def, part)
+	var t: float = clampf(x, 0.0, 1.0)
+	var total := 0.0; var upto := 0.0
+	var prev: float = spline(k, 0.0)
+	for i in STEPS:
+		var b: float = float(i + 1) / STEPS
+		var cur: float = spline(k, b)
+		var area: float = (prev + cur) * 0.5 / STEPS
+		if b <= t: upto += area
+		elif float(i) / STEPS < t: upto += (prev + lerpf(prev, cur, (t - float(i) / STEPS) * STEPS)) * 0.5 * (t - float(i) / STEPS)
+		total += area; prev = cur
+	if total <= 0.000001: return t
+	return clampf(upto / total, 0.0, 1.0)
+
+## Mean of the raw speed curve (what the raw keys are divided by): real speed = raw / mean.
+static func mean(def, part: int) -> float:
+	if not has_points(def, part): return 1.0
+	return mean_of(keys(def, part))
+
+static func mean_of(k: Array) -> float:
+	var total := 0.0; var prev: float = spline(k, 0.0)
+	for i in STEPS:
+		var cur: float = spline(k, float(i + 1) / STEPS); total += (prev + cur) * 0.5 / STEPS; prev = cur
+	return maxf(total, 0.000001)
 
 ## Normalized (0..1) progress of a part at time fraction x, authored ease when not custom.
 ## `linear_strike`: the human strike's authored timing is linear.
 static func normalized(def, part: int, x: float, linear_strike := false) -> float:
 	if custom(def, part):
+		if has_points(def, part): return _integrated(def, part, x)
 		var e := ends(def, part)
 		return hermite(x, e.x, e.y)
 	if part == LEAD: return smoothstep(0.0, 1.0, x)
@@ -47,6 +119,7 @@ static func easing(def) -> Tween.EaseType:
 
 ## Relative speed (d progress / d time, 1 = average) of a part at x, for the graph.
 static func speed(def, part: int, x: float) -> float:
+	if has_points(def, part): return spline(keys(def, part), x) / mean(def, part)
 	var h := 0.002
 	var a: float = clampf(x - h, 0.0, 1.0); var b: float = clampf(x + h, 0.0, 1.0)
 	return (normalized(def, part, b) - normalized(def, part, a)) / maxf(b - a, 0.000001)

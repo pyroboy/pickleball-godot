@@ -197,6 +197,10 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export_range(-1.0, 3.0) var speed_strike_end: float = -1.0
 @export_range(-1.0, 3.0) var speed_finish_start: float = -1.0
 @export_range(-1.0, 3.0) var speed_finish_end: float = -1.0
+## Speed points inside each part: (time fraction, speed, 0), up to 4 (stroke_speed_ramp.gd).
+@export var speed_lead_points: PackedVector3Array = PackedVector3Array()
+@export var speed_strike_points: PackedVector3Array = PackedVector3Array()
+@export var speed_finish_points: PackedVector3Array = PackedVector3Array()
 @export var windup_body: Resource
 @export var follow_through_body: Resource
 @export var charge_duration: float = 0.3
@@ -364,6 +368,9 @@ func lerp_with(other, w: float):
 	o.speed_strike_end = speed_strike_end if t < 0.5 else other.speed_strike_end
 	o.speed_finish_start = speed_finish_start if t < 0.5 else other.speed_finish_start
 	o.speed_finish_end = speed_finish_end if t < 0.5 else other.speed_finish_end
+	o.speed_lead_points = (speed_lead_points if t < 0.5 else other.speed_lead_points).duplicate()
+	o.speed_strike_points = (speed_strike_points if t < 0.5 else other.speed_strike_points).duplicate()
+	o.speed_finish_points = (speed_finish_points if t < 0.5 else other.speed_finish_points).duplicate()
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)

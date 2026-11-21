@@ -23,7 +23,7 @@ BODY = ["stance_width", "front_foot_forward", "back_foot_back", "crouch_amount",
 TIMING = ["charge_duration", "ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold"]
 STORY = ["weight_shift", "hip_yaw_deg", "torso_yaw_deg"]
 GAMEPLAY = ["paddle_forehand_mul", "paddle_forward_mul", "paddle_y_offset", "has_zone", "zone_x_min", "zone_x_max",
-            "zone_y_min", "zone_y_max", "zone_forward_offset", "paddle_floor_clearance", "speed_strike_start", "speed_strike_end"] + TIMING
+            "zone_y_min", "zone_y_max", "zone_forward_offset", "paddle_floor_clearance", "speed_strike_start", "speed_strike_end", "speed_strike_points"] + TIMING
 HOLDS = {"s08", "s09", "s20"}            # charge and ready poses: held, not swung
 OVERHEADS = {"s03", "s04"}
 JUMPS = {"b15", "b16"}
