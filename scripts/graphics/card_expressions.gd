@@ -15,7 +15,13 @@ class_name CardExpressions
 ##   fatigue      stamina below full speed
 ## Expressions crossfade over BLEND s and fade with travel speed. Channels as card_reactions.gd,
 ## plus look (head turn, deg, + = toward the forehand side) and shrug (shoulders and head up, m).
+##
+## Not in lockstep (CardProfile): each player notices a change after their own delay, so the shown
+## context lags the real one. Into idle: winners first, the one who erred a beat later. Into
+## waiting: the server first, the receiving team next, the server's partner last. Into live: at
+## once. Loops run at the player's own tempo and phase.
 
+const CardProfileScript = preload("res://scripts/graphics/card_profile.gd")
 const BLEND: = 0.45
 const MOOD_ON: = 0.35
 const CHANNELS: = ["arm", "elbow", "torso", "head", "bob", "spin", "look", "shrug"]
@@ -33,9 +39,17 @@ var _w: Dictionary = {}       # expression -> blend weight
 var _t: = 0.0
 var _forced: = ""             # bench / studio: show this one regardless of context and mood
 var _target: = ""
+var profile   # CardProfile
+var _shown_ctx: = "idle"      # the context this player has reacted to (lags the real one)
+var _pending_ctx: = ""
+var _pending_t: = 0.0
+var _last_won: = true
+var _last_erred: = false
 
 func _init(player) -> void:
 	_player = player
+	profile = CardProfileScript.new(int(player.get_actor_id()) if player.has_method("get_actor_id") else 0)
+	_t = profile.phase
 
 func _connect() -> void:
 	if _connected: return
@@ -50,6 +64,8 @@ func _on_rally_ended(winner: int, _r: String, _d: String) -> void:
 	var won: bool = int(_player.get_team_id()) == winner
 	var ball = _game.get("ball")
 	var erred: bool = not won and ball != null and int(ball.get("last_hit_actor_id")) == int(_player.get_actor_id())
+	_last_won = won
+	_last_erred = erred
 	if won:
 		_streak += 1
 		frustration *= 0.55
@@ -93,9 +109,40 @@ func _context() -> String:
 		return "waiting"
 	return "idle"
 
+## The context this player shows: the real one after this player's own delay (live at once).
+func shown_context() -> String:
+	return _shown_ctx
+
+func _update_shown(delta: float) -> void:
+	var raw: = _context()
+	if raw == "live" or _game == null:
+		_shown_ctx = raw
+		_pending_ctx = ""
+		return
+	if raw == _shown_ctx:
+		_pending_ctx = ""
+		return
+	if raw != _pending_ctx:
+		_pending_ctx = raw
+		_pending_t = maxf(0.0, _delay_for(raw) + profile.jitter())
+	_pending_t -= delta
+	if _pending_t <= 0.0:
+		_shown_ctx = raw
+		_pending_ctx = ""
+
+func _delay_for(ctx: String) -> float:
+	if ctx == "idle":
+		return profile.notice + (0.0 if _last_won else (0.6 if _last_erred else 0.25))
+	# waiting: who has the serve
+	var srv = _game.get_server_actor() if _game.has_method("get_server_actor") else null
+	if srv == null or not is_instance_valid(srv): return profile.notice
+	if srv == _player: return profile.notice * 0.5
+	if int(srv.get_team_id()) == int(_player.get_team_id()): return profile.notice + 0.35
+	return profile.notice + 0.15
+
 func _pick() -> String:
 	if _forced != "": return _forced
-	var ctx: = _context()
+	var ctx: = _shown_ctx
 	var ten: = tension()
 	var tired: = fatigue()
 	match ctx:
@@ -119,7 +166,8 @@ func _pick() -> String:
 ## Returns channel -> value ({} when nothing shows).
 func update(delta: float, amount: float) -> Dictionary:
 	_connect()
-	_t += delta
+	_t += delta * profile.tempo
+	_update_shown(delta)
 	_target = _pick()
 	for n in NAMES:
 		var goal: float = 1.0 if n == _target else 0.0

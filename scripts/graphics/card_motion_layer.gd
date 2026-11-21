@@ -61,7 +61,8 @@ var _tap = null               # CardPartnerTap: partner paddle tap between point
 var _tapping: = false
 var _expressions = null       # CardExpressions: idle / ready moods while standing
 var _expr_amount: = 0.0
-var _stand_w: = 0.0           # 0 athletic crouch .. 1 standing straight (between points)
+var _stand_w: = 0.0           # 0 athletic crouch .. 1 standing straight (between points), eased
+var _stand_p: = 0.0           # linear progress behind _stand_w
 var stand_raise: = 0.0        # m the body is lifted this frame (bench)
 var _free: Dictionary = {}    # arm -> 1 free .. 0 on the paddle (eased)
 var last_channels: Dictionary = {}   # reaction / expression channels applied this frame (bench)
@@ -408,10 +409,16 @@ func _stand_straight(delta: float, swinging: bool) -> void:
 	stand_raise = 0.0
 	var player = _rig._player
 	var want: = 0.0
-	if enabled() and not _rig._raw and not swinging and _expressions != null and _expressions._context() == "idle" \
+	if enabled() and not _rig._raw and not swinging and _expressions != null and _expressions.shown_context() == "idle" \
 			and not (_tap != null and _tap._hands_busy(player)):
 		want = 1.0 - smoothstep(0.3, 1.0, _speed)
-	_stand_w = move_toward(_stand_w, want, delta / STAND_EASE) if delta > 0.0 else want
+	# This player's own speed (CardProfile), eased in and out rather than linear.
+	var ease: float = STAND_EASE
+	if _expressions != null:
+		ease = _expressions.profile.rise_ease if want > _stand_p else _expressions.profile.sink_ease
+		if _expressions._context() == "live": ease = minf(ease, 0.15)   # the rally started: no lag
+	_stand_p = move_toward(_stand_p, want, delta / ease) if delta > 0.0 else want
+	_stand_w = smoothstep(0.0, 1.0, _stand_p)
 	if _stand_w <= 1e-3: return
 	var legs: Array = []
 	for name in ["right_leg_node", "left_leg_node"]:
