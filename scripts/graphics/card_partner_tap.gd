@@ -34,23 +34,21 @@ func _hands_busy(p) -> bool:
 	return idx >= 0 and (idx == int(bpc.get("retriever")) or idx == int(bpc.get("server")))
 
 ## Advance. `stop_reaction(p)` ends a player's card reaction when the tap starts.
-## Returns {} or {"turn": 0..1 face-the-partner weight, "w": 0..1 reach weight, "nudge": 0..1, "target": Vector3, "partner": player}.
+## Returns {} or {"turn": 0..1 face-the-partner weight, "w": 0..1 reach weight, "nudge": 0..1, "target": Vector3, "partner": player,
+## "turn_deg": the most this player turns (the busy partner turns less), "hip_share": how much of it the hips take (-1: the usual), "busy"}.
 func update(_delta: float, stop_reaction: Callable) -> Dictionary:
 	if _game == null: _game = _player.get_parent()
 	if _game == null: return {}
 	var bpc = _game.get("between_point_controller")
-	var t: float = float(bpc.tap_clock_for(_player)) if bpc != null and is_instance_valid(bpc) and bpc.has_method("tap_clock_for") else -1.0
-	var partner = bpc.tap_partner_of(_player) if t >= 0.0 else null
-	if t < 0.0 or t >= DONE or partner == null:
+	var tap: Dictionary = bpc.tap_for(_player) if bpc != null and is_instance_valid(bpc) and bpc.has_method("tap_for") else {}
+	if tap.is_empty() or float(tap.t) >= DONE:
 		_t = -1.0
 		return {}
 	if _t < 0.0: stop_reaction.call(_player)
-	_t = t
+	_t = float(tap.t)
 	# Turn first, then reach; going back the paddle comes down before the body turns away.
 	var back_mid: float = lerpf(HOLD, DONE, 0.55)
 	var turn: float = smoothstep(0.0, TURN, _t) * (1.0 - smoothstep(back_mid - 0.1, DONE, _t))
 	var w: float = smoothstep(TURN * 0.6, REACH, _t) * (1.0 - smoothstep(HOLD, back_mid, _t))
 	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.07)
-	var target: Vector3 = bpc.tap_meet
-	target.y += float(bpc.TAP_HEIGHT)   # above the floor
-	return {"turn": turn, "w": w, "nudge": nudge, "target": target, "partner": partner}
+	return {"turn": turn, "w": w, "nudge": nudge, "target": tap.target, "partner": tap.partner, "turn_deg": tap.turn_deg, "hip_share": tap.hip_share, "busy": tap.busy}

@@ -347,7 +347,9 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	to_p.y = 0.0
 	if fwd.length_squared() < 1e-6 or to_p.length_squared() < 1e-6: return
 	# First the chest (and partly the hips) turn to face the partner, then the paddle hand reaches.
-	var yaw: float = clampf(fwd.normalized().signed_angle_to(to_p.normalized(), Vector3.UP), -deg_to_rad(TAP_TURN_DEG), deg_to_rad(TAP_TURN_DEG)) * tw
+	var need: float = fwd.normalized().signed_angle_to(to_p.normalized(), Vector3.UP)
+	var limit: float = deg_to_rad(float(tap.turn_deg) if float(tap.get("turn_deg", -1.0)) > 0.0 else TAP_TURN_DEG)
+	var yaw: float = clampf(need, -limit, limit) * tw
 	var hips: Node3D = body.get_node_or_null("HipsMesh")
 	var hip_p: Vector3 = _plain(hips if hips else body)
 	var turn: = _turn_about(hip_p, Vector3.UP, yaw)
@@ -362,7 +364,8 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 		if n == null: return
 		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
 	add.call(torso, turn)
-	if hips != null: add.call(hips, _turn_about(hip_p, Vector3.UP, yaw * TAP_HIP_SHARE))
+	var hip_share: float = float(tap.hip_share) if float(tap.get("hip_share", -1.0)) > 0.0 else TAP_HIP_SHARE
+	if hips != null: add.call(hips, _turn_about(hip_p, Vector3.UP, yaw * hip_share))
 	var head: Node3D = torso.get_node_or_null("HeadMesh")
 	if head != null: add.call(head, turn)
 	var aim: = Transform3D.IDENTITY
@@ -413,7 +416,7 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 				_tap_noted = true
 				var tip: Vector3 = _paddle_aim * hd * (pxf * Vector3(0, preload("res://scripts/paddle_dimensions.gd").LENGTH, 0))
 				PerfMonitor.note("partner_tap", {"step": "reach", "tip_gap": tip.distance_to(Vector3(tap.target)), "tip_height": tip.y - PickleballConstants.FLOOR_Y,
-					"hand_height": (hd * _plain(paddle_arm.hand_pivot)).y - PickleballConstants.FLOOR_Y, "shoulder_height": shoulder.y - PickleballConstants.FLOOR_Y, "arm": from.length(), "shoulder_to_meet": to_meet.length(), "w": w})
+					"hand_height": (hd * _plain(paddle_arm.hand_pivot)).y - PickleballConstants.FLOOR_Y, "shoulder_height": shoulder.y - PickleballConstants.FLOOR_Y, "need_deg": rad_to_deg(need), "turn_deg": rad_to_deg(yaw), "busy": bool(tap.get("busy", false))})
 
 # ------------------------------------------------------------------ stand straight between points
 
