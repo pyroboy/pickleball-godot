@@ -186,28 +186,6 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 
 var _variant_cache: Resource = null
 
-func has_backhand_face_variant() -> bool:
-	return not backhand_face_variant.is_empty()
-
-## This pose with the backhand-face overrides applied (cached; self when there is none).
-## Unknown field names are skipped with a warning so a typo cannot silently change play.
-func backhand_face_def() -> Resource:
-	if backhand_face_variant.is_empty(): return self
-	if _variant_cache != null: return _variant_cache
-	var o: Resource = duplicate(true)
-	o.backhand_face_variant = {}
-	var known: Dictionary = {}
-	for p in get_property_list(): known[p.name] = true
-	for key in backhand_face_variant:
-		if not known.has(str(key)):
-			push_warning("PostureDefinition %d: unknown variant field %s" % [posture_id, key])
-			continue
-		var v: Variant = backhand_face_variant[key]
-		o.set(str(key), v.duplicate(true) if v is Resource else v)
-	_variant_cache = o
-	return o
-
-
 @export_group("Metadata")
 @export var schema_version: int = 1
 @export_multiline var notes: String = ""

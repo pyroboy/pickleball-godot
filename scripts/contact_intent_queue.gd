@@ -88,9 +88,6 @@ func finish_claim(token: int, generation: int) -> bool:
 			return true
 	return false
 
-func pending_count() -> int:
-	return _offers.size()
-
 static func _primitive(value: Variant, depth: int = 0) -> bool:
 	return _bounded_finite(value, depth, [2048])
 

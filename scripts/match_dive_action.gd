@@ -9,7 +9,6 @@ const Grounded = preload("res://scripts/match_grounded_reach.gd")
 const RigSurfaces = preload("res://scripts/player_surface_contacts.gd")
 const BodyProfile = preload("res://scripts/body_surface_profile.gd")
 const BodyDimensions = preload("res://scripts/player_body_dimensions.gd")
-const BodyClearance = preload("res://scripts/body_clearance.gd")
 const Planner = preload("res://scripts/incoming_contact_planner.gd")
 const Hands = preload("res://scripts/player_hand_presentation.gd")
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
@@ -682,18 +681,6 @@ func _update_arm_geometry() -> void:
 	# conservative than the former sampled convex-hull margin checks.
 	_arm_geometry = {"boxes": cells, "frame_source": "displayed_skin_local_slice_bounds"}
 
-func _arm_clear(shoulder: Vector3, elbow: Vector3, wrist: Vector3) -> bool:
-	if minf(elbow.y - 0.045, wrist.y - 0.025) < PickleballConstants.FLOOR_Y - 0.0001: return false
-	return _segment_clear(shoulder, elbow, 0.045, 0.12) and _segment_clear(elbow, wrist, 0.035, 0.0)
-
-func _segment_clear(a: Vector3, b: Vector3, radius: float, exclude_start: float) -> bool:
-	var begin := _body_inverse * a.lerp(b, clampf(exclude_start / maxf(a.distance_to(b), 0.00001), 0.0, 1.0))
-	var finish := _body_inverse * b
-	for cell: AABB in _arm_geometry.boxes:
-		var bounds := cell.grow(radius)
-		if bounds.has_point(begin) or bounds.has_point(finish) or bounds.intersects_segment(begin, finish): return false
-	return true
-
 func _solve_arm_ik(arm, target: Vector3, pole: Vector3, mount, wrist: Vector3) -> void:
 	# Godot look_at preserves basis scale. Thousands of transactional IK
 	# probes must not accumulate floating-point scale in a physical link.
@@ -911,12 +898,6 @@ func _rig_floor() -> Dictionary:
 		if RigSurfaces.posed_bounds(mesh.mesh, mesh.global_transform, palette).position.y >= float(result.minimum): continue
 		var minimum := _mesh_floor(mesh, palette)
 		if minimum < float(result.minimum): result = {"minimum": minimum, "part": String(mesh.name)}
-	return result
-
-func _lower_floor() -> float:
-	var result := _core_floor()
-	for leg in [actor.right_leg_node, actor.left_leg_node]:
-		for mesh in [leg.thigh_mesh, leg.shin_mesh]: result = minf(result, _mesh_floor(mesh, RigSurfaces._skin_palette(mesh)))
 	return result
 
 func _apply_feet(motion: Dictionary, direction: Vector3, probing: bool) -> bool:

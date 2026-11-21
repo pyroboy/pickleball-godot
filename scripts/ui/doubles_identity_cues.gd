@@ -1,6 +1,5 @@
 extends Node3D
 ## Small ground-level identity cues, without collision or contact authority.
-const Layout=preload("res://scripts/ui/mobile_layout.gd")
 var game
 var rows:Array=[]
 func setup(owner)->void:

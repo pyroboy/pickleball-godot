@@ -1143,12 +1143,6 @@ func _perf_update_leg_ik(delta: float, def_override = null) -> void:
 	_player._draw_step_debug(right_step_target, left_step_target, right_step_origin, left_step_origin, right_foot_was_swing, left_foot_was_swing)
 
 
-func _apply_foot_lock(animated_pos: Vector3, is_swing: bool, was_swing: bool, locked: bool, lock_pos: Vector3, _delta: float) -> Array:
-	if is_swing: return [animated_pos, false, lock_pos]
-	if was_swing: return [animated_pos, true, animated_pos]
-	if locked: return [lock_pos, true, lock_pos]
-	return [animated_pos, false, lock_pos]
-
 func foot_pitch_report(right: bool) -> Dictionary:
 	var side := 0 if right else 1
 	return _foot_pitch_reports[side].duplicate() if not _foot_pitch_reports[side].is_empty() else {"requested": 0.0, "applied": 0.0, "limited": false, "grounded": true, "procedural": 0.0}

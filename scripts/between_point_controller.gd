@@ -3,7 +3,6 @@ extends Node
 
 const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
-const Geometry = preload("res://scripts/paddle_clearance.gd")
 const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
 # Ball pickup / throw keys authored in the Pose Studio (data/ball_actions): timing + key deltas.
 const Actions = preload("res://scripts/ball_actions.gd")

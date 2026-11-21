@@ -71,48 +71,6 @@ const GRID_EM_MULT_MAX: float = 1.2
 
 
 
-static func ghost_base_albedo(paddle_color: Color, is_charge: bool) -> Color:
-	if is_charge:
-		return Color(
-			paddle_color.r * 0.5, 
-			paddle_color.g * 0.5, 
-			paddle_color.b * 0.5, 
-			_PostureConstants.POSTURE_GHOST_ALPHA * 1.5, 
-		)
-	return Color(
-		paddle_color.r, 
-		paddle_color.g, 
-		paddle_color.b, 
-		_PostureConstants.POSTURE_GHOST_ALPHA, 
-	)
-
-
-
-
-
-static func ghost_base_emission(paddle_color: Color, is_charge: bool) -> Color:
-	if is_charge:
-		return Color(
-			paddle_color.r * 0.4 + 0.1, 
-			paddle_color.g * 0.4 + 0.1, 
-			paddle_color.b * 0.4 + 0.1, 
-			1.0, 
-		)
-	return Color(
-		paddle_color.r * 0.7 + 0.2, 
-		paddle_color.g * 0.7 + 0.2, 
-		paddle_color.b * 0.7 + 0.2, 
-		1.0, 
-	)
-
-
-
-static func ghost_base_em_mult(is_charge: bool) -> float:
-	return 0.08 if is_charge else 0.12
-
-
-
-
 static func stage_colors(stage: int) -> Dictionary:
 	match stage:
 		2:

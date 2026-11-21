@@ -3,7 +3,6 @@ extends Node
 const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
 const _Flight = preload("res://scripts/ball_flight_predictor.gd")
-const Accuracy = preload("res://scripts/shot_accuracy.gd")
 const ServeStyles = preload("res://scripts/serve_style.gd")
 
 
@@ -184,15 +183,6 @@ func get_arc_label() -> String:
 
 
 
-func apply_arc_intent_to_impulse(shot_impulse: Vector3) -> Vector3:
-	if is_zero_approx(_trajectory_arc_offset):
-		return shot_impulse
-	var adjusted_impulse: Vector3 = shot_impulse
-	adjusted_impulse.y += _trajectory_arc_offset * 3.6
-	return adjusted_impulse
-
-
-
 func _create_visuals() -> void :
 	if not RuntimePolicy.developer_tools:
 		_create_landing_cursor()
@@ -237,39 +227,6 @@ func _create_visuals() -> void :
 
 
 
-func _update_red_target_marker() -> void :
-	if target_marker == null or _game == null:
-		return
-
-	var score_right: int = _game.score_right
-	var total_score: int = score_right
-	var serve_from_right: bool = (total_score % 2) == 0
-	var target_x: float
-
-	if serve_from_right:
-
-		target_x = maxf(_serve_aim_offset_x, 1.5)
-	else:
-
-		target_x = minf(_serve_aim_offset_x, -1.5)
-
-
-	target_marker.global_position = Vector3(target_x, 0.1, 4.6)
-	target_marker.visible = true
-
-
-
-
-func _get_serve_launch_position(is_red_side: bool, _player_pos: Vector3) -> Vector3:
-	return _game.game_serve.get_serve_launch_position(is_red_side)
-
-
-
-func _get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool) -> Vector3:
-	return _game.game_serve.get_predicted_serve_velocity(charge_ratio, from_red_side)
-
-
-
 func _draw_trajectory(start_position: Vector3, start_velocity: Vector3, start_angular: Vector3 = Vector3.ZERO) -> void :
 	trajectory_mesh.clear_surfaces()
 	trajectory_mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP, trajectory_material)
@@ -280,24 +237,6 @@ func _draw_trajectory(start_position: Vector3, start_velocity: Vector3, start_an
 	trajectory_mesh_instance.visible = true
 
 
-
-
-func _predict_ball_landing_pos() -> Vector3:
-	if _ball == null:
-		return Vector3.INF
-	var flight: Dictionary = _Flight.trace(_ball.global_position, _ball.linear_velocity, 
-		_ball.angular_velocity, 3.0, 1, true)
-	return flight["first_bounce"] if flight["first_bounce_time"] >= 0.0 else Vector3.INF
-
-
-
-func _is_landing_out_of_bounds(pos: Vector3) -> bool:
-	if pos == Vector3.INF:
-		return false
-
-	var half_len: float = 6.7
-	var half_wid: float = 3.05
-	return pos.z > half_len or pos.z < - half_len or pos.x < - half_wid or pos.x > half_wid
 
 
 func _create_landing_cursor() -> void :

@@ -89,35 +89,6 @@ func build_green_set(posture_ghosts: Dictionary,
 
 
 
-func score_green_postures(local_lat: float, local_ht: float, 
-        green_set: Dictionary, posture_zones: Dictionary) -> Dictionary:
-    var best: int = -1
-    var best_score: float = INF
-    for posture in green_set:
-        if posture not in posture_zones:
-            continue
-        var zone: Dictionary = posture_zones[posture]
-        var lat_miss: float = 0.0
-        if local_lat < zone.x_min:
-            lat_miss = zone.x_min - local_lat
-        elif local_lat > zone.x_max:
-            lat_miss = local_lat - zone.x_max
-        var ht_miss: float = 0.0
-        if local_ht < zone.y_min:
-            ht_miss = zone.y_min - local_ht
-        elif local_ht > zone.y_max:
-            ht_miss = local_ht - zone.y_max
-
-        var score: float = ht_miss * 2.5 + lat_miss
-        if score < best_score:
-            best_score = score
-            best = posture
-    return {"posture": best, "score": best_score}
-
-
-
-
-
 func find_best_green_posture(ref_pos: Vector3, posture_ghosts: Dictionary, 
         posture_zones: Dictionary, forehand_charge: int, 
         backhand_charge: int, player_pos: Vector3, 
@@ -213,36 +184,6 @@ func find_closest_trajectory_point(player_pos: Vector3,
     return best_pt
 
 
-
-
-
-func compute_expected_contact_point(player_pos: Vector3, 
-        court_floor_y: float, ball_is_descending: bool) -> Vector3:
-    if _trajectory_points.is_empty():
-        return player_pos
-    var player_xz: = Vector2(player_pos.x, player_pos.z)
-
-    if ball_is_descending:
-        var last_in_reach: = Vector3.INF
-        for pt in _trajectory_points:
-            if pt.y < (court_floor_y - 0.02) or pt.y > 1.8:
-                continue
-            if player_xz.distance_to(Vector2(pt.x, pt.z)) < REACH_XZ:
-                last_in_reach = pt
-        if last_in_reach != Vector3.INF:
-            return last_in_reach
-
-
-    var best_pt: = _trajectory_points[0]
-    var best_d: = INF
-    for pt in _trajectory_points:
-        if pt.y < (court_floor_y - 0.02) or pt.y > 1.8:
-            continue
-        var d: = player_xz.distance_to(Vector2(pt.x, pt.z))
-        if d < best_d:
-            best_d = d
-            best_pt = pt
-    return best_pt
 
 
 
@@ -352,24 +293,6 @@ func grade_ball_to_ghost(d: float) -> String:
 
 
 
-func zone_lat_miss(local_lat: float, zone: Dictionary) -> float:
-    if local_lat < zone.x_min:
-        return zone.x_min - local_lat
-    if local_lat > zone.x_max:
-        return local_lat - zone.x_max
-    return 0.0
-
-
-
-func zone_ht_miss(local_ht: float, zone: Dictionary) -> float:
-    if local_ht < zone.y_min:
-        return zone.y_min - local_ht
-    if local_ht > zone.y_max:
-        return local_ht - zone.y_max
-    return 0.0
-
-
-
 func height_tier(ball_y: float, court_floor_y: float) -> int:
     var rel_h: float = ball_y - court_floor_y
     if rel_h < 0.22: return 0
@@ -378,9 +301,3 @@ func height_tier(ball_y: float, court_floor_y: float) -> int:
     return 3
 
 
-
-func local_axes(ref_pos: Vector3, player_pos: Vector3, 
-        forehand_axis: Vector3, court_floor_y: float) -> Vector2:
-    var local_lat: float = (ref_pos - player_pos).dot(forehand_axis)
-    var local_ht: float = ref_pos.y - court_floor_y
-    return Vector2(local_lat, local_ht)

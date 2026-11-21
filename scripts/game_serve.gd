@@ -4,7 +4,6 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const _Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Styles = preload("res://scripts/serve_style.gd")
-const Path = preload("res://scripts/stroke_swing_path.gd")
 const HeldMotion = preload("res://scripts/held_hit_motion.gd")
 const Feet = preload("res://scripts/player_nvz_state.gd")
 
@@ -282,12 +281,6 @@ func cleanup(recover_held_visual: bool = false) -> void :
 
 
 
-
-func get_aim_offset() -> float:
-	return _serve_aim_offset_x
-
-func get_arc_offset() -> float:
-	return _trajectory_arc_offset
 
 func set_aim_offset(val: float) -> void :
 	_serve_aim_offset_x = val
@@ -689,10 +682,6 @@ func get_serve_launch_position(is_red_side: bool) -> Vector3:
 	return Styles.release_plan(server.global_position, server.court_side == 1, selected_serve_style, release).contact_position
 
 
-func get_predicted_serve_velocity(charge_ratio: float, from_red_side: bool = false) -> Vector3:
-	return get_predicted_serve_launch(charge_ratio, from_red_side).get("velocity", Vector3.ZERO)
-
-
 func get_predicted_serve_launch(charge_ratio: float, from_red_side: bool = false, spin_mode: int = -1) -> Dictionary:
 	var team: int = 1 if from_red_side else 0
 	var style: int = selected_serve_style
@@ -707,51 +696,6 @@ func get_predicted_serve_launch(charge_ratio: float, from_red_side: bool = false
 	_preview_key = key
 	_preview_launch = Styles.solve_launch(_game.shot_physics, plan.contact_position, target, charge_ratio, server.court_side, style, _game.trajectory_arc_offset)
 	return _preview_launch
-
-
-func _solve_flat_serve_velocity(charge_ratio: float, from_red_side: bool = false) -> Vector3:
-	var serve_origin: Vector3 = get_serve_launch_position(from_red_side)
-	var total_score: int = _game.get_server_score(1 if from_red_side else 0)
-	var serve_from_right: bool = (total_score % 2) == 0
-	var aim: float = _game.serve_aim_offset_x
-	var target_x: float = aim
-	if from_red_side:
-		target_x = maxf(aim, 1.5) if serve_from_right else minf(aim, -1.5)
-	else:
-		target_x = minf(aim, -1.5) if serve_from_right else maxf(aim, 1.5)
-	var target_z: float = 4.6 if from_red_side else -4.6
-	var target: Vector3 = Vector3(target_x, _Flight.FLOOR_REST_Y, target_z)
-	var horizontal: Vector2 = Vector2(target.x - serve_origin.x, target.z - serve_origin.z)
-	var pace: float = lerpf(9.0, 13.0, clampf(charge_ratio, 0.0, 1.0))
-	var duration: float = clampf(horizontal.length() / pace + _game.trajectory_arc_offset * 0.6, 0.8, 1.7)
-	var launch: Vector3 = Vector3(horizontal.x / duration, 
-		(target.y - serve_origin.y + 0.5 * Ball.get_effective_gravity() * duration * duration) / duration, 
-		horizontal.y / duration)
-	var best: Vector3 = launch
-	var best_score: float = INF
-	for iteration in range(24):
-		var flight: Dictionary = _Flight.trace(serve_origin, launch, Vector3.ZERO, 3.0, 1, false)
-		var landing: Vector3 = flight["first_bounce"]
-		var net: Dictionary = flight["net_crossing"]
-		var clears_net: bool = not net.is_empty() and net["pos"].y >= _Flight.net_clear_y_at(net["pos"].x) + 0.08
-		var error: Vector2 = Vector2(target.x - landing.x, target.z - landing.z)
-		var score: float = error.length() + (4.0 if not clears_net else 0.0)
-		if float(flight["first_bounce_time"]) >= 0.0 and score < best_score:
-			best = launch
-			best_score = score
-		if score < 0.12:
-			break
-		if not clears_net and not net.is_empty():
-			launch.y += (_Flight.net_clear_y_at(net["pos"].x) + 0.2 - net["pos"].y) / maxf(float(net["time"]), 0.1)
-		if float(flight["first_bounce_time"]) >= 0.0:
-			var actual_time: float = maxf(float(flight["first_bounce_time"]), 0.2)
-			launch.x += error.x / actual_time * 0.9
-			launch.z += error.y / actual_time * 0.9
-		launch = launch.limit_length(Ball.MAX_SPEED)
-	return best
-
-
-
 
 
 func trigger_server_position_fault(reason: String = "", foot_detail: String = "") -> void :
@@ -787,21 +731,6 @@ func trigger_server_position_fault(reason: String = "", foot_detail: String = ""
 	else:
 		scoreboard_ui.show_fault("SERVE FAULT", detail)
 		_game._on_point_scored(winner)
-
-
-
-
-
-func adjust_aim(direction: int) -> void :
-	var SERVE_AIM_STEP: = PickleballConstants.SERVE_AIM_STEP
-	var SERVE_AIM_MAX: = PickleballConstants.SERVE_AIM_MAX
-	_serve_aim_offset_x = clampf(_serve_aim_offset_x + direction * SERVE_AIM_STEP, - SERVE_AIM_MAX, SERVE_AIM_MAX)
-
-func adjust_arc(direction: int) -> void :
-	var ARC_INTENT_STEP: = PickleballConstants.ARC_INTENT_STEP
-	var ARC_INTENT_MIN: = PickleballConstants.ARC_INTENT_MIN
-	var ARC_INTENT_MAX: = PickleballConstants.ARC_INTENT_MAX
-	_trajectory_arc_offset = clampf(_trajectory_arc_offset + direction * ARC_INTENT_STEP, ARC_INTENT_MIN, ARC_INTENT_MAX)
 
 
 

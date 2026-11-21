@@ -626,41 +626,6 @@ func _record_consumed_path(from: Vector3, to: Vector3, reserve: float) -> void:
 	if _record_consumed_motion:
 		_consumed_path_bounds = _consumed_path_bounds.merge(AABB(from, Vector3.ZERO).expand(to).grow(game.ball.BALL_RADIUS + reserve))
 
-func _consume_controller_motion_receipt(delta: float) -> bool:
-	if _consumed_motion.is_empty(): return false
-	var receipt: Dictionary = _consumed_motion
-	_consumed_motion = {}
-	var ball = game.ball
-	if int(receipt.frame) != Engine.get_physics_frames() or int(receipt.flight) != ball.flight_id or int(receipt.epoch) != _interval_reset_epoch: return false
-	if float(receipt.delta) != delta or not ball.matches_consumed_motion(receipt):
-		last_evidence["consumed_motion"] = receipt
-		_hold_unresolved(delta, "controller consumed motion state changed")
-		return true
-	# Endpoint publication can happen after a controller's own callback. An
-	# endpoint alone cannot certify an intervening crossing. Only unchanged
-	# actual geometry or disjoint whole-interval bounds certify this receipt.
-	for actor_id in _frame_current:
-		var current: Dictionary = _frame_current[actor_id]
-		var captured: Dictionary = receipt.geometry.get(actor_id, {})
-		var prior: Dictionary = receipt.prior_geometry.get(actor_id, captured)
-		if not _late_geometry_clear(prior, captured, current, receipt.bounds):
-			last_evidence["consumed_motion"] = {"frame": receipt.frame, "flight": receipt.flight, "actor_id": actor_id, "delta": delta, "fraction": receipt.fraction, "path_bounds": receipt.bounds}
-			_hold_unresolved(delta, "later actor geometry intersects consumed interval bounds")
-			return true
-	return true
-
-func _late_geometry_clear(prior: Dictionary, captured: Dictionary, current: Dictionary, path_bounds: AABB) -> bool:
-	if prior.is_empty() or captured.is_empty() or current.is_empty(): return false
-	if captured.parts.size() != current.parts.size(): return false
-	for id in current.parts:
-		if not captured.parts.has(id) or not prior.parts.has(id): return false
-		var now: Dictionary = current.parts[id]
-		var old: Dictionary = captured.parts[id]
-		if now.mesh_key == old.mesh_key and now.transform == old.transform and now.palette == old.palette and now.get("hand", {}) == old.get("hand", {}): continue
-		var swept: AABB = prior.parts[id].bounds.merge(old.bounds).merge(now.bounds)
-		if swept.intersects(path_bounds): return false
-	return true
-
 func capture_remainder_endpoint() -> void:
 	_capture_current()
 

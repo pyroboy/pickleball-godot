@@ -218,19 +218,6 @@ func sampled_triangles() -> PackedVector3Array:
 		result[index] = vertices[indices[index]]
 	return result
 
-func joint_positions() -> Dictionary:
-	var result: Dictionary = {"wrist": wrist_socket}
-	for bone in range(BONE_COUNT):
-		result[_data.names[bone]] = skeleton.get_bone_global_pose(bone).origin
-	for digit in range(5):
-		var bone: = 3 + digit * 3
-		result[FINGER_NAMES[digit] + "_tip"] = skeleton.get_bone_global_pose(bone) * _data.tip_local[digit]
-	return result
-
-
-
-
-
 func palm_surface_gap(local_center: Vector3, radius: float = BALL_RADIUS) -> float:
 	var patch: PackedVector3Array = _data.palm_patch
 	var distance_squared: = INF
@@ -246,27 +233,6 @@ func ball_surface_gap(local_center: Vector3, radius: float = BALL_RADIUS) -> flo
 		var nearest: = _closest_triangle_point(local_center, points[index], points[index + 1], points[index + 2])
 		distance_squared = minf(distance_squared, nearest.distance_squared_to(local_center))
 	return sqrt(distance_squared) - radius
-
-func debug_metadata() -> Dictionary:
-	return {"surface_count": hand_mesh.mesh.get_surface_count(), 
-		"triangles": _data.indices.size() / 3, "vertices": _data.vertices.size(), 
-		"bones": skeleton.get_bone_count(), "mesh_build_count": mesh_build_count, 
-		"pose_update_count": pose_update_count, "bone_pose_write_count": bone_pose_write_count, 
-		"wrist_bridge_bone": WRIST_BRIDGE_BONE, "wrist_bridge_update_count": wrist_bridge_update_count, 
-		"wrist_bridge_definition": "Shortest proper cuff-distal swing to actual forearm mesh +Y; no axial skin wringing", 
-		"pose": _mode, "closure": _closure, "index_closure": _index_closure, "support_style_weight": _support_style_weight, "wrist_socket": wrist_socket, 
-		"relaxed_closure": RELAXED_CLOSURE, 
-		"cup_ball_center": cup_ball_center, "palm_contact_point": palm_contact_point, 
-		"palm_normal": palm_normal, "radial_sign": radial_sign, 
-		"anatomical_basis": anatomical_basis, "palm_contact_basis": palm_contact_basis, 
-		"anatomical_basis_definition": "X wrist-to-middle MCP; Y projected index-minus-little times radial_sign; Z X cross Y", 
-		"palm_contact_basis_definition": "Z opposite calibrated cup contact normal; X projected wrist-to-middle MCP", 
-		"middle_mcp_rest": middle_mcp_rest, "palm_length": palm_length, 
-		"bind_aabb": hand_mesh.mesh.get_aabb(), "mesh_id": hand_mesh.mesh.get_instance_id(), 
-		"skin_id": hand_mesh.skin.get_instance_id(), "handle_radius": HANDLE_RADIUS, 
-		"grip_fit_definition": "Pad-only fit to shared circular handle radius; adult landmarks, lengths and cup seat unchanged", 
-		"pad_contact_gap_target": PAD_CONTACT_GAP, "palm_contact_triangles": _data.palm_patch.size() / 3, 
-		"bone_names": _data.names.duplicate(), "finger_lengths": _data.lengths.duplicate(true)}
 
 static func _build(left: bool) -> Dictionary:
 	var names: Array[String] = ["palm"]

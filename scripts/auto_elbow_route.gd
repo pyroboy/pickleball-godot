@@ -136,30 +136,6 @@ static func _segment_distance(a: Vector3, b: Vector3, c: Vector3, d: Vector3) ->
 static func capsule_margin(a: Vector3, b: Vector3, radius: float, obstacle: Dictionary) -> float:
 	return _segment_distance(a, b, obstacle.a, obstacle.b) - radius - float(obstacle.radius)
 
-static func _cell_segment_margin(a: Vector3, b: Vector3, cell: Dictionary) -> float:
-	# min_t max_plane distance(a+t*(b-a)). The convex piecewise-linear minimum
-	# occurs at an endpoint or a crossing of two affine plane-distance functions.
-	# This is the continuous-segment counterpart of body_clearance.cell_margin.
-	var starts: Array[float] = []
-	var slopes: Array[float] = []
-	for plane: Plane in cell.get("planes", []):
-		starts.append(plane.distance_to(a))
-		slopes.append(plane.normal.dot(b - a))
-	if starts.is_empty(): return -INF
-	var minimum: float = INF
-	var times: Array[float] = [0.0, 1.0]
-	for i in range(starts.size()):
-		for j in range(i):
-			var denom: float = slopes[i] - slopes[j]
-			if absf(denom) > 1.0e-12:
-				var at: float = (starts[j] - starts[i]) / denom
-				if at > 0.0 and at < 1.0: times.append(at)
-	for at in times:
-		var maximum: float = -INF
-		for i in range(starts.size()): maximum = maxf(maximum, starts[i] + slopes[i] * at)
-		minimum = minf(minimum, maximum)
-	return minimum
-
 static func _cell_capsule_bound(a: Vector3, b: Vector3, radius: float, cell: Dictionary, required: float) -> float:
 	# Linear-time conservative hard gate. A capsule is contained by the cell's
 	# radius-expanded halfspaces. If the entire center segment misses their

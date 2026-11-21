@@ -93,9 +93,6 @@ func abort_before_scene() -> void:
 func game() -> Node:
  return _game_ref.get_ref() if _game_ref != null else null
 
-func claims_game(value: Node) -> bool:
- return _armed and not _cancel_requested and game() == value
-
 func defer_practice(value: Node, panel: Node) -> bool:
  # A cancellation still owns the scene's intent and must consume/discard it.
  if not _armed or game() != value: return false

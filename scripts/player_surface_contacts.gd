@@ -293,45 +293,6 @@ static func net_plane_extent(player, player_num: int, include_paddle: bool = tru
 	return {"crossed": not crossed_parts.is_empty(), "min_side_z": minimum, "parts": crossed_parts,
 		"point": witness, "source": "posed_mesh", "extent_exact": exact, "tolerance": tolerance}
 
-static func legal_hand_contact_distance(player, center: Vector3, radius: float = 0.0375) -> Dictionary:
-	## Current-frame manifold observation only. Actual hand/paddle geometry
-	## still qualifies the hand; distance does not grant a new shot.
-	var result := {"hit": false, "distance": INF, "gap": INF, "kind": "legal_hand", "source": "posed_mesh"}
-	if not ("paddle_node" in player) or player.paddle_node == null: return result
-	for instance in meshes(player, false):
-		var hand: Dictionary = hand_geometry(instance)
-		if hand.is_empty(): continue
-		var bounds: AABB = world_bounds(instance)
-		var nearest_bound := Vector3(clampf(center.x, bounds.position.x, bounds.end.x), clampf(center.y, bounds.position.y, bounds.end.y), clampf(center.z, bounds.position.z, bounds.end.z))
-		if center.distance_to(nearest_bound) >= float(result.distance): continue
-		var triangles := world_triangles(instance)
-		if hand_contact_kind(hand, triangles, Vector3(hand.wrist) + Vector3(hand.distal) * 0.05, player.paddle_node.global_transform) != "legal_hand": continue
-		for offset in range(0, triangles.size() - 2, 3):
-			var a: Vector3 = triangles[offset]; var b: Vector3 = triangles[offset + 1]; var c: Vector3 = triangles[offset + 2]
-			var polygon := _clip_distal(PackedVector3Array([a, b, c]), hand.wrist, hand.distal)
-			for index in range(1, polygon.size() - 1):
-				var nearest: Vector3 = Geometry.closest_triangle(center, polygon[0], polygon[index], polygon[index + 1])
-				var distance: float = center.distance_to(nearest)
-				if distance < float(result.distance):
-					result.distance = distance; result.gap = distance - radius
-					result.hit = distance <= radius + 0.00002
-					result.surface = nearest; result.normal = (center - nearest).normalized()
-					result.part = String(instance.name)
-	return result
-
-static func _clip_distal(points: PackedVector3Array, wrist: Vector3, distal: Vector3) -> PackedVector3Array:
-	var output := PackedVector3Array()
-	if points.is_empty(): return output
-	var previous: Vector3 = points[-1]
-	var previous_distance: float = (previous - wrist).dot(distal)
-	for point in points:
-		var distance: float = (point - wrist).dot(distal)
-		if (distance >= 0.0) != (previous_distance >= 0.0):
-			output.append(previous.lerp(point, -previous_distance / (distance - previous_distance)))
-		if distance >= 0.0: output.append(point)
-		previous = point; previous_distance = distance
-	return output
-
 static var _planar_face_sources: Dictionary = {}
 static var _planar_face_keys: Dictionary = {}
 static func rigid_planar_face_sources(mesh: Mesh) -> PackedInt32Array:

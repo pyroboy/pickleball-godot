@@ -273,40 +273,6 @@ func _is_ft_key(posture: int) -> bool:
 
 
 
-func get_posture_family(p: int) -> int:
-	if _player == null:
-		return 0
-	match p:
-		_player.PaddlePosture.FOREHAND, _player.PaddlePosture.WIDE_FOREHAND, \
-		_player.PaddlePosture.LOW_FOREHAND, _player.PaddlePosture.CHARGE_FOREHAND, \
-		_player.PaddlePosture.MID_LOW_FOREHAND, _player.PaddlePosture.MID_LOW_WIDE_FOREHAND, \
-		_player.PaddlePosture.LOW_WIDE_FOREHAND:
-			return 0
-		_player.PaddlePosture.BACKHAND, _player.PaddlePosture.WIDE_BACKHAND, \
-		_player.PaddlePosture.LOW_BACKHAND, _player.PaddlePosture.CHARGE_BACKHAND, \
-		_player.PaddlePosture.MID_LOW_BACKHAND, _player.PaddlePosture.MID_LOW_WIDE_BACKHAND, \
-		_player.PaddlePosture.LOW_WIDE_BACKHAND:
-			return 1
-		_player.PaddlePosture.FORWARD, _player.PaddlePosture.LOW_FORWARD, \
-		_player.PaddlePosture.READY, _player.PaddlePosture.VOLLEY_READY, \
-		_player.PaddlePosture.MID_LOW_FORWARD:
-			return 2
-		_player.PaddlePosture.MEDIUM_OVERHEAD, _player.PaddlePosture.HIGH_OVERHEAD:
-			return 3
-	return 0
-
-
-
-func get_height_zone(rel_h: float) -> int:
-	if rel_h < 0.15:
-		return 0
-	if rel_h < 0.5:
-		return 1
-	return 2
-
-
-
-
 func compute_contact_at_player_z(ball_pos: Vector3, ball_vel: Vector3, player_z: float) -> Vector3:
 	if _player == null:
 		return ball_pos
@@ -342,27 +308,3 @@ func compute_contact_at_player_z(ball_pos: Vector3, ball_vel: Vector3, player_z:
 
 
 
-
-func get_overhead_posture(ball_position: Vector3, horizontal_distance: float, current_posture: int) -> int:
-	if _player == null:
-		return -1
-	var relative_ball_height: float = ball_position.y - _player.ground_y
-	if current_posture == _player.PaddlePosture.HIGH_OVERHEAD:
-		if relative_ball_height >= _PC.OVERHEAD_RELEASE_HEIGHT and horizontal_distance <= _PC.OVERHEAD_RELEASE_RADIUS:
-			if relative_ball_height >= _PC.HIGH_OVERHEAD_TRIGGER_HEIGHT:
-				return _player.PaddlePosture.HIGH_OVERHEAD
-			if relative_ball_height >= _PC.MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-				return _player.PaddlePosture.MEDIUM_OVERHEAD
-		return -1
-	if current_posture == _player.PaddlePosture.MEDIUM_OVERHEAD:
-		if relative_ball_height >= _PC.OVERHEAD_RELEASE_HEIGHT and horizontal_distance <= _PC.OVERHEAD_RELEASE_RADIUS:
-			if relative_ball_height >= _PC.HIGH_OVERHEAD_TRIGGER_HEIGHT:
-				return _player.PaddlePosture.HIGH_OVERHEAD
-			return _player.PaddlePosture.MEDIUM_OVERHEAD
-		return -1
-
-	if relative_ball_height >= _PC.HIGH_OVERHEAD_TRIGGER_HEIGHT:
-		return _player.PaddlePosture.HIGH_OVERHEAD
-	if relative_ball_height >= _PC.MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-		return _player.PaddlePosture.MEDIUM_OVERHEAD
-	return -1

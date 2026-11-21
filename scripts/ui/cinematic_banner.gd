@@ -43,9 +43,6 @@ func _label(size: int, color: Color) -> Label:
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
-func is_banner_active() -> bool:
-	return _banner_active
-
 # Fade in (0.35 s), hold, fade out (0.45 s) over `seconds` in total.
 func show_banner(title: String, sub: String = "", seconds: float = 3.0, dim_alpha: float = 0.45, title_size: int = 46, sub_size: int = 22) -> void:
 	_kill()

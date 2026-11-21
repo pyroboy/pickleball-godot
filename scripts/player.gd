@@ -1049,33 +1049,6 @@ func _get_popup_tendency(contact_state: int, distance_to_ball: float, ball_heigh
 		contact_penalty = 0.15
 	return clamp(height_error + distance_error + charge_error + contact_penalty, 0.0, 0.6)
 
-func _get_overhead_posture(ball_position: Vector3, horizontal_distance: float) -> int:
-	var relative_ball_height: float = ball_position.y - ground_y
-	if paddle_posture == PaddlePosture.HIGH_OVERHEAD:
-		if relative_ball_height >= OVERHEAD_RELEASE_HEIGHT and horizontal_distance <= OVERHEAD_RELEASE_RADIUS:
-			if relative_ball_height >= HIGH_OVERHEAD_TRIGGER_HEIGHT:
-				return PaddlePosture.HIGH_OVERHEAD
-			if relative_ball_height >= MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-				return PaddlePosture.MEDIUM_OVERHEAD
-		return -1
-	if paddle_posture == PaddlePosture.MEDIUM_OVERHEAD:
-		if relative_ball_height >= OVERHEAD_RELEASE_HEIGHT and horizontal_distance <= OVERHEAD_RELEASE_RADIUS:
-			if relative_ball_height >= HIGH_OVERHEAD_TRIGGER_HEIGHT:
-				return PaddlePosture.HIGH_OVERHEAD
-			return PaddlePosture.MEDIUM_OVERHEAD
-		return -1
-	if horizontal_distance > OVERHEAD_TRIGGER_RADIUS:
-		return -1
-	if relative_ball_height >= HIGH_OVERHEAD_TRIGGER_HEIGHT:
-		return PaddlePosture.HIGH_OVERHEAD
-	if relative_ball_height >= MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-		return PaddlePosture.MEDIUM_OVERHEAD
-	return -1
-
-
-
-
-
 func get_player_num() -> int:
 	return player_num
 
@@ -1106,10 +1079,6 @@ func _get_posture_offset_for(p: int) -> Vector3:
 	if posture:
 		return posture.get_posture_offset_for(p)
 	return Vector3.ZERO
-
-func _update_paddle_tracking(force: bool = false) -> void :
-	if posture:
-		posture.update_paddle_tracking(force)
 
 func _draw_step_debug(r_target: Vector3, l_target: Vector3, r_origin: Vector3, l_origin: Vector3, r_swing: bool, l_swing: bool) -> void :
 	if debug_visual:

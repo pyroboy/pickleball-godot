@@ -177,17 +177,3 @@ func _score_call_positions_correct(context: Dictionary) -> bool:
 
 func _player_position_error(context: Dictionary) -> bool:
 	return not _score_call_positions_correct(context) or int(context.actual_server) != int(context.server_actor)
-
-func _restore_core(state: Dictionary) -> void:
-	teams = state.teams.duplicate(true)
-	starting_servers = state.starting_servers.duplicate()
-	scores = state.scores.duplicate()
-	court_ends = state.court_ends.duplicate()
-	serving_team = int(state.serving_team)
-	server_actor = int(state.server_actor)
-	server_number = int(state.server_number)
-	target_score = int(state.target_score)
-	match_over = bool(state.match_over)
-	winner_team = int(state.winner_team)
-	ends_changed = bool(state.ends_changed)
-	end_change_pending = bool(state.end_change_pending)

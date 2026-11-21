@@ -158,9 +158,6 @@ var _editor_solo_posture_id: int = -1
 
 var editor_preview_mode: bool = false
 
-func set_editor_solo_posture_id(id: int) -> void :
-	_editor_solo_posture_id = id
-
 var _paddle_head_marker: MeshInstance3D = null
 var _hit_posture: int = -1
 var _hit_flash_t: float = 0.0
@@ -1425,10 +1422,3 @@ func _apply_full_body_posture(def_override = null) -> void :
 	if def:
 		_presented_body_pose = def
 		_skeleton_applier.apply(def)
-
-func _get_basis_from_rotation(rot_deg: Vector3) -> Basis:
-	var b: = Basis()
-	b = b * Basis(Vector3.RIGHT, deg_to_rad(rot_deg.x))
-	b = b * Basis(Vector3.UP, deg_to_rad(rot_deg.y))
-	b = b * Basis(Vector3.FORWARD, deg_to_rad(rot_deg.z))
-	return b

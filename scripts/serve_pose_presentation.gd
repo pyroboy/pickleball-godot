@@ -40,46 +40,6 @@ static func prepare(pose: PostureDefinition, style: int, charge: float, held_off
 	pose.set_meta("serve_phase_held_offset", held_offset)
 	return pose
 
-static func contact_orientation(pose: PostureDefinition, style: int) -> PostureDefinition:
-
-
-	Orientation.set_canonical_basis(pose, Orientation.canonical_basis(pose) * Basis(Vector3.BACK, deg_to_rad(contact_turn(style))))
-	pose.right_elbow_pole = DROP_CONTACT_POLE if style in [2, 4, 5, 6] else FLAT_CONTACT_POLE
-	return pose
-
-static func contact_turn(style: int) -> float:
-
-
-	return -70.0 if style == 1 else CONTACT_INPLANE_DEG
-
-static func approach_orientation(pose: PostureDefinition, style: int, charge: float, progress: float) -> PostureDefinition:
-	var envelope: float = pow(sin(PI * clampf(progress, 0.0, 1.0)), 2.0)
-	var amount: float = lerpf(40.0, 20.0, clampf(charge, 0.0, 1.0)) if style == 5 else lerpf(50.0, 30.0, clampf(charge, 0.0, 1.0))
-	if style == 2: amount -= 4.0 * (1.0 - clampf(charge, 0.0, 1.0))
-	var turn: float = contact_turn(style) + amount * envelope
-	Orientation.set_canonical_basis(pose, Orientation.canonical_basis(pose) * Basis(Vector3.BACK, deg_to_rad(turn)))
-	pose.right_elbow_pole = (DROP_CONTACT_POLE if style in [2, 4, 5, 6] else FLAT_CONTACT_POLE) + Vector3( - 0.04, 0, 0) * envelope
-	return pose
-
-static func release_withdrawal(pose: PostureDefinition, style: int, progress: float) -> PostureDefinition:
-
-
-	if style not in [2, 4, 5, 6]: return pose
-	var q: float = float(pose.get_meta("serve_phase_charge", 1.0))
-	var samples: Array = WITHDRAWAL[5 if style == 6 else style]
-	var segment: int = 0 if q <= 0.5 else 1
-	var u: float = q * 2.0 if segment == 0 else (q - 0.5) * 2.0
-	var target: Basis = Basis(_basis(samples[segment][1]).get_rotation_quaternion().slerp(_basis(samples[segment + 1][1]).get_rotation_quaternion(), u))
-	var weight: float = smoothstep(0.0, 1.0, progress)
-	var current_basis: Basis = Orientation.canonical_basis(pose)
-	var current: Vector3 = Calibration.legacy_head_from_non_contact(Vector3(pose.paddle_forehand_mul, pose.paddle_y_offset, pose.paddle_forward_mul), current_basis)
-	var basis: Basis = Basis(current_basis.get_rotation_quaternion().slerp(target.get_rotation_quaternion(), weight))
-	var head: Vector3 = Calibration.non_contact_head_from_legacy(current.lerp(_curve(samples[0][0], samples[1][0], samples[2][0], q), weight), basis)
-	pose.paddle_forehand_mul = head.x;pose.paddle_y_offset = head.y;pose.paddle_forward_mul = head.z
-	Orientation.set_canonical_basis(pose, basis)
-	pose.right_elbow_pole = pose.right_elbow_pole.lerp(_curve(samples[0][2], samples[1][2], samples[2][2], q), weight)
-	return pose
-
 static func finish(pose: PostureDefinition, style: int) -> PostureDefinition:
 	var values: Array = FINISH_SLICE if style == 2 else (FINISH_HIGH_SOFT if style == 3 else FINISH_STANDARD)
 	var head: Vector3 = Calibration.non_contact_head_from_legacy(values[0], _basis(values[1]))

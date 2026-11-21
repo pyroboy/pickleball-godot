@@ -4,7 +4,6 @@ extends RefCounted
 const PATH := "res://data/emergency_dive_profiles.bin"
 const SCHEMA := 3
 const ENTRY_EPSILON := 0.0
-const Surface = preload("res://scripts/player_surface_contacts.gd")
 static var _loaded := false
 static var _data: Dictionary = {}
 static var _code := ""
@@ -174,5 +173,3 @@ static func load_profiles() -> Dictionary:
 		if not profile is Dictionary or not profile_integrity_valid(profile) or not certificate_complete(profile): return {}
 	_data = data
 	return _data
-
-static func warm_cache() -> bool: return not load_profiles().is_empty()

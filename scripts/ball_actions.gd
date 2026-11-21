@@ -210,9 +210,6 @@ static func has_edits(id: int) -> bool:
 		if not (k as Dictionary).is_empty(): return true
 	return false
 
-static func is_throw(id: int) -> bool:
-	return id == THROW or id == THROW_STRONG
-
 ## Which throw a pass of this length uses (the strong one only when its file exists).
 static func throw_for(distance: float) -> int:
 	return THROW_STRONG if distance >= STRONG_THROW_M and get_def(THROW_STRONG) != null else THROW

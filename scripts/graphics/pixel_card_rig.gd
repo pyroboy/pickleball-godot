@@ -139,12 +139,6 @@ static func attach(player) -> PixelCardRig:
 	host.add_child(rig)
 	return rig
 
-## Give one actor an on-screen accent colour (palette swap of its team-coloured pixels).
-static func set_accent(player, display_color: Color) -> void:
-	if player == null or player.get_parent() == null: return
-	var rig: Node = player.get_parent().get_node_or_null("PixelCards_%d" % player.get_instance_id())
-	if rig is PixelCardRig: rig.apply_accent(display_color)
-
 static func _load_meta() -> Dictionary:
 	if _meta.is_empty():
 		var f: = FileAccess.open(META_PATH, FileAccess.READ)
@@ -372,9 +366,6 @@ func apply_accent(display_color: Color) -> void:
 	if _mat == null or not _has_other: return
 	_mat.set_shader_parameter("accent_color", _display_to_atlas(display_color))
 	_mat.set_shader_parameter("accent_mix", 1.0)
-
-func clear_accent() -> void:
-	if _mat != null: _mat.set_shader_parameter("accent_mix", 0.0)
 
 ## Human keeps the authored art (rank 0). Among same-team actors the human, then the lower
 ## actor id, ranks first; each later one gets the team accent so partner and opponents read apart.

@@ -461,16 +461,6 @@ func _slider(parent:Node,d:Dictionary,axis:int,value:float)->void:
 		else:
 			var vec:Vector3=_edit.get(d.field);vec[axis]=v;_changed(d.field,vec))
 
-func _build_body_input_help()->void:
-	var help:=Label.new();help.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;help.modulate=Ui.MUTED
-	help.text="Tap a number to type. Fine/Normal sets slider steps."
-	_field_help+=" New body entries stay within their shown limits; full body/foot turns and elbow guide rotations wrap at 360°. Joint guides steer IK, not limb length. Existing saved values stay unchanged until edited."
-	help.tooltip_text=_field_help
-	_fields.add_child(help)
-	if not _base and (_group.selected==0 or (_group.selected==6 and _selected_joint=="hips")):
-		_body_position_status=Label.new();_body_position_status.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;_fields.add_child(_body_position_status)
-		_sync_body_position_status(_preview.pose)
-
 func _compact_section(caption:String)->VBoxContainer:
 	var fold:=button(_fields,caption+" ▸",func():pass)
 	fold.alignment=HORIZONTAL_ALIGNMENT_LEFT;fold.toggle_mode=true;fold.set_meta("compact_pose_row",true)
@@ -1242,18 +1232,6 @@ func _build_contact_curve()->void:
 	var help:=Label.new();help.text="0 straighter · 0.5 original · 1 rounder. Wind-up, Contact and Finish stay fixed. Saved curve shaping also applies in gameplay.";help.modulate=Ui.MUTED;help.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;_fields.add_child(help)
 	var bend:Vector3=Path.ContactCurve.bend(Path.ContactCurve.position(Path.endpoint(_current,0)),Path.ContactCurve.position(_current),Path.ContactCurve.position(Path.endpoint(_current,2)))
 	if bend.length_squared()<.00000001:help.text+=" These anchors are straight; move an existing phase to define a bend."
-
-func _build_body_position()->void:
-	var title:=Label.new();title.text="Whole body · "+("Ready" if not _has_motion() else ["Wind-up","Contact","Finish"][_stage]);_fields.add_child(title)
-	var help:=Label.new();help.text="Move the body relative to the fixed paddle target. X moves sideways, Y changes body height, Z moves forward/back. Soles stay on the floor; body movement stops at reach/grounding limits. Type numbers for precise values; XYZ accepts ±1.5 m. The saved request remains unchanged when the applied movement is capped.";help.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;help.modulate=Ui.MUTED;_fields.add_child(help)
-	if _serve:help.text+=" Serve feet remain planted while the body moves over them."
-	_body_position_status=Label.new();_body_position_status.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;_fields.add_child(_body_position_status)
-	_sync_body_position_status(_preview.pose)
-	var descriptor:Dictionary=Fields.body_descriptor("body_position_offset")
-	var position:Variant=_edit.get("body_position_offset")
-	if position is Vector3:
-		for axis in range(3):_slider(_fields,descriptor,axis,position[axis])
-	_build_stance_presets()
 
 func _sync_body_position_status(pose:PostureDefinition)->void:
 	if not is_instance_valid(_body_position_status) or pose==null:return

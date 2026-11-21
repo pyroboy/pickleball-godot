@@ -543,47 +543,6 @@ func _exp_env(t: float, attack: float, decay_start: float, decay_rate: float) ->
 
 
 
-func _create_impact_sound(
-	duration: float, 
-	amplitude: float, 
-	pop_gain: float, 
-	body_gain: float, 
-	noise_gain: float, 
-	pop_decay: float, 
-	body_decay: float, 
-	attack: float, 
-	pitch_scale: float, 
-	body_pitch_scale: float
-) -> AudioStreamWAV:
-	var wave = _new_wave()
-	var samples = PackedByteArray()
-	var num_samples = int(duration * AUDIO_SAMPLE_RATE)
-	var transient_end = attack + 0.002
-
-	for i in range(num_samples):
-		var t = float(i) / AUDIO_SAMPLE_RATE
-
-		var pop_env = _exp_env(t, attack, attack, pop_decay)
-		var body_env = _exp_env(t, attack * 0.6, transient_end, body_decay)
-		var click_env = exp( - t * (pop_decay * 1.8))
-
-		var pop = sin(t * POP_FREQ * pitch_scale * TAU) * 0.72
-		var pop_upper = sin(t * POP_UPPER_FREQ * pitch_scale * TAU) * 0.28
-		var body = sin(t * BODY_FREQ * body_pitch_scale * TAU) * 0.55
-		var body_low = sin(t * BODY_LOW_FREQ * body_pitch_scale * TAU) * 0.25
-		var body_high = sin(t * BODY_HIGH_FREQ * body_pitch_scale * TAU) * 0.2
-		var click = (_audio_rng.randf() * 2.0 - 1.0) * click_env
-
-
-		var combined = (
-			(pop + pop_upper) * pop_gain * pop_env + 
-			(body + body_low + body_high) * body_gain * body_env + 
-			click * noise_gain
-		)
-		_append_sample(samples, combined * amplitude)
-
-	wave.data = samples
-	return wave
 
 func _create_paddle_sound(
 	duration: float, 
@@ -938,22 +897,6 @@ func _create_smash_sound() -> AudioStreamWAV:
 		0.00015, 
 		1.03 + pitch_var, 
 		body_pitch_v
-	)
-
-func _create_serve_sound() -> AudioStreamWAV:
-
-	return _create_paddle_sound(
-		0.028, 
-		0.62, 
-		1.0, 
-		1.0, 
-		0.1, 
-		0.03, 
-		205.0, 
-		112.0, 
-		0.0002, 
-		1.0, 
-		1.0
 	)
 
 func _create_court_bounce_sound(speed: float) -> AudioStreamWAV:

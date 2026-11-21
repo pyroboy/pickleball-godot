@@ -1,6 +1,5 @@
 class_name BasePoseDefinition extends Resource
 
-const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 
 
 
@@ -84,12 +83,6 @@ const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 @export var last_tuned_at: String = ""
 
 
-func duplicate_pose():
-	var pose = load("res://scripts/base_pose_definition.gd").new()
-	_copy_fields_to(pose)
-	return pose
-
-
 func blend_onto_stroke(stroke_def, weight: float = -1.0):
 	if stroke_def == null:
 		return null
@@ -104,57 +97,6 @@ func blend_onto_stroke(stroke_def, weight: float = -1.0):
 
 func to_preview_posture(stroke_def):
 	return blend_onto_stroke(stroke_def, 1.0)
-
-
-func _copy_fields_to(other) -> void :
-	other.base_pose_id = base_pose_id
-	other.display_name = display_name
-	other.canonical_intent = canonical_intent
-	other.stroke_overlay_mix = stroke_overlay_mix
-	other.recovery_time = recovery_time
-	other.landing_lockout_time = landing_lockout_time
-	other.jump_window = jump_window
-	other.split_step_hop_height = split_step_hop_height
-	other.lunge_distance = lunge_distance
-	other.right_hand_offset = right_hand_offset
-	other.right_elbow_pole = right_elbow_pole
-	other.right_shoulder_rotation_deg = right_shoulder_rotation_deg
-	other.right_elbow_swivel_deg = right_elbow_swivel_deg
-	other.left_elbow_swivel_deg = left_elbow_swivel_deg
-	other.elbow_swivel_weight = elbow_swivel_weight
-	other.left_hand_mode = left_hand_mode
-	other.left_hand_offset = left_hand_offset
-	other.left_elbow_pole = left_elbow_pole
-	other.left_shoulder_rotation_deg = left_shoulder_rotation_deg
-	other.stance_width = stance_width
-	other.front_foot_forward = front_foot_forward
-	other.back_foot_back = back_foot_back
-	other.right_foot_yaw_deg = right_foot_yaw_deg
-	other.left_foot_yaw_deg = left_foot_yaw_deg
-	other.right_foot_pitch_deg = right_foot_pitch_deg
-	other.left_foot_pitch_deg = left_foot_pitch_deg
-	other.right_knee_pole = right_knee_pole
-	other.left_knee_pole = left_knee_pole
-	other.right_foot_offset = right_foot_offset
-	other.left_foot_offset = left_foot_offset
-	other.lead_foot = lead_foot
-	other.crouch_amount = crouch_amount
-	other.weight_shift = weight_shift
-	other.hip_yaw_deg = hip_yaw_deg
-	other.torso_yaw_deg = torso_yaw_deg
-	other.torso_pitch_deg = torso_pitch_deg
-	other.torso_roll_deg = torso_roll_deg
-	other.spine_curve_deg = spine_curve_deg
-	other.body_yaw_deg = body_yaw_deg
-	other.body_pitch_deg = body_pitch_deg
-	other.body_roll_deg = body_roll_deg
-	other.head_yaw_deg = head_yaw_deg
-	other.head_pitch_deg = head_pitch_deg
-	other.head_track_ball_weight = head_track_ball_weight
-	other.schema_version = schema_version
-	other.notes = notes
-	other.last_tuned_by = last_tuned_by
-	other.last_tuned_at = last_tuned_at
 
 
 func _apply_body_fields(target, source, mix: float) -> void :

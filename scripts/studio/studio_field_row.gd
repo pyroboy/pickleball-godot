@@ -7,7 +7,6 @@ extends HBoxContainer
 ## space is kept, so nothing moves). Every write goes through studio.set_field; a slider drag
 ## is one undo step (begin/end_edit).
 
-const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Theme_ = preload("res://scripts/studio/studio_theme.gd")
 const STAGE_COLORS := [Color("bd80ff"), Color("ffdc62"), Color("58dfdb")]
 const SAVED_COLOR := Color("eef5fa")

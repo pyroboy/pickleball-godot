@@ -1,6 +1,5 @@
 extends RefCounted
 const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
-const ShotMotionContext = preload("res://scripts/shot_motion_context.gd")
 const TacticalMotion = preload("res://scripts/tactical_stroke_motion.gd")
 
 
@@ -522,10 +521,6 @@ static func serve_style_contact(style: int, ball_offset: Vector3 = SERVE_CONTACT
 static func _raw_serve_style_contact(style: int, ball_offset: Vector3 = SERVE_CONTACT) -> PostureDefinition:
 	return ServeJoint.contact(serve_contact(_style_spin(style)), ball_offset)
 
-static func _set_serve_surface(pose: PostureDefinition, ball_offset: Vector3) -> void :
-
-	ServeJoint.contact(pose, ball_offset)
-
 static func original_serve_load(start: PostureDefinition) -> PostureDefinition:
 	if start.has_meta("serve_phase_profile"):
 		start = _legacy_serve_style_preparation(int(start.get_meta("serve_phase_style")), float(start.get_meta("serve_phase_charge")), start.get_meta("serve_phase_held_offset"))
@@ -586,28 +581,6 @@ static func serve_style_strike(start: PostureDefinition, progress: float, style:
 	_smooth_through_contact(pose, start, contact, _serve_finish_key(style, q, ball_offset), u, true)
 	ServePresentation.copy_context(start, pose)
 	return ServeEdits.apply_motion(pose, style, Vector3(q * (1.0 - u), u, 0), custom, use_saved)
-
-static func _legacy_serve_style_strike(start: PostureDefinition, progress: float, style: int, ball_offset: Vector3 = SERVE_CONTACT) -> PostureDefinition:
-	var t: float = clampf(progress, 0.0, 1.0)
-	var contact: PostureDefinition = _raw_serve_style_contact(style, ball_offset)
-	var loaded: PostureDefinition = original_serve_load(start)
-	var pose: PostureDefinition = Path.blend_pose(loaded, contact, t * t)
-	pose.left_hand_offset = start.left_hand_offset.lerp(contact.left_hand_offset, smoothstep(0.0, 0.45, t))
-
-
-	if style in [0, 1, 3, 4, 5, 6]:
-		pose.paddle_y_offset -= sin(PI * t) * (0.08 if style in [0, 1, 3, 4] else 0.04)
-
-	if style == 5: pose.paddle_forehand_mul -= sin(PI * t) * 0.18
-	if style == 6: pose.paddle_forehand_mul += sin(PI * t) * 0.06
-
-
-
-	if start.has_meta("reference_serve_load") and not start.has_meta("serve_phase_profile") and t < 0.65:
-		var support: = pose.left_hand_offset
-		pose = Path.blend_pose(start, pose, smoothstep(0.0, 0.65, t))
-		pose.left_hand_offset = support
-	return pose
 
 static func serve_style_follow_through(style: int, charge: float, progress: float, ball_offset: Vector3 = SERVE_CONTACT, custom: PostureDefinition = null, use_saved: bool = true) -> PostureDefinition:
 	var t: float = clampf(progress, 0.0, 1.0)

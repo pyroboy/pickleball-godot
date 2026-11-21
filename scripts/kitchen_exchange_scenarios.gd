@@ -51,34 +51,3 @@ static func movement_input(offset: Vector3, current_velocity: Vector3, move_spee
 	var desired: Vector3 = offset.normalized() * speed
 	var current: = Vector3(current_velocity.x, 0.0, current_velocity.z)
 	return current.move_toward(desired, 18.0 * delta) / maxf(move_speed, 0.1)
-
-static func review_case(kind: String, receiver: int, diagonal: int = 1) -> Dictionary:
-	var side: float = 1.0 if receiver == 0 else -1.0
-	var lane: float = side * diagonal
-	var result: = {"kind": kind, "receiver": receiver, 
-		"player": Vector3(lane * 0.55, 0, side * 2.72), 
-		"origin": Vector3( - lane * 1.15, 0.72, - side * 1.55), 
-		"target": Vector3(lane * 1.05, Flight.FLOOR_REST_Y, side * 1.3), 
-		"duration": 0.0}
-	match kind:
-		"WIDE": result.target.x = lane * 1.75
-		"CENTER":
-			result.player.x = lane * 1.75
-			result.target.x = lane * 0.4
-		"ACUTE":
-			result.origin.x = - lane * 1.9
-			result.target = Vector3(lane * 1.95, Flight.FLOOR_REST_Y, side * 1.12)
-		"SHORT_LOW": result.target = Vector3(lane * 0.9, Flight.FLOOR_REST_Y, side * 0.88)
-		"NET_POPUP", "HIGH_POPUP":
-			result.player.x = lane * 0.4
-			result.origin = Vector3( - lane * 0.15, 1.05, - side * 1.85)
-			result.target = Vector3(lane * 0.4, 1.2 if kind == "NET_POPUP" else 1.95, side * 2.18)
-			result.duration = 0.88 if kind == "NET_POPUP" else 1.1
-		"UNREACHABLE":
-			result.player.x = - lane * 2.3
-
-
-			result.origin = Vector3(lane * 2.1, 0.45, side * 1.3)
-			result.target = Vector3(lane * 2.1, 0.2, side * 2.0)
-			result.duration = 0.12
-	return result

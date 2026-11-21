@@ -5,7 +5,6 @@ extends RefCounted
 ## (sextic). Isolate polynomial roots through derivative-monotone intervals.
 ## Only entry/tangent roots after the original contact remain candidates.
 const Bounds=preload("res://scripts/contact_polynomial_bounds.gd")
-const Geometry=preload("res://scripts/contact_surface_geometry.gd")
 const ROOT_EPS:=1e-9
 const DISTANCE_EPS:=0.00002
 static func first_entry(ball:Vector3,motion:Vector3,a:Vector3,b:Vector3,c:Vector3,
@@ -115,9 +114,3 @@ static func _roots(coefficients:Array,low:float,high:float)->Array:
  for t in roots:
   if distinct.is_empty() or absf(float(t)-float(distinct[-1]))>ROOT_EPS:distinct.append(float(t))
  return distinct
-
-static func _vertex_less(a:Array,b:Array)->bool:
- for vector in 2:
-  for axis in 3:
-   if Vector3(a[vector])[axis]!=Vector3(b[vector])[axis]:return Vector3(a[vector])[axis]<Vector3(b[vector])[axis]
- return false

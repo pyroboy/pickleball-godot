@@ -4,10 +4,7 @@ extends RefCounted
 ## (debug/pose_data.gd) and runtime_court_frame. No authored pose/resource is modified.
 const Surface = preload("res://scripts/player_surface_contacts.gd")
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
-const Hands = preload("res://scripts/player_hand_presentation.gd")
 const Foot = preload("res://scripts/pose_foot_contacts.gd")
-const Paddle = preload("res://scripts/paddle_dimensions.gd")
-const SwingPath = preload("res://scripts/stroke_swing_path.gd")
 const Geometry = preload("res://scripts/contact_surface_geometry.gd")
 const REQUIRED_GAP := 0.001
 const WRIST_RESERVE := 0.98

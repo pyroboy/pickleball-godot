@@ -3,7 +3,6 @@ const ActivationZones = preload("res://scripts/contact_activation_zones.gd")
 const WristReach = preload("res://scripts/paddle_wrist_reach.gd")
 const PaddleDimensions = preload("res://scripts/paddle_dimensions.gd")
 
-const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Body = preload("res://scripts/stroke_body_pose.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const IMPACT_DISTANCE: float = 0.1

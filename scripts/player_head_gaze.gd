@@ -32,27 +32,6 @@ static func local_gaze_basis(parent_basis: Basis, forward: Vector3, world_direct
 	pitch = clampf(pitch, - PITCH_DOWN_LIMIT, PITCH_UP_LIMIT)
 	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch * - forward.z)
 
-static func rest_body_yaw(player, ball, delta: float = 1.0 / 60.0) -> float:
-	var target: = 0.0
-	if ball != null:
-		var direction: Vector3 = ball.global_position - player.global_position
-		direction.y = 0.0
-		var forward: Vector3 = player._get_forward_axis()
-
-
-
-
-		if direction.length_squared() >= 0.01:
-			var yaw: float = forward.signed_angle_to(direction.normalized(), Vector3.UP)
-			target = - rad_to_deg(clampf(yaw, - deg_to_rad(95.0), deg_to_rad(95.0)))
-	if not "_head_gaze" in player or player._head_gaze == null: return target
-	var state = player._head_gaze
-
-
-	var desired: float = state._rest_body_angle + wrapf(target - state._rest_body_angle, -180.0, 180.0)
-	state._rest_body_angle = move_toward(state._rest_body_angle, desired, 240.0 * maxf(delta, 0.0))
-	return state._rest_body_angle
-
 func update(player, ball, delta: float) -> void :
 	if player.body_pivot == null or ball == null: return
 	var torso: Node3D = player.body_pivot.get_node_or_null("TorsoMesh")

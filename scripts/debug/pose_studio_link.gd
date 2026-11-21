@@ -10,8 +10,6 @@ extends "res://scripts/debug/pose_shots.gd"
 ## The link never writes pose files itself: `save` goes through studio.save (tools/pose_notes.py).
 
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
-const Keyframe = preload("res://scripts/stroke_body_keyframe.gd")
-const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 const Store = preload("res://scripts/mobile_pose_store.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
 const LayoutAudit = preload("res://scripts/studio/studio_layout_audit.gd")

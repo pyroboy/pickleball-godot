@@ -68,17 +68,6 @@ static func set_global_from_pose(pose: Resource) -> Error:
 	next.grip = {"main_rotation_deg": angle}
 	return _commit(next)
 
-static func clear_global() -> Error:
-	last_error = ""
-	var loaded := _read_document()
-	if loaded.error != OK: return loaded.error
-	var next: Dictionary = loaded.document.duplicate(true)
-	if next.grip == null: return OK
-	if int(next.revision) >= MAX_GENERATION: return _fail(ERR_OUT_OF_MEMORY, "Grip history limit reached")
-	next.previous = {"generation": next.generation, "grip": next.grip}
-	next.revision = int(next.revision) + 1; next.generation = 0; next.grip = null
-	return _commit(next)
-
 static func undo_global() -> Error:
 	last_error = ""
 	var loaded := _read_document()

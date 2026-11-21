@@ -49,11 +49,6 @@ static func set_visual_court_side(actor, target_side:int) -> Array:
    child.transform=selected
  return changed
 
-static func restore_runtime_visuals(changed:Array)->void:
- for record in changed:
-  if record.has("mesh"):record.node.mesh=record.mesh
-  else:record.node.transform=record.transform
-
 static func _capture_subtree(root) -> Dictionary:
  var nodes:Array=[];var bones:Array=[];var meshes:Array=[]
  var stack:Array=[root]

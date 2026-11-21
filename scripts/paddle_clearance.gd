@@ -43,10 +43,6 @@ static func sample_head_surface() -> Array[Vector3]:
 			points.append(Vector3(cos(angle) * PaddleDimensions.HANDLE_RADIUS, fraction * PaddleDimensions.HANDLE_LENGTH, sin(angle) * PaddleDimensions.HANDLE_RADIUS))
 	return points
 
-static func signed_box_distance(point: Vector3, half_extents: Vector3) -> float:
-	var q: Vector3 = point.abs() - half_extents
-	return q.max(Vector3.ZERO).length() + minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
-
 static func closest_head_surface(point: Vector3, incoming: Vector3) -> Vector3:
 	var xy: = Vector2(point.x, point.y - PaddleDimensions.HEAD_CENTER_Y)
 	var spine: = Vector2(0.0, clampf(xy.y, - PaddleDimensions.HEAD_SPINE_HALF, PaddleDimensions.HEAD_SPINE_HALF))

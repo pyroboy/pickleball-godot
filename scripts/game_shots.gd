@@ -171,12 +171,6 @@ func _update_out_indicator() -> void :
 	_hide_out_indicator()
 
 
-func _show_out_indicator() -> void :
-	if not _out_shown:
-		_out_shown = true
-		_scoreboard_ui.show_out()
-
-
 func _hide_out_indicator() -> void :
 	if _out_shown:
 		_out_shown = false

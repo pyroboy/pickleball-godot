@@ -1,7 +1,6 @@
 extends RefCounted
 
 
-const Dimensions = preload("res://scripts/player_body_dimensions.gd")
 const ArmVisual = preload("res://scripts/player_arm_visual.gd")
 const TorsoSkin = preload("res://scripts/articulated_torso_mesh.gd")
 const SKIN: = Color("dbb18b")
@@ -57,14 +56,6 @@ static func apply(player) -> void :
 static func _replace(node: MeshInstance3D, mesh: ArrayMesh) -> void :
 	node.mesh = mesh
 	node.material_override = material()
-
-static func _limb_rings(profile: Array, colors: Array, sides: int) -> ArrayMesh:
-
-
-	for index in range(profile.size()): profile[index].y *= -1.0
-	profile.reverse()
-	colors.reverse()
-	return _rings(profile, colors, sides)
 
 static func _rings(profile: Array, colors: Array, sides: int, squared: bool = false) -> ArrayMesh:
 	var surface: = SurfaceTool.new()

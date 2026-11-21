@@ -368,12 +368,6 @@ func get_ttc_at_world_point(world_pt: Vector3, radius: float = 0.4) -> float:
 
 
 
-func get_ttc_color_at_world_point(world_pt: Vector3, radius: float = 0.4) -> Color:
-	var ttc: float = get_ttc_at_world_point(world_pt, radius)
-	if ttc >= INF:
-		return COLOR_INACTIVE
-	return _get_time_color(ttc)
-
 func get_approach_info() -> Dictionary:
 
 

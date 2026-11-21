@@ -251,40 +251,6 @@ func _create_line(parent: Node3D, start: Vector3, end: Vector3, material: Standa
 	parent.add_child(mesh_inst)
 	mesh_inst.global_position = center
 
-func create_walls(parent: Node3D) -> void :
-	var half_length: float = COURT_LENGTH / 2.0
-	var half_width: float = COURT_WIDTH / 2.0
-
-	_create_wall(parent, Vector3( - half_width - 0.1, 1, 0), Vector3(0.2, 2, COURT_LENGTH))
-	_create_wall(parent, Vector3(half_width + 0.1, 1, 0), Vector3(0.2, 2, COURT_LENGTH))
-	_create_wall(parent, Vector3(0, 1, - half_length - 0.1), Vector3(COURT_WIDTH, 2, 0.2))
-	_create_wall(parent, Vector3(0, 1, half_length + 0.1), Vector3(COURT_WIDTH, 2, 0.2))
-
-func _create_wall(parent: Node3D, pos: Vector3, size: Vector3) -> void :
-	var wall: StaticBody3D = StaticBody3D.new()
-	parent.add_child(wall)
-	wall.global_position = pos
-
-	var mesh_inst: MeshInstance3D = MeshInstance3D.new()
-	var mesh: BoxMesh = BoxMesh.new()
-	mesh.size = size
-	mesh_inst.mesh = mesh
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.6, 0.55, 0.5, 0.3)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mesh_inst.material_override = mat
-	wall.add_child(mesh_inst)
-
-	var col: CollisionShape3D = CollisionShape3D.new()
-	var shape: BoxShape3D = BoxShape3D.new()
-	shape.size = size
-	col.shape = shape
-	wall.add_child(col)
-
-	wall.physics_material_override = PhysicsMaterial.new()
-	wall.physics_material_override.bounce = 0.6
-	wall.physics_material_override.friction = 0.5
-
 func get_court_bounds() -> Dictionary:
 	var half_len: float = COURT_LENGTH / 2.0
 	var half_wid: float = COURT_WIDTH / 2.0

@@ -7,7 +7,6 @@ const Grounded = preload("res://scripts/match_grounded_reach.gd")
 const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Finite = preload("res://scripts/finite_paddle_contact.gd")
 const ContactShape = preload("res://scripts/paddle_clearance.gd")
-const Dimensions = preload("res://scripts/paddle_dimensions.gd")
 const QUERY_STEP := 1.0 / 120.0
 const IK_FIELDS := ["right_foot_smooth", "left_foot_smooth", "right_foot_locked", "left_foot_locked", "right_foot_lock_pos", "left_foot_lock_pos", "right_step_t", "left_step_t", "_right_yaw", "_left_yaw", "right_contact_serial", "left_contact_serial", "_knee_yaw", "_run_active", "_run_stopping", "_moving", "_live_stance_initialized", "_active_side", "_live_step_origin", "_step_elapsed", "_step_duration", "_last_body_position", "_airborne"]
 var game
@@ -465,7 +464,3 @@ func _valid_delayed_selection(prediction: Dictionary, observed_state: Dictionary
 	if actor == null or actor.ai_brain == null or not Identity.matches(actor, observed_state): return false
 	var ball = actor._get_ball_ref()
 	return ball != null and bool(observed_state.get("ready", false)) and int(observed_state.get("bounces", -1)) in [0, 1] and actor.ai_brain._perception_ready and int(observed_state.get("flight_id", -1)) == actor.ai_brain._observed_flight_id and ball.flight_id == actor.ai_brain._observed_flight_id and not prediction.get("samples", []).is_empty()
-
-func committed_opportunity() -> Dictionary:
-	if not active or helper == null: return {}
-	return Identity.annotate(actor, {"active": true, "kind": kind, "flight_id": helper.flight_id, "phase": str(helper.latest_motion.get("phase", "recovery")), "contacted": helper.contacted, "contact_window": contact_window_active, "recovering": _recovery_only or bridge_active(), "point": helper.plan.get("point", Vector3.ZERO), "time": maxf(0.0, float(helper.plan.get("time", 0.0)) - helper.elapsed)})

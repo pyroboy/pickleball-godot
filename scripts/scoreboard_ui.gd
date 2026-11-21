@@ -166,14 +166,6 @@ func clear_fault() -> void :
 	if is_instance_valid(_hud) and _hud.get("fault"):
 		_hud.fault.visible = false
 
-func show_out(text: String = "OUT!") -> void :
-	if _hud and _hud.get("out_text"):
-		_hud.out_text.text = text
-		_hud.out_text.modulate.a = 1.0
-		_hud.out_text.visible = true
-	if _hud and _hud.get("zone"):
-		_hud.zone.visible = false
-
 func hide_out() -> void :
 	if _hud and _hud.get("out_text"):
 		_hud.out_text.visible = false

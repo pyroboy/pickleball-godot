@@ -95,10 +95,6 @@ func _serve_position(u: float) -> Vector3:
 	var height_scale: float = maxf(contact_point.y - floor_y, .001) / maxf(end.y - floor_y, .001)
 	return Vector3(contact_point.x, floor_y + (point.y - floor_y) * height_scale, contact_point.z)
 
-func set_block_visible(value: bool) -> void:
-	_show_block = value
-	if block: block.visible = value and _definition != null and _definition.has_zone
-
 func _build_path() -> void:
 	var material := _line_material(Color("e7db72"))
 	var mesh := ImmediateMesh.new()

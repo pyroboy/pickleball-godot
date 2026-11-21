@@ -56,26 +56,6 @@ func invalidate_cache() -> void :
 	_cache_override_ref = null
 
 
-func set_editor_base_pose_override(def) -> void :
-	_editor_base_pose_override = def
-	invalidate_cache()
-
-
-func clear_editor_base_pose_override() -> void :
-	_editor_base_pose_override = null
-	invalidate_cache()
-
-
-func set_editor_state_override(state_id: int) -> void :
-	_editor_state_override = state_id
-	invalidate_cache()
-
-
-func clear_editor_state_override() -> void :
-	_editor_state_override = -1
-	invalidate_cache()
-
-
 func get_base_pose_def():
 	if _editor_base_pose_override != null:
 		return _editor_base_pose_override
@@ -112,15 +92,6 @@ func compose_runtime_posture(def_override = null):
 		_cache_state_id = state_id
 		_cache_override_ref = null
 	return composed
-
-
-func compose_preview_posture(base_def, stroke_posture_id: int):
-	var stroke_def = _posture_lib.get_def(stroke_posture_id)
-	if stroke_def == null:
-		stroke_def = _posture_lib.get_def(_player.PaddlePosture.READY)
-	if stroke_def == null or base_def == null:
-		return stroke_def
-	return base_def.to_preview_posture(stroke_def)
 
 
 func update_runtime_pose_state(delta: float) -> void :

@@ -1,6 +1,5 @@
 extends RefCounted
 ## Only maps existing authoring degrees of freedom. No pose/rig math lives here.
-const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const Serve = preload("res://scripts/mobile_serve_pose_store.gd")
 const POS := ["paddle_forehand_mul", "paddle_y_offset", "paddle_forward_mul"]
 const ROT := ["paddle_pitch_base_deg", "paddle_yaw_base_deg", "paddle_roll_base_deg"]

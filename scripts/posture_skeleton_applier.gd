@@ -1,6 +1,5 @@
 class_name PostureSkeletonApplier extends RefCounted
 
-const _PostureDefinition = preload("res://scripts/posture_definition.gd")
 const VisibleBody = preload("res://scripts/stroke_body_pose.gd")
 
 

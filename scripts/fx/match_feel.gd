@@ -172,16 +172,6 @@ func _handle_hit() -> void:
 	(flash.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.72, 0.3, 0.6) if smash else Color(1.0, 1.0, 0.9, 0.5)
 	flash.visible = true
 
-func _classify(velocity: Vector3, hitter) -> String:
-	var speed: float = velocity.length()
-	var horizontal: float = Vector2(velocity.x, velocity.z).length()
-	var arc: float = velocity.y / maxf(horizontal, 0.01)
-	if speed >= SMASH_MIN_SPEED and velocity.y <= -SMASH_MIN_DROP: return "SMASH"
-	if arc > 0.7: return "LOB"
-	if speed < 7.0 and arc < 0.6 and hitter != null and absf(hitter.global_position.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.6: return "DINK"
-	if speed >= 11.0: return "DRIVE"
-	return ""
-
 func _on_rally_ended(winner: int, reason: String, _detail: String) -> void:
 	_rally_hits = 1
 	if reason not in [RallyScorer.FAULT_KITCHEN_VOLLEY, RallyScorer.FAULT_MOMENTUM] or winner not in [0, 1]: return

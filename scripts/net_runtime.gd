@@ -120,17 +120,6 @@ func _upload_impacts() -> void :
 		packed.append(_impacts[i] if i < _impacts.size() else Vector4.ZERO)
 	for material in _materials: material.set_shader_parameter("impacts", packed)
 
-func displacement_at(point: Vector3) -> float:
-
-	var v: float = clampf((point.y - Profile.FLOOR_Y) / Profile.height_at(point.x), 0.0, 1.0)
-	var anchor: float = sin(v * PI) * maxf(0.0, 1.0 - pow(absf(point.x) / Profile.HALF_SPAN, 8.0))
-	var displacement: = 0.0
-	for hit in _impacts:
-		var distance: float = Vector2((point.x - hit.x) * 0.82, (point.y - hit.y) * 1.4).length()
-		displacement += hit.w * exp( - hit.z * 3.4) * exp( - distance * 3.8) * sin(hit.z * 22.0 - distance * 9.0)
-	return clampf(displacement * anchor, -0.045, 0.045)
-
-
 func resolve_swept_contact(state: PhysicsDirectBodyState3D) -> void :
 	if _has_live_contact_owner():
 		reset_sweep_observation(state.transform.origin, state.linear_velocity, int(_ball.flight_id))

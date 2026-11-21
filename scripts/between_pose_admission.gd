@@ -3,7 +3,6 @@ extends RefCounted
 ## The real ball/phase clock is never captured, rewound, moved or awarded here.
 const Clear=preload("res://scripts/live_ready_clearance.gd")
 const Budget=preload("res://scripts/live_arm_budget.gd")
-const Surface=preload("res://scripts/player_surface_contacts.gd")
 const Paddle=preload("res://scripts/paddle_dimensions.gd")
 const FOOT_TOLERANCE:=.00002
 const HAND_GAP:=.0002
@@ -27,12 +26,6 @@ static func _geometry(points:PackedVector3Array)->Dictionary:
  var boxes:Array[AABB]=[];var indices:Array[int]=[]
  for index in range(0,points.size()-2,3):boxes.append(AABB(points[index],Vector3.ZERO).expand(points[index+1]).expand(points[index+2]));indices.append(index/3)
  return {"points":points,"bounds":boxes,"tree":Clear._tree(indices,boxes)}
-static func _surfaces_clear(points:PackedVector3Array,other:Dictionary)->bool:
- if points.is_empty() or other.points.is_empty():return false
- for index in range(0,points.size()-2,3):
-  var a:Vector3=points[index];var b:Vector3=points[index+1];var c:Vector3=points[index+2]
-  if not Clear._clear_triangle(a,b,c,AABB(a,Vector3.ZERO).expand(b).expand(c).grow(HAND_GAP),other,other.tree,HAND_GAP):return false
- return true
 func displayed_report()->Dictionary:
  var arms:Dictionary=Budget.displayed_report(actor)
  var sleeve:Dictionary=Clear.clearance_report(actor)

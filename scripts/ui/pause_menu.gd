@@ -6,7 +6,6 @@ extends CanvasLayer
 const SettingsPanelScript = preload("res://scripts/ui/settings_panel.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
-const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const TITLE_SCENE: = "res://scenes/title.tscn"
 
 var _hint: Label

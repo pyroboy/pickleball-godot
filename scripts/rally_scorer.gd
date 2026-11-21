@@ -145,9 +145,6 @@ func set_active(active: bool) -> void:
 func has_pending_settlement() -> bool:
 	return not _pending_result.is_empty()
 
-func pending_settlement() -> Dictionary:
-	return _pending_result.duplicate(true)
-
 func settle_pending_rally(delta: float = -1.0) -> bool:
 	if _contact_simulation_unresolved(): return false
 	if _pending_result.is_empty(): return true
@@ -257,10 +254,6 @@ func _on_actor_paddle_hit(actor_id: int) -> void :
 		_last_volley_time_msec = Time.get_ticks_msec()
 		_last_volley_player = actor_id
 		_volley_momentum_watches[actor_id] = {"time": _last_volley_time_msec, "stable_since": -1}
-
-func on_illegal_hand_contact(player_num: int, reason: String, evidence: Dictionary) -> void:
-	if evidence.get("kind", "body") != "legal_hand": return
-	on_illegal_hitting_surface_contact(player_num, reason, evidence)
 
 func on_actor_illegal_hitting_surface_contact(actor_id: int, reason: String, evidence: Dictionary) -> void:
 	if not _active or _ball == null or _actor(actor_id) == null: return
@@ -692,21 +685,6 @@ func _team_for_side(side: int) -> int:
 		if found >= 0 and found != ActorIdentity.team_id(player): return -1
 		found = ActorIdentity.team_id(player)
 	return found if found >= 0 else side if not is_instance_valid(_actor_registry) else -1
-
-func on_illegal_hitting_surface_contact(team_id: int, reason: String, evidence: Dictionary) -> void:
-	on_actor_illegal_hitting_surface_contact(_event_actor(team_id, evidence), reason, evidence)
-
-func on_illegal_repeat_contact(team_id: int, evidence: Dictionary) -> void:
-	on_actor_illegal_repeat_contact(_event_actor(team_id, evidence), evidence)
-
-func on_physical_body_contact(team_id: int, evidence: Dictionary) -> void:
-	on_actor_body_contact(_event_actor(team_id, evidence), evidence)
-
-func check_kitchen_volley_at_hit(team_id: int, player_z: float) -> Dictionary:
-	return check_actor_kitchen_volley_at_hit(_legacy_actor(team_id), player_z)
-
-func check_two_bounce_rule(team_id: int) -> Dictionary:
-	return check_actor_two_bounce_rule(_legacy_actor(team_id))
 
 func on_actor_receiving_contact_fault(actor_id: int, result: Dictionary, evidence: Dictionary) -> void:
 	if not _active or _actor(actor_id) == null or result.get("valid", true) or result.get("unresolved", false): return

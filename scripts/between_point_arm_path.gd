@@ -105,14 +105,6 @@ func apply(owner,pose)->void:
  last_basis=arm.hand_mesh.global_basis.orthonormalized()
  last_elbow=arm.forearm_pivot.global_position
  last_upper=arm.upper_pivot.global_basis.orthonormalized();last_fore=arm.forearm_pivot.global_basis.orthonormalized();last_body=actor.body_pivot.global_transform
-func _fixed_hand(arm,left:bool)->void:
- var mount:Transform3D=arm.hand_mesh.global_transform
- var wrist:Vector3=mount*arm.articulated_hand.wrist_socket
- var fit:Dictionary=Budget.solve(arm.upper_pivot.global_position,wrist,arm.forearm_pivot.global_position,mount.basis*arm.articulated_hand.anatomical_basis,arm.upper_arm_length,arm.forearm_length,left)
- if not fit.feasible:return
- arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
- arm.solve_ik(mount.origin,fit.elbow,null,wrist)
- arm.articulated_hand.set_mesh_world_transform(mount);arm.articulated_hand.update_wrist_bridge(arm.fore_mesh.global_basis)
 
 func _fit_cup(arm,owner)->void:
  var transaction=Sleeve.Transaction.new(actor);var saved:Dictionary=transaction._snapshot(true)

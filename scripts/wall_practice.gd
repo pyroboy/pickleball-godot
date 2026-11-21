@@ -2,7 +2,6 @@ extends Node3D
 
 
 const BallModel = preload("res://scripts/ball.gd")
-const Flight = preload("res://scripts/ball_flight_predictor.gd")
 const Profiles = preload("res://scripts/shot_profile.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const FLOOR: = 0.075

@@ -171,10 +171,6 @@ func _clear_presentation() -> void:
 		_drawing.hide()
 		_drawing.queue_redraw()
 
-## Value copy for diagnostics; callers cannot move the actual marker.
-func presentation_state() -> Dictionary:
-	return _presentation.duplicate(true)
-
 static func visual_metrics(viewport_size: Vector2, pixels_per_unit: float = 1.0) -> Dictionary:
 	var scale := Layout.scale_for(viewport_size)
 	var pixel := 1.0 / maxf(0.1, pixels_per_unit)

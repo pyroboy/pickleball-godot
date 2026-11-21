@@ -93,6 +93,3 @@ func _add_posts(net: StaticBody3D) -> void :
 		collision.shape = shape
 		collision.position = post.position
 		net.add_child(collision)
-
-func get_net_height() -> float:
-	return Profile.CENTER_HEIGHT

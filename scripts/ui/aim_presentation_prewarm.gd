@@ -25,11 +25,6 @@ static func cancel_for(host: Node, reason: String = "loading_back") -> bool:
   session.cancelled=true;session.cancel_reason=reason;session.cancel_usec=Time.get_ticks_usec()
  return true
 
-static func active_report(host: Node) -> Dictionary:
- var session: WarmSession=_inflight.get(host.get_instance_id())
- if session==null:return {}
- return {"phase":session.phase,"cancelled":session.cancelled,"draws":session.draws,"cancel_usec":session.cancel_usec}
-
 static func _wait_draw(tree: SceneTree, session: WarmSession) -> bool:
  var previous := session.draws
  # SceneTree process frames continue while paused/minimized; cancellation

@@ -93,12 +93,6 @@ func _necessary_entry_fit() -> bool:
 		if not FootContact.reach_report(leg.thigh_pivot.global_position, leg.foot_pivot.global_position, leg.thigh_length, leg.shin_length).feasible: return false
 	return true
 
-func coarse_candidate_possible(prediction: Dictionary, state: Dictionary) -> bool:
-	# Necessary forecast filter only. No rig writes, certificates, timing or
-	# status updates; the exact chooser remains the admission authority.
-	if active or not _eligible(state) or not _supported_entry() or not _necessary_entry_fit(): return false
-	return not _coarse_forecasts(prediction, state).is_empty()
-
 func _coarse_forecasts(prediction: Dictionary, state: Dictionary) -> Array:
 	var result: Array = []
 	var origin: Vector3 = actor.global_position

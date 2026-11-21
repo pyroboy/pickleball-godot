@@ -91,11 +91,6 @@ static func cell_margin(point: Vector3, cell: Dictionary) -> float:
 	for plane in cell.planes: margin = maxf(margin, plane.distance_to(point))
 	return margin
 
-static func point_margins(point: Vector3, geometry: Dictionary) -> Dictionary:
-	var result: = {"pelvis": INF, "abdomen": INF, "ribcage": INF, "neck": INF}
-	for cell in geometry.cells: result[cell.region] = minf(result[cell.region], cell_margin(point, cell))
-	return result
-
 static func sample_paddle(paddle: Transform3D, points: Array[Vector3], geometry: Dictionary) -> Dictionary:
 	var result: = {"pelvis": INF, "abdomen": INF, "ribcage": INF, "neck": INF}
 	for point in points:
@@ -103,57 +98,6 @@ static func sample_paddle(paddle: Transform3D, points: Array[Vector3], geometry:
 		for cell in geometry.cells: result[cell.region] = minf(result[cell.region], cell_margin(world, cell))
 	return result
 
-static func sample_segment(a: Vector3, b: Vector3, radius: float, geometry: Dictionary, exclude_start_m: float = 0.0, steps: int = 12) -> Dictionary:
-	var result: = {"pelvis": INF, "abdomen": INF, "ribcage": INF, "neck": INF}
-	var start: float = clampf(exclude_start_m / maxf(a.distance_to(b), 1e-05), 0.0, 1.0)
-	for step in range(steps + 1):
-		var point: Vector3 = a.lerp(b, lerpf(start, 1.0, float(step) / maxi(steps, 1)))
-		for cell in geometry.cells: result[cell.region] = minf(result[cell.region], cell_margin(point, cell) - radius)
-	return result
-
-static func leg_metrics(hip: Vector3, knee: Vector3, ankle: Vector3) -> Dictionary:
-	return {"thigh_scale": hip.distance_to(knee) / D.THIGH_LENGTH, "shin_scale": knee.distance_to(ankle) / D.SHIN_LENGTH, 
-		"span_ratio": hip.distance_to(ankle) / (D.THIGH_LENGTH + D.SHIN_LENGTH)}
-
 static var _surface_cache: Dictionary = {}
 
 
-
-static func mesh_surface_triangles(mesh: MeshInstance3D) -> PackedVector3Array:
-	if mesh.has_meta(&"leg_knee_bridge"): return mesh.get_meta(&"leg_knee_bridge").triangles()
-	return preload("res://scripts/player_arm_visual.gd").posed_triangles(mesh)
-
-static func mesh_surface_points(mesh: MeshInstance3D) -> PackedVector3Array:
-	if mesh.has_meta(&"leg_knee_bridge"): return mesh.get_meta(&"leg_knee_bridge").points()
-	if mesh.has_meta(&"arm_elbow_bridge"):
-		return mesh.get_meta(&"arm_elbow_bridge").points()
-	var key: int = mesh.mesh.get_instance_id()
-	if not _surface_cache.has(key):
-		var points: = PackedVector3Array()
-		for surface in range(mesh.mesh.get_surface_count()):
-			var arrays: Array = mesh.mesh.surface_get_arrays(surface)
-			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-			points.append_array(vertices)
-			var count: int = indices.size() if not indices.is_empty() else vertices.size()
-			for offset in range(0, count - 2, 3):
-				var a: Vector3 = vertices[indices[offset] if not indices.is_empty() else offset]
-				var b: Vector3 = vertices[indices[offset + 1] if not indices.is_empty() else offset + 1]
-				var c: Vector3 = vertices[indices[offset + 2] if not indices.is_empty() else offset + 2]
-				points.append((a + b + c) / 3.0);points.append((a + b) * 0.5);points.append((a + c) * 0.5);points.append((b + c) * 0.5)
-		_surface_cache[key] = points
-	return _surface_cache[key]
-
-static func mesh_surface_margins(mesh: MeshInstance3D, geometry: Dictionary, shoulder: Vector3 = Vector3.INF, elbow: Vector3 = Vector3.INF, shoulder_band_m: float = 0.0, sample_details = null) -> Dictionary:
-	var result: = {"pelvis": INF, "abdomen": INF, "ribcage": INF, "neck": INF}
-	var axis: Vector3 = (elbow - shoulder).normalized() if shoulder.is_finite() and elbow.is_finite() else Vector3.ZERO
-	for point in mesh_surface_points(mesh):
-		var world: Vector3 = mesh.global_transform * point
-		if shoulder_band_m > 0 and (world - shoulder).dot(axis) < shoulder_band_m: continue
-		for cell in geometry.cells:
-			var margin: float = cell_margin(world, cell)
-			if margin < result[cell.region]:
-				result[cell.region] = margin
-				if sample_details != null:
-					sample_details[cell.region] = {"point": [world.x, world.y, world.z], "along_arm_m": (world - shoulder).dot(axis) if shoulder.is_finite() else -1.0}
-	return result

@@ -105,13 +105,6 @@ func slowmo_scale() -> float:
 	for v in _slowmo_sources.values(): lowest = minf(lowest, float(v))
 	return lowest
 
-func is_slowmo_active() -> bool:
-	return not _slowmo_sources.is_empty()
-
-func is_hitstop_active() -> bool:
-	return _hitstop_active
-
-
 func set_realtime_required(source_id: String, required: bool) -> void :
 	if required: _realtime_sources[source_id] = true
 	else: _realtime_sources.erase(source_id)

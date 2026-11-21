@@ -69,11 +69,6 @@ const _GameShots = preload("res://scripts/game_shots.gd")
 const _ReactionHitButton = preload("res://scripts/reaction_hit_button.gd")
 
 
-const _PostureDefinition = preload("res://scripts/posture_definition.gd")
-const _BasePoseDefinition = preload("res://scripts/base_pose_definition.gd")
-const _BasePoseLibrary = preload("res://scripts/base_pose_library.gd")
-const _PostureLibrary = preload("res://scripts/posture_library.gd")
-const _PostureSkeletonApplier = preload("res://scripts/posture_skeleton_applier.gd")
 
 
 
@@ -241,33 +236,8 @@ func get_team_court_side(team: int) -> int:
 		side = actor.court_side
 	return side
 
-func get_team_for_court_side(side: int) -> int:
-	if side not in [0, 1]: return -1
-	var team := -1
-	for candidate in [0, 1]:
-		if get_team_court_side(candidate) == side:
-			if team >= 0: return -1
-			team = candidate
-	return team
-
 func _is_practice() -> bool:
 	return _practice_mode or (practice_launcher != null and practice_launcher.is_active)
-
-func is_awaiting_return() -> bool:
-	return _awaiting_return
-
-func get_serve_charge_time() -> float:
-	return serve_charge_time
-
-func get_ai_difficulty() -> int:
-	return ai_difficulty
-
-func get_serve_aim_offset() -> float:
-	return serve_aim_offset_x
-
-func get_trajectory_arc_offset() -> float:
-	return trajectory_arc_offset
-
 
 func _unhandled_input(event: InputEvent) -> void :
 	if event is InputEventMouseButton and event.pressed:
@@ -824,12 +794,6 @@ func _on_player_grade_flashed(grade: String) -> void :
 func _on_reaction_auto_fire() -> void :
 	if game_state == GameState.PLAYING and not input_handler.serve_is_charging:
 		_perform_player_swing(1.0)
-
-func _enter_slow_mo() -> void :
-	if _in_slow_mo:
-		return
-	_in_slow_mo = true
-	TimeScale.request_slowmo("reaction", 0.55)
 
 func _exit_slow_mo() -> void :
 	if _in_slow_mo:
@@ -1661,9 +1625,6 @@ func _start_drop_test() -> void :
 	if game_drop_test and game_drop_test.has_method("start"):
 		game_drop_test.start()
 
-func is_ball_frozen() -> bool:
-	return _ball_frozen
-
 func _toggle_ball_freeze() -> void :
 	if game_serve and game_serve.is_release_pending():
 		game_serve.cleanup()
@@ -1713,9 +1674,6 @@ var _editor_previous_camera_mode: int = 0
 
 
 
-
-func _simulate_shot_trajectory(start_pos: Vector3, vel: Vector3, omega: Vector3, grav: float, target_z: float, net_sign: float) -> Dictionary:
-	return shot_physics.simulate_shot_trajectory(start_pos, vel, omega, grav, target_z, net_sign)
 
 func compute_shot_velocity(ball_pos: Vector3, charge_ratio: float, player_num: int, shot_type: String) -> Vector3:
 	return shot_physics.compute_shot_velocity(ball_pos, charge_ratio, player_num, shot_type, ai_difficulty)

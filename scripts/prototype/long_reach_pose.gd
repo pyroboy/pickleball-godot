@@ -2,7 +2,6 @@ extends RefCounted
 ## Isolated, deterministic long-reach presentation. No authored resource writes.
 ## Body travel follows a planted lead foot; the trailing foot gathers afterwards.
 const Dimensions = preload("res://scripts/player_body_dimensions.gd")
-const Hands = preload("res://scripts/player_hand_presentation.gd")
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
 const DURATION := 1.80
 const CONTACT_TIME := 0.43
@@ -112,50 +111,6 @@ static func main_pole(actor,_wrist:Vector3,_mount:Transform3D,motion:Dictionary,
 	var outboard:Vector3=actor.right_arm_node.upper_pivot.global_position+torso.global_basis.x
 	if base.is_empty():return outboard
 	return torso.to_global(base.main_elbow).lerp(outboard,float(motion.pole_weight))
-
-static func apply_support_arm(actor,base:Dictionary,motion:Dictionary,hands)->void:
-	var arm=actor.left_arm_node
-	var torso:Node3D=actor.body_pivot.get_node("TorsoMesh")
-	var shoulder:Vector3=arm.upper_pivot.global_position
-	var rest:Vector3=torso.to_global(base.support_wrist)
-	var high:float=float(motion.get("height_weight",0.0))
-	# A longer low/outboard counterbalance lets the upper arm hang naturally.
-	# The elbow guide stays below the shoulder instead of making a raised,
-	# sharply bent free arm. Preserve the approved low/mid path exactly.
-	var open_offset:=Vector3(-.38,-.24,.06).lerp(Vector3(-.48,-.38,.06),high)
-	var opened:Vector3=shoulder+torso.global_basis*open_offset
-	var wrist:Vector3=rest.lerp(opened,float(motion.counterbalance_weight))
-	var pole_offset:=Vector3.LEFT.lerp(Vector3(-1.0,-.30,-.30),high)
-	var opened_pole:Vector3=shoulder-torso.global_basis.x if high<=0.0 else shoulder+torso.global_basis*pole_offset
-	var pole:Vector3=torso.to_global(base.support_elbow).lerp(opened_pole,float(motion.counterbalance_weight))
-	# Free hand follows its actual solved forearm; never leave the old grip or
-	# a world-fixed support arm behind when the chest turns into a backhand.
-	arm.upper_pivot.basis=Basis.IDENTITY;arm.forearm_pivot.basis=Basis.IDENTITY
-	var mount:Transform3D=hands.callout_mount(arm,wrist,pole,float(motion.counterbalance_weight))
-	var ready_mount:Transform3D=torso.global_transform*base.support_mount
-	mount.basis=ready_mount.basis.slerp(mount.basis,float(motion.pole_weight)).orthonormalized()
-	mount.origin=wrist-mount.basis*arm.articulated_hand.wrist_socket
-	arm.solve_ik(mount.origin,pole,mount,wrist)
-	if high>0.0:
-		# The high free hand follows a convex joint-space path from the captured
-		# READY wrist to a neutral wrist. A world-down thumb reference can add
-		# >90 degrees of forearm rotation as the chest turns; never inherit that
-		# into the tall stance or hide it with a larger wrist budget.
-		var model=arm.articulated_hand
-		var ready:Dictionary=base.support_channels
-		var settle:float=1.0-float(motion.counterbalance_weight)
-		var reference:Basis=Anatomy.forearm_reference_for_arm(arm,wrist,true)
-		var axial:float=deg_to_rad(float(ready.forearm_axial_deg)*settle/model.radial_sign)
-		var flex:float=deg_to_rad(float(ready.flexion_deg)*settle)
-		var deviation:float=deg_to_rad(float(ready.radial_deviation_deg)*settle/model.radial_sign)
-		var anatomical:Basis=reference*Basis(Vector3.RIGHT,axial)*Basis(Vector3.UP,flex)*Basis(Vector3.BACK,deviation)
-		var safe:Basis=anatomical*model.anatomical_basis.inverse()
-		mount.basis=mount.basis.slerp(safe,high).orthonormalized()
-		mount.origin=wrist-mount.basis*model.wrist_socket
-	hands.apply_mount(arm,mount)
-	if float(motion.pole_weight)<=.000001:
-		var pose:Dictionary=base.support_hand_pose
-		arm.articulated_hand.set_pose(pose.mode,pose.closure,pose.index,pose.style)
 
 static func _lift(t:float,start:float,end:float,height:float)->float:
 	if t<=start or t>=end:return 0.0

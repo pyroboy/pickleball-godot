@@ -16,7 +16,6 @@ const SMASH_DOWNWARD_BIAS: = 0.22
 const AI_HIT_COOLDOWN: = 0.16
 const AI_CHARGE_DURATION: = 0.28
 const AI_TRAJECTORY_DURATION: = 0.6
-const _PL = preload("res://scripts/posture_library.gd")
 
 
 
@@ -85,9 +84,6 @@ func _authored_follow_through_data(posture_id: int, _charge_ratio: float) -> Dic
 		"hold": maxf(0.0, def.ft_duration_hold), 
 		"curve": def.ft_ease_curve, 
 	}
-
-func snapped_v3(v: Vector3) -> String:
-	return "(%s, %s, %s)" % [snapped(v.x, 0.01), snapped(v.y, 0.01), snapped(v.z, 0.01)]
 
 func _process(delta: float) -> void:
 	var _pt := Time.get_ticks_usec()
@@ -485,34 +481,6 @@ func update_underhand_serve_strike(progress: float) -> void :
 
 	var pose: PostureDefinition = Motion.serve_strike(_serve_release_start, t, _serve_release_spin)
 	_apply_motion_pose(pose)
-
-
-func animate_underhand_serve_release(charge_ratio: float, spin_mode: int = 0) -> void :
-	if not _player._ensure_paddle_ready(): return
-	if paddle_swing_tween != null and paddle_swing_tween.is_valid():
-		paddle_swing_tween.kill()
-	if _player.posture.human_contact:
-		_player.posture.human_contact.cancel()
-	serving_visual_active = true
-	charge_visual_active = false
-	is_in_follow_through = true
-	_apply_motion_pose(Motion.serve_contact(spin_mode))
-	paddle_swing_tween = _player.create_tween()
-	var sweep: = func(factor: float):
-		_apply_motion_pose(Motion.serve_follow_through(charge_ratio, factor, spin_mode))
-	paddle_swing_tween.tween_method(sweep, 0.0, 1.0, Motion.SERVE_SWEEP_TIME).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	paddle_swing_tween.tween_interval(Motion.SERVE_HOLD_TIME)
-	var finish: PostureDefinition = Motion.serve_follow_through(charge_ratio, 1.0, spin_mode)
-	var ready: PostureDefinition = _get_posture_def(_player.PaddlePosture.READY)
-	if ready:
-
-		ready = ready.lerp_with(ready, 0.0)
-		ready.front_foot_forward = -0.12
-		ready.back_foot_back = -0.24
-		var recover: = func(factor: float):
-			_apply_motion_pose(SwingPath.blend_pose(finish, ready, factor))
-		paddle_swing_tween.tween_method(recover, 0.0, 1.0, Motion.SERVE_RECOVERY_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	paddle_swing_tween.finished.connect(_on_paddle_release_finished)
 
 
 func _apply_motion_pose(pose: PostureDefinition) -> void :

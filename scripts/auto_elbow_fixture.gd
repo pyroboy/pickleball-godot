@@ -7,7 +7,6 @@ const BodyClearance = preload("res://scripts/body_clearance.gd")
 const PaddleClearance = preload("res://scripts/paddle_clearance.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
-const Path = preload("res://scripts/stroke_swing_path.gd")
 const Preview = preload("res://scripts/runtime_motion_preview.gd")
 const Styles = preload("res://scripts/serve_style.gd")
 const UPPER_RADIUS := 0.058
@@ -174,54 +173,6 @@ static func basis_angle_deg(a: Basis, b: Basis) -> float:
 	var cosine: float = clampf((relative.x.x + relative.y.y + relative.z.z - 1.0) * 0.5, -1.0, 1.0)
 	return rad_to_deg(atan2(sine, cosine))
 
-static func sample_pose(kind: String, id: int, progress: float, hand: int = 0, charge: float = 1.0) -> PostureDefinition:
-	var pose: PostureDefinition
-	if kind == "serve":
-		var duration: float = serve_duration(id)
-		pose = Preview.sample_serve_elapsed(id, progress * duration, charge)
-	else:
-		var base: PostureDefinition = PostureLibrary.instance().get_def(id).duplicate(true)
-		base.paddle_hand = hand
-		pose = Path.sample(base, progress) if kind == "authored" else Motion.sample_drive(base, progress, charge)
-	pose.paddle_hand = hand
-	return pose
-
-static func serve_duration(style: int) -> float:
-	return float(Preview.serve_plan(style).contact_time) + Styles.sweep_duration(style) + Motion.SERVE_HOLD_TIME + Motion.SERVE_RECOVERY_TIME
-
-static func sample_times(kind: String, id: int, steps: int) -> Array[float]:
-	var times: Array[float] = []
-	for step in range(steps + 1): times.append(float(step) / maxi(steps, 1))
-	if kind == "serve":
-		var plan: Dictionary = Preview.serve_plan(id)
-		var duration: float = serve_duration(id)
-		var contact: float = plan.contact_time
-		for elapsed in [0.0, 0.18 * 0.45, 0.18, float(plan.bounce_time), contact - Styles.stroke_duration(id), contact,
-			contact + Styles.sweep_duration(id), contact + Styles.sweep_duration(id) + Motion.SERVE_HOLD_TIME, duration]:
-			if elapsed >= 0.0 and elapsed <= duration:
-				var t: float = elapsed / duration
-				if not times.has(t): times.append(t)
-	else:
-		for t in [0.0, 0.25, 0.5, 0.75, 1.0]:
-			if not times.has(t): times.append(t)
-	times.sort()
-	return times
-
-static func baseline_metrics(frame: Dictionary) -> Dictionary:
-	var shoulder: Vector3 = frame.shoulder
-	var wrist: Vector3 = frame.wrist
-	var elbow: Vector3 = frame.baseline_elbow
-	var span: float = shoulder.distance_to(wrist)
-	var forward_result: Dictionary = forward(frame, elbow)
-	var channels: Dictionary = frame.baseline_channels
-	return {"reach_ok": bool(forward_result.valid), "reach_gap_m": maxf(0.0, span - float(frame.upper_length) - float(frame.fore_length)),
-		"production_stretch": frame.production_visual_stretch,
-		"wrist_budget_ok": channels.within_animation_budget,
-		"wrist_budget_ratio": channels.coupled_budget_ratio,
-		"wrist_axial_deg": channels.forearm_axial_deg,
-		"fixed_mount_ik_wrist_gap_m": frame.fixed_mount_ik_wrist_gap_m,
-		"baseline_circle_gap_m": forward_result.get("elbow_projection_gap_m", -1.0)}
-
 static func validate_pair(frames: Array, solutions: Array) -> Dictionary:
 	if frames.size() != 2 or solutions.size() != 2:
 		return {"valid": false, "reason": "two_arm_pair_required", "clearance_m": -INF}
@@ -312,19 +263,6 @@ static func _paddle_segment_bound(a: Vector3, b: Vector3, radius: float, head: b
 	var bound: float = center_distance - half_length
 	if bound >= 0.001 or depth <= 0 or center_distance < 0.0: return bound
 	return minf(_paddle_segment_bound(a, middle, radius, head, depth - 1), _paddle_segment_bound(middle, b, radius, head, depth - 1))
-
-## Optional exact-second fixture from the isolated gameplay-parity sequence.
-## A TO_READY sequence includes strike, sweep, hold and recovery. It is a separate
-## coverage mode from sample_pose's normalized source keyframe path.
-static func make_sequence(kind: String, id: int, hand: int = 0, player = null):
-	var Sequence: Script = load("res://scripts/ui/mobile_pose_sequence.gd")
-	var source: PostureDefinition
-	if kind == "serve": source = preload("res://scripts/mobile_serve_pose_store.gd").get_def(id).duplicate(true)
-	else: source = PostureLibrary.instance().get_def(id).duplicate(true)
-	source.paddle_hand = hand
-	var sequence = Sequence.new()
-	sequence.configure(source, Sequence.Mode.TO_READY, Sequence.Stance.AUTHORED, 0, kind != "authored", player)
-	return sequence
 
 static func sequence_times(sequence, steps: int) -> Array[float]:
 	var times: Array[float] = []

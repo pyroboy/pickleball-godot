@@ -23,27 +23,6 @@ static func o(field:String,label:String,items:Array)->Dictionary:
 
 const JOINT_IDS=["right_elbow","left_elbow","right_knee","left_knee","right_foot","left_foot","right_hand","left_hand","hips","torso","head","paddle"]
 const JOINT_LABELS=["Right elbow","Left elbow","Right knee","Left knee","Right foot","Left foot","Right hand","Left hand","Hips","Upper body","Head","Paddle"]
-static func joint_fields(id:String,base:bool)->Array:
-	var names:Array=[]
-	match id:
-		"right_elbow":names=["right_elbow_pole","right_shoulder_rotation_deg"]
-		"left_elbow":names=["left_elbow_pole","left_shoulder_rotation_deg"]
-		"right_knee":names=["right_knee_pole","crouch_amount"]
-		"left_knee":names=["left_knee_pole","crouch_amount"]
-		"right_foot":names=["right_foot_pitch_deg","right_foot_yaw_deg","right_foot_offset"]
-		"left_foot":names=["left_foot_pitch_deg","left_foot_yaw_deg","left_foot_offset"]
-		"right_hand":names=["right_hand_offset","main_grip_rotation_deg","support_grip_rotation_deg","support_grip_slide_m"]
-		"left_hand":names=["left_hand_offset","main_grip_rotation_deg","support_grip_rotation_deg","support_grip_slide_m"]
-		"hips":names=["body_position_offset","crouch_amount","weight_shift","hip_yaw_deg","body_pitch_deg","body_roll_deg"]
-		"torso":names=["torso_yaw_deg","torso_pitch_deg","torso_roll_deg","spine_curve_deg","shoulder_protraction_m"]
-		"head":names=["head_yaw_deg","head_pitch_deg","head_track_ball_weight"]
-		"paddle":return fields(4,base)
-	var result:Array=[]
-	for field in names:
-		for group in range(5):
-			for d in fields(group,base):
-				if d.field==field:result.append(d)
-	return result
 
 ## New editor input limits only. Loading/importing existing authored poses does
 ## not normalize them; physical reach still belongs to the unchanged rig.

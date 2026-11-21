@@ -9,7 +9,6 @@ const AI_MARKER_HEIGHT = 0.09
 const NON_VOLLEY_ZONE = PickleballConstants.NON_VOLLEY_ZONE
 const MEDIUM_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.MEDIUM_OVERHEAD_TRIGGER_HEIGHT
 const HIGH_OVERHEAD_TRIGGER_HEIGHT = PickleballConstants.HIGH_OVERHEAD_TRIGGER_HEIGHT
-const _Ball = preload("res://scripts/ball.gd")
 const DEBUG_STEP_PLANNER = true
 
 var _debug_hidden: bool = true
@@ -435,72 +434,6 @@ func update_ai_indicators() -> void :
 	ai_contact_indicator.global_position = _player._clamp_to_court(ai_contact_indicator_position)
 
 
-func predict_human_intercept_points(ball: RigidBody3D) -> Dictionary:
-	var gravity: float = _Ball.get_effective_gravity()
-	var pos: Vector3 = ball.global_position
-	var vel: Vector3 = ball.linear_velocity
-	var omega: Vector3 = ball.angular_velocity
-	var floor_h: float = 0.08
-
-
-	const MIN_HIT_HEIGHT = 0.18
-	const MAX_HIT_HEIGHT = 1.5
-	const STEP = 0.045
-	const MAX_STEPS = 80
-	const MIN_GAP = 0.25
-
-	var pre_bounce: Array[Vector3] = []
-	var post_bounce: Array[Vector3] = []
-	var has_bounced = false
-	var last_pre = Vector3.ZERO
-	var last_post = Vector3.ZERO
-
-	for _i in range(MAX_STEPS):
-		var stepped: Array = _Ball.predict_aero_step(pos, vel, omega, gravity, STEP)
-		if stepped.is_empty():
-			break
-		pos = stepped[0]
-		vel = stepped[1]
-		omega = stepped[2]
-
-		if pos.y <= floor_h:
-			if not has_bounced:
-				has_bounced = true
-				pos.y = floor_h
-				var bounced: Array = _Ball.predict_bounce_spin(vel, omega)
-				if bounced.is_empty():
-					break
-				vel = bounced[0]
-				omega = bounced[1]
-				continue
-			else:
-				break
-
-
-		if pos.z < _player.min_z or pos.z > _player.max_z:
-			continue
-		if pos.x < _player.min_x or pos.x > _player.max_x:
-			continue
-
-		if pos.y >= MIN_HIT_HEIGHT and pos.y <= MAX_HIT_HEIGHT:
-			if not has_bounced:
-
-				var in_kitchen = (_player.player_num == 0 and pos.z < NON_VOLLEY_ZONE) or \
-				(_player.player_num == 1 and pos.z > - NON_VOLLEY_ZONE)
-				if not in_kitchen:
-					if last_pre == Vector3.ZERO or pos.distance_to(last_pre) >= MIN_GAP:
-						if pre_bounce.size() < HUMAN_INTERCEPT_POOL_SIZE:
-							pre_bounce.append(pos)
-							last_pre = pos
-			else:
-				if last_post == Vector3.ZERO or pos.distance_to(last_post) >= MIN_GAP:
-					if post_bounce.size() < HUMAN_INTERCEPT_POOL_SIZE:
-						post_bounce.append(pos)
-						last_post = pos
-
-	return {"pre": pre_bounce, "post": post_bounce}
-
-
 func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	_last_flight = {}
@@ -527,132 +460,9 @@ func draw_incoming_trajectory(ball: RigidBody3D) -> Array[Vector3]:
 	if incoming_traj_instance: incoming_traj_instance.visible = _trajectory_visible
 	return points
 
-func clear_incoming_trajectory() -> void :
-	_last_flight = {}
-	_last_trajectory_points.clear()
-	if incoming_traj_mesh:
-		incoming_traj_mesh.clear_surfaces()
-	if incoming_traj_instance:
-		incoming_traj_instance.visible = false
-
 func update_human_intercept_pools(ball: RigidBody3D) -> void :
 	_last_trajectory_points = draw_incoming_trajectory(ball)
 
 	for nodes in [human_prebounce_indicators, human_postbounce_indicators, human_prebounce_dashlines, human_prebounce_labels, human_postbounce_labels]:
 		for node in nodes:
 			if node: node.visible = false
-
-func _classify_pre_bounce_shot(hit_h: float, player_z_abs: float, _pt_z_abs: float) -> Dictionary:
-	if _player and _player.pose_controller:
-		return _player.pose_controller.describe_contact_intent(hit_h, player_z_abs, true)
-
-	if hit_h >= HIGH_OVERHEAD_TRIGGER_HEIGHT:
-		return {
-			"label": "⚡ SMASH ⚡", 
-			"dot_color": Color(1.0, 0.15, 0.1, 1.0), 
-			"label_color": Color(1.0, 0.22, 0.02, 1.0), 
-			"scale": 1.65, 
-			"energy": 1.6, 
-		}
-	if hit_h >= MEDIUM_OVERHEAD_TRIGGER_HEIGHT:
-		return {
-			"label": "SEMI-SMASH", 
-			"dot_color": Color(1.0, 0.55, 0.05, 1.0), 
-			"label_color": Color(1.0, 0.65, 0.1, 1.0), 
-			"scale": 1.25, 
-			"energy": 1.3, 
-		}
-
-	var near_kitchen: bool = player_z_abs < NON_VOLLEY_ZONE + 0.6
-	if hit_h < 0.45 and near_kitchen:
-		return {
-			"label": "DINK VOLLEY", 
-			"dot_color": Color(0.95, 0.9, 0.2, 1.0), 
-			"label_color": Color(1.0, 1.0, 0.35, 1.0), 
-			"scale": 0.95, 
-			"energy": 1.0, 
-		}
-	if near_kitchen:
-		return {
-			"label": "PUNCH VOLLEY", 
-			"dot_color": Color(1.0, 0.78, 0.15, 1.0), 
-			"label_color": Color(1.0, 0.85, 0.22, 1.0), 
-			"scale": 1.05, 
-			"energy": 1.1, 
-		}
-
-	return {
-		"label": "DEEP VOLLEY", 
-		"dot_color": Color(1.0, 0.7, 0.15, 1.0), 
-		"label_color": Color(1.0, 0.78, 0.2, 1.0), 
-		"scale": 1.0, 
-		"energy": 1.0, 
-	}
-
-func _classify_post_bounce_shot(hit_h: float, player_z_abs: float, _pt_z_abs: float) -> Dictionary:
-	if _player and _player.pose_controller:
-		return _player.pose_controller.describe_contact_intent(hit_h, player_z_abs, false)
-	var near_kitchen: bool = player_z_abs < NON_VOLLEY_ZONE + 0.6
-	var at_baseline: bool = player_z_abs > NON_VOLLEY_ZONE + 2.6
-
-	if hit_h < 0.4 and near_kitchen:
-		return {
-			"label": "DINK", 
-			"dot_color": Color(0.3, 1.0, 0.85, 1.0), 
-			"label_color": Color(0.45, 1.0, 0.9, 1.0), 
-			"scale": 0.9, 
-			"energy": 1.0, 
-		}
-
-	if hit_h < 0.45:
-		return {
-			"label": "DROP", 
-			"dot_color": Color(0.4, 0.95, 1.0, 1.0), 
-			"label_color": Color(0.55, 1.0, 1.0, 1.0), 
-			"scale": 0.95, 
-			"energy": 1.0, 
-		}
-
-	if hit_h > 1.1:
-		return {
-			"label": "LOB RETURN", 
-			"dot_color": Color(0.7, 0.55, 1.0, 1.0), 
-			"label_color": Color(0.8, 0.65, 1.0, 1.0), 
-			"scale": 1.1, 
-			"energy": 1.15, 
-		}
-
-	if at_baseline:
-		return {
-			"label": "GROUNDSTROKE", 
-			"dot_color": Color(0.2, 0.9, 1.0, 1.0), 
-			"label_color": Color(0.35, 0.95, 1.0, 1.0), 
-			"scale": 1.1, 
-			"energy": 1.15, 
-		}
-
-	return {
-		"label": "RETURN", 
-		"dot_color": Color(0.3, 0.85, 1.0, 1.0), 
-		"label_color": Color(0.45, 0.92, 1.0, 1.0), 
-		"scale": 1.0, 
-		"energy": 1.0, 
-	}
-
-
-func draw_dash_line(mesh_inst: MeshInstance3D, from_pos: Vector3, to_pos: Vector3) -> void :
-	var imesh = mesh_inst.mesh as ImmediateMesh
-	if imesh == null:
-		return
-	imesh.clear_surfaces()
-	var height = to_pos.y - from_pos.y
-	if height < 0.05:
-		return
-	var NUM_DASHES = 7
-	imesh.surface_begin(Mesh.PRIMITIVE_LINES)
-	for d in range(NUM_DASHES):
-		var t_start = float(d) / float(NUM_DASHES)
-		var t_end = (float(d) + 0.5) / float(NUM_DASHES)
-		imesh.surface_add_vertex(Vector3(from_pos.x, from_pos.y + t_start * height, from_pos.z))
-		imesh.surface_add_vertex(Vector3(from_pos.x, from_pos.y + t_end * height, from_pos.z))
-	imesh.surface_end()

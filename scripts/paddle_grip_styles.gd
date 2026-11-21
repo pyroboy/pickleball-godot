@@ -13,10 +13,6 @@ static func spin_for_relative(pose, degrees: float) -> float:
 static func set_relative_rotation(pose, degrees: float) -> void:
 	pose.paddle_in_hand_rotation_deg = spin_for_relative(pose, degrees)
 
-static func apply_preset(pose, index: int) -> void:
-	if index >= 0 and index < PRESET_ANGLES.size():
-		set_relative_rotation(pose, PRESET_ANGLES[index])
-
 static func preset_index(pose) -> int:
 	var rotation := relative_rotation(pose)
 	for index in range(PRESET_ANGLES.size()):

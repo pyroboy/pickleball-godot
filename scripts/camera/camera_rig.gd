@@ -280,9 +280,6 @@ func handle_input(event: InputEvent) -> void :
 
 
 
-func cancel_orbit_drag() -> void :
-	_orbit_dragging = false
-
 # After a doubles change of ends the human plays from the far end. Turn the
 # whole rig half a turn about the court centre so the view stays behind them:
 # the court is symmetric, so this reads as the court flipping, not the camera.
@@ -323,72 +320,6 @@ func update(delta: float) -> void :
 	if camera != null and (editor_active or orbit_mode != 0):
 		var target_fov: float = 72.0 if editor_active or orbit_mode == 3 else PORTRAIT_HORIZONTAL_FOV if _portrait_camera and orbit_mode == 0 else _base_fov
 		camera.fov = lerpf(camera.fov, target_fov, 5.0 * delta)
-
-func begin_editor_view(player: Node3D) -> void :
-	gameplay_camera.suspend()
-	end_between_point_cinematic()
-	if editor_active or camera == null or player == null:
-		return
-	_editor_saved_state = {
-		"mode": orbit_mode, "angle": orbit_angle, "pitch": orbit_pitch, 
-		"auto": orbit_auto, "position": camera.position, 
-		"rotation": camera.rotation_degrees, "fov": camera.fov, 
-		"v_offset": camera.v_offset, "h_offset": camera.h_offset, 
-		"projection": camera.projection, "size": camera.size, "keep_aspect": camera.keep_aspect,
-		"near": camera.near, "frustum_offset": camera.frustum_offset, 
-	}
-	editor_active = true
-	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
-	camera.keep_aspect = Camera3D.KEEP_HEIGHT
-	orbit_mode = 3
-	orbit_auto = false
-	reset_editor_view(player.global_position)
-
-func end_editor_view() -> void :
-	if not editor_active or camera == null:
-		return
-	editor_active = false
-	_editor_orbit_dragging = false
-	_editor_pan_dragging = false
-	orbit_mode = _editor_saved_state.get("mode", 0)
-	orbit_angle = _editor_saved_state.get("angle", 0.0)
-	orbit_pitch = _editor_saved_state.get("pitch", 0.35)
-	orbit_auto = _editor_saved_state.get("auto", false)
-	camera.position = _editor_saved_state.get("position", _default_pos)
-	camera.rotation_degrees = _editor_saved_state.get("rotation", _default_rot)
-	camera.fov = _editor_saved_state.get("fov", _base_fov)
-	camera.v_offset = _editor_saved_state.get("v_offset", 0.0)
-	camera.h_offset = _editor_saved_state.get("h_offset", 0.0)
-	camera.projection = _editor_saved_state.get("projection", Camera3D.PROJECTION_PERSPECTIVE)
-	camera.size = _editor_saved_state.get("size", 1.0)
-	camera.keep_aspect = _editor_saved_state.get("keep_aspect", Camera3D.KEEP_HEIGHT)
-	camera.near = _editor_saved_state.get("near", 0.05)
-	camera.frustum_offset = _editor_saved_state.get("frustum_offset", Vector2.ZERO)
-	_editor_saved_state.clear()
-
-func reset_editor_view(player_position: Vector3) -> void :
-	editor_target = player_position + Vector3.UP * 0.15
-	editor_distance = 3.4
-	orbit_angle = - PI * 0.5 + 0.55
-	orbit_pitch = 0.24
-	_update_editor_camera()
-
-func focus_editor_view(world_point: Vector3) -> void :
-	editor_target = world_point
-	_update_editor_camera()
-
-func set_editor_view(view: String) -> void :
-	match view:
-		"front":
-			orbit_angle = - PI * 0.5
-			orbit_pitch = 0.24
-		"side":
-			orbit_angle = 0.0
-			orbit_pitch = 0.24
-		"top":
-			orbit_angle = - PI * 0.5
-			orbit_pitch = 1.48
-	_update_editor_camera()
 
 func _handle_editor_input(event: InputEvent) -> void :
 	if event is InputEventMouseButton:
@@ -757,9 +688,6 @@ func begin_between_point_cinematic(focus_provider: Callable = Callable(), durati
 
 func end_between_point_cinematic() -> void :
 	if _between_point_camera != null: _between_point_camera.end()
-
-func is_between_point_cinematic_active() -> bool:
-	return _between_point_camera.active
 
 func _cinematic_blocked() -> bool:
 	if gameplay_camera.mode != GameplayCamera.CENTER: return true

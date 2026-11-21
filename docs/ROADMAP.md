@@ -48,7 +48,7 @@ Status: done, in progress, next, later.
 - [x] Card atlases at the game's real limb lengths: `assets/pixel_cards/`
 - [x] Fog-free card shader, tonemap-compensated colours: `shaders/pixel_card.gdshader`
 - [x] Gameplay identical with cards on and off (seeded bench, pose diff)
-- [ ] Classic / Pixel toggle in the Settings UI
+- [x] ~~Classic / Pixel toggle in the Settings UI~~: dropped 2026-11-21, pixel cards are the only look
 - [ ] Far-court card tier (20 degrees, half size)
 - [ ] Hand states (open / grip / reach) from the articulated hand mode
 - [ ] Joint seams (elbow, knee) and draw-order polish

@@ -445,9 +445,6 @@ func _select_shot(shot: String) -> void :
 		if game.selected_spin_mode == mode: break
 		game.cycle_spin_mode()
 
-func _selected_shot() -> String:
-	return "DROP" if game.selected_shot_intent == "DROP" else game.hud._selected_spin
-
 # Scoped minima are authored 720-wide portrait units, so their proportions
 # survive high-DPI framebuffers. Match the bounds-checked narrow portrait UI.
 func _caption_size(font_size: int, minimum_design_size: int = 0) -> int:

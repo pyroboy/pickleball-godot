@@ -88,13 +88,6 @@ func enter_idle() -> void :
 	queue_redraw()
 
 
-func hide_button() -> void :
-	_active = false
-	visible = false
-	_in_perfect_window = false
-	_flash_t = 0.0
-	queue_redraw()
-
 func is_perfect() -> bool:
 	return _active and _in_perfect_window
 

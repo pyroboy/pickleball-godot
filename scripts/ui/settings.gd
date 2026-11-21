@@ -114,10 +114,6 @@ func set_value(key: String, value: Variant) -> void :
 	settings_changed.emit(key, value)
 	_queue_save()
 
-func reset_to_defaults() -> void :
-	for key in DEFAULTS.keys():
-		set_value(key, MOBILE_DEFAULTS[key] if OS.has_feature("mobile") and MOBILE_DEFAULTS.has(key) else DEFAULTS[key])
-
 func reset_focus_visuals() -> void:
 	# Reset only these visual preferences; keep gameplay and custom pose data intact.
 	for key in FOCUS_VISUAL_KEYS:

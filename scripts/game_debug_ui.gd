@@ -166,10 +166,6 @@ func _posture_line(tag: String, player: CharacterBody3D) -> String:
 
 
 
-func update_service_zone_debug() -> void :
-	_update_service_zone_debug(0, _ball)
-
-
 func _update_service_zone_debug(_game_state: int, ball: RigidBody3D) -> void :
 	if _game_state != 2 or ball == null:
 		return
@@ -387,10 +383,6 @@ func set_debug_visible(v: bool) -> void :
 		_apply_phase(DebugPhase.FULL_HUD)
 	else:
 		_apply_phase(DebugPhase.OFF)
-
-
-func set_debug_zones_visible(v: bool) -> void :
-	_set_zones_visible(v)
 
 
 func _set_debug_visuals_visible(v: bool) -> void :

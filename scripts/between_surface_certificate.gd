@@ -25,16 +25,6 @@ func reset() -> void:
 	_pairs.clear(); _geometries.clear(); _topologies.clear()
 	_pair_key_bytes = 0; _geometry_key_bytes = 0; _topology_triangles = 0
 
-func cache_report() -> Dictionary:
-	var point_bytes := 0; var bound_values := 0
-	for value: Dictionary in _geometries.values():
-		point_bytes += value.points.size() * 12; bound_values += value.bounds.size()
-	return {"pair_entries": _pairs.size(), "pair_key_bytes": _pair_key_bytes,
-		"geometry_entries": _geometries.size(), "geometry_key_bytes": _geometry_key_bytes,
-		"geometry_point_bytes": point_bytes, "geometry_aabb_values": bound_values,
-		"topologies": _topologies.size(), "topology_triangles": _topology_triangles,
-		"counts": counts.duplicate()}
-
 static func _bounds(points: PackedVector3Array) -> AABB:
 	var minimum := points[0]; var maximum := points[0]
 	for point in points:

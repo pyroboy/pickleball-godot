@@ -8,7 +8,6 @@ extends VBoxContainer
 
 signal content_changed
 
-const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Theme_ = preload("res://scripts/studio/studio_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const Row = preload("res://scripts/studio/studio_field_row.gd")
@@ -210,18 +209,6 @@ func _fields_shown() -> Array:
 		if not (r.field in out): out.append(r.field)
 	for f in options: out.append(f)
 	return out
-
-func row_for(field: String, axis: int):
-	for r in rows:
-		if r.field == field and r.axis == axis: return r
-	return null
-
-## Focused row (slider or spin has keyboard focus), for arrow-key nudges.
-func focused_row():
-	var f := get_viewport().gui_get_focus_owner()
-	for r in rows:
-		if f == r.slider or f == r.spin.get_line_edit(): return r
-	return null
 
 func state() -> Dictionary:
 	var out: Array = []

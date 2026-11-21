@@ -336,11 +336,6 @@ func _perf_integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 var time_since_last_bounce: float = -1.0
 var _consumed_bounce_age: Dictionary = {}
-func matches_consumed_motion(receipt: Dictionary) -> bool:
-	if global_position != receipt.position or bounce_count != int(receipt.bounces): return false
-	if not _prepared_aero.is_empty() and int(_prepared_aero.frame) == Engine.get_physics_frames() and int(_prepared_aero.flight) == flight_id:
-		return _prepared_aero.position == receipt.position and _prepared_aero.before_velocity == receipt.velocity and _prepared_aero.before_omega == receipt.omega and linear_velocity == _prepared_aero.after_velocity and angular_velocity == _prepared_aero.after_omega and bounce_count == int(_prepared_aero.bounce_count)
-	return linear_velocity == receipt.velocity and angular_velocity == receipt.omega
 
 func mark_bounce_age_consumed() -> void:
 	_consumed_bounce_age = {"frame": Engine.get_physics_frames(), "flight": flight_id}
@@ -600,14 +595,6 @@ func set_actor_serve_identity(actor) -> bool:
 	serve_team = last_hit_team_id; serve_court_side = last_hit_court_side
 	return true
 
-func set_serve_actor(actor) -> bool:
-	return set_actor_serve_identity(actor)
-
-func serve_by_actor(actor, direction: Vector3) -> bool:
-	if not set_actor_serve_identity(actor): return false
-	_start_serve(last_hit_team_id, direction)
-	return true
-
 func serve(team: int, direction: Vector3) -> void:
 	if not _assign_legacy_team(team): return
 	serve_court_side = get_last_hit_court_side()
@@ -692,9 +679,6 @@ func _record_paddle_contact(player_num: int) -> bool:
 
 func get_last_hit_by() -> int:
 	return last_hit_by
-
-func get_bounce_count() -> int:
-	return bounce_count
 
 func record_bounce_side(bounce_z: float) -> void :
 	time_since_last_bounce = 0.0

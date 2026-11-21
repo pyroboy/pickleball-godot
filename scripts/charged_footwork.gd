@@ -95,9 +95,6 @@ func motion_context() -> Dictionary:
 	context["lob_retrieval"] = bool(plan.get("lob_retrieval", false))
 	return context
 
-func planning_contact() -> Dictionary:
-	return plan if active else {}
-
 func _eligible(ball) -> bool:
 	var game = player.get_parent()
 	return not player.is_ai and not player.posture.editor_preview_mode and game.game_state == game.GameState.PLAYING and not game._tool_state_active() and not game.match_over and ball != null and ball.is_in_play and ball.last_hit_by != player.player_num and ball.bounces_since_last_hit < 2 and not player.is_jumping
