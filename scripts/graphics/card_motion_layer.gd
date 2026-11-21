@@ -32,7 +32,6 @@ const SPEED_HALF_LIFE: = 0.08
 const TAP_TURN_DEG: = 70.0    # chest turn toward the partner for a paddle tap (face each other)
 const TAP_HIP_SHARE: = 0.35   # part of that turn the hips take, so the waist doesn't over-twist
 const TAP_LEAN_DEG: = 5.0     # lean toward a partner who is farther away (up to 1.7 m)
-const TAP_PADDLE_REACH: = 0.43  # m from the hand to the paddle tip (tips meet)
 const TAP_PUSH: = 0.004       # m: the tap's push along the reach
 const HOLD_EASE: = 0.1        # s to switch an arm between free and on the paddle
 const HOLD_DIST: = 0.14       # m: a hand this close to the paddle shaft / throat holds it
@@ -45,6 +44,7 @@ const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no
 const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
 const CardExpressionsScript = preload("res://scripts/graphics/card_expressions.gd")
 const CardPartnerTapScript = preload("res://scripts/graphics/card_partner_tap.gd")
+const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 
 static var _env_off: int = -1
 
@@ -125,8 +125,10 @@ static func _turn_about(pivot: Vector3, axis: Vector3, angle: float) -> Transfor
 ## Rebuild the deltas. Call with the deltas cleared, so the rig's reads are the plain ones.
 func update(delta: float, swinging: bool, paddle_arm) -> void:
 	_deltas.clear()
+	_paddle_aim = Transform3D.IDENTITY
 	_update_hold(delta, paddle_arm)
 	_gait(delta, swinging, paddle_arm)
+	_relax_arms(delta, swinging, paddle_arm)
 	_react(delta, paddle_arm, swinging)
 	_partner_tap(delta, paddle_arm)
 	_stand_straight(delta, swinging)
@@ -327,7 +329,6 @@ func _stop_reaction(p) -> void:
 
 func _partner_tap(delta: float, paddle_arm) -> void:
 	_tapping = false
-	_paddle_aim = Transform3D.IDENTITY
 	var player = _rig._player
 	if not enabled() or _rig._raw or paddle_arm == null: return
 	var tap: Dictionary = _tap.update(delta, _stop_reaction)
@@ -368,55 +369,140 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	if hips != null: add.call(hips, _turn_about(hip_p, Vector3.UP, yaw * hip_share))
 	var head: Node3D = torso.get_node_or_null("HeadMesh")
 	if head != null: add.call(head, turn)
-	var aim: = Transform3D.IDENTITY
-	var shoulder: Vector3 = turn * _plain(paddle_arm.upper_pivot)
-	var hand: Vector3 = turn * _plain(paddle_arm.hand_pivot)
-	# The hand stops a paddle short of the meeting point, so only the paddle tips meet there.
+	# Everything from here starts from the arm and paddle as they are drawn now (hanging at the
+	# side between points), so the reach grows out of that and comes back to it.
+	var paddle: Node3D = player.get("paddle_node")
+	if paddle == null: return
+	var pxf: Transform3D = paddle.get_global_transform_interpolated()
+	var base: Transform3D = _deltas.get(paddle_arm.hand_pivot, Transform3D.IDENTITY)
+	var hang: Transform3D = _paddle_aim
 	var meet: Vector3 = Vector3(tap.target)
+	var shoulder: Vector3 = turn * _plain(paddle_arm.upper_pivot)
+	var grip0: Vector3 = turn * base * pxf.origin
+	var from: Vector3 = grip0 - shoulder
 	var to_meet: Vector3 = meet - shoulder
-	var hand_goal: Vector3 = meet - to_meet.normalized() * TAP_PADDLE_REACH if to_meet.length() > TAP_PADDLE_REACH + 0.05 else shoulder + to_meet * 0.5
-	var from: Vector3 = hand - shoulder
-	# A casual reach: the arm keeps its length and hangs below the line to the meeting point, far
-	# enough that the paddle, angled up from the hand, ends exactly there (shoulder, hand and
-	# paddle tip make a triangle). Standing too close for that would cross the paddles.
 	var span: float = to_meet.length()
 	var arm_len: float = from.length()
-	if span > absf(arm_len - TAP_PADDLE_REACH) + 0.02 and span < arm_len + TAP_PADDLE_REACH - 0.02:
-		var along: Vector3 = to_meet / span
-		var down: Vector3 = along.cross(along.cross(Vector3.UP))
-		if down.length_squared() > 1e-6:
-			down = down.normalized() * (1.0 if down.y < 0.0 else -1.0)
-			var cos_drop: float = clampf((arm_len * arm_len + span * span - TAP_PADDLE_REACH * TAP_PADDLE_REACH) / (2.0 * arm_len * span), -1.0, 1.0)
-			hand_goal = shoulder + (along * cos_drop + down * sqrt(1.0 - cos_drop * cos_drop)) * arm_len
-	var to: Vector3 = hand_goal - shoulder
-	if from.length_squared() > 1e-6 and to.length_squared() > 1e-6:
-		var q: = Quaternion(from.normalized(), to.normalized())
-		var b: = Basis(Quaternion.IDENTITY.slerp(q, w))
-		aim = Transform3D(b, shoulder - b * shoulder)
-		# The tap: a short push along the reach.
-		aim = Transform3D(Basis.IDENTITY, to.normalized() * TAP_PUSH * float(tap.nudge)) * aim
+	var reach: float = PaddleSize.LENGTH   # grip to tip
+	if arm_len < 1e-3 or span < 1e-3: return
+	# A casual reach: the arm keeps its length and stays below the line to the meeting point, far
+	# enough that the paddle, angled up from the grip, ends exactly there: shoulder, grip and tip
+	# make a triangle, so the two tips really touch. Too close or too far for the triangle: the
+	# grip goes on the line and the tips come as near as they can.
+	var along: Vector3 = to_meet / span
+	var grip_goal: Vector3 = shoulder + along * arm_len
+	var down: Vector3 = along.cross(along.cross(Vector3.UP))
+	if span > absf(arm_len - reach) + 0.01 and span < arm_len + reach - 0.01 and down.length_squared() > 1e-6:
+		down = down.normalized() * (1.0 if down.y < 0.0 else -1.0)
+		var cos_drop: float = clampf((arm_len * arm_len + span * span - reach * reach) / (2.0 * arm_len * span), -1.0, 1.0)
+		grip_goal = shoulder + (along * cos_drop + down * sqrt(1.0 - cos_drop * cos_drop)) * arm_len
+	var to: Vector3 = grip_goal - shoulder
+	var qa: = Basis(Quaternion.IDENTITY.slerp(Quaternion(from.normalized(), to.normalized()), w))
+	var aim: = Transform3D(qa, shoulder - qa * shoulder)
 	for arm_name in ["right_arm_node", "left_arm_node"]:
 		var arm: Node3D = player.get(arm_name)
 		if arm == null or arm.get("upper_pivot") == null: continue
 		var d: Transform3D = (aim * turn) if arm == paddle_arm else turn
 		for n in [arm.upper_pivot, arm.forearm_pivot, arm.hand_pivot]: add.call(n, d)
-	# The paddle head, not just the hand, points at the meeting point.
-	var paddle: Node3D = player.get("paddle_node")
-	if paddle != null:
-		var pxf: Transform3D = paddle.get_global_transform_interpolated()
-		var hd: Transform3D = aim * turn
-		var grip: Vector3 = hd * pxf.origin
-		var shaft: Vector3 = hd.basis * pxf.basis.y
-		var want: Vector3 = Vector3(tap.target) - grip
-		if shaft.length_squared() > 1e-6 and want.length_squared() > 1e-6:
-			var b: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), want.normalized()), w))
-			_paddle_aim = Transform3D(b, grip - b * grip)
-			# Once per tap, at the touch: how close the drawn paddle tip came and how high it was.
-			if float(tap.nudge) > 0.5 and not _tap_noted:
-				_tap_noted = true
-				var tip: Vector3 = _paddle_aim * hd * (pxf * Vector3(0, preload("res://scripts/paddle_dimensions.gd").LENGTH, 0))
-				PerfMonitor.note("partner_tap", {"step": "reach", "tip_gap": tip.distance_to(Vector3(tap.target)), "tip_height": tip.y - PickleballConstants.FLOOR_Y,
-					"hand_height": (hd * _plain(paddle_arm.hand_pivot)).y - PickleballConstants.FLOOR_Y, "shoulder_height": shoulder.y - PickleballConstants.FLOOR_Y, "need_deg": rad_to_deg(need), "turn_deg": rad_to_deg(yaw), "busy": bool(tap.get("busy", false))})
+	# The paddle turns about the grip until its tip is on the meeting point; at the touch it
+	# pushes a few millimetres on, into the partner's paddle.
+	var carry: Transform3D = aim * turn
+	var grip: Vector3 = aim * grip0
+	var shaft: Vector3 = (carry * hang * base).basis * pxf.basis.y
+	var want: Vector3 = meet - grip
+	if shaft.length_squared() < 1e-8 or want.length_squared() < 1e-8: return
+	var qp: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), want.normalized()), w))
+	var push: = Transform3D(Basis.IDENTITY, want.normalized() * TAP_PUSH * float(tap.nudge))
+	_paddle_aim = push * Transform3D(qp, grip - qp * grip) * carry * hang * carry.affine_inverse()
+	# Once per tap, at the touch: where the drawn paddle tip is (the partner's note gives the other).
+	if float(tap.nudge) > 0.5 and not _tap_noted:
+		_tap_noted = true
+		var tip: Vector3 = paddle_delta(paddle_arm) * (pxf * Vector3(0, reach, 0))
+		PerfMonitor.note("partner_tap", {"step": "reach", "tip": tip, "tip_gap": tip.distance_to(meet), "tip_height": tip.y - PickleballConstants.FLOOR_Y,
+			"hand_height": (carry * base * _plain(paddle_arm.hand_pivot)).y - PickleballConstants.FLOOR_Y, "need_deg": rad_to_deg(need), "turn_deg": rad_to_deg(yaw), "busy": bool(tap.get("busy", false))})
+
+# ------------------------------------------------------------------ arms down between points
+
+const RELAX_EASE: = 0.3        # s for an arm to drop / come back up
+const RELAX_SWING_DEG: = 16.0  # walking: the hanging arms swing against the legs
+const RELAX_SWAY_DEG: = 2.5    # standing: a slow idle sway
+var _relax: Dictionary = {}    # arm -> 0 as posed .. 1 hanging at the side (eased)
+var _relax_t: = 0.0
+
+## 1 when this arm has nothing to do: the point is over and it is not handling the ball,
+## celebrating or getting set for the serve.
+func _relax_goal(arm, paddle_arm, swinging: bool) -> float:
+	var player = _rig._player
+	if not enabled() or _rig._raw or swinging or not player.has_method("_between_point_owner"): return 0.0
+	var bpc = player._between_point_owner()
+	if bpc == null: return 0.0
+	var ph: String = str(bpc.get("phase"))
+	if ph in ["IDLE", "SET_SERVE"]: return 0.0
+	if arm == paddle_arm: return 0.0 if _reactions != null and _reactions.current() != "" else 1.0
+	var idx: int = bpc.index_for_actor(player)
+	if idx == int(bpc.get("_carry_team")): return 0.0
+	var handlers: Array = [int(bpc.get("retriever")), int(bpc.get("server")), int(bpc.get("catcher"))]
+	if idx in handlers and (ph in CardPartnerTap.BUSY_PHASES or ph == "HELPER_WAIT"): return 0.0
+	return 1.0
+
+## Between points the gameplay pose keeps the ready guard (paddle up, free hand out in front).
+## The cards let both arms hang at the sides instead: the upper arm drops from the shoulder,
+## the forearm follows with a slight bend, the paddle points down along the leg. Walking, the
+## arms swing against the legs; standing, they sway a little.
+func _relax_arms(delta: float, swinging: bool, paddle_arm) -> void:
+	var player = _rig._player
+	_relax_t += delta
+	var body: Node3D = player.body_pivot
+	var fwd: Vector3 = body.get_global_transform_interpolated().basis * player._get_forward_axis()
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-6: return
+	fwd = fwd.normalized()
+	var side: = fwd.cross(Vector3.UP).normalized()
+	var hips: Node3D = body.get_node_or_null("HipsMesh")
+	var centre: Vector3 = _plain(hips if hips else body)
+	var seed_phase: float = float(player.get_instance_id() % 97)
+	for pair in [[player.get("right_arm_node"), 1.0], [player.get("left_arm_node"), -1.0]]:
+		var arm: Node3D = pair[0]
+		if arm == null or arm.get("upper_pivot") == null: continue
+		var cur: float = float(_relax.get(arm, 0.0))
+		cur = move_toward(cur, _relax_goal(arm, paddle_arm, swinging), delta / RELAX_EASE) if delta > 0.0 else cur
+		_relax[arm] = cur
+		if cur <= 0.001: continue
+		var r: float = smoothstep(0.0, 1.0, cur)
+		var shoulder: Vector3 = _plain(arm.upper_pivot)
+		var elbow: Vector3 = _plain(arm.forearm_pivot)
+		var hand: Vector3 = _plain(arm.hand_pivot)
+		var out: Vector3 = side * signf((shoulder - centre).dot(side))
+		# Swing with the stride (the gait's own measure), plus the idle sway.
+		var swing: float = deg_to_rad(RELAX_SWING_DEG * clampf(_amt, -1.0, 1.0) * float(pair[1])
+			+ RELAX_SWAY_DEG * sin(_relax_t * 1.5 + seed_phase + float(pair[1])))
+		var rock: = Basis(side, swing)
+		var upper_to: Vector3 = rock * (Vector3.DOWN + out * 0.10 + fwd * 0.04).normalized()
+		var fore_to: Vector3 = rock * (Vector3.DOWN + out * 0.04 + fwd * 0.22).normalized()
+		var t1: = Transform3D.IDENTITY
+		if (elbow - shoulder).length_squared() > 1e-6:
+			var b1: = Basis(Quaternion.IDENTITY.slerp(Quaternion((elbow - shoulder).normalized(), upper_to), r))
+			t1 = Transform3D(b1, shoulder - b1 * shoulder)
+		var elbow1: Vector3 = t1 * elbow
+		var hand1: Vector3 = t1 * hand
+		var t2: = t1
+		if (hand1 - elbow1).length_squared() > 1e-6:
+			var b2: = Basis(Quaternion.IDENTITY.slerp(Quaternion((hand1 - elbow1).normalized(), fore_to), r))
+			t2 = Transform3D(b2, elbow1 - b2 * elbow1) * t1
+		# Under whatever the gait already put on the arm (the shoulders' counter-turn).
+		_deltas[arm.upper_pivot] = _deltas.get(arm.upper_pivot, Transform3D.IDENTITY) * t1
+		_deltas[arm.forearm_pivot] = _deltas.get(arm.forearm_pivot, Transform3D.IDENTITY) * t2
+		_deltas[arm.hand_pivot] = _deltas.get(arm.hand_pivot, Transform3D.IDENTITY) * t2
+		if arm == paddle_arm:   # the paddle hangs from the hand, tip down and a little forward
+			var paddle: Node3D = player.get("paddle_node")
+			if paddle != null:
+				var pxf: Transform3D = paddle.get_global_transform_interpolated()
+				var hd: Transform3D = _deltas[arm.hand_pivot]
+				var grip: Vector3 = hd * pxf.origin
+				var shaft: Vector3 = hd.basis * pxf.basis.y
+				if shaft.length_squared() > 1e-8:
+					var bp: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), rock * (Vector3.DOWN + fwd * 0.30 + out * 0.05).normalized()), r))
+					_paddle_aim = Transform3D(bp, grip - bp * grip)
 
 # ------------------------------------------------------------------ stand straight between points
 

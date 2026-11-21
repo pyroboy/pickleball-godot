@@ -95,6 +95,7 @@ const TAP_HEIGHT: = 0.95        # m above the court floor: hand height, a handsh
 const TAP_FULL_TURN_DEG: = 90.0
 const TAP_FULL_HIP_SHARE: = 0.6
 const TAP_BUSY_TURN_DEG: = 28.0
+const TAP_FEET_TURN_DEG: = 60.0  # the one who turns fully also turns the feet this far; the chest does the rest
 ## One per team: {pair: [index, index] (the first turns fully, the second is the busy one),
 ## spots, meet, state "WALK" | "TAP", clock, touched, pace, linger}.
 var _taps: Array = []
@@ -150,6 +151,13 @@ func _tick_partner_taps(delta: float) -> void:
 			if there:
 				PerfMonitor.note("partner_tap", {"step": "arrived", "walk_seconds": tap.clock, "apart": _players[tap.pair[0]].global_position.distance_to(_players[tap.pair[1]].global_position), "phase": phase})
 				tap.state = "TAP"; tap.clock = 0.0
+				# The one who turns fully turns the feet too (ready_facing_for_actor).
+				var lead = _players[tap.pair[0]]
+				var fwd: Vector3 = lead._get_forward_axis()
+				var to_partner: Vector3 = _players[tap.pair[1]].global_position - lead.global_position
+				to_partner.y = 0.0
+				tap["facing"] = clampf(-rad_to_deg(fwd.signed_angle_to(to_partner.normalized(), Vector3.UP)), -TAP_FEET_TURN_DEG, TAP_FEET_TURN_DEG)
+				if lead.leg_ik != null: lead.leg_ik.face_ready_now(null)
 			elif tap.clock > TAP_WALK_LIMIT:
 				PerfMonitor.note("partner_tap", {"step": "dropped", "phase": phase})
 				_taps.erase(tap)
@@ -161,6 +169,7 @@ func _tick_partner_taps(delta: float) -> void:
 			if tap.clock >= (TapDraw.DONE + float(tap.linger)) * float(tap.pace):
 				PerfMonitor.note("partner_tap", {"step": "done", "seconds": tap.clock})
 				_taps.erase(tap)
+				if _players[tap.pair[0]].leg_ik != null: _players[tap.pair[0]].leg_ik.face_ready_now(null)   # feet back to the net
 
 ## The tap this player is in, once both stand at the meeting point, or {}:
 ## {t: seconds on the drawing's own clock (card_partner_tap.gd), target, partner, turn_deg,
@@ -1111,6 +1120,8 @@ func _nearest_retriever(point: Vector3) -> int:
 	return best
 
 func ready_facing_for_actor(actor) -> float:
+	var tap: Dictionary = _tap_of(index_for_actor(actor))
+	if not tap.is_empty() and tap.state == "TAP" and tap.pair[0] == index_for_actor(actor): return float(tap.get("facing", 0.0))
 	if phase == "END_TURN": return 180.0
 	# Change of ends: whoever reaches their new spot turns around right away instead
 	# of standing until the last player arrives.
