@@ -1015,6 +1015,7 @@ Open (ask the user; recommended default in brackets):
 | 9 Movement | Arm swing and shoulder counter-turn built, motion bench built; Movement workspace and gait tuning not started |
 | 10 Reactions | First batch, partner tap, standing expressions, relaxed stand built; Reactions workspace in the studio, later reactions, emotes, sound not started |
 | 9b Ball actions | Built and authored 2026-11-21 (pickup, lob, strong throw); dead ball only, unedited = IDENTICAL; look not yet checked by the user |
+| 6c step 5 Clipping | Built 2026-11-21. Checker: exact torso-mesh test every tick incl. Ready -> Wind-up (C_clip_ready / C_clip_swing). Drawn elbow: swivel constraint (visual only, bench IDENTICAL). Paddle: blends go around the body (`scripts/around_body.gd` in blend_pose, the follow-through sweep and serve_joint_motion.blend; keys unchanged; only the 10 poses that clipped change). Drawn clip ticks, all strokes + serves: elbow 21 -> 0, forearm 39 -> 0, paddle 35 -> 1 (s08). Bench 3 seeds x 90 s: seeds 1 and 3 same shots, plans and launch errors; seed 2 one long rally diverged (68 vs 67 shots). Cost ~0.08 ms/frame (Mac) |
 | UI polish 2026-11-21 | Layout audit at 1280 x 800 and 1920 x 1080, every workspace, stage, panel tab, AutoPose on / off: 0 issues (only the Versions list scrolls at 1280 x 800) |
 
 Committed on `visual-pass` (9f8df92, 1caf1a2 and later).

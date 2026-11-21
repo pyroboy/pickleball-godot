@@ -1,4 +1,5 @@
 extends RefCounted
+const AroundBody = preload("res://scripts/around_body.gd")
 const Rotation = preload("res://scripts/paddle_rotation.gd")
 const FloorGeometry = preload("res://scripts/paddle_floor_geometry.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
@@ -60,6 +61,13 @@ static func sample_with_endpoints(def: PostureDefinition, progress: float, windu
 	var m1: Vector3 = tangent if t <= 0.5 else p2 - p1
 	var curved: = (2 * u * u * u - 3 * u * u + 1) * start + (u * u * u - 2 * u * u + u) * m0 + (-2 * u * u * u + 3 * u * u) * end + (u * u * u - u * u) * m1
 	var position: Vector3 = start.lerp(end, u).lerp(curved, def.swing_path_blend)
+	if t > 0.5:
+		# Follow-through (the ball has left): the paddle sweeps around the body, not through it.
+		# Canonical frame is (x, y, -forward); Contact and Finish themselves never move.
+		var head_c := Vector3(position.x, position.y, -position.z)
+		var grip: Vector3 = head_c + Rotation.unspun_basis(pose) * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + _main_offset(pose))
+		var shift: Vector3 = AroundBody.shift(pose, grip, head_c, paddle_hand(def), paddle_head(def), paddle_hand(finish), paddle_head(finish), u)
+		position += Vector3(shift.x, shift.y, -shift.z)
 	pose.paddle_forehand_mul = position.x
 	pose.paddle_y_offset = position.y
 	pose.paddle_forward_mul = position.z
@@ -168,7 +176,10 @@ static func blend_pose(from_pose: PostureDefinition, to_pose: PostureDefinition,
 	var offset: Vector3 = pose.left_hand_offset if pose.paddle_hand == 1 else pose.right_hand_offset
 	var hand_a: = Vector3(from_pose.paddle_forehand_mul, from_pose.paddle_y_offset, - from_pose.paddle_forward_mul) + from_basis * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + from_offset)
 	var hand_b: = Vector3(to_pose.paddle_forehand_mul, to_pose.paddle_y_offset, - to_pose.paddle_forward_mul) + to_basis * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + to_offset)
-	var head: Vector3 = hand_a.lerp(hand_b, t) - basis * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + offset)
+	var hand: Vector3 = hand_a.lerp(hand_b, t)
+	var head: Vector3 = hand - basis * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + offset)
+	# The paddle goes around the body, never through it (around_body.gd; the keys never move).
+	head += AroundBody.shift(pose, hand, head, hand_a, paddle_head(from_pose), hand_b, paddle_head(to_pose), t)
 	pose.paddle_forehand_mul = head.x
 	pose.paddle_y_offset = head.y
 	pose.paddle_forward_mul = - head.z
@@ -203,6 +214,17 @@ static func blend_pose(from_pose: PostureDefinition, to_pose: PostureDefinition,
 		var lag: float = lerpf(float(from_pose.get_meta("visual_wrist_lag_deg", 0.0)), float(to_pose.get_meta("visual_wrist_lag_deg", 0.0)), t)
 		if lag > 1e-05: pose.set_meta("visual_wrist_lag_deg", clampf(lag, 0.0, 6.0))
 	return pose
+
+## Paddle head and grip of a pose in the canonical blend frame (x forehand, y up from the root,
+## +z away from the net), as blend_pose computes them.
+static func paddle_head(pose: PostureDefinition) -> Vector3:
+	return Vector3(pose.paddle_forehand_mul, pose.paddle_y_offset, - pose.paddle_forward_mul)
+
+static func paddle_hand(pose: PostureDefinition) -> Vector3:
+	return paddle_head(pose) + Rotation.unspun_basis(pose) * ((PaddleSize.MAIN_GRIP_OFFSET - PaddleSize.HEAD_OFFSET) + _main_offset(pose))
+
+static func _main_offset(pose: PostureDefinition) -> Vector3:
+	return pose.left_hand_offset if pose.paddle_hand == 1 else pose.right_hand_offset
 
 static func _support_mode(pose: PostureDefinition) -> int:
 	if pose.left_hand_mode != 0: return pose.left_hand_mode

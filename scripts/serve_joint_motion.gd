@@ -1,6 +1,7 @@
 extends RefCounted
 
 
+const AroundBody = preload("res://scripts/around_body.gd")
 const Body = preload("res://scripts/stroke_body_pose.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const Orientation = preload("res://scripts/stroke_preparation_orientation.gd")
@@ -86,6 +87,9 @@ static func blend(start: PostureDefinition, end: PostureDefinition, progress: fl
 	var hand: Basis = Anatomy.forearm_reference(s, e, w, Vector3.UP, false) * Basis(Vector3.RIGHT, axial) * Basis(Vector3.UP, flex) * Basis(Vector3.BACK, deviation) * _anatomical.inverse()
 	var paddle: Basis = hand * Grip.basis(Basis.IDENTITY, false, pose.main_grip_rotation_deg).inverse()
 	var head: Vector3 = w - hand * Hand.WRIST_SOCKET + paddle * (Size.HEAD_OFFSET - Size.MAIN_GRIP_OFFSET - pose.right_hand_offset)
+	# The paddle goes around the body, never through it (around_body.gd; the keys never move).
+	var grip: Vector3 = head + paddle * (Size.MAIN_GRIP_OFFSET - Size.HEAD_OFFSET + pose.right_hand_offset)
+	head += AroundBody.shift(pose, grip, head, Path.paddle_hand(start), Path.paddle_head(start), Path.paddle_hand(end), Path.paddle_head(end), t)
 	Orientation.set_canonical_basis(pose, paddle)
 	pose.paddle_forehand_mul = head.x;pose.paddle_y_offset = head.y;pose.paddle_forward_mul = - head.z
 	var pole: Vector3 = s + Basis.from_euler(pose.right_shoulder_rotation_deg * (PI / 180.0)).inverse() * (e - s)
