@@ -59,6 +59,9 @@ var _view_btn: Button
 var _view_i := 0
 var _sheet_title: Label
 var _sheet_pin: Button
+var _sheet_note: Label
+var _layers: VBoxContainer
+var _layer_btns := {}        # "ghosts" | "arc" | "contact" -> Button
 var _region_btns := {}       # region -> [Button x3]
 var _handle := ""
 var _drawer: Control
@@ -111,9 +114,17 @@ func mount_preview(pv: Control) -> void:
 	pv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_scene.move_child(pv, 0)
 	_build_scene_overlay()
+	_scene.resized.connect(_refit)
+
+## The camera fits the pose once the scene has its real size (and again after a resize while
+## it still follows the pose): fitting earlier, at the editor's start size, left it far away.
+func _refit() -> void:
+	var vi = studio._view_input
+	if vi != null and vi.auto_fit and vi.drag == vi.Drag.NONE: vi.frame_pose()
 
 func studio_ready() -> void:
 	_refresh_pose()
+	_refit.call_deferred()
 
 # ---------------------------------------------------------------- look
 
@@ -200,10 +211,18 @@ func _build_scene_overlay() -> void:
 	hp.position = Vector2(GAP, GAP)
 	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
 	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
+	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 130, 64))
 	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
 	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
 	_scene.add_child(views)
-	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -200; views.offset_right = -GAP; views.offset_top = 72
+	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -346; views.offset_right = -GAP; views.offset_top = 72
+	_layers = VBoxContainer.new(); _layers.name = "Layers"; _layers.visible = false
+	_layers.add_theme_constant_override("separation", 8)
+	_layers.anchor_left = 1.0; _layers.anchor_right = 1.0; _layers.offset_left = -346; _layers.offset_right = -146; _layers.offset_top = 72 + 64 + 8
+	for l in [["ghosts", "Ghosts"], ["arc", "Trajectory"], ["contact", "Contact box"]]:
+		var b := _btn(l[1], _toggle_layer.bind(l[0]), 200, 64); b.add_theme_font_size_override("font_size", SMALL)
+		_layer_btns[l[0]] = b; _layers.add_child(b)
+	_scene.add_child(_layers)
 	var chips := HBoxContainer.new(); chips.name = "AutoPoseChips"; chips.add_theme_constant_override("separation", 8)
 	chips.anchor_left = 0.0; chips.anchor_right = 1.0; chips.anchor_top = 1.0; chips.anchor_bottom = 1.0
 	chips.offset_left = GAP; chips.offset_right = -GAP; chips.offset_top = -64 - GAP; chips.offset_bottom = -GAP
@@ -222,6 +241,23 @@ func _build_scene_overlay() -> void:
 	_toast.offset_left = GAP * 2; _toast.offset_right = -GAP * 2; _toast.offset_top = -170; _toast.offset_bottom = -64 - GAP * 3
 	_scene.add_child(_toast)
 	_refresh_chips()
+
+func _layer_on(what: String) -> bool:
+	var pv = studio.preview
+	match what:
+		"ghosts": return pv != null and bool(pv._ghosts_visible) and int(pv.inbetween_count) > 0
+		"arc": return pv != null and bool(pv._arc_visible)
+		_: return bool(studio._contact_on)
+
+## Ghosts (in-between poses), trajectory (the paddle's arc) and the contact box.
+func _toggle_layer(what: String) -> void:
+	var on := not _layer_on(what)
+	if what == "ghosts": studio.set_ghost_count(3 if on else 0)
+	studio.set_overlay(what, on)
+	_refresh_layers()
+
+func _refresh_layers() -> void:
+	for w in _layer_btns: _tint(_layer_btns[w], _layer_on(w))
 
 func _pill() -> StyleBoxFlat:
 	var s := _panel(Color(Ui.PANEL, 0.88), 18)
@@ -370,6 +406,8 @@ func _build_sheet(sheet: VBoxContainer) -> void:
 	var rx := _btn("Relax key", _relax, 0); rx.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _tint(rx, true, Ui.INK)
 	for b in [_sheet_pin, rp, rx]: acts.add_child(b)
 	v.add_child(acts)
+	_sheet_note = _label("", SMALL, Ui.MUTED); _sheet_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(_sheet_note)
 	v.add_child(_label("Stiffness · stiff = moves less (arms: body follows more)", SMALL, Ui.MUTED))
 	for reg in REGIONS:
 		var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
@@ -404,8 +442,13 @@ func _refresh_sheet() -> void:
 	if _handle == "": return
 	_sheet_title.text = String(AP_NAMES.get(_handle, _handle))
 	var pinned: bool = studio.autopose_pinned(_handle)
-	_sheet_pin.text = "Pinned" if pinned else "Pin"
-	_tint(_sheet_pin, pinned, Ui.INK)
+	var why: String = studio.autopose_lock_reason(_handle)
+	_sheet_pin.text = "Pinned · tap to free" if pinned else "Pin"
+	_sheet_pin.disabled = why != ""
+	_tint(_sheet_pin, pinned and why == "", Ui.INK)
+	if why.contains("Gameplay edit"): why = "the paddle at Contact is gameplay (where the ball is hit); change it in the desktop studio"
+	_sheet_note.text = ("Locked: " + why) if why != "" else ("Holds still while you drag other parts. Tap Pinned to free it." if pinned
+		else "Pin it to hold it still while you drag other parts. Feet start pinned.")
 	for region in _region_btns:
 		var now: float = float(studio.autopose_stiffness.get(region, 1.0))
 		var bs: Array = _region_btns[region]

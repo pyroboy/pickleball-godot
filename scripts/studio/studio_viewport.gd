@@ -78,7 +78,8 @@ var drag := Drag.NONE
 var _left_nav := false   # current orbit/pan was started with the left button
 ## Phone (touch) mode: finger-sized hit areas and rings; two fingers pan and pinch-zoom.
 var touch := false
-const TOUCH_SCALE := 2.6          # phone canvas points per desktop point for rings and hit areas
+const TOUCH_SCALE := 2.6          # phone: hit areas (canvas points per desktop point), finger-sized
+const TOUCH_DRAW := 1.5           # phone: drawn rings (smaller than their hit areas, so the body shows)
 var _touches := {}                # finger index -> position (touch mode)
 var _pinch := {}                  # two-finger gesture: {mid, dist}
 var _touch_block := false         # after a two-finger gesture: ignore the last finger until it lifts
@@ -452,7 +453,9 @@ func handle_screen(id: String) -> Vector2:
 func _begin_ap(h: String, e: InputEventMouseButton) -> void:
 	var b: Dictionary = studio.autopose_drag_begin(h)
 	if not b.get("ok", false):
-		studio._set_status("AutoPose: " + str(b.get("error", "cannot drag " + h))); return
+		studio._set_status("AutoPose: " + str(b.get("error", "cannot drag " + h)))
+		if touch: studio.handle_tapped.emit(h)   # phone: a locked ring still opens its options (they say why)
+		return
 	preview.cancel_gesture()
 	var w: Vector3 = b.get("handle_start", Vector3.INF)
 	if not w.is_finite():
@@ -550,7 +553,7 @@ func _draw_ap(rect: Rect2) -> void:
 		var locked: bool = studio.autopose_lock_reason(id) != ""
 		var hot: bool = id == ap_handle or id == hover_ap
 		var col: Color = DOT_HOVER if hot else AP_LOCKED if locked else _ap_color(id)
-		var r := _r(AP_RADIUS) + (1.5 if hot else 0.0)
+		var r := AP_RADIUS * (TOUCH_DRAW if touch else 1.0) + (1.5 if hot else 0.0)
 		if id in AP_EDGES:   # small diamond on the rim
 			r -= 1.5
 			var o := r + 2.0

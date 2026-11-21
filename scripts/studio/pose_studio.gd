@@ -563,6 +563,7 @@ func _build_view_hint() -> void:
 	_hint.add_child(_joint_label)
 	preview.add_child(_hint)
 	preview.resized.connect(_layout_hint)
+	if phone: _hint.visible = false   # desktop keys / mouse hints; the phone layout has its own
 
 func _set_hint(t: String) -> void:
 	if _joint_label == null or _joint_label.text == t: return
@@ -580,7 +581,7 @@ func _layout_hint() -> void:
 	var wrap := tw + inner > maxw
 	_joint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF
 	_joint_label.custom_minimum_size.x = (maxw - inner) if wrap else 0.0
-	_hint.visible = _joint_label.text != ""
+	_hint.visible = _joint_label.text != "" and not phone
 	_hint.reset_size()
 	(func() -> void:
 		if _hint == null or preview == null: return
