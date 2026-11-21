@@ -34,12 +34,14 @@ const TIP_LOCAL := Vector3(0, PaddleSize.LENGTH, 0)
 
 # Points read per evaluation (indices).
 enum { R_HAND, L_HAND, R_ELBOW, L_ELBOW, R_KNEE, L_KNEE, R_FOOT, L_FOOT, HIPS, TORSO, HEAD, PADDLE,
-	TIP, R_ANKLE, L_ANKLE, R_THIGH, L_THIGH, GRIP, R_SHOULDER, L_SHOULDER, R_WRIST, L_WRIST, EDGE_A, EDGE_B, NPTS }
+	TIP, R_ANKLE, L_ANKLE, R_THIGH, L_THIGH, GRIP, R_SHOULDER, L_SHOULDER, R_WRIST, L_WRIST, EDGE_A, EDGE_B, R_TOE, L_TOE, NPTS }
 const HANDLES := {"right_hand": R_HAND, "left_hand": L_HAND, "right_elbow": R_ELBOW, "left_elbow": L_ELBOW,
 	"right_knee": R_KNEE, "left_knee": L_KNEE, "right_foot": R_FOOT, "left_foot": L_FOOT, "hips": HIPS,
 	"torso": TORSO, "chest": TORSO, "head": HEAD, "paddle": PADDLE, "paddle_tip": TIP,
 	"right_shoulder": R_SHOULDER, "left_shoulder": L_SHOULDER, "right_hip": R_THIGH, "left_hip": L_THIGH,
-	"paddle_edge_a": EDGE_A, "paddle_edge_b": EDGE_B}
+	"paddle_edge_a": EDGE_A, "paddle_edge_b": EDGE_B, "right_toe": R_TOE, "left_toe": L_TOE}
+## Toe handles turn that foot around its ankle (foot yaw only; the ankle stays pinned).
+const TOE_LOCAL := Vector3(0, -0.015, -0.34)   # ahead of the toes, clear of the foot ring (the foot points along its pivot's -Z)
 ## Rotate handles (6c step 4): shoulders turn the upper body only (torso yaw / pitch / roll; hips and
 ## feet hold), hips turn the pelvis (hip yaw, body pitch / roll; knees follow, feet planted), paddle
 ## edges (rim, both sides of the head) turn the paddle in the hand along the handle
@@ -157,6 +159,8 @@ func _read() -> PackedVector3Array:
 	out[L_WRIST] = p.left_arm_node.anatomical_wrist_world
 	out[EDGE_A] = pt * EDGE_A_LOCAL
 	out[EDGE_B] = pt * EDGE_B_LOCAL
+	out[R_TOE] = p.right_leg_node.foot_pivot.global_transform * TOE_LOCAL
+	out[L_TOE] = p.left_leg_node.foot_pivot.global_transform * TOE_LOCAL
 	return out
 
 ## World points of every handle on `player` as it stands now (no evaluation): the AutoPose
@@ -316,6 +320,8 @@ func _build_params(main: String) -> Array:
 	elif h.ends_with("_knee"):
 		_p(out, h.trim_suffix("_knee") + "_knee_pole", "legs", 0.25, 3)
 		if full: hips.call(out)
+	elif h.ends_with("_toe"):   # turn the foot on the spot
+		_p(out, h.trim_suffix("_toe") + "_foot_yaw_deg", "foot", 10.0)
 	elif h.ends_with("_foot"):
 		_p(out, h.trim_suffix("_foot") + "_foot_offset", "foot", 0.05, 3)
 		_p(out, h.trim_suffix("_foot") + "_knee_pole", "legs", 0.25, 3)
@@ -438,6 +444,7 @@ func begin(h: String, opts: Dictionary = {}) -> Dictionary:
 	for pi in [R_FOOT, R_ANKLE, L_FOOT, L_ANKLE]:
 		var side: String = "right_foot" if pi in [R_FOOT, R_ANKLE] else "left_foot"
 		if h == side or (unpin.has(side) and not pinned.has(side)): continue
+		if h == side.trim_suffix("_foot") + "_toe" and pi in [R_FOOT, L_FOOT]: continue   # turning this foot: its ankle holds, its middle swings
 		_pins.append([pi, _pts0[pi], W_PIN])
 	if (stage == 1 and not _engine._base and not _paddle_free) or h in EDGE_HANDLES:   # edges: roll along the handle
 		_pins.append([GRIP, _pts0[GRIP], W_PIN]); _pins.append([TIP, _pts0[TIP], W_PIN])

@@ -53,16 +53,17 @@ const DOT_OUTLINE := Color("122630")
 const SELECT_COLOR := Color("71f5da")
 const AP_IDS := ["right_hand", "left_hand", "paddle_tip", "right_elbow", "left_elbow", "right_knee", "left_knee",
 	"right_foot", "left_foot", "hips", "chest", "head", "right_shoulder", "left_shoulder", "right_hip", "left_hip",
-	"paddle_edge_a", "paddle_edge_b"]
+	"paddle_edge_a", "paddle_edge_b", "right_toe", "left_toe"]
 ## Rotate handles (ring with a turn arc): drag turns that part, it does not move it.
-const AP_ROTATE := ["right_shoulder", "left_shoulder", "right_hip", "left_hip"]
+const AP_ROTATE := ["right_shoulder", "left_shoulder", "right_hip", "left_hip", "right_toe", "left_toe"]
 const AP_EDGES := ["paddle_edge_a", "paddle_edge_b"]
 const AP_NAMES := {"right_hand": "Right hand", "left_hand": "Left hand", "paddle_tip": "Paddle tip", "right_elbow": "Right elbow",
 	"left_elbow": "Left elbow", "right_knee": "Right knee", "left_knee": "Left knee", "right_foot": "Right foot",
 	"left_foot": "Left foot", "hips": "Hips", "chest": "Chest", "head": "Head",
 	"right_shoulder": "Right shoulder (turn upper body)", "left_shoulder": "Left shoulder (turn upper body)",
 	"right_hip": "Right hip (turn hips)", "left_hip": "Left hip (turn hips)",
-	"paddle_edge_a": "Paddle edge (roll the face)", "paddle_edge_b": "Paddle edge (roll the face)"}
+	"paddle_edge_a": "Paddle edge (roll the face)", "paddle_edge_b": "Paddle edge (roll the face)",
+	"right_toe": "Right toes (turn the foot)", "left_toe": "Left toes (turn the foot)"}
 const AP_ARM := Color("5fb8ff")
 const AP_LEG := Color("7ee081")
 const AP_BODY := Color("d59cff")
@@ -901,6 +902,7 @@ func _update_ap() -> bool:
 	return changed
 
 func _ap_color(id: String) -> Color:
+	if id.ends_with("_toe"): return AP_LEG
 	if id in ["hips", "chest", "head"] or id in AP_ROTATE: return AP_BODY
 	if id in AP_EDGES: return TIP_COLOR
 	if id.ends_with("_knee") or id.ends_with("_foot"): return AP_LEG

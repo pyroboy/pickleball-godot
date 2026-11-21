@@ -27,7 +27,8 @@ const VIEWS := ["front", "side", "back"]
 const AP_NAMES := {"right_hand": "Right hand", "left_hand": "Left hand", "paddle_tip": "Paddle tip", "right_elbow": "Right elbow",
 	"left_elbow": "Left elbow", "right_knee": "Right knee", "left_knee": "Left knee", "right_foot": "Right foot",
 	"left_foot": "Left foot", "hips": "Hips", "chest": "Chest", "head": "Head", "right_shoulder": "Right shoulder",
-	"left_shoulder": "Left shoulder", "right_hip": "Right hip", "left_hip": "Left hip", "paddle_edge_a": "Paddle edge", "paddle_edge_b": "Paddle edge"}
+	"left_shoulder": "Left shoulder", "right_hip": "Right hip", "left_hip": "Left hip", "paddle_edge_a": "Paddle edge", "paddle_edge_b": "Paddle edge",
+	"right_toe": "Right toes · turn the foot", "left_toe": "Left toes · turn the foot"}
 const LEVELS := [["Loose", 0.5], ["Normal", 1.0], ["Stiff", 2.0]]
 const REGIONS := [["Arms", "arms"], ["Torso", "torso"], ["Legs", "legs"]]
 const CURVES := [["Straight", 0.0], ["Natural", 0.5], ["Round", 1.0]]
@@ -90,6 +91,7 @@ var _key_time_row: HBoxContainer   # Swing sheet: move the selected path key ear
 var _key_time: HSlider
 var _key_time_sync := false
 var _preset_label: Label
+var _sheet_unlock: Button      # ring sheet: unlock the Contact paddle (Gameplay edit)
 var _speed_unlock: Button      # Speed sheet: unlock the Strike part (gameplay timing)
 var _speed_how: Label           # one-line hint above the graph
 var _swing_info: Label
@@ -525,6 +527,10 @@ func _build_sheet(sheet: VBoxContainer) -> void:
 	v.add_child(acts)
 	_sheet_note = _label("", SMALL, Ui.MUTED); _sheet_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(_sheet_note)
+	# The paddle at Contact is where the ball is hit (gameplay): moving it needs this explicit unlock.
+	_sheet_unlock = _btn("", func(): studio.set_gameplay_edit(not studio.gameplay_edit); _refresh_sheet(); _refresh_chips(), 0, 64)
+	_sheet_unlock.name = "ContactUnlock"; _sheet_unlock.visible = false
+	v.add_child(_sheet_unlock)
 	v.add_child(_label("Stiffness · stiff = moves less (arms: body follows more)", SMALL, Ui.MUTED))
 	for reg in REGIONS:
 		var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
@@ -776,7 +782,11 @@ func _refresh_sheet() -> void:
 	_sheet_pin.text = "Pinned · tap to free" if pinned else "Pin"
 	_sheet_pin.disabled = why != ""
 	_tint(_sheet_pin, pinned and why == "", Ui.INK)
-	if why.contains("Gameplay edit"): why = "the paddle at Contact is gameplay (where the ball is hit); change it in the desktop studio"
+	var contact_paddle: bool = studio._contact_paddle_handle(_handle)
+	_sheet_unlock.visible = contact_paddle
+	_sheet_unlock.text = "Contact paddle unlocked · tap to lock" if studio.gameplay_edit else "Unlock Contact paddle"
+	_tint(_sheet_unlock, studio.gameplay_edit, Ui.GOLD)
+	if why.contains("Gameplay edit"): why = "the paddle at Contact is where the ball is hit. Unlocking it changes how shots play."
 	_sheet_note.text = ("Locked: " + why) if why != "" else ("Holds still while you drag other parts. Tap Pinned to free it." if pinned
 		else "Pin it to hold it still while you drag other parts. Feet start pinned.")
 	for region in _region_btns:
