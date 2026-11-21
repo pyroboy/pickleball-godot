@@ -117,6 +117,31 @@ static func transition(def) -> Tween.TransitionType:
 static func easing(def) -> Tween.EaseType:
 	return Tween.EASE_IN_OUT if def.ft_ease_curve == 2 else Tween.EASE_OUT
 
+## Rescale the keys [[x, v], ...] of a part (start, points, end) so that their speed curve has
+## mean 1 (the part covers its distance in its time): every entry whose `free` flag is true is
+## multiplied by one common factor, the others stay. Returns the new keys, or [] when no factor
+## does it (nothing free, or the fixed entries alone already cover more than the distance, or it
+## would need a speed above MAX_SPEED).
+static func solve_mean(k: Array, free: Array) -> Array:
+	var any_free := false
+	for i in k.size(): if free[i] and k[i][1] > 0.0001: any_free = true
+	var apply := func(mu: float) -> Array:
+		var out: Array = []
+		for i in k.size(): out.append([k[i][0], minf(k[i][1] * mu, MAX_SPEED) if free[i] else k[i][1]])
+		return out
+	if not any_free:
+		return k.duplicate(true) if absf(mean_of(k) - 1.0) < 0.004 else []
+	var lo := 0.0; var hi := 1.0
+	if mean_of(apply.call(0.0)) > 1.0: return []
+	while mean_of(apply.call(hi)) < 1.0:
+		hi *= 2.0
+		if hi > 4096.0: return []   # capped at MAX_SPEED everywhere and still short
+	for i in 28:
+		var mid := (lo + hi) * 0.5
+		if mean_of(apply.call(mid)) < 1.0: lo = mid
+		else: hi = mid
+	return apply.call((lo + hi) * 0.5)
+
 ## Relative speed (d progress / d time, 1 = average) of a part at x, for the graph.
 static func speed(def, part: int, x: float) -> float:
 	if has_points(def, part): return spline(keys(def, part), x) / mean(def, part)
@@ -126,4 +151,6 @@ static func speed(def, part: int, x: float) -> float:
 
 ## Hermite end speeds that best stand in for the authored ease (a graph's first drag starts here).
 static func authored_ends(def, part: int) -> Vector2:
-	return Vector2(clampf(speed(def, part, 0.0), 0.0, MAX_SPEED), clampf(speed(def, part, 1.0), 0.0, MAX_SPEED))
+	var e := Vector2(clampf(speed(def, part, 0.0), 0.0, MAX_SPEED), clampf(speed(def, part, 1.0), 0.0, MAX_SPEED))
+	# An ease that starts / ends at rest reads as a hair above zero (numeric slope): call it rest.
+	return Vector2(0.0 if e.x < 0.03 else e.x, 0.0 if e.y < 0.03 else e.y)

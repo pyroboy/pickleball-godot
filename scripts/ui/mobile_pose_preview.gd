@@ -498,20 +498,7 @@ func _rebuild_arc_mesh() -> void:
 func _retime_momentum() -> bool:
 	if not _momentum_supported(): return false
 	var t0 := Time.get_ticks_usec()
-	if _retime_stroke.is_empty():
-		var seq = Sequence.new()
-		seq.configure(_motion_definition, Sequence.Mode.STROKE, Sequence.Stance.AUTHORED, 0, true, player)
-		if seq.style >= 0 or seq.variant != null or seq.ready == null: return false
-		var displayed_pose: PostureDefinition = pose if pose != null else _motion_definition
-		var windup: PostureDefinition = seq._stroke_pose(0.0)
-		for i in RETIME_LEAD + 1:
-			_retime_lead.append(_solved_head(seq.scoped_pose(seq._stance_copy(ReadyCurve.sample(seq.ready, windup, float(i) / RETIME_LEAD)))))
-		for i in RETIME_STROKE + 1:
-			_retime_stroke.append(_solved_head(seq.scoped_pose(seq._stance_copy(seq._stroke_pose(float(i) / RETIME_STROKE)))))
-		show_pose(displayed_pose)
-		# Durations and the end poses do not depend on the speed fields: kept with the tables.
-		_retime_w = seq.prefix_seconds; _retime_release = seq.release_seconds; _retime_stroke_s = seq.stroke_seconds
-		_retime_finish = seq.finish; _retime_ready = seq.ready
+	if not _ensure_retime_tables(): return false
 	var w: float = _retime_w
 	var end: float = w + _retime_stroke_s
 	var def: PostureDefinition = _motion_definition
@@ -532,6 +519,38 @@ func _retime_momentum() -> bool:
 	momentum_retime_usec = Time.get_ticks_usec() - t0
 	PerfMonitor.record("studio.momentum_retime", momentum_retime_usec)
 	return true
+
+## The tables of solved heads along the path (and the durations kept with them); false when
+## this is not a plain stroke.
+func _ensure_retime_tables() -> bool:
+	if not _retime_stroke.is_empty(): return true
+	if not _momentum_supported(): return false
+	var seq = Sequence.new()
+	seq.configure(_motion_definition, Sequence.Mode.STROKE, Sequence.Stance.AUTHORED, 0, true, player)
+	if seq.style >= 0 or seq.variant != null or seq.ready == null: return false
+	var displayed_pose: PostureDefinition = pose if pose != null else _motion_definition
+	var windup: PostureDefinition = seq._stroke_pose(0.0)
+	for i in RETIME_LEAD + 1:
+		_retime_lead.append(_solved_head(seq.scoped_pose(seq._stance_copy(ReadyCurve.sample(seq.ready, windup, float(i) / RETIME_LEAD)))))
+	for i in RETIME_STROKE + 1:
+		_retime_stroke.append(_solved_head(seq.scoped_pose(seq._stance_copy(seq._stroke_pose(float(i) / RETIME_STROKE)))))
+	show_pose(displayed_pose)
+	# Durations and the end poses do not depend on the speed fields: kept with the tables.
+	_retime_w = seq.prefix_seconds; _retime_release = seq.release_seconds; _retime_stroke_s = seq.stroke_seconds
+	_retime_finish = seq.finish; _retime_ready = seq.ready
+	return true
+
+## Paddle-head path length (m) of the three motion parts [Ready -> Wind-up, strike, follow-through]
+## and their durations (s): the speed graph's real-speed scale. Empty when not a plain stroke.
+func part_lengths() -> Dictionary:
+	if not _motion_enabled or not _setup_finished or motion_root == null or not _ensure_retime_tables(): return {}
+	var length := func(t: PackedVector3Array, a: int, b: int) -> float:
+		var sum := 0.0
+		for i in range(a, b): sum += t[i].distance_to(t[i + 1])
+		return sum
+	var mid: int = RETIME_STROKE / 2
+	return {"lengths": [length.call(_retime_lead, 0, RETIME_LEAD), length.call(_retime_stroke, 0, mid), length.call(_retime_stroke, mid, RETIME_STROKE)],
+		"seconds": [_retime_w, _retime_release, _retime_stroke_s - _retime_release]}
 
 ## Catmull-Rom through the table (uniform in x): follows the curve between entries.
 static func _table_head(table: PackedVector3Array, x: float) -> Vector3:

@@ -190,6 +190,7 @@ var _badges: Dictionary = {}     # key -> {unsaved, score, stars, stale, version
 var _badge_clock := 0.0
 var _link = null
 var _poll_frames := 0
+var strike_speed_unlocked := false   # phone Speed sheet: the Strike part of the speed curve may be edited (it changes how shots play)
 var gameplay_edit := false        # top bar "Gameplay edit": off = gameplay fields locked (see gameplay_locked)
 var _gameplay_btn: Button
 var _autopose = null              # AutoPose solver (autopose_solver.gd), made on first use
@@ -1926,6 +1927,7 @@ func gameplay_locked(field: String) -> bool:
 	# Ball actions: only the pickup Grab hand is fixed (the game puts it on the ball).
 	if engine.get("_action"): return field == "left_hand_offset" and engine._stage == 1 and int(engine._current.action_id) == 0
 	if gameplay_edit: return false
+	if strike_speed_unlocked and field.begins_with("speed_strike"): return false
 	if field in POS or field in FACE_FIELDS: return not engine._base and engine._stage == 1
 	return field in GAMEPLAY_FIELDS
 

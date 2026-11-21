@@ -17,7 +17,7 @@ const STUDIO_SCRIPT := "res://scripts/studio/pose_studio.gd"
 const VERSION := 1
 const TICK := 1.0 / 30.0
 const MAX_LINE := 1 << 20
-const KEEPS_LOOP := ["ping", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
+const KEEPS_LOOP := ["ping", "shot", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
 
 var port := 8766
 var _server := TCPServer.new()
@@ -240,6 +240,12 @@ func _send(d: Dictionary) -> void:
 func _dispatch(req: Dictionary) -> Dictionary:
 	var cmd := str(req.get("cmd", ""))
 	if cmd == "ping": return {"ok": true, "version": VERSION, "ready": _ed != null, "window": _window_info()}
+	if cmd == "shot":   # test hook: the whole window as a PNG (UI checks by eye)
+		var path := str(req.get("path", ""))
+		if path == "": return _err("shot needs a path")
+		var img: Image = get_tree().root.get_texture().get_image()   # the last drawn frame
+		var e := img.save_png(path)
+		return {"ok": e == OK, "path": path, "w": img.get_width(), "h": img.get_height()}
 	while _ed == null or not is_instance_valid(_ed): await _frames(1)
 	if not (cmd in KEEPS_LOOP): _loop = false
 	var fn := "_c_" + cmd

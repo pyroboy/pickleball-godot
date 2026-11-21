@@ -88,6 +88,7 @@ var _keys_b: Button
 var _key_time_row: HBoxContainer   # Swing sheet: move the selected path key earlier / later
 var _key_time: HSlider
 var _key_time_sync := false
+var _speed_unlock: Button      # Speed sheet: unlock the Strike part (gameplay timing)
 var _speed_how: Label           # one-line hint above the graph
 var _swing_info: Label
 var _path_info: Label
@@ -631,12 +632,23 @@ func _build_speed(sheet: VBoxContainer) -> void:
 	_speed_graph = SpeedGraph.new(); _speed_graph.name = "PhoneSpeedGraph"; _speed_graph.studio = studio
 	_speed_graph.set_scale_k(2.2); _speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_speed_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_speed_graph.lock_note = "locked · desktop only"
-	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike speed changes how shots play: edit it in the desktop studio"))
+	_speed_graph.lock_note = "locked"
+	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike speed changes how shots play. Tap Unlock Strike to edit it."))
+	# The Strike (and the Wind-up / Contact key points it shares) is gameplay timing: an explicit unlock.
+	_speed_unlock = _btn("Unlock Strike", _toggle_strike_unlock, 0, 60); _speed_unlock.name = "SpeedUnlock"
+	_speed_unlock.add_theme_font_size_override("font_size", SMALL)
 	v.add_child(_speed_graph)
+	v.add_child(_speed_unlock)
 	_speed_graph.selection_changed.connect(_refresh_speed)
 
-const SPEED_HOW := "Tap the line to add a point. Drag a dot up = faster, down = slower."
+const SPEED_HOW := "One curve: drag a dot up = faster, down = slower. Tap the line to add a point; the part's other points give way."
+func _toggle_strike_unlock() -> void:
+	studio.strike_speed_unlocked = not studio.strike_speed_unlocked
+	_speed_unlock.text = "Lock Strike again" if studio.strike_speed_unlocked else "Unlock Strike"
+	_tint(_speed_unlock, studio.strike_speed_unlocked, Ui.GOLD)
+	_speed_graph.queue_redraw()
+	_show_toast("Strike unlocked: its speed changes how shots play" if studio.strike_speed_unlocked else "Strike locked")
+
 ## Header state for the selected speed point: Delete shows, the hint names the point.
 func _refresh_speed() -> void:
 	var sel: Vector2i = _speed_graph.selected

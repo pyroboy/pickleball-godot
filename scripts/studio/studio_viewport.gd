@@ -667,15 +667,21 @@ func _draw_arc(rect: Rect2) -> void:
 ## Small legend in the preview's lower-left corner: the dot colours = paddle speed.
 func _draw_speed_legend(rect: Rect2, k: float) -> void:
 	if _arc_dots.is_empty(): return
-	var w := 90.0 * k; var hgt := 6.0 * k
-	var o := Vector2(rect.position.x + 12.0 * k, rect.end.y - 34.0 * k - legend_lift)
-	for i in 30:
-		draw_rect(Rect2(o + Vector2(w * i / 30.0, 0), Vector2(w / 30.0 + 0.5, hgt)), speed_color(i / 29.0))
 	var font := get_theme_default_font()
-	var fs := int(round(get_theme_default_font_size() * 0.75 * k))
-	draw_string(font, o + Vector2(0, -4.0 * k), "paddle speed", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.75))
-	draw_string(font, o + Vector2(0, hgt + fs + 1.0), "slow", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.6))
-	draw_string(font, o + Vector2(w - 60.0 * k, hgt + fs + 1.0), "%.1f m/s" % _arc_peak, HORIZONTAL_ALIGNMENT_RIGHT, 60.0 * k, fs, Color(1, 1, 1, 0.6))
+	var fs := int(round(12.0 * k))
+	var peak := "%.1f m/s" % _arc_peak
+	var slow_w := font.get_string_size("slow", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var peak_w := font.get_string_size(peak, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	# One row: slow [colour bar] 21.5 m/s, sized by its own text.
+	var bar := 70.0 * k; var gap := 6.0 * k; var hgt := 6.0 * k
+	# Desktop: top-left (the AutoPose hint bar owns the bottom). Phone: bottom-left, above the chips.
+	var o := Vector2(rect.position.x + 12.0 * k, rect.end.y - 14.0 * k - legend_lift) if touch else Vector2(rect.position.x + 14.0, rect.position.y + 22.0)
+	draw_rect(Rect2(o + Vector2(-5.0 * k, -fs - 2.0 * k), Vector2(slow_w + bar + peak_w + gap * 2.0 + 10.0 * k, fs + 8.0 * k)), Color(DOT_OUTLINE, 0.6))
+	draw_string(font, o, "slow", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.75))
+	var bx := o.x + slow_w + gap
+	for i in 30:
+		draw_rect(Rect2(Vector2(bx + bar * i / 30.0, o.y - fs * 0.5 - hgt * 0.5 + 1.0), Vector2(bar / 30.0 + 0.5, hgt)), speed_color(i / 29.0))
+	draw_string(font, Vector2(bx + bar + gap, o.y), peak, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.75))
 
 ## Path key / bend point (or a tick dot: a new key there) under `point`: its progress, -1 = none.
 func path_pick(point: Vector2) -> float:

@@ -55,15 +55,23 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 
 	var compact: PostureDefinition = _compact_or_overhead_definition(base, minf(charge, 0.58), is_volley, near_kitchen, shot_intent)
+	var ends: Array = _drive_endpoints(base, def, compact, strength, spin_mode)
 	if base.play_authored_keys == 1:
-		# "My keys play" (Pose Studio, per stroke): the whole authored Wind-up / Finish pose, body
-		# included, blended in by drive strength like the two-hand backhand. baked_keys() fills the
-		# keys with what the code below builds, so switching it on changes nothing until an edit.
-		if spin_mode == 1: def.paddle_pitch_base_deg -= 4.0 * strength
-		elif spin_mode == 2: def.paddle_pitch_base_deg += 12.0 * strength
-		_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 0), Path.endpoint(base, 0), strength), true)
-		_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 2), Path.endpoint(base, 2), strength), false)
-		return def
+		# "My keys play" (Pose Studio, per stroke): the game's own power scaling above, plus how far
+		# the authored Wind-up / Finish keys are from the game's full-power poses, scaled by
+		# strength. Unedited (baked_keys) that difference is zero at every power; at full power the
+		# authored keys play exactly, whole body included.
+		var full: Array = _drive_endpoints(base, base.lerp_with(base, 0.0), compact, 1.0, 0)
+		_add_pose_delta(ends[0], _authored_windup(base), full[0], strength)
+		_add_pose_delta(ends[1], Path.endpoint(base, 2), full[1], strength)
+	_write_endpoint(def, ends[0], true)
+	_write_endpoint(def, ends[1], false)
+	return def
+
+## The game-built Wind-up and Finish of a drive at `strength` (0 compact .. 1 full): [windup,
+## finish]. `def` is the Contact definition being built (spin adjusts its pitch).
+static func _drive_endpoints(base: PostureDefinition, def: PostureDefinition, compact: PostureDefinition, strength: float, spin_mode: int) -> Array:
+	var side: float = 1.0 if base.family == 0 else -1.0
 	var windup: PostureDefinition = Path.endpoint(compact, 0)
 	# Full-charge Wind-up / Finish paddle: the pose's authored keys (Pose Studio, the momentum arc's
 	# W and F points); a pose without them keeps the built-in drive numbers.
@@ -118,12 +126,42 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 		def.paddle_pitch_base_deg += 12.0 * strength
 		finish.paddle_y_offset = lerpf(finish.paddle_y_offset, base.paddle_y_offset + 0.08, strength)
 		finish.paddle_forward_mul = lerpf(finish.paddle_forward_mul, 0.43, strength)
-	_write_endpoint(def, windup, true)
-	_write_endpoint(def, finish, false)
-	return def
+	return [windup, finish]
+
+## pose += scale * (a - b), field by field: numbers and vectors add (angles by the short way
+## round), switches and enums take `a` once the scale passes one half.
+static var _delta_fields: Array = []
+static func _add_pose_delta(pose: PostureDefinition, a: PostureDefinition, b: PostureDefinition, scale: float) -> void:
+	if _delta_fields.is_empty():
+		for prop in pose.get_property_list():
+			if not (int(prop.usage) & PROPERTY_USAGE_SCRIPT_VARIABLE): continue
+			if prop.type in [TYPE_FLOAT, TYPE_VECTOR3, TYPE_INT, TYPE_BOOL] and not String(prop.name) in ["posture_id", "play_authored_keys", "schema_version"]:
+				_delta_fields.append([String(prop.name), int(prop.type), String(prop.name).ends_with("_deg")])
+	for f in _delta_fields:
+		var va = a.get(f[0]); var vb = b.get(f[0])
+		if f[1] == TYPE_FLOAT:
+			var d: float = float(va) - float(vb)
+			if f[2]: d = wrapf(d, -180.0, 180.0)
+			if not is_zero_approx(d): pose.set(f[0], float(pose.get(f[0])) + scale * d)
+		elif f[1] == TYPE_VECTOR3:
+			var d: Vector3 = va - vb
+			if f[2]: d = Vector3(wrapf(d.x, -180.0, 180.0), wrapf(d.y, -180.0, 180.0), wrapf(d.z, -180.0, 180.0))
+			if not d.is_zero_approx(): pose.set(f[0], pose.get(f[0]) + scale * d)
+		elif va != vb and scale >= 0.5: pose.set(f[0], va)
 
 
 
+
+## The load turn sample_drive adds at the Wind-up of a full-charge swing of `base` (degrees).
+static func _windup_load_turn(base: PostureDefinition) -> float:
+	return Preparation.drive_turn(base, 0.0, 1.0, drive_strength(base, 1.0), false)
+
+## The authored Wind-up key without that load turn: sample_drive adds the turn back while it
+## plays, so a "My keys play" Wind-up shows in play exactly as it was posed.
+static func _authored_windup(base: PostureDefinition) -> PostureDefinition:
+	var windup: PostureDefinition = Path.endpoint(base, 0)
+	Preparation.turn_shaft(windup, -_windup_load_turn(base))
+	return windup
 
 ## A copy of `base` whose authored Wind-up / Finish keys are the ones the game builds for its
 ## full-charge drive, with play_authored_keys on: it plays exactly as `base` did (game-built),
@@ -133,7 +171,10 @@ static func baked_keys(base: PostureDefinition) -> PostureDefinition:
 	off.play_authored_keys = 0
 	var built: PostureDefinition = drive_definition(off, 1.0)
 	var out: PostureDefinition = base.duplicate(true)
-	_write_endpoint(out, Path.endpoint(built, 0), true)
+	# The Wind-up as it plays: with the load turn of the paddle face the game adds there.
+	var windup: PostureDefinition = Path.endpoint(built, 0)
+	Preparation.turn_shaft(windup, _windup_load_turn(off))
+	_write_endpoint(out, windup, true)
 	_write_endpoint(out, Path.endpoint(built, 2), false)
 	out.play_authored_keys = 1
 	return out
@@ -223,6 +264,11 @@ static func sample_drive(base: PostureDefinition, progress: float, charge: float
 			pose.left_hand_offset += Vector3(-0.1, -0.15, 0.0) * slot
 	var result: PostureDefinition = Path.blend_pose(def, pose, clampf(charge, 0.0, 1.0))
 	Support.swing(result, base, t, charge, is_volley or near_kitchen or shot_intent == "DROP")
+	# The load turn of the paddle face (strongest at Wind-up, gone before Contact). With "My keys
+	# play" the keys already hold it (baked_keys), and the paddle follows the keys' own rotation.
+	# The load turn of the paddle face (strongest at Wind-up, released before Contact). With "My
+	# keys play" the authored Wind-up already shows it: drive_definition takes it out of the key
+	# (_authored_windup) so that this puts it back, and the key plays exactly as posed.
 	Preparation.turn_shaft(result, Preparation.drive_turn(base, t, charge, drive_strength(base, charge, is_volley, near_kitchen), is_volley or near_kitchen or shot_intent == "DROP"))
 
 
@@ -266,7 +312,9 @@ static func _compact_or_overhead_definition(base: PostureDefinition, charge: flo
 	# "My keys play" on a stroke whose own swing is this compact / overhead motion (low and
 	# mid-low strokes, overheads): its authored Wind-up / Finish keys, in that same plain context.
 	# Volleys, drops and kitchen play keep the built motion (the keys were not posed for them).
-	if base.play_authored_keys == 1 and not near_kitchen and kind == motion_kind(base, 1.0): return def
+	if base.play_authored_keys == 1 and not near_kitchen and kind == motion_kind(base, 1.0):
+		_write_endpoint(def, _authored_windup(base), true)
+		return def
 	var windup: PostureDefinition = base.lerp_with(base, 0.0)
 	var finish: PostureDefinition = base.lerp_with(base, 0.0)
 	if kind == "SMASH":
