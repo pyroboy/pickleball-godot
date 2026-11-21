@@ -55,6 +55,7 @@ const STROKE_FIELDS := [
 	"ft_paddle_offset", "ft_paddle_rotation_deg", "ft_hip_uncoil_deg", "ft_front_foot_load",
 	"ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "ft_ease_curve",
 	"compact_finish_lateral_scale", "compact_motion_scale", "compact_finish_elbow_offset", "swing_path_blend", "contact_curve",
+	"ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak",
 	"windup_body", "follow_through_body", "charge_duration",
 ]
 const BASE_FIELDS := [
@@ -64,6 +65,7 @@ const BASE_FIELDS := [
 const UNIT_FIELDS := [
 	"head_track_ball_weight", "support_index_closure", "support_grip_style", "charge_back_foot_load",
 	"ft_front_foot_load", "compact_finish_lateral_scale", "compact_motion_scale", "swing_path_blend", "contact_curve", "stroke_overlay_mix",
+	"ready_curve_bow", "ready_curve_round", "ready_curve_peak",
 ]
 const INTEGER_MAX := {"left_hand_mode": 4, "lead_foot": 1, "paddle_hand": 1, "paddle_pitch_sign_source": 2,
 	"paddle_yaw_sign_source": 2, "paddle_roll_sign_source": 2, "ft_ease_curve": 2, "canonical_intent": 8}

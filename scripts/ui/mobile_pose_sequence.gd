@@ -2,6 +2,7 @@ extends RefCounted
 ## Deterministic, private fixture; no ball/contact simulation and no global state writes.
 const Clock = preload("res://scripts/stroke_playback_clock.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
+const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Runtime = preload("res://scripts/runtime_motion_preview.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
@@ -105,7 +106,7 @@ func sample(seconds: float) -> Dictionary:
 				pose = variant.sample_amount(source,0.0,smoothstep(Held.WINDUP_SECONDS,Held.STRONG_SECONDS,preparation_elapsed))
 		var u := smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
 		if pose == null:
-			pose = Clock.Grip.sample(ready,windup,u) if Clock.Grip.supports_both_joined(ready,windup) else Path.blend_pose(ready,windup,u)
+			pose = ReadyCurve.sample(ready,windup,u)
 		phase = "Charging · Ready → Wind-up" if preparation_elapsed <= Held.WINDUP_SECONDS else "Charging · Wind-up → Strong"
 	elif mode == Mode.SERVE_RECEIVE and t >= prefix_seconds+full_seconds:
 		pose = ready.duplicate(true); split = _split_at(t-prefix_seconds-full_seconds); phase = "Opponent return cue · " + str(split.phase); p = 1.0

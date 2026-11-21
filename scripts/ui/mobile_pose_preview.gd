@@ -3,10 +3,13 @@ extends TextureRect
 const Ghosts = preload("res://scripts/ui/mobile_pose_ghosts.gd")
 const ContactPreview = preload("res://scripts/ui/mobile_pose_contact_preview.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
+const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
 const ElbowRuntime = preload("res://scripts/elbow_preset_runtime.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const SelectedGizmo = preload("res://scripts/ui/mobile_pose_gizmo.gd")
 const ARC_STEPS := 64
+const READY_ARC_STEPS := 24
+const READY_ARC_COLOR := Color("9aa3b5")   # Ready end of the Ready -> Wind-up lead-in
 const STAGE_NAMES := ["Wind-up", "Contact", "Finish"]
 const GHOST_SCALE := 0.65
 const GHOST_ALPHA := 0.12
@@ -50,6 +53,7 @@ var _inbetween_root: Node3D
 var _inbetween_dirty := true
 var motion_root: Node3D
 var sample_heads: PackedVector3Array = PackedVector3Array()
+var ready_heads: PackedVector3Array = PackedVector3Array()   # Ready -> Wind-up lead-in, paddle head
 var ghost_transforms: Array[Transform3D] = []
 var motion_rebuild_count := 0
 var motion_sampler: Callable
@@ -384,6 +388,18 @@ func _rebuild_motion() -> void:
 		for id in JOINT_NAMES: joint_samples[id].append(joint_world_position(id))
 		if index in [0, ARC_STEPS / 2, ARC_STEPS]:
 			ghost_transforms.append(paddle_transform)
+	# Ready -> Wind-up lead-in (plain strokes only: serves, variants and ball actions have
+	# their own samplers / no Ready start). Same sampler as playback and the held-Hit wind-up.
+	ready_heads.clear()
+	if not motion_sampler.is_valid() and _motion_definition.posture_id < 90:
+		var ready_def: PostureDefinition = PostureLibrary.instance().get_def(20)
+		if ready_def != null:
+			var windup: PostureDefinition = Path.sample(_motion_definition, 0.0)
+			for index in range(READY_ARC_STEPS + 1):
+				var sample: PostureDefinition = ReadyCurve.sample(ready_def, windup, float(index) / READY_ARC_STEPS)
+				player.posture.transition_pose_blend = sample
+				player.posture.force_posture_update(sample)
+				ready_heads.append(player.paddle_node.global_transform * PaddleSize.HEAD_OFFSET)
 	# Sampling is synchronous and invisible between viewport draws. Restore the
 	# exact current scrub/play pose, not Contact or the final sampled keyframe.
 	show_pose(displayed_pose)
@@ -405,6 +421,12 @@ func _rebuild_motion() -> void:
 		for index in range(ARC_STEPS):
 			_add_arc_segment(_arc.to_local(sample_heads[index]), _arc.to_local(sample_heads[index + 1]),
 				_motion_color(float(index) / ARC_STEPS), _motion_color(float(index + 1) / ARC_STEPS))
+		_arc_mesh.surface_end()
+	if ready_heads.size() > 1 and ready_heads[0].distance_squared_to(ready_heads[-1]) > 0.00000001:
+		_arc_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+		for index in range(ready_heads.size() - 1):
+			_add_arc_segment(_arc.to_local(ready_heads[index]), _arc.to_local(ready_heads[index + 1]),
+				READY_ARC_COLOR.lerp(STAGE_COLORS[0], float(index) / READY_ARC_STEPS), READY_ARC_COLOR.lerp(STAGE_COLORS[0], float(index + 1) / READY_ARC_STEPS))
 		_arc_mesh.surface_end()
 	_refresh_inbetween()
 	motion_rebuild_count += 1

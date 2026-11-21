@@ -172,6 +172,11 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export_range(0.0, 1.0) var swing_path_blend: float = 1.0
 ## Shape only the bend around Contact. The middle value preserves existing motion.
 @export_range(0.0, 1.0) var contact_curve: float = 0.5
+## Ready -> Wind-up paddle path shape (ready_windup_curve.gd). Bow 0 keeps the straight move.
+@export_range(0.0, 1.0) var ready_curve_bow: float = 0.0
+@export_range(0.0, 1.0) var ready_curve_round: float = 0.5
+@export_range(-180.0, 180.0) var ready_curve_dir_deg: float = 0.0
+@export_range(0.05, 0.95) var ready_curve_peak: float = 0.5
 @export var windup_body: Resource
 @export var follow_through_body: Resource
 @export var charge_duration: float = 0.3
@@ -324,6 +329,10 @@ func lerp_with(other, w: float):
 	o.ft_ease_curve = ft_ease_curve if t < 0.5 else other.ft_ease_curve
 	o.swing_path_blend = lerpf(swing_path_blend, other.swing_path_blend, t)
 	o.contact_curve = lerpf(contact_curve, other.contact_curve, t)
+	o.ready_curve_bow = lerpf(ready_curve_bow, other.ready_curve_bow, t)
+	o.ready_curve_round = lerpf(ready_curve_round, other.ready_curve_round, t)
+	o.ready_curve_dir_deg = rad_to_deg(lerp_angle(deg_to_rad(ready_curve_dir_deg), deg_to_rad(other.ready_curve_dir_deg), t))
+	o.ready_curve_peak = lerpf(ready_curve_peak, other.ready_curve_peak, t)
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)
