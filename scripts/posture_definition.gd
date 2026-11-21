@@ -176,6 +176,8 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 ## forward metres) off the normal curve; Wind-up, Contact and Finish themselves never move.
 @export var paddle_path_times: PackedFloat32Array = PackedFloat32Array()
 @export var paddle_path_offsets: PackedVector3Array = PackedVector3Array()
+## Per key tangent (offset slope per unit progress); zero = automatic (Pose Studio handles).
+@export var paddle_path_tangents: PackedVector3Array = PackedVector3Array()
 ## Shape only the bend around Contact. The middle value preserves existing motion.
 @export_range(0.0, 1.0) var contact_curve: float = 0.5
 ## Ready -> Wind-up paddle path shape (ready_windup_curve.gd). Auto 0 and bow 0 = the old straight move.
@@ -189,6 +191,7 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 ## ready_path_offsets[i] (forehand, up, forward metres) off the Ready -> Wind-up path.
 @export var ready_path_times: PackedFloat32Array = PackedFloat32Array()
 @export var ready_path_offsets: PackedVector3Array = PackedVector3Array()
+@export var ready_path_tangents: PackedVector3Array = PackedVector3Array()
 ## Speed ramp per motion part (stroke_speed_ramp.gd): relative speed at the part's start / end,
 ## 1 = its average speed. -1 (both) = the authored ease. Durations and keys never move.
 @export_range(-1.0, 3.0) var speed_lead_start: float = -1.0
@@ -354,6 +357,7 @@ func lerp_with(other, w: float):
 	o.swing_path_blend = lerpf(swing_path_blend, other.swing_path_blend, t)
 	o.paddle_path_times = (paddle_path_times if t < 0.5 else other.paddle_path_times).duplicate()
 	o.paddle_path_offsets = (paddle_path_offsets if t < 0.5 else other.paddle_path_offsets).duplicate()
+	o.paddle_path_tangents = (paddle_path_tangents if t < 0.5 else other.paddle_path_tangents).duplicate()
 	o.contact_curve = lerpf(contact_curve, other.contact_curve, t)
 	o.ready_curve_auto = lerpf(ready_curve_auto, other.ready_curve_auto, t)
 	o.ready_curve_bow = lerpf(ready_curve_bow, other.ready_curve_bow, t)
@@ -362,6 +366,7 @@ func lerp_with(other, w: float):
 	o.ready_curve_peak = lerpf(ready_curve_peak, other.ready_curve_peak, t)
 	o.ready_path_times = (ready_path_times if t < 0.5 else other.ready_path_times).duplicate()
 	o.ready_path_offsets = (ready_path_offsets if t < 0.5 else other.ready_path_offsets).duplicate()
+	o.ready_path_tangents = (ready_path_tangents if t < 0.5 else other.ready_path_tangents).duplicate()
 	o.speed_lead_start = speed_lead_start if t < 0.5 else other.speed_lead_start
 	o.speed_lead_end = speed_lead_end if t < 0.5 else other.speed_lead_end
 	o.speed_strike_start = speed_strike_start if t < 0.5 else other.speed_strike_start

@@ -96,29 +96,53 @@ static func sample_with_endpoints(def: PostureDefinition, progress: float, windu
 
 
 
-## Paddle path keys (PostureDefinition.paddle_path_times / _offsets): the offset off the normal
-## curve at progress t. Cubic Hermite through (0, 0), the keys, (0.5, 0), (1, 0); the slope is
-## zero at Wind-up, Contact and Finish (the paddle meets the ball on the same line).
+## Paddle path keys (PostureDefinition.paddle_path_times / _offsets / _tangents): the offset off
+## the normal curve at progress t. Cubic Hermite through (0, 0), the keys, (0.5, 0), (1, 0); the
+## slope is zero at Wind-up, Contact and Finish (the paddle meets the ball on the same line).
+## A key's slope is automatic (its neighbours) unless paddle_path_tangents gives one (non-zero,
+## metres of offset per unit progress: the Pose Studio tangent handles).
 static func path_offset(def: PostureDefinition, t: float) -> Vector3:
+	var k := _path_keys(def)
+	return Vector3.ZERO if k.is_empty() else hermite_keys(k[0], k[1], k[2], t)
+
+## The slope the curve uses at key time t (automatic or the key's tangent).
+static func path_key_slope(def: PostureDefinition, t: float) -> Vector3:
+	var k := _path_keys(def)
+	if k.is_empty(): return Vector3.ZERO
+	for m in k[0].size(): if absf(k[0][m] - t) < 0.0005: return key_slope(k[0], k[1], k[2], m)
+	return Vector3.ZERO
+
+static func _path_keys(def: PostureDefinition) -> Array:
 	var n: int = mini(def.paddle_path_times.size(), def.paddle_path_offsets.size())
-	if n == 0: return Vector3.ZERO
+	if n == 0: return []
 	var ts: Array = [0.0, 0.5, 1.0]
 	var os: Array = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
+	var tans: Array = [null, null, null]
 	for i in n:
 		var k: float = def.paddle_path_times[i]
 		if k <= 0.0 or k >= 1.0 or is_equal_approx(k, 0.5): continue
 		var j := ts.size()
 		for m in ts.size(): if ts[m] > k: j = m; break
 		ts.insert(j, k); os.insert(j, def.paddle_path_offsets[i])
+		var tan: Vector3 = def.paddle_path_tangents[i] if i < def.paddle_path_tangents.size() else Vector3.ZERO
+		tans.insert(j, tan if tan.length_squared() > 1e-10 else null)
+	return [ts, os, tans]
+
+## Slope at key m: zero on the fixed keys (no tangent), the key's tangent, else its neighbours.
+static func key_slope(ts: Array, os: Array, tans: Array, m: int) -> Vector3:
+	if tans[m] != null: return tans[m]
+	if m == 0 or m == ts.size() - 1: return Vector3.ZERO
+	if is_equal_approx(ts[m], 0.0) or is_equal_approx(ts[m], 0.5) or is_equal_approx(ts[m], 1.0): return Vector3.ZERO
+	return (os[m + 1] - os[m - 1]) / (ts[m + 1] - ts[m - 1])
+
+## Cubic Hermite through sorted (ts, os) with key_slope tangents.
+static func hermite_keys(ts: Array, os: Array, tans: Array, t: float) -> Vector3:
 	var i := 0
 	while i < ts.size() - 2 and t > ts[i + 1]: i += 1
 	var h: float = ts[i + 1] - ts[i]
 	if h <= 0.0: return Vector3.ZERO
 	var s: float = clampf((t - ts[i]) / h, 0.0, 1.0)
-	var slope := func(m: int) -> Vector3:
-		if is_equal_approx(ts[m], 0.0) or is_equal_approx(ts[m], 0.5) or is_equal_approx(ts[m], 1.0): return Vector3.ZERO
-		return (os[m + 1] - os[m - 1]) / (ts[m + 1] - ts[m - 1])
-	var m0: Vector3 = slope.call(i); var m1: Vector3 = slope.call(i + 1)
+	var m0: Vector3 = key_slope(ts, os, tans, i); var m1: Vector3 = key_slope(ts, os, tans, i + 1)
 	return (2*s*s*s - 3*s*s + 1) * os[i] + (s*s*s - 2*s*s + s) * h * m0 + (-2*s*s*s + 3*s*s) * os[i + 1] + (s*s*s - s*s) * h * m1
 
 static func _sample_elbow_path(points: PackedVector3Array, t: float) -> Vector3:

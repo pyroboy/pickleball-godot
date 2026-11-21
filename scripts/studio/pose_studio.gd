@@ -20,6 +20,7 @@ const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const SpeedRamp = preload("res://scripts/stroke_speed_ramp.gd")
+const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
 const Store = preload("res://scripts/mobile_pose_store.gd")
 const ViewSettings = preload("res://scripts/mobile_pose_view_settings.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
@@ -1196,27 +1197,30 @@ func path_keys() -> Array:
 	var out: Array = []
 	if not path_keys_supported(): return out
 	var c: Resource = engine._current
-	for i in mini(c.paddle_path_times.size(), c.paddle_path_offsets.size()): out.append([c.paddle_path_times[i], c.paddle_path_offsets[i]])
-	for i in mini(c.ready_path_times.size(), c.ready_path_offsets.size()): out.append([LEAD_IN + c.ready_path_times[i], c.ready_path_offsets[i]])
+	var tan := func(arr: PackedVector3Array, i: int) -> Vector3: return arr[i] if i < arr.size() else Vector3.ZERO
+	for i in mini(c.paddle_path_times.size(), c.paddle_path_offsets.size()): out.append([c.paddle_path_times[i], c.paddle_path_offsets[i], tan.call(c.paddle_path_tangents, i)])
+	for i in mini(c.ready_path_times.size(), c.ready_path_offsets.size()): out.append([LEAD_IN + c.ready_path_times[i], c.ready_path_offsets[i], tan.call(c.ready_path_tangents, i)])
 	out.sort_custom(func(a, b): return a[0] < b[0])
 	return out
 
-## Replace the path keys (one undo step unless a drag's begin_edit is open). Progress is kept
-## off Wind-up / Contact / Finish (at least 0.02 away); offsets at most 0.8 m.
+## Replace the path keys [[progress, offset, tangent?], ...] (one undo step unless a drag's
+## begin_edit is open). Progress is kept off Wind-up / Contact / Finish (at least 0.02 away);
+## offsets at most 0.8 m; tangent (offset slope per unit progress, zero = automatic) at most 4.
 func set_path_keys(keys: Array, refresh := true) -> Dictionary:
 	if not path_keys_supported(): return {"ok": false, "error": "path keys: strokes only"}
-	var times := PackedFloat32Array(); var offs := PackedVector3Array()
-	var lead_times := PackedFloat32Array(); var lead_offs := PackedVector3Array()
+	var times := PackedFloat32Array(); var offs := PackedVector3Array(); var tans := PackedVector3Array()
+	var lead_times := PackedFloat32Array(); var lead_offs := PackedVector3Array(); var lead_tans := PackedVector3Array()
 	var sorted := keys.duplicate(); sorted.sort_custom(func(a, b): return a[0] < b[0])
 	for k in sorted:
 		if is_lead_in(float(k[0])):
 			var o: Vector3 = k[1]
 			lead_times.append(clampf(float(k[0]) - LEAD_IN, 0.03, 0.97)); lead_offs.append(o.limit_length(0.8))
+			lead_tans.append(_key_tangent(k))
 			continue
 		var t: float = clampf(float(k[0]), 0.02, 0.98)
 		if absf(t - 0.5) < 0.02: t = 0.48 if t < 0.5 else 0.52
 		var o: Vector3 = k[1]
-		times.append(t); offs.append(o.limit_length(0.8))
+		times.append(t); offs.append(o.limit_length(0.8)); tans.append(_key_tangent(k))
 	var own := _txn == null
 	if own: begin_edit("path keys")
 	var prev_group: int = engine._group.selected
@@ -1224,12 +1228,25 @@ func set_path_keys(keys: Array, refresh := true) -> Dictionary:
 	engine._changed("paddle_path_times", times, false)
 	engine._changed("ready_path_times", lead_times, false)
 	engine._changed("ready_path_offsets", lead_offs, false)
+	engine._changed("paddle_path_tangents", tans, false)
+	engine._changed("ready_path_tangents", lead_tans, false)
 	engine._changed("paddle_path_offsets", offs, refresh)
 	engine._group.select(prev_group)
 	selected_field = "paddle_path_offsets"
 	if own: end_edit()
 	else: _after_change(true)
 	return {"ok": true, "keys": path_keys().size()}
+
+func _key_tangent(k: Array) -> Vector3:
+	var v: Vector3 = k[2] if k.size() > 2 and k[2] is Vector3 else Vector3.ZERO
+	return v.limit_length(4.0)
+
+## The slope the curve uses at a path key now (automatic or its tangent), offset per unit progress.
+func path_key_slope(t: float) -> Vector3:
+	if not path_keys_supported(): return Vector3.ZERO
+	var c: Resource = engine._current
+	if is_lead_in(t): return ReadyCurve.key_slope(Path.sample(c, 0.0), t - LEAD_IN)
+	return Path.path_key_slope(c, t)
 
 ## Speed points of one motion part (stroke_speed_ramp.gd): [(time fraction, speed, 0)], at most
 ## 4, x kept inside 0.02..0.98, speed 0..3. One undo step unless a drag's begin_edit is open.

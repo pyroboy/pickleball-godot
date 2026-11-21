@@ -85,6 +85,7 @@ var _swing_info: Label
 var _path_info: Label
 var _path_del: Button
 var _path_clear: Button
+var _path_auto: Button          # Auto curve: the selected key's tangent back to automatic
 var _sel_path := -1.0   # progress of the path key tapped on the arc (-1 = none)
 var _handle := ""
 var _drawer: Control
@@ -530,7 +531,7 @@ func _build_swing(sheet: VBoxContainer) -> void:
 	var head := HBoxContainer.new()
 	var t := _label("Swing path", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
-	var how := _label("Dots = game ticks (wide gaps = fast). Drag W / F to move that key's paddle, a pink square to bend the path; press a dot to add a key there.", SMALL, Ui.MUTED)
+	var how := _label("Dots = game ticks, blue slow to red fast. Drag W / F to move that key's paddle, a pink square to bend the path; press a dot to add a key. A tapped key shows orange tangent handles: drag one to steer the curve through it.", SMALL, Ui.MUTED)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
 	var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
 	var cl := _label("Curve", SMALL); cl.custom_minimum_size.x = 100; r.add_child(cl)
@@ -550,6 +551,7 @@ func _build_swing(sheet: VBoxContainer) -> void:
 	_path_info = _label("", SMALL); _path_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_path_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; pr.add_child(_path_info)
 	_path_del = _btn("Delete key", _delete_path_key, 190, 64); _path_del.add_theme_font_size_override("font_size", SMALL); pr.add_child(_path_del)
+	_path_auto = _btn("Auto curve", _auto_tangent, 190, 64); _path_auto.name = "PathAutoTangent"; _path_auto.add_theme_font_size_override("font_size", SMALL); pr.add_child(_path_auto)
 	_path_clear = _btn("Clear", func(): studio.set_path_keys([]); _sel_path = -1.0; _refresh_swing(), 120, 64)
 	_path_clear.add_theme_font_size_override("font_size", SMALL); pr.add_child(_path_clear)
 	v.add_child(pr)
@@ -584,6 +586,13 @@ func _set_curve(value: float) -> void:
 	if not r.get("ok", false): _show_toast(String(r.get("error", "Curve: cannot change it here")))
 	_refresh_swing()
 
+## The selected key's tangent handles back to automatic.
+func _auto_tangent() -> void:
+	var vi = studio.get("_view_input")
+	if vi == null: return
+	vi.sel_key_t = _sel_path; vi.reset_tangent()
+	_show_toast("Curve through this key: automatic"); _refresh_swing()
+
 func _delete_path_key() -> void:
 	var keys: Array = studio.path_keys().filter(func(k): return absf(float(k[0]) - _sel_path) > 0.001)
 	studio.set_path_keys(keys)
@@ -608,6 +617,8 @@ func _refresh_swing() -> void:
 			else "Key at %d%% of the swing · %.0f cm off the curve" % [roundi(_sel_path * 100.0), o.length() * 100.0]
 	else: _path_info.text = "Path keys: %d" % keys.size() + ("" if keys.is_empty() else " · tap one to delete it")
 	_path_del.visible = sel
+	var custom_tan: bool = sel and keys.any(func(k): return absf(float(k[0]) - _sel_path) < 0.001 and k.size() > 2 and (k[2] as Vector3).length_squared() > 1e-10)
+	_path_auto.visible = custom_tan
 	_path_clear.visible = not keys.is_empty() and not sel
 	var pv = studio.preview
 	var kt: PackedFloat32Array = pv.momentum_key_times

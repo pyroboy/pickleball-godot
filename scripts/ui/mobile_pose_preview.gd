@@ -80,6 +80,8 @@ var momentum_key_times := PackedFloat32Array()   # their seconds from Ready
 var momentum_contact_speed := 0.0                # m/s: peak paddle-head speed of the strike
 var momentum_rebuild_count := 0
 var momentum_progress := PackedFloat32Array()   # stroke progress of each tick (-1 before Wind-up)
+var momentum_path_tan := PackedVector3Array()   # path handles: solved world direction per unit progress (keys; zero for bend points)
+const TAN_STEP := 0.015                            # progress step for that direction (central difference)
 var momentum_path_t := PackedFloat32Array()      # path handles: the keys' progress, then bend points
 var momentum_path_heads := PackedVector3Array()  # their heads on the arc
 var momentum_path_virtual := PackedByteArray()   # 1 = a bend point (no key there yet)
@@ -467,7 +469,7 @@ func _solved_head(p: PostureDefinition) -> Vector3:
 
 func _rebuild_momentum() -> void:
 	momentum_heads.clear(); momentum_keys.clear(); momentum_key_times.clear(); momentum_contact_speed = 0.0
-	momentum_progress.clear(); momentum_path_t.clear(); momentum_path_heads.clear(); momentum_path_virtual.clear()
+	momentum_progress.clear(); momentum_path_t.clear(); momentum_path_heads.clear(); momentum_path_virtual.clear(); momentum_path_tan.clear()
 	if not _momentum_supported(): return
 	var t0 := Time.get_ticks_usec()
 	var seq = Sequence.new()
@@ -488,6 +490,12 @@ func _rebuild_momentum() -> void:
 		for p in pts:
 			momentum_path_t.append(p[0]); momentum_path_virtual.append(p[1])
 			momentum_path_heads.append(_solved_head(seq._stroke_pose(p[0])))
+			# Solved path direction through a key (world metres per unit progress): tangent handles.
+			var tan := Vector3.ZERO
+			if p[1] == 0:
+				var a: float = maxf(p[0] - TAN_STEP, 0.0); var b: float = minf(p[0] + TAN_STEP, 1.0)
+				tan = (_solved_head(seq._stroke_pose(b)) - _solved_head(seq._stroke_pose(a))) / maxf(b - a, 0.001)
+			momentum_path_tan.append(tan)
 		# Ready -> Wind-up lead-in handles (progress LEAD_IN + v, v 0 = Ready .. 1 = Wind-up): its keys,
 		# plus a bend point in the middle when it has none.
 		if seq.ready != null and seq.variant == null:
@@ -498,6 +506,11 @@ func _rebuild_momentum() -> void:
 			for p in lead:
 				momentum_path_t.append(LEAD_IN + p[0]); momentum_path_virtual.append(p[1])
 				momentum_path_heads.append(_solved_head(ReadyCurve.sample(seq.ready, windup, p[0])))
+				var tan := Vector3.ZERO
+				if p[1] == 0:
+					var a: float = maxf(p[0] - TAN_STEP, 0.0); var b: float = minf(p[0] + TAN_STEP, 1.0)
+					tan = (_solved_head(ReadyCurve.sample(seq.ready, windup, b)) - _solved_head(ReadyCurve.sample(seq.ready, windup, a))) / maxf(b - a, 0.001)
+				momentum_path_tan.append(tan)
 	for t in times:
 		momentum_key_times.append(t); momentum_keys.append(_solved_head(seq.sample(t).pose))
 	# Peak paddle-head speed of the strike (Wind-up -> Contact), one tick at a time. (The strike

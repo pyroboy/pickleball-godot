@@ -59,28 +59,33 @@ static func smooth_offset(ready: PostureDefinition, windup: PostureDefinition, u
 	var curve: Vector3 = a * (v * v * v) + p1 * (3.0 * v * v * u) + p2 * (3.0 * v * u * u) + b * (u * u * u)
 	return curve - a.lerp(b, u)
 
-## Cubic Hermite through (0, 0), the keys, (1, 0); slope zero at Ready and Wind-up.
+## Cubic Hermite through (0, 0), the keys, (1, 0); slope zero at Ready and Wind-up. A key's
+## slope is automatic unless ready_path_tangents gives one (non-zero: a studio tangent handle).
 static func key_offset(windup: PostureDefinition, u: float) -> Vector3:
+	var k := _keys(windup)
+	return Vector3.ZERO if k.is_empty() else Path.hermite_keys(k[0], k[1], k[2], u)
+
+static func key_slope(windup: PostureDefinition, v: float) -> Vector3:
+	var k := _keys(windup)
+	if k.is_empty(): return Vector3.ZERO
+	for m in k[0].size(): if absf(k[0][m] - v) < 0.0005: return Path.key_slope(k[0], k[1], k[2], m)
+	return Vector3.ZERO
+
+static func _keys(windup: PostureDefinition) -> Array:
 	var n: int = mini(windup.ready_path_times.size(), windup.ready_path_offsets.size())
-	if n == 0: return Vector3.ZERO
+	if n == 0: return []
 	var ts: Array = [0.0, 1.0]
 	var os: Array = [Vector3.ZERO, Vector3.ZERO]
+	var tans: Array = [null, null]
 	for i in n:
 		var k: float = windup.ready_path_times[i]
 		if k <= 0.0 or k >= 1.0: continue
 		var j := ts.size() - 1
 		for m in ts.size(): if ts[m] > k: j = m; break
 		ts.insert(j, k); os.insert(j, windup.ready_path_offsets[i])
-	var i := 0
-	while i < ts.size() - 2 and u > ts[i + 1]: i += 1
-	var h: float = ts[i + 1] - ts[i]
-	if h <= 0.0: return Vector3.ZERO
-	var s: float = clampf((u - ts[i]) / h, 0.0, 1.0)
-	var slope := func(m: int) -> Vector3:
-		if m == 0 or m == ts.size() - 1: return Vector3.ZERO
-		return (os[m + 1] - os[m - 1]) / (ts[m + 1] - ts[m - 1])
-	var m0: Vector3 = slope.call(i); var m1: Vector3 = slope.call(i + 1)
-	return (2*s*s*s - 3*s*s + 1) * os[i] + (s*s*s - 2*s*s + s) * h * m0 + (-2*s*s*s + 3*s*s) * os[i + 1] + (s*s*s - s*s) * h * m1
+		var tan: Vector3 = windup.ready_path_tangents[i] if i < windup.ready_path_tangents.size() else Vector3.ZERO
+		tans.insert(j, tan if tan.length_squared() > 1e-10 else null)
+	return [ts, os, tans]
 
 static func bow_offset(ready: PostureDefinition, windup: PostureDefinition, u: float) -> Vector3:
 	var bow: float = clampf(windup.ready_curve_bow, 0.0, 1.0)

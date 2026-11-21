@@ -70,7 +70,7 @@ const AP_RADIUS := 6.0
 const LOCK_OFF := Vector2(11, -11)   # lock icon centre from its handle (points)
 const LOCK_PICK := 7.0
 const PIN_COLOR := Color("71f5da")
-enum Drag { NONE, ORBIT, PAN, ZOOM, GIZMO, TIP, AUTOPOSE, PATH }
+enum Drag { NONE, ORBIT, PAN, ZOOM, GIZMO, TIP, AUTOPOSE, PATH, TANGENT }
 const LINK_DEVICE := 77           # device id of mouse events the TCP link pushes (pose_studio_link.gd _mods)
 
 var studio
@@ -113,6 +113,8 @@ var arc_stage := -1                     # key of the arc point being dragged (0 
 ## the middle of each half that has no key. Drag one to bend / place the path there (a bend point
 ## becomes a key); press a tick dot to add a key at that moment; a tap opens the key's options.
 const PATH_COLOR := Color("ff8fb1")
+var _arc_cols := PackedColorArray()   # tick dot colours by paddle speed (speed_color)
+var _arc_peak := 0.0                    # their scale: the fastest tick (m/s)
 var _path_pts := PackedVector2Array()   # screen points of preview.momentum_path_heads
 var path_t := -1.0                       # progress of the key being dragged (-1 = none)
 var _path_head0 := Vector3.INF
@@ -146,6 +148,7 @@ func _gui_input(event: InputEvent) -> void:
 			Drag.GIZMO: preview.gizmo.input(event)
 			Drag.TIP: _tip_motion(event.position)
 			Drag.PATH: if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _path_motion(event.position)
+			Drag.TANGENT: if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _tan_motion(event.position)
 			Drag.AUTOPOSE:   # only motion with the left button held moves the handle (a stray hover event is not the drag)
 				if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _ap_motion(event)
 			Drag.ORBIT: if not _touch_block: orbit(event.relative)
@@ -221,8 +224,12 @@ func _button(e: InputEventMouseButton) -> void:
 					var t := path_t
 					path_t = -1.0
 					studio.end_edit(); studio.drag_changed()
+					sel_key_t = t   # a key keeps its tangent handles until another press
 					if not _path_moved: studio.handle_tapped.emit("pathkey:%f" % t)
 					queue_redraw(); return
+				if drag == Drag.TANGENT:
+					drag = Drag.NONE
+					studio.end_edit(); studio.drag_changed(); queue_redraw(); return
 				if drag == Drag.AUTOPOSE:
 					drag = Drag.NONE
 					var tapped: bool = int(studio.last_autopose.get("moves", 0)) == 0
@@ -250,9 +257,14 @@ func _button(e: InputEventMouseButton) -> void:
 				var lk := ap_lock_pick(e.position) if core == "" and not touch else ""
 				if lk != "":
 					studio.set_autopose_pin(lk); queue_redraw(); return
+				var tg := tan_pick(e.position) if core == "" else 0
+				if tg != 0:
+					if e.double_click: reset_tangent(); return
+					_begin_tan(tg, e); return
 				var pk := path_pick(e.position) if core == "" else -1.0
 				if pk >= 0.0:
 					_begin_path(pk, e); return
+				if sel_key_t >= 0.0: sel_key_t = -1.0; queue_redraw()
 				var ak := arc_pick(e.position) if core == "" else -1
 				if ak >= 0:
 					if ak != studio.stage: studio.set_stage(ak)
@@ -369,7 +381,7 @@ func finish_drag() -> void:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
 		studio.drag_changed(); queue_redraw()
 		return
-	if drag == Drag.PATH:
+	if drag == Drag.PATH or drag == Drag.TANGENT:
 		drag = Drag.NONE; path_t = -1.0
 		studio.end_edit(); studio.drag_changed(); queue_redraw()
 		return
@@ -388,7 +400,7 @@ func cancel() -> void:
 		ap_handle = ""; ap_target = Vector3.INF; arc_stage = -1
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
 		studio.drag_changed(); queue_redraw()
-	elif drag == Drag.PATH:
+	elif drag == Drag.PATH or drag == Drag.TANGENT:
 		drag = Drag.NONE; path_t = -1.0
 		studio.abort_edit(); studio.drag_changed(); queue_redraw()
 	elif drag == Drag.GIZMO or drag == Drag.TIP:
@@ -564,7 +576,29 @@ func _update_arc() -> bool:
 	for i in (pp.size() if not changed else 0):
 		if pp[i].is_finite() != _path_pts[i].is_finite() or (pp[i].is_finite() and pp[i].distance_squared_to(_path_pts[i]) > 0.04): changed = true; break
 	_arc_dots = dots; _arc_keys = keys; _path_pts = pp
+	if changed or _arc_cols.size() != dots.size(): _arc_cols = _speed_colors()
 	return changed
+
+## Tick dot colours by paddle-head speed (central difference, m/s): blue slow -> green ->
+## yellow -> red at the stroke's peak. Same heads the arc draws, so the colours match the tube.
+func _speed_colors() -> PackedColorArray:
+	var h: PackedVector3Array = preview.momentum_heads
+	var out := PackedColorArray()
+	var n := h.size()
+	if n < 2: return out
+	var sp := PackedFloat32Array(); var top := 0.001
+	for i in n:
+		var v: float = h[mini(i + 1, n - 1)].distance_to(h[maxi(i - 1, 0)]) / (preview.TICK * float(mini(i + 1, n - 1) - maxi(i - 1, 0)))
+		sp.append(v); top = maxf(top, v)
+	_arc_peak = top
+	for v in sp: out.append(speed_color(v / top))
+	return out
+
+static func speed_color(u: float) -> Color:
+	var stops := [Color("4aa3ff"), Color("49d18a"), Color("ffd24a"), Color("ff5a4a")]
+	var x: float = clampf(u, 0.0, 1.0) * 3.0
+	var i: int = mini(int(x), 2)
+	return stops[i].lerp(stops[i + 1], x - i)
 
 ## Wind-up (0) or Finish (2) arc point under `point` (-1 = none). The current key's point is
 ## left to its rings.
@@ -582,10 +616,13 @@ func arc_pick(point: Vector2) -> int:
 func _draw_arc(rect: Rect2) -> void:
 	if _arc_keys.size() < 3: return
 	var k := TOUCH_DRAW if touch else 1.0
-	for p in _arc_dots:
+	for i in _arc_dots.size():
+		var p: Vector2 = _arc_dots[i]
 		if not p.is_finite() or not rect.has_point(p): continue
-		draw_circle(p, 3.2 * k, DOT_OUTLINE, true, -1.0, true)
-		draw_circle(p, 2.0 * k, Color(1, 1, 1, 0.92), true, -1.0, true)
+		draw_circle(p, 3.4 * k, DOT_OUTLINE, true, -1.0, true)
+		draw_circle(p, 2.3 * k, _arc_cols[i] if i < _arc_cols.size() else Color(1, 1, 1, 0.92), true, -1.0, true)
+	_draw_speed_legend(rect, k)
+	_draw_tangents(rect, k)
 	for i in _path_pts.size():
 		var p: Vector2 = _path_pts[i]
 		if not p.is_finite() or not rect.has_point(p): continue
@@ -614,6 +651,19 @@ func _draw_arc(rect: Rect2) -> void:
 		var fs := int(round(get_theme_default_font_size() * 0.8 * k))
 		var tw := font.get_string_size("WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		draw_string(font, p + Vector2(-tw.x * 0.5, fs * 0.36), "WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, cols[st])
+
+## Small legend in the preview's lower-left corner: the dot colours = paddle speed.
+func _draw_speed_legend(rect: Rect2, k: float) -> void:
+	if _arc_dots.is_empty(): return
+	var w := 90.0 * k; var hgt := 6.0 * k
+	var o := Vector2(rect.position.x + 12.0 * k, rect.end.y - 34.0 * k)
+	for i in 30:
+		draw_rect(Rect2(o + Vector2(w * i / 30.0, 0), Vector2(w / 30.0 + 0.5, hgt)), speed_color(i / 29.0))
+	var font := get_theme_default_font()
+	var fs := int(round(get_theme_default_font_size() * 0.75 * k))
+	draw_string(font, o + Vector2(0, -4.0 * k), "paddle speed", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.75))
+	draw_string(font, o + Vector2(0, hgt + fs + 1.0), "slow", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.6))
+	draw_string(font, o + Vector2(w - 60.0 * k, hgt + fs + 1.0), "%.1f m/s" % _arc_peak, HORIZONTAL_ALIGNMENT_RIGHT, 60.0 * k, fs, Color(1, 1, 1, 0.6))
 
 ## Path key / bend point (or a tick dot: a new key there) under `point`: its progress, -1 = none.
 func path_pick(point: Vector2) -> float:
@@ -680,11 +730,133 @@ func _path_motion(point: Vector2) -> void:
 	studio.set_path_keys(keys)
 	_update_arc(); queue_redraw()
 
+# ---------------------------------------------------------------- tangent handles (path keys)
+## A selected path key (pressed or dragged) shows two tangent handles along the solved path
+## direction: drag either to set the direction and pull of the path through the key (the other
+## mirrors it); double-click one = automatic again. The key's tangent is an offset slope
+## (paddle_path_tangents / ready_path_tangents); the drag adds the pointer's change in path
+## velocity to the slope the curve had when the drag began.
+const TAN_COLOR := Color("ffb15a")
+const TAN_SPAN := 0.06        # progress either side of the key that a handle stands for
+const TAN_SPAN_LEAD := 0.15   # the same on the Ready -> Wind-up lead-in (its progress is the lead-in)
+const TAN_MIN_M := 0.07       # handles never closer than this to their key (world metres)
+const TAN_MIN_PX := 34.0      # ... nor closer than this on screen (scaled for touch by _r)
+const TAN_MAX_M := 0.3        # ... and never further than this (world metres)
+var sel_key_t := -1.0         # progress of the key showing tangent handles (-1 = none)
+var _tan_sign := 1.0
+var _tan_span := TAN_SPAN
+var _tan_slope0 := Vector3.ZERO
+var _tan_world0 := Vector3.ZERO
+var _tan_head := Vector3.INF
+
+func _key_index(t: float) -> int:
+	for i in preview.momentum_path_t.size():
+		if preview.momentum_path_virtual[i] == 0 and absf(preview.momentum_path_t[i] - t) < 0.001: return i
+	return -1
+
+## World head, solved direction and the span a handle stands for, of the selected key.
+func _tan_frame() -> Dictionary:
+	if sel_key_t < 0.0 or not _arc_shown() or not studio.path_keys_supported(): return {}
+	var i := _key_index(sel_key_t)
+	if i < 0 or i >= preview.momentum_path_tan.size(): return {}
+	var head: Vector3 = preview.momentum_path_heads[i]; var tw: Vector3 = preview.momentum_path_tan[i]
+	var span: float = TAN_SPAN_LEAD if studio.is_lead_in(sel_key_t) else TAN_SPAN
+	if tw.length_squared() < 1e-8: tw = Vector3.UP * 0.001
+	if tw.length() * span < TAN_MIN_M: span = TAN_MIN_M / maxf(tw.length(), 0.001)
+	# Also never shorter than a finger / cursor on screen (the phone's view is far smaller).
+	var c: Vector2 = preview._world_screen_position(head)
+	var px := 0.0
+	for sgn in [-1.0, 1.0]:
+		var e: Vector2 = preview._world_screen_position(head + tw * span * sgn)
+		if c.is_finite() and e.is_finite(): px = maxf(px, c.distance_to(e))
+	var want: float = _r(TAN_MIN_PX)
+	if px > 0.5 and px < want: span *= want / px
+	span = minf(span, TAN_MAX_M / maxf(tw.length(), 0.001))   # pointing at the camera: stay near the key
+	return {"head": head, "tan": tw, "span": span}
+
+func _tan_points() -> Array:
+	var f := _tan_frame()
+	if f.is_empty(): return []
+	var a: Vector2 = preview._world_screen_position(f.head - f.tan * f.span)
+	var b: Vector2 = preview._world_screen_position(f.head + f.tan * f.span)
+	var c: Vector2 = preview._world_screen_position(f.head)
+	if not (a.is_finite() and b.is_finite() and c.is_finite()): return [a, c, b]
+	# Drawn at least a finger / cursor away from the key, along the on-screen direction (the drag
+	# follows the pointer's movement, so the drawn spot need not be the exact 3D point).
+	var want: float = _r(TAN_MIN_PX)
+	var dir: Vector2 = (b - a)
+	dir = dir.normalized() if dir.length() > 0.5 else Vector2.RIGHT
+	if c.distance_to(b) < want: b = c + dir * want
+	if c.distance_to(a) < want: a = c - dir * want
+	return [a, c, b]
+
+## Tangent handle under point: +1 out (later in time), -1 in, 0 none.
+func tan_pick(point: Vector2) -> int:
+	var pts := _tan_points()
+	if pts.is_empty(): return 0
+	var r := _r(ARC_KEY_RADIUS + 3.0)
+	if pts[2].is_finite() and pts[2].distance_to(point) < r: return 1
+	if pts[0].is_finite() and pts[0].distance_to(point) < r: return -1
+	return 0
+
+func _begin_tan(sign: int, e: InputEventMouseButton) -> void:
+	var f := _tan_frame()
+	if f.is_empty(): return
+	preview.cancel_gesture()
+	studio.begin_edit("path tangent")
+	_tan_sign = float(sign); _tan_span = f.span; _tan_world0 = f.tan; _tan_head = f.head
+	_tan_slope0 = studio.path_key_slope(sel_key_t)
+	var handle: Vector3 = f.head + f.tan * f.span * _tan_sign
+	_path_plane = Plane(-preview.camera.global_transform.basis.z, handle)
+	_path_grab = e.position - preview._world_screen_position(handle)   # the drawn handle may sit off its 3D point
+	if not _path_grab.is_finite(): _path_grab = Vector2.ZERO
+	drag = Drag.TANGENT
+	studio.drag_changed(); queue_redraw()
+
+func _tan_motion(point: Vector2) -> void:
+	var hit := _plane_hit(point - _path_grab, _path_plane)
+	if not hit.is_finite(): return
+	var v_world: Vector3 = (hit - _tan_head) * _tan_sign / _tan_span
+	var dv: Vector3 = v_world - _tan_world0
+	var p = preview.player
+	var slope: Vector3 = _tan_slope0 + Vector3(dv.dot(p._get_forehand_axis()), dv.y, dv.dot(p._get_forward_axis()))
+	if slope.length_squared() < 1e-8: slope = Vector3(0.0, 1e-4, 0.0)   # zero means automatic: keep it explicit
+	_set_key_tangent(sel_key_t, slope)
+
+func _set_key_tangent(t: float, slope: Vector3) -> void:
+	var keys: Array = studio.path_keys()
+	for k in keys:
+		if absf(float(k[0]) - t) < 0.001:
+			if k.size() > 2: k[2] = slope
+			else: k.append(slope)
+	studio.set_path_keys(keys)
+	_update_arc(); queue_redraw()
+
+## The selected key's tangent back to automatic (one undo step).
+func reset_tangent() -> void:
+	if sel_key_t < 0.0: return
+	studio.begin_edit("path tangent auto"); _set_key_tangent(sel_key_t, Vector3.ZERO); studio.end_edit()
+
+func _draw_tangents(_rect: Rect2, k: float) -> void:
+	var pts := _tan_points()
+	if pts.is_empty() or not pts[0].is_finite() or not pts[2].is_finite(): return
+	var custom := false
+	for key in studio.path_keys(): if absf(float(key[0]) - sel_key_t) < 0.001 and key.size() > 2 and (key[2] as Vector3).length_squared() > 1e-10: custom = true
+	draw_line(pts[0], pts[2], DOT_OUTLINE, 4.0 * k, true)
+	draw_line(pts[0], pts[2], TAN_COLOR, 2.0 * k, true)
+	for e in [0, 2]:
+		var hot: bool = drag == Drag.TANGENT and ((e == 2) == (_tan_sign > 0.0))
+		var r := (6.0 + (1.5 if hot else 0.0)) * k
+		draw_circle(pts[e], r + 2.0, DOT_OUTLINE, true, -1.0, true)
+		if custom: draw_circle(pts[e], r, Color("eef5fa") if hot else TAN_COLOR, true, -1.0, true)
+		else: draw_circle(pts[e], r, Color("eef5fa") if hot else TAN_COLOR, false, 2.0 * k, true)
+
 ## Data for ui_dump / the link: the momentum arc in preview points.
 func arc_state() -> Dictionary:
 	_update_arc()
 	var pt = func(p: Vector2): return [p.x, p.y] if p.is_finite() else null
-	return {"shown": _arc_shown(), "ticks": _arc_dots.size(), "dots": Array(_arc_dots).map(pt), "keys": Array(_arc_keys).map(pt),
+	var tp := _tan_points()
+	return {"tangent_key": sel_key_t, "tangent_handles": tp.map(pt) if not tp.is_empty() else [], "shown": _arc_shown(), "ticks": _arc_dots.size(), "dot_colors": Array(_arc_cols).map(func(c: Color): return c.to_html(false)), "peak_speed": _arc_peak, "dots": Array(_arc_dots).map(pt), "keys": Array(_arc_keys).map(pt),
 		"key_times": Array(preview.momentum_key_times), "contact_speed": preview.momentum_contact_speed,
 		"heads": Array(preview.momentum_heads).map(func(h: Vector3): return [snappedf(h.x, 0.001), snappedf(h.y, 0.001), snappedf(h.z, 0.001)]),
 		"dragging": arc_stage, "path": Array(_path_pts).map(pt), "path_t": Array(preview.momentum_path_t),

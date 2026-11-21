@@ -788,6 +788,7 @@ func _c_mouse(r: Dictionary) -> Dictionary:
 			"down", "up":
 				var b := InputEventMouseButton.new()
 				b.button_index = int(m.get("button", 1)); b.pressed = kind == "down"
+				b.double_click = b.pressed and bool(m.get("double", false))   # test hook: a double-click press
 				held = (held | (1 << (b.button_index - 1))) if b.pressed else (held & ~(1 << (b.button_index - 1)))
 				b.button_mask = held
 				ev = b
