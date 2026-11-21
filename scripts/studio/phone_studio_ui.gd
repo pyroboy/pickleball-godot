@@ -563,7 +563,8 @@ func _refresh_swing() -> void:
 	if not studio.path_keys_supported(): _path_info.text = "Path keys: strokes only"
 	elif sel:
 		var o: Vector3 = keys.filter(func(k): return absf(float(k[0]) - _sel_path) < 0.001)[0][1]
-		_path_info.text = "Key at %d%% of the swing · %.0f cm off the curve" % [roundi(_sel_path * 100.0), o.length() * 100.0]
+		_path_info.text = ("Key at %d%% of Ready → Wind-up · %.0f cm off the curve" % [roundi((_sel_path - studio.LEAD_IN) * 100.0), o.length() * 100.0]) if studio.is_lead_in(_sel_path) \
+			else "Key at %d%% of the swing · %.0f cm off the curve" % [roundi(_sel_path * 100.0), o.length() * 100.0]
 	else: _path_info.text = "Path keys: %d" % keys.size() + ("" if keys.is_empty() else " · tap one to delete it")
 	_path_del.visible = sel
 	_path_clear.visible = not keys.is_empty() and not sel

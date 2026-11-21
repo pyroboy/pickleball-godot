@@ -119,6 +119,7 @@ var _path_off0 := Vector3.ZERO
 var _path_plane := Plane()
 var _path_grab := Vector2.ZERO
 var _path_moved := false
+var _pick_head := Vector3.INF          # arc head of the lead-in tick path_pick last returned
 
 func attach(owner_studio, pv) -> void:
 	studio = owner_studio; preview = pv
@@ -625,11 +626,18 @@ func path_pick(point: Vector2) -> float:
 		if d < best_d: best_d = d; best = preview.momentum_path_t[i]
 	if best >= 0.0: return best
 	best_d = _r(4.0)
+	_pick_head = Vector3.INF
+	var w: float = preview.momentum_key_times[0] if preview.momentum_key_times.size() > 0 else 0.0
 	for i in _arc_dots.size():
 		var pr: float = preview.momentum_progress[i] if i < preview.momentum_progress.size() else -1.0
-		if pr < 0.03 or pr > 0.97 or absf(pr - 0.5) < 0.04 or not _arc_dots[i].is_finite(): continue
+		if pr < 0.0 and w > 0.0:   # a lead-in tick: a new Ready -> Wind-up key there
+			var v: float = smoothstep(0.0, w, i * preview.TICK)
+			if v < 0.05 or v > 0.95: continue
+			pr = studio.LEAD_IN + v
+		elif pr < 0.03 or pr > 0.97 or absf(pr - 0.5) < 0.04: continue
+		if not _arc_dots[i].is_finite(): continue
 		var d := _arc_dots[i].distance_to(point)
-		if d < best_d: best_d = d; best = pr
+		if d < best_d: best_d = d; best = pr; _pick_head = preview.momentum_heads[i]
 	return best
 
 func _begin_path(t: float, e: InputEventMouseButton) -> void:
@@ -640,6 +648,7 @@ func _begin_path(t: float, e: InputEventMouseButton) -> void:
 	for i in preview.momentum_path_t.size(): if absf(preview.momentum_path_t[i] - t) < 0.001: head = preview.momentum_path_heads[i]
 	if not head.is_finite():   # a tick dot: its head on the arc
 		for i in preview.momentum_progress.size(): if absf(preview.momentum_progress[i] - t) < 0.0001: head = preview.momentum_heads[i]
+	if not head.is_finite() and studio.is_lead_in(t): head = _pick_head
 	if not head.is_finite(): return
 	preview.cancel_gesture()
 	studio.begin_edit("path key")

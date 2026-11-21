@@ -178,11 +178,17 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export var paddle_path_offsets: PackedVector3Array = PackedVector3Array()
 ## Shape only the bend around Contact. The middle value preserves existing motion.
 @export_range(0.0, 1.0) var contact_curve: float = 0.5
-## Ready -> Wind-up paddle path shape (ready_windup_curve.gd). Bow 0 keeps the straight move.
+## Ready -> Wind-up paddle path shape (ready_windup_curve.gd). Auto 0 and bow 0 = the old straight move.
+@export_range(0.0, 1.0) var ready_curve_auto: float = 1.0
 @export_range(0.0, 1.0) var ready_curve_bow: float = 0.0
 @export_range(0.0, 1.0) var ready_curve_round: float = 0.5
 @export_range(-180.0, 180.0) var ready_curve_dir_deg: float = 0.0
 @export_range(0.05, 0.95) var ready_curve_peak: float = 0.5
+## Ready -> Wind-up path keys (Pose Studio AutoPose arc, grey lead-in): key i at lead-in progress
+## ready_path_times[i] (0 = Ready, 1 = Wind-up, never on those two) pushes the paddle by
+## ready_path_offsets[i] (forehand, up, forward metres) off the Ready -> Wind-up path.
+@export var ready_path_times: PackedFloat32Array = PackedFloat32Array()
+@export var ready_path_offsets: PackedVector3Array = PackedVector3Array()
 @export var windup_body: Resource
 @export var follow_through_body: Resource
 @export var charge_duration: float = 0.3
@@ -337,10 +343,13 @@ func lerp_with(other, w: float):
 	o.paddle_path_times = (paddle_path_times if t < 0.5 else other.paddle_path_times).duplicate()
 	o.paddle_path_offsets = (paddle_path_offsets if t < 0.5 else other.paddle_path_offsets).duplicate()
 	o.contact_curve = lerpf(contact_curve, other.contact_curve, t)
+	o.ready_curve_auto = lerpf(ready_curve_auto, other.ready_curve_auto, t)
 	o.ready_curve_bow = lerpf(ready_curve_bow, other.ready_curve_bow, t)
 	o.ready_curve_round = lerpf(ready_curve_round, other.ready_curve_round, t)
 	o.ready_curve_dir_deg = rad_to_deg(lerp_angle(deg_to_rad(ready_curve_dir_deg), deg_to_rad(other.ready_curve_dir_deg), t))
 	o.ready_curve_peak = lerpf(ready_curve_peak, other.ready_curve_peak, t)
+	o.ready_path_times = (ready_path_times if t < 0.5 else other.ready_path_times).duplicate()
+	o.ready_path_offsets = (ready_path_offsets if t < 0.5 else other.ready_path_offsets).duplicate()
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)

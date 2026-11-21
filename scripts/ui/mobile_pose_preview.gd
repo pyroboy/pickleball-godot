@@ -9,6 +9,7 @@ const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const SelectedGizmo = preload("res://scripts/ui/mobile_pose_gizmo.gd")
 const ARC_STEPS := 64
 const READY_ARC_STEPS := 24
+const LEAD_IN := 1.0   # path handle progress above this = Ready -> Wind-up lead-in (pose_studio.gd LEAD_IN)
 const READY_ARC_COLOR := Color("9aa3b5")   # Ready end of the Ready -> Wind-up lead-in
 const STAGE_NAMES := ["Wind-up", "Contact", "Finish"]
 const GHOST_SCALE := 0.65
@@ -487,6 +488,16 @@ func _rebuild_momentum() -> void:
 		for p in pts:
 			momentum_path_t.append(p[0]); momentum_path_virtual.append(p[1])
 			momentum_path_heads.append(_solved_head(seq._stroke_pose(p[0])))
+		# Ready -> Wind-up lead-in handles (progress LEAD_IN + v, v 0 = Ready .. 1 = Wind-up): its keys,
+		# plus a bend point in the middle when it has none.
+		if seq.ready != null and seq.variant == null:
+			var windup: PostureDefinition = seq._stroke_pose(0.0)
+			var lead: Array = []
+			for k in _motion_definition.ready_path_times: lead.append([float(k), 0])
+			if not lead.any(func(k): return absf(float(k[0]) - 0.5) < 0.15): lead.append([0.5, 1])
+			for p in lead:
+				momentum_path_t.append(LEAD_IN + p[0]); momentum_path_virtual.append(p[1])
+				momentum_path_heads.append(_solved_head(ReadyCurve.sample(seq.ready, windup, p[0])))
 	for t in times:
 		momentum_key_times.append(t); momentum_keys.append(_solved_head(seq.sample(t).pose))
 	# Peak paddle-head speed of the strike (Wind-up -> Contact), one tick at a time. (The strike

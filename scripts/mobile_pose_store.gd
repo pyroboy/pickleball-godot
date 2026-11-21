@@ -55,8 +55,8 @@ const STROKE_FIELDS := [
 	"ft_paddle_offset", "ft_paddle_rotation_deg", "ft_hip_uncoil_deg", "ft_front_foot_load",
 	"ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "ft_ease_curve",
 	"compact_finish_lateral_scale", "compact_motion_scale", "compact_finish_elbow_offset", "swing_path_blend", "contact_curve",
-	"ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak",
-	"paddle_path_times", "paddle_path_offsets",
+	"ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak",
+	"paddle_path_times", "paddle_path_offsets", "ready_path_times", "ready_path_offsets",
 	"windup_body", "follow_through_body", "charge_duration",
 ]
 const BASE_FIELDS := [
@@ -66,7 +66,7 @@ const BASE_FIELDS := [
 const UNIT_FIELDS := [
 	"head_track_ball_weight", "support_index_closure", "support_grip_style", "charge_back_foot_load",
 	"ft_front_foot_load", "compact_finish_lateral_scale", "compact_motion_scale", "swing_path_blend", "contact_curve", "stroke_overlay_mix",
-	"ready_curve_bow", "ready_curve_round", "ready_curve_peak",
+	"ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_peak",
 ]
 const INTEGER_MAX := {"left_hand_mode": 4, "lead_foot": 1, "paddle_hand": 1, "paddle_pitch_sign_source": 2,
 	"paddle_yaw_sign_source": 2, "paddle_roll_sign_source": 2, "ft_ease_curve": 2, "canonical_intent": 8}
@@ -380,7 +380,7 @@ static func _valid_fields(fields, is_base: bool, nested: bool = false) -> bool:
 		for additive in ["right_foot_pitch_deg", "left_foot_pitch_deg"]:
 			if not fields.has(additive): required.erase(additive)
 		if not is_base:
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets"]:
 				if not fields.has(additive): required.erase(additive)
 		if fields.size() != required.size() or not fields.has_all(required): return false
 	var template: Resource = BasePose.new() if is_base else Posture.new()
@@ -462,6 +462,10 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 		def.paddle_in_hand_rotation_deg = 0.0
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("paddle_path_times"):
 		def.paddle_path_times = PackedFloat32Array(); def.paddle_path_offsets = PackedVector3Array()
+	if def.get_script() == Posture and not fields.is_empty() and not fields.has("ready_path_times"):
+		def.ready_path_times = PackedFloat32Array(); def.ready_path_offsets = PackedVector3Array()
+	if def.get_script() == Posture and not fields.is_empty() and not fields.has("ready_curve_bow"):
+		def.ready_curve_auto = 1.0; def.ready_curve_bow = 0.0; def.ready_curve_round = 0.5; def.ready_curve_dir_deg = 0.0; def.ready_curve_peak = 0.5
 	for field in fields:
 		var value = fields[field]
 		if field in ["windup_body", "follow_through_body"]:
@@ -478,8 +482,8 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 
 static func _decode_value(field: String, value):
 	if field == "elbow_preset_bake": return value.duplicate(true)
-	if field == "paddle_path_times": return PackedFloat32Array(value)
-	if field in ["right_elbow_path", "left_elbow_path", "paddle_path_offsets"]:
+	if field in ["paddle_path_times", "ready_path_times"]: return PackedFloat32Array(value)
+	if field in ["right_elbow_path", "left_elbow_path", "paddle_path_offsets", "ready_path_offsets"]:
 		var path := PackedVector3Array()
 		for point in value:
 			path.append(Vector3(point[0], point[1], point[2]))
@@ -517,7 +521,7 @@ static func _prepare_approved_pose_imports(document: Dictionary, include_absent:
 			var payload: Dictionary = JSON.parse_string(approved.JSON_TEXT)
 			var fields: Dictionary = approved.applied_fields() if approved.has_method("applied_fields") else payload.fields.duplicate(true)
 			var defaults := _encode_fields(_export_packaged_default(int(id), false))
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets"]:
 				if not fields.has(additive): fields[additive] = previous.get(additive, defaults[additive])
 			for stage in ["windup_body", "follow_through_body"]:
 				# Sparse legacy keys are intentional: absence inherits Contact. Only

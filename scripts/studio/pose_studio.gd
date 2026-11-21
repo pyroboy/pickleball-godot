@@ -1184,7 +1184,10 @@ func set_swing_curve(v: float) -> Dictionary:
 	return set_field("swing_path_blend", null, clampf(v, 0.0, 1.0))
 
 ## Paddle path keys (swing arc): [[progress, Vector3 offset], ...] sorted by progress. Strokes only
-## (serves, stances and ball actions have none).
+## (serves, stances and ball actions have none). Progress 0..1 = Wind-up -> Finish
+## (paddle_path_*); LEAD_IN + v (v 0..1 = Ready -> Wind-up) = the grey lead-in (ready_path_*).
+const LEAD_IN := 1.0
+static func is_lead_in(t: float) -> bool: return t > LEAD_IN
 func path_keys_supported() -> bool:
 	return _ok() and key != "" and not engine._base and not engine._serve and not engine.get("_action") and engine._has_motion()
 
@@ -1193,6 +1196,7 @@ func path_keys() -> Array:
 	if not path_keys_supported(): return out
 	var c: Resource = engine._current
 	for i in mini(c.paddle_path_times.size(), c.paddle_path_offsets.size()): out.append([c.paddle_path_times[i], c.paddle_path_offsets[i]])
+	for i in mini(c.ready_path_times.size(), c.ready_path_offsets.size()): out.append([LEAD_IN + c.ready_path_times[i], c.ready_path_offsets[i]])
 	out.sort_custom(func(a, b): return a[0] < b[0])
 	return out
 
@@ -1201,8 +1205,13 @@ func path_keys() -> Array:
 func set_path_keys(keys: Array, refresh := true) -> Dictionary:
 	if not path_keys_supported(): return {"ok": false, "error": "path keys: strokes only"}
 	var times := PackedFloat32Array(); var offs := PackedVector3Array()
+	var lead_times := PackedFloat32Array(); var lead_offs := PackedVector3Array()
 	var sorted := keys.duplicate(); sorted.sort_custom(func(a, b): return a[0] < b[0])
 	for k in sorted:
+		if is_lead_in(float(k[0])):
+			var o: Vector3 = k[1]
+			lead_times.append(clampf(float(k[0]) - LEAD_IN, 0.03, 0.97)); lead_offs.append(o.limit_length(0.8))
+			continue
 		var t: float = clampf(float(k[0]), 0.02, 0.98)
 		if absf(t - 0.5) < 0.02: t = 0.48 if t < 0.5 else 0.52
 		var o: Vector3 = k[1]
@@ -1212,6 +1221,8 @@ func set_path_keys(keys: Array, refresh := true) -> Dictionary:
 	var prev_group: int = engine._group.selected
 	engine._group.select(5)
 	engine._changed("paddle_path_times", times, false)
+	engine._changed("ready_path_times", lead_times, false)
+	engine._changed("ready_path_offsets", lead_offs, false)
 	engine._changed("paddle_path_offsets", offs, refresh)
 	engine._group.select(prev_group)
 	selected_field = "paddle_path_offsets"
