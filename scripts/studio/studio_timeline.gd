@@ -101,6 +101,10 @@ func build(owner_studio) -> void:
 		if i > 0 and speed_graph: speed_graph.apply_preset(["original", "linear", "in", "out", "inout", "whip"][i - 1])
 		ease_preset.select(0))
 	es.add_child(ease_preset)
+	var ts := Theme_.segment(row, "TestSeg")
+	var test_button: Button = Theme_.tool_button("TestButton", "Test", "", "Play real balls in the game on this unsaved pose: the game feeds a ball to this stroke, picks the stroke itself and reports what it chose, the power, and whether the paddle met the ball. Nothing is saved.")
+	test_button.pressed.connect(func(): studio.start_game_test())
+	ts.add_child(test_button)
 	_transport = [play_button, step_back, step_fwd, loop_toggle, hold_button]
 	var srow := HBoxContainer.new(); srow.name = "ScrubRow"; srow.add_theme_constant_override("separation", Theme_.SP2)
 	add_child(srow)

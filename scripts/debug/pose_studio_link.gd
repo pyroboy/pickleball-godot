@@ -17,7 +17,7 @@ const STUDIO_SCRIPT := "res://scripts/studio/pose_studio.gd"
 const VERSION := 1
 const TICK := 1.0 / 30.0
 const MAX_LINE := 1 << 20
-const KEEPS_LOOP := ["ping", "shot", "hold", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
+const KEEPS_LOOP := ["ping", "shot", "hold", "test", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
 
 var port := 8766
 var _server := TCPServer.new()
@@ -240,6 +240,28 @@ func _send(d: Dictionary) -> void:
 func _dispatch(req: Dictionary) -> Dictionary:
 	var cmd := str(req.get("cmd", ""))
 	if cmd == "ping": return {"ok": true, "version": VERSION, "ready": _ed != null, "window": _window_info()}
+	if cmd == "test":   # test hook: Pose Studio's real-ball test: action start | stop | state, plus auto / random / slow
+		if _studio == null: return _err("studio not running")
+		var act := str(req.get("action", "state"))
+		var res: Dictionary = {}
+		if act == "start": res = _studio.start_game_test()
+		elif act == "stop": _studio.end_game_test()
+		var ov = _studio._test_overlay
+		if is_instance_valid(ov):
+			if req.has("auto"): ov.auto_swing = bool(req.auto); ov._refresh_buttons()
+			if req.has("slow"): ov.set_slow(bool(req.slow))
+		var g = _studio._game()
+		if g != null and req.has("random"): g.practice_launcher.pose_test_random = bool(req.random)
+		if bool(req.get("unfocus_ok", false)): PauseController._focus_paused = false; PauseController._set_pause_state()   # a background test window
+		var live = PostureLibrary.instance().get_def(int(req.get("posture", 0)))
+		return {"ok": res.get("ok", true), "error": res.get("error", ""), "active": _studio.game_test_active, "paused": get_tree().paused,
+			"studio_visible": _studio.visible, "tool_state": g._tool_state_active() if g else null,
+			"practice": g.practice_launcher.is_active if g else null, "attempts": g.practice_launcher.attempt_count if g else 0,
+			"state": int(g.game_state) if g else -1, "score": [g.score_left, g.score_right] if g else [],
+			"feed": {"contact": _v(g.practice_launcher.pose_test_feed.get("contact", Vector3.ZERO)), "player": _v(g.practice_launcher.pose_test_feed.get("player", Vector3.ZERO)), "time": g.practice_launcher.pose_test_feed.get("time", 0.0)} if g else {},
+			"balls": ov.balls if is_instance_valid(ov) else _studio.last_test_balls, "report": ov.report if is_instance_valid(ov) else {},
+			"live_crouch": live.crouch_amount if live else null, "live_windup_crouch": (live.windup_body.values.get("crouch_amount") if live and live.windup_body else null),
+			"time_scale": Engine.time_scale}
 	if cmd == "hold":   # test hook: the hold Play replays (seconds), or begin / release like the Hold button
 		if _studio == null: return _err("studio not running")
 		var what := str(req.get("action", "set"))
@@ -992,3 +1014,7 @@ func _c_gizmo(_r) -> Dictionary:
 		"scene_visible": gz != null and is_instance_valid(gz.scene_root) and gz.scene_root.visible,
 		"world": world, "projected": projected, "drag": drag, "progress": _ed._progress, "stage_index": _ed._stage,
 		"preview_size": pv.size, "camera": [pv.camera.global_position, pv.camera.h_offset, pv.camera.v_offset]}.merged(extra)
+
+
+func _v(v: Vector3) -> Array:
+	return [snappedf(v.x, 0.001), snappedf(v.y, 0.001), snappedf(v.z, 0.001)]

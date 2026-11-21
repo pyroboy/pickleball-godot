@@ -86,6 +86,90 @@ func start_drill(mode: String, demo: bool = false, direction: int = 1, pattern: 
 	if is_wall(): wall_practice.enter()
 	repeat_drill()
 
+# ---------------------------------------------------------------- Pose Studio test feed
+## Pose Studio "Test": real balls for one stroke. The drive drill's bookkeeping (score snapshot,
+## loop, landing check), with the human placed so that the bounced feed crosses that stroke's
+## contact plane at its contact spot. The game's own planner then picks the stroke.
+var pose_test := false
+var pose_test_random := false      # vary where and how fast the ball arrives
+var pose_test_posture := -1        # the stroke under test (posture_id)
+var _pose_feed_pending := false
+var pose_test_feed: Dictionary = {}   # the last feed: {contact, player, time, jitter}
+
+func start_pose_test(def: PostureDefinition, random: bool) -> void:
+	if def == null or _game == null: return
+	pose_test = true
+	pose_test_random = random
+	pose_test_posture = def.posture_id
+	start_drill("DRIVE")
+
+## The flattest feed from `origin` to `target` whose bounce rises past `want_y`: the drive drill's
+## feed when that is enough, otherwise a higher one. Returns {launch, sample}: sample is the ball
+## coming down through want_y after the bounce.
+func _pose_feed(origin: Vector3, target: Vector3, want_y: float) -> Dictionary:
+	var fallback: Dictionary = {}
+	for step in range(0, 14):
+		var launch: Dictionary = _game.shot_physics.solve_aimed_launch(origin, target, 0.48, 1, 0, "AUTO", "DRIVE") if step == 0 \
+			else solve_airborne_feed(origin, target, 0.9 + 0.1 * step)
+		var trace: Dictionary = _Flight.trace(origin, launch.velocity, launch.omega, 4.5, 2, true)
+		var apex: Dictionary = {}; var best: Dictionary = {}
+		for sample in trace.get("samples", []):
+			if int(sample.bounces) != 1: continue
+			if apex.is_empty() or float(sample.pos.y) > float(apex.pos.y): apex = sample; best = {}
+			elif best.is_empty() or absf(float(sample.pos.y) - want_y) < absf(float(best.pos.y) - want_y): best = sample
+		if apex.is_empty(): continue
+		if float(apex.pos.y) >= want_y + 0.03 and not best.is_empty(): return {"launch": launch, "sample": best}
+		fallback = {"launch": launch, "sample": apex}   # the highest so far, if none gets there
+	return fallback
+
+func stop_pose_test() -> void:
+	pose_test = false
+	_pose_feed_pending = false
+	stop_practice()
+
+func _feed_pose_test() -> void:
+	var def: PostureDefinition = PostureLibrary.instance().get_def(pose_test_posture)
+	if def == null: return
+	_player_right.global_position = Vector3(-1.25, _player_right.ground_y, -5.9)
+	var origin := Vector3(-1.25, 0.95, -5.5)
+	var target := Vector3(1.25, _Flight.FLOOR_REST_Y, 4.4)
+	# A feed whose bounce comes up to the stroke's contact height; the human stands so the ball
+	# coming down through that height is at the stroke's own contact spot.
+	var want_y: float = (def.zone_y_min + def.zone_y_max) * 0.5 if def.has_zone else 1.0
+	var found: Dictionary = _pose_feed(origin, target, want_y)
+	if found.is_empty(): return
+	var nominal: Dictionary = found.launch
+	var best: Dictionary = found.sample
+	var fwd: Vector3 = _player_left._get_forward_axis(); var side: Vector3 = _player_left._get_forehand_axis()
+	var stand: Vector3 = Vector3(best.pos) - fwd * def.zone_forward_offset - side * def.paddle_forehand_mul
+	stand.y = _player_left.ground_y
+	stand.x = clampf(stand.x, -PickleballConstants.COURT_WIDTH * 0.5 - 1.0, PickleballConstants.COURT_WIDTH * 0.5 + 1.0)
+	_player_left.global_position = stand
+	# The ball that is actually fed: the same one, or one that lands and travels a little differently.
+	var jitter := Vector3.ZERO; var pace := 1.0
+	if pose_test_random:
+		jitter = Vector3(randf_range(-0.18, 0.18), 0.0, randf_range(-0.4, 0.4)); pace = randf_range(0.95, 1.05)
+	var launch: Dictionary = nominal
+	if pose_test_random:
+		var varied: Dictionary = _pose_feed(origin, target + jitter, want_y)
+		if not varied.is_empty(): launch = varied.launch
+	_ball.global_position = origin
+	_ball.suppress_paddle_collision(_player_right.paddle_node)
+	_ball.linear_velocity = launch.velocity * pace
+	_ball.angular_velocity = launch.omega
+	_ball.last_hit_by = 1
+	_ball.serve_team = 1
+	_ball.is_in_play = true
+	_ball.both_bounces_complete = true
+	_ball.serving_side_bounced = true
+	_ball.receiving_side_bounced = true
+	_ball.flight_id += 1
+	_game._set_game_state(_game.GameState.PLAYING)
+	_game.rally_scorer._serve_was_hit = true
+	_player_right.set_ai_movement_enabled(false)
+	pose_test_feed = {"contact": Vector3(best.pos), "player": stand, "time": float(best.time), "jitter": jitter, "pace": pace}
+	_set_status("Test ball: hit it back")
+
 func is_wall() -> bool:
 	return is_active and drill_mode == "WALL"
 
@@ -115,6 +199,9 @@ func repeat_drill() -> void :
 
 		_game._perform_serve(0.55)
 		_set_status("Let the serve bounce, then return it")
+		return
+	if pose_test:
+		_pose_feed_pending = true   # fed on the next physics tick (see _perf_physics_process)
 		return
 
 
@@ -396,6 +483,11 @@ func _physics_process(_delta: float) -> void:
 	PerfMonitor.record("practice.physics", Time.get_ticks_usec() - _pt)
 
 func _perf_physics_process(_delta: float) -> void:
+	# A ball fed between physics ticks is rejected by the contact referee on its first step
+	# (it tracks the ball by flight) and replayed forever; fed here, inside the tick, it is accepted.
+	if _pose_feed_pending:
+		_pose_feed_pending = false
+		if pose_test and is_active and not _game._tool_state_active(): _feed_pose_test()
 	if not is_exchange_demo() or _ball.is_time_frozen() or _game._tool_state_active() or _game.game_state != _game.GameState.PLAYING: return
 	var human = _player_left.posture.human_contact
 	if human == null: return

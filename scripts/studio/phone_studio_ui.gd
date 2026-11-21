@@ -309,13 +309,14 @@ func _build_scene_overlay() -> void:
 	hp.position = Vector2(GAP, GAP)
 	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
 	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
-	views.add_child(_btn("Swing", func(): _open_sheet("swing"), 124, 64))
-	var spb := _btn("Easing", func(): _open_sheet("speed"), 124, 64); spb.name = "SpeedButton"; views.add_child(spb)
-	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 130, 64))
-	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
-	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
+	var tb := _btn("Test", func(): studio.start_game_test(), 92, 64); tb.name = "TestButton"; views.add_child(tb)
+	views.add_child(_btn("Swing", func(): _open_sheet("swing"), 104, 64))
+	var spb := _btn("Easing", func(): _open_sheet("speed"), 110, 64); spb.name = "SpeedButton"; views.add_child(spb)
+	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 106, 64))
+	_view_btn = _btn("Front", _next_view, 100, 64); views.add_child(_view_btn)
+	views.add_child(_btn("⤢", func(): studio.frame_pose(), 60, 64))
 	_scene.add_child(views)
-	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -610; views.offset_right = -GAP; views.offset_top = 72
+	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -672; views.offset_right = -GAP; views.offset_top = 72
 	_layers = VBoxContainer.new(); _layers.name = "Layers"; _layers.visible = false
 	_layers.add_theme_constant_override("separation", 8)
 	_layers.anchor_left = 1.0; _layers.anchor_right = 1.0; _layers.offset_left = -346; _layers.offset_right = -146; _layers.offset_top = 72 + 64 + 8

@@ -914,7 +914,8 @@ func _perform_player_swing(charge_ratio: float) -> void :
 		"shot_intent": "GROUNDSTROKE", "arc": trajectory_arc_offset}
 	# Tap = touch shot placed short, hold = power shot placed deep (docs/CONTROLS_PLAN.md).
 	var restore_choice: Array = []
-	if _HumanShotChoice.ENABLED and human != null and not _is_practice() and aim_controller != null:
+	# (Practice drills pick their own shot; a Pose Studio test plays like a match.)
+	if _HumanShotChoice.ENABLED and human != null and (not _is_practice() or (practice_launcher != null and practice_launcher.pose_test)) and aim_controller != null:
 		var preparation: Dictionary = human.preparation_contact()
 		var root: Vector3 = preparation.get("target_root", player_left.global_position) if not preparation.is_empty() else player_left.global_position
 		var contact_height: float = Vector3(preparation.point).y if not preparation.is_empty() else ball.global_position.y
@@ -1751,8 +1752,11 @@ func _exit_tree() -> void :
 var _tool_suspended_nodes: Dictionary = {}
 var _tool_ball_was_frozen: bool = false
 
+## Pose Studio "Test": the real game runs on the studio's working pose while the studio (and the
+## editor under it) stays open but hidden. The editor then no longer counts as an open tool.
+var pose_test_active := false
 func _tool_state_active() -> bool:
-	return is_instance_valid(mobile_pose_editor) or (game_sound_tune != null and game_sound_tune.sound_tune_panel != null and game_sound_tune.sound_tune_panel.visible)
+	return (is_instance_valid(mobile_pose_editor) and not pose_test_active) or (game_sound_tune != null and game_sound_tune.sound_tune_panel != null and game_sound_tune.sound_tune_panel.visible)
 
 func close_active_tool() -> bool:
 	if movement_actions != null and movement_actions.is_open():

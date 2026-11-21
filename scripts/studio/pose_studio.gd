@@ -1428,6 +1428,98 @@ func notify(t: String) -> void:
 	_set_status(t)
 	notice.emit(t)
 
+# ---------------------------------------------------------------- Test (real balls)
+## The real game plays the working pose: unsaved copies are patched into the live pose library
+## (in memory, with a backup), the studio hides, the game runs, and the practice feeder sends
+## balls to the stroke being edited. Leaving puts everything back. Nothing is saved.
+const TestOverlay = preload("res://scripts/studio/pose_test_overlay.gd")
+const PoseStore = preload("res://scripts/mobile_pose_store.gd")
+var game_test_active := false
+var _test_backups: Dictionary = {}   # posture id -> the live definition as it was
+var _test_overlay = null
+var last_test_balls: Array = []      # what the game did with each ball of the last test (overlay reports)
+
+func _game():
+	var g = get_tree().current_scene if get_tree() else null
+	return g if g != null and g.has_method("_tool_state_active") and g.get("practice_launcher") != null else null
+
+func game_test_available() -> String:
+	if not _ok() or key == "": return "Pick a stroke first"
+	if not path_keys_supported(): return "Test works on strokes (not stances, serves or ball actions)"
+	var g = _game()
+	if g == null: return "No game to test in"
+	if g.practice_launcher.is_active: return "Leave practice first, then test"
+	return ""
+
+func start_game_test() -> Dictionary:
+	if game_test_active: return {"ok": true}
+	var why := game_test_available()
+	if why != "":
+		notify(why); return {"ok": false, "error": why}
+	var g = _game()
+	commit_pending_text(); stop_drag(); engine._stop()
+	if _txn != null: end_edit()
+	# The working copies become the live poses (memory only).
+	_test_backups.clear()
+	for ck in engine._copies.keys():
+		if not String(ck).begins_with("stroke:"): continue
+		var copy: PostureDefinition = engine._copies[ck]
+		var live: PostureDefinition = PostureLibrary.instance().get_def(copy.posture_id)
+		if live == null or copy.posture_id == 20: continue
+		_test_backups[copy.posture_id] = live.duplicate(true)
+		if PoseStore.copy_values(copy, live) != OK:
+			var id: int = copy.posture_id
+			_restore_test_poses()
+			var msg := "This pose has a value the game cannot use (pose %d). Test not started." % id
+			notify(msg); return {"ok": false, "error": msg}
+	_refresh_live_poses(g)
+	var tested: int = int(engine._current.posture_id)
+	visible = false
+	g.pose_test_active = true
+	game_test_active = true
+	PauseController.close()
+	_test_overlay = TestOverlay.new()
+	_test_overlay.studio = self; _test_overlay.game = g; _test_overlay.tested_posture = tested
+	_test_overlay.back_pressed.connect(end_game_test)
+	g.add_child(_test_overlay)
+	g.practice_launcher.start_pose_test(PostureLibrary.instance().get_def(tested), false)
+	return {"ok": true, "tested": tested, "patched": _test_backups.keys()}
+
+func end_game_test() -> void:
+	if not game_test_active: return
+	var g = _game()
+	if is_instance_valid(_test_overlay):
+		last_test_balls = _test_overlay.balls.duplicate(true)
+		_test_overlay.queue_free()
+	_test_overlay = null
+	if g != null:
+		g.practice_launcher.stop_pose_test()
+		_restore_test_poses()
+		_refresh_live_poses(g)
+		g.pose_test_active = false
+	game_test_active = false
+	PauseController.open()
+	if is_instance_valid(PauseController._menu): PauseController._menu.hide()
+	visible = true
+	_needs_sync = true
+	notify("Back in the studio. The test did not save anything.")
+
+func _restore_test_poses() -> void:
+	for id in _test_backups.keys():
+		var live: PostureDefinition = PostureLibrary.instance().get_def(int(id))
+		if live != null: PoseStore.copy_values(_test_backups[id], live)
+	_test_backups.clear()
+
+## As after a save (game.gd _close_mobile_pose_editor), without reloading anything from disk.
+func _refresh_live_poses(g) -> void:
+	for player in g.get_players():
+		if player == null: continue
+		if player.posture:
+			player.posture.refresh_posture_zones()
+			var human = player.posture.get("human_contact")
+			if human != null and human.get("held_hit_motion") != null: human.held_hit_motion.reset(true)
+		if player.pose_controller: player.pose_controller.invalidate_cache()
+
 # ---------------------------------------------------------------- Hold (the long press)
 ## Play shows "my swing": what the game plays for a human who holds Hit `hold_seconds` and lets
 ## go (mobile_pose_sequence.gd swing_hold). The Hold button sets it by being held.
@@ -1578,6 +1670,7 @@ func _update_joint_label() -> void:
 	_set_hint(" · ".join(parts))
 
 func _process(delta: float) -> void:
+	if game_test_active: return   # the game is running; the studio waits behind it
 	if not _ok():
 		if is_ready: is_ready = false; _set_status("Engine closed. Restart the studio.")
 		return
@@ -1892,6 +1985,7 @@ func _list_state() -> Dictionary:
 # ================================================================ keyboard
 
 func _input(event: InputEvent) -> void:
+	if game_test_active: return
 	if not (event is InputEventKey) or not event.pressed: return
 	var e: InputEventKey = event
 	var cmd := e.is_command_or_control_pressed()
