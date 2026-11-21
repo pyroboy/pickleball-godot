@@ -1,5 +1,6 @@
 extends RefCounted
 const BodyTurn = preload("res://scripts/rally_body_turn.gd")
+const Swing = preload("res://scripts/human_swing_playback.gd")
 const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const JointPreview = preload("res://scripts/live_joint_preparation_path.gd")
 const PlannedGrip = preload("res://scripts/held_preparation_reach.gd")
@@ -551,10 +552,8 @@ func _advance_swing(delta: float, ball) -> void :
 		if not contact.is_empty() and contact.posture == swing_def.posture_id:
 			swing_def = contact.def
 		var factor: float = clampf(elapsed / strike_time, 0, 1)
-		var strike_progress: float = 0.5 * Ramp.normalized(swing_def, Ramp.STRIKE, factor) if Ramp.custom(swing_def, Ramp.STRIKE) else factor * 0.5
-		visual_pose = BodyTurn.sample(DriveMotion.sample_drive(swing_def, strike_progress, charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context))
-		if _strike_start_pose:
-			visual_pose = Path.blend_pose(visual_pose, _strike_start_pose, pow(1.0 - factor, 2.0))
+		# The swing shape lives in human_swing_playback.gd: Pose Studio's Hold / Play call the same.
+		visual_pose = Swing.strike_pose(swing_def, factor, charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context, _strike_start_pose)
 		if _released_joint_path: visual_pose = JointPreview.sample(player, visual_pose, preceding_pose, -1.0)
 		_apply_visual()
 		var owner = player.get_parent().contact_authority
@@ -586,10 +585,7 @@ func _advance_swing(delta: float, ball) -> void :
 				elapsed = 0
 	elif phase == 2:
 		elapsed += delta
-		var factor: float = Path.release_progress(swing_def, 1, clampf(elapsed / maxf(0.01, swing_def.ft_duration_sweep), 0, 1))
-		visual_pose = BodyTurn.sample(DriveMotion.sample_drive(swing_def, factor, charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context))
-		if _finish_start_pose:
-			visual_pose = Path.blend_pose(visual_pose, _finish_start_pose, pow(clampf((1.0 - factor) * 2.0, 0.0, 1.0), 2.0))
+		visual_pose = Swing.finish_pose(swing_def, elapsed / maxf(0.01, swing_def.ft_duration_sweep), charge_ratio, _swing_is_volley, _swing_spin_mode, _swing_near_kitchen, _swing_shot_intent, motion_context, _finish_start_pose)
 		if elapsed >= swing_def.ft_duration_sweep:
 			phase = 3
 			elapsed = 0
