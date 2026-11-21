@@ -37,6 +37,7 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 	if between != null and def != null:
 		pole_reference_axis = forehand_axis.rotated(Vector3.UP, -deg_to_rad(def.body_yaw_deg))
 
+	var swivel_record: Array = []   # [arm, wrist, swivel pole]: the drawn elbow, recorded after every arm step
 	if _player.paddle_node:
 		var left_dominant: bool = def != null and def.paddle_hand == 1
 		var dominant_arm = _player.left_arm_node if left_dominant else _player.right_arm_node
@@ -62,7 +63,7 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 				main_pole_world = ArmAnatomy.conditioned_pole(dominant_arm.upper_pivot.global_position, wrist, main_pole_world, distal, dominant_arm.upper_arm_length, dominant_arm.forearm_length)
 			# Authored elbow swivel (stage 6c): the pose's angle replaces the guide point by its weight.
 			var swivel_weight: float = clampf(float(def.elbow_swivel_weight), 0.0, 1.0) if def != null and "elbow_swivel_weight" in def else 0.0
-			var swivel_pole: Vector3 = main_pole_world
+			var swivel_pole: Vector3 = Vector3.INF   # INF = draw the solved elbow
 			if swivel_weight > 0.0 and elbow_swivel_enabled:
 				var chest: Array = ElbowSwivel.frame(def, forehand_axis, forward_axis, left_dominant)
 				var sh: Vector3 = dominant_arm.upper_pivot.global_position
@@ -77,11 +78,11 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 				var axis: Vector3 = (wrist - shoulder).normalized()
 				var trail_sign: float = side * (-1.0 if def.family == 1 else 1.0)
 				main_pole_world = shoulder + (main_pole_world - shoulder).rotated(axis, deg_to_rad(lag * trail_sign))
-				swivel_pole = shoulder + (swivel_pole - shoulder).rotated(axis, deg_to_rad(lag * trail_sign))
+				if swivel_pole.is_finite(): swivel_pole = shoulder + (swivel_pole - shoulder).rotated(axis, deg_to_rad(lag * trail_sign))
 			dominant_arm.solve_ik(main_target, main_pole_world, _player.paddle_node.global_transform, wrist)
-			# The authored swivel is visual only (gameplay reads the solved arm): record the turn from
-			# this elbow to the swivel one; the pixel cards draw the elbow turned by it.
-			ElbowSwivel.record_visual_turn(dominant_arm, wrist, main_pole_world, swivel_pole)
+			# The authored swivel is visual only (gameplay reads the solved arm). The turn from the
+			# solved elbow to the swivel one is recorded after the last arm step below.
+			if elbow_swivel_enabled: swivel_record = [dominant_arm, wrist, swivel_pole]
 			_hands.apply_mount(dominant_arm, mount)
 
 		var support_target: Vector3 = get_support_hand_target(def)
@@ -132,6 +133,11 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 	LiveArmBudget.apply(_player, def, _hands)
 	_player.set_meta("carried_cup_report", load("res://scripts/carried_cup_continuity.gd").apply(_player, _hands))
 	_player.set_meta("ready_clearance_hook", load("res://scripts/live_ready_clearance.gd").apply_presented_ready(_player, def))
+	# Drawn elbow (pixel cards, studio, checker): from the elbow the arm ended with (LiveArmBudget may
+	# have re-solved it), turned to the authored swivel and kept outside the torso.
+	if not swivel_record.is_empty():
+		var arm = swivel_record[0]
+		ElbowSwivel.record_visual_turn(arm, swivel_record[1], arm.forearm_pivot.global_position, swivel_record[2], ElbowSwivel.body_shapes(_player))
 
 	if not _player.is_ai and b != null and _player.debug_visual and _player.posture.human_contact == null:
 		if _player.debug_visual.human_committed_contact_position != Vector3.ZERO:

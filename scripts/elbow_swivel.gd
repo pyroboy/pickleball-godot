@@ -84,8 +84,51 @@ static func mix(shoulder: Vector3, wrist: Vector3, legacy: Vector3, out_dir: Vec
 ## by turning the elbow around the shoulder-wrist line by this angle (pixel cards, studio, checker).
 const VISUAL_TURN_META := "elbow_visual_turn"
 
-static func record_visual_turn(arm, wrist: Vector3, solved_pole: Vector3, swivel_pole: Vector3) -> void:
+## Constraint: the drawn elbow and forearm stay outside the torso. The torso is the player's chest
+## and hips boxes (player_body_builder.gd: TorsoMesh 0.36 x 0.32 x 0.2 m, HipsMesh 0.3 x 0.14 x 0.18 m)
+## taken as elliptic cylinders in their own frames, so they turn and lean with the body:
+## [half-width (local x), half-depth (local z), y from, y to]. Checked against the skinned torso
+## mesh by tools/pose_check.py (C_clip_ready / C_clip_swing).
+const CHEST_SHAPE := [0.17, 0.10, -0.20, 0.12]
+const HIPS_SHAPE := [0.155, 0.10, -0.10, 0.22]
+const ELBOW_MARGIN := 0.035      # elbow point clear of the skin (arm thickness)
+const FOREARM_MARGIN := 0.025
+const CLEAR_STEP_DEG := 5.0      # search step around the shoulder-wrist circle
+const CLEAR_MAX_DEG := 150.0     # furthest the drawn elbow may turn from the authored swivel
+
+## The torso shapes for `record_visual_turn`: [[world -> mesh-local, shape], ...]; [] if missing.
+static func body_shapes(player) -> Array:
+	var out: Array = []
+	if player == null or player.body_pivot == null: return out
+	for pair in [["TorsoMesh", CHEST_SHAPE], ["HipsMesh", HIPS_SHAPE]]:
+		var n: Node3D = player.body_pivot.get_node_or_null(pair[0])
+		if n != null: out.append([n.global_transform.affine_inverse(), pair[1]])
+	return out
+
+static func _inside(body: Array, p: Vector3, margin: float) -> bool:
+	for b in body:
+		var q: Vector3 = b[0] * p
+		var sh: Array = b[1]
+		if q.y < sh[2] or q.y > sh[3]: continue
+		var x: float = q.x / (sh[0] + margin)
+		var z: float = q.z / (sh[1] + margin)
+		if x * x + z * z < 1.0: return true
+	return false
+
+## The drawn elbow `elbow` (on the shoulder-wrist circle) or its forearm is inside the torso.
+static func arm_inside(body: Array, elbow: Vector3, wrist: Vector3) -> bool:
+	if _inside(body, elbow, ELBOW_MARGIN): return true
+	for k in [0.25, 0.5, 0.75]:
+		if _inside(body, elbow.lerp(wrist, k), FOREARM_MARGIN): return true
+	return false
+
+## `solved_pole`: the solved elbow (or its pole); `swivel_pole`: where the authored swivel wants it,
+## INF = keep the solved elbow. With `body` (body_shapes), the drawn turn moves to the nearest
+## angle around the shoulder-wrist line where the elbow and forearm are clear of the torso,
+## staying on the side it moved to last tick (no front / back flips). Visual only.
+static func record_visual_turn(arm, wrist: Vector3, solved_pole: Vector3, swivel_pole: Vector3, body: Array = []) -> void:
 	var turn := 0.0
+	if not swivel_pole.is_finite(): swivel_pole = solved_pole
 	if solved_pole != swivel_pole:
 		var shoulder: Vector3 = arm.upper_pivot.global_position
 		var span := wrist - shoulder
@@ -95,10 +138,31 @@ static func record_visual_turn(arm, wrist: Vector3, solved_pole: Vector3, swivel
 			var b := swivel_pole - shoulder; b -= axis * b.dot(axis)
 			if a.length_squared() > 1e-8 and b.length_squared() > 1e-8: turn = a.signed_angle_to(b, axis)
 	var m: Dictionary = arm.get_meta(VISUAL_TURN_META, {})
+	var push := 0.0
+	if not body.is_empty():
+		push = _clear_push(arm, wrist, turn, body, float(m.get("push", 0.0)))
+		turn += push
 	if turn == 0.0 and m.is_empty(): return
 	var frame := Engine.get_physics_frames()
 	var prev: float = float(m.get("prev", turn)) if int(m.get("frame", -1)) == frame else float(m.get("cur", turn))
-	arm.set_meta(VISUAL_TURN_META, {"frame": frame, "prev": prev, "cur": turn})
+	arm.set_meta(VISUAL_TURN_META, {"frame": frame, "prev": prev, "cur": turn, "push": push})
+
+## Extra turn (radians) that clears the torso; 0 when the authored elbow is already clear or no
+## angle within CLEAR_MAX_DEG is (a hand inside the body: no elbow can fix that).
+static func _clear_push(arm, wrist: Vector3, turn: float, body: Array, last_push: float) -> float:
+	var shoulder: Vector3 = arm.upper_pivot.global_position
+	var span := wrist - shoulder
+	if span.length_squared() < 1e-6: return 0.0
+	var axis := span.normalized()
+	var radial: Vector3 = arm.forearm_pivot.global_position - shoulder
+	if not arm_inside(body, shoulder + radial.rotated(axis, turn), wrist): return 0.0
+	var first: float = 1.0 if last_push >= 0.0 else -1.0
+	var step := deg_to_rad(CLEAR_STEP_DEG)
+	for k in range(1, int(CLEAR_MAX_DEG / CLEAR_STEP_DEG) + 1):
+		for dir in [first, -first]:
+			var push: float = dir * step * k
+			if not arm_inside(body, shoulder + radial.rotated(axis, turn + push), wrist): return push
+	return 0.0
 
 ## The drawn elbow from the solved shoulder, elbow and forearm end; `fraction` (0..1, physics
 ## interpolation) blends the previous tick's turn into this one's; < 0 = this tick's.
