@@ -240,6 +240,7 @@ func _eval_arm(x: PackedFloat64Array) -> PackedVector3Array:
 func _p(list: Array, field: String, region: String, scale: float, comps := -1) -> void:
 	var ed = _engine
 	if ed._edit.get(field) == null or _pose0.get(field) == null: return
+	if ed._serve and not ed.ServeStore.is_field_editable(stage, field): return   # serve keys keep only their own fields
 	if stage != 1 and not (field in Keyframe.FIELDS or field in ed.POS or field in ed.ROT): return   # would write the shared base
 	if stage == 1 and (field in ed.POS or field in studio.FACE_FIELDS) and not _paddle_free: return   # Contact paddle: gameplay (free with Gameplay edit)
 	if field in studio.GAMEPLAY_FIELDS and not (field in ed.POS and (stage != 1 or _paddle_free)): return   # wind-up / finish POS = deltas; Contact POS only when freed
@@ -301,7 +302,12 @@ func _build_params(main: String) -> Array:
 	elif h in EDGE_HANDLES:   # roll the face around the handle (Contact: gameplay, _p skips it unless freed)
 		# Turn the paddle in the hand (paddle_in_hand_rotation_deg: about the handle's long axis
 		# through the grip), so the hand and arm IK stay as they are; grip and tip pinned (begin).
-		_p(out, "paddle_in_hand_rotation_deg", "paddle", 10.0)
+		# Serves keep the paddle's world angle when the in-hand turn changes (the serve store
+		# compensates it), so they turn the face with the three paddle angles: grip and tip
+		# pinned, the only freedom left is the turn around the handle.
+		if _engine._serve:
+			for f in ["paddle_pitch_base_deg", "paddle_yaw_base_deg", "paddle_roll_base_deg"]: _p(out, f, "paddle", 10.0)
+		else: _p(out, "paddle_in_hand_rotation_deg", "paddle", 10.0)
 	elif h == "torso" or h == "chest":
 		chest.call(out); hips.call(out)
 	elif h == "head":

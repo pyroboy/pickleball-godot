@@ -1751,7 +1751,7 @@ func _handled() -> void:
 
 ## The paddle hand id on a stroke pose ("" on body stances / serves: no paddle channels there).
 func main_hand_id() -> String:
-	if not _ok() or engine._edit == null or engine._base or engine._serve: return ""
+	if not _ok() or engine._edit == null or engine._base: return ""
 	return "left_hand" if int(engine._edit.get("paddle_hand")) == 1 else "right_hand"
 
 ## engine.studio_gizmo_override: the paddle hand's Move gizmo becomes the paddle's own X / Y / Z

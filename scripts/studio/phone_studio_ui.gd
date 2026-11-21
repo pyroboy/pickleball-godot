@@ -9,6 +9,7 @@ extends Control
 ## Canvas units (the project's 720-wide portrait canvas): 1 pt is about 1.85 units.
 
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
+const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
 const Queue = preload("res://scripts/studio/phone_sync_queue.gd")
 const ScrubTrack = preload("res://scripts/studio/studio_timeline.gd").ScrubTrack
@@ -30,6 +31,15 @@ const REGIONS := [["Arms", "arms"], ["Torso", "torso"], ["Legs", "legs"]]
 const CURVES := [["Straight", 0.0], ["Natural", 0.5], ["Round", 1.0]]
 
 var studio
+var _col: VBoxContainer
+var _top_fill: ColorRect      # behind the Dynamic Island / status bar (the top bar's colour)
+var _bottom_fill: ColorRect   # behind the home indicator (the lower panel's colour)
+var _drawer_pad: MarginContainer
+var _star_pad: MarginContainer
+var insets := Vector2.ZERO    # safe-area insets (top, bottom) in canvas units
+var _lower_scroll: ScrollContainer
+var _lower_pad: MarginContainer
+var _third := 0.0
 var _scene: Control
 var _lower: VBoxContainer
 var _sheet: VBoxContainer
@@ -86,8 +96,13 @@ func build(owner_studio) -> void:
 	theme = _theme()
 	var bg := ColorRect.new(); bg.color = Ui.BACKDROP; bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); add_child(bg)
+	_top_fill = ColorRect.new(); _top_fill.color = Ui.PANEL; _top_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_top_fill.anchor_right = 1.0; add_child(_top_fill)
+	_bottom_fill = ColorRect.new(); _bottom_fill.color = Ui.PANEL; _bottom_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bottom_fill.anchor_right = 1.0; _bottom_fill.anchor_top = 1.0; _bottom_fill.anchor_bottom = 1.0; add_child(_bottom_fill)
 	var col := VBoxContainer.new(); col.name = "Column"; col.add_theme_constant_override("separation", 0)
 	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); add_child(col)
+	_col = col
 	_build_header(col)
 	_scene = Control.new(); _scene.name = "Scene"; _scene.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scene.clip_contents = true
@@ -111,12 +126,43 @@ func build(owner_studio) -> void:
 	studio.pose_saved.connect(func(_k, _v): _refresh_pose())
 	studio.pose_edited.connect(func(_k): if _swing.visible: _refresh_swing.call_deferred())
 
-## The lower third (and the ring sheet in its place) is a third of the screen height.
+## Safe area (iPhone: Dynamic Island / status bar on top, home indicator below): the column
+## sits inside it and the strips outside take the bars' colour. The lower third (and the
+## sheets in its place) is a third of the safe height. Mac test: --studio-safe=TOP,BOTTOM
+## (canvas units; iPhone 15 Pro is about 108,62).
 func _fit() -> void:
-	var third: float = floor(size.y / 3.0)
-	_lower.custom_minimum_size.y = third
+	insets = _safe_insets()
+	_col.offset_top = insets.x; _col.offset_bottom = -insets.y
+	_top_fill.offset_bottom = insets.x
+	_bottom_fill.offset_top = -insets.y
+	if _drawer_pad: _drawer_pad.add_theme_constant_override("margin_top", int(insets.x)); _drawer_pad.add_theme_constant_override("margin_bottom", int(insets.y))
+	if _star_pad: _star_pad.add_theme_constant_override("margin_bottom", int(insets.y)); (_star_pad.get_parent() as Control).offset_top = -460 - insets.y
+	var third: float = floor((size.y - insets.x - insets.y) / 3.0)
+	_third = third
 	_sheet.custom_minimum_size.y = third
 	_swing.custom_minimum_size.y = third
+	_fit_lower()
+
+## The lower panel is as tall as its content (timeline, stars, tabs, the notes / versions shown),
+## at most a third of the safe height (then the list scrolls): no empty band under short lists.
+func _fit_lower() -> void:
+	if _lower_scroll == null or _third <= 0.0: return
+	var fixed := 0.0
+	for c in _lower.get_children():
+		if c != _lower_scroll and c is Control and c.visible: fixed += c.get_combined_minimum_size().y
+	var want: float = fixed + _lower_pad.get_combined_minimum_size().y
+	_lower.custom_minimum_size.y = minf(_third, ceilf(want))
+	_lower.size_flags_vertical = Control.SIZE_FILL
+
+func _safe_insets() -> Vector2:
+	for a in OS.get_cmdline_user_args():
+		if String(a).begins_with("--studio-safe="):
+			var v := String(a).get_slice("=", 1).split(",")
+			if v.size() == 2: return Vector2(float(v[0]), float(v[1]))
+	if get_viewport() == null: return Vector2.ZERO
+	var full := get_viewport().get_visible_rect()
+	var safe: Rect2 = Layout.safe_rect(get_viewport())
+	return Vector2(maxf(safe.position.y - full.position.y, 0.0), maxf(full.end.y - safe.end.y, 0.0))
 
 func mount_preview(pv: Control) -> void:
 	pv.reparent(_scene, false)
@@ -337,6 +383,8 @@ func _build_lower(lower: VBoxContainer) -> void:
 	scroll.add_child(pad)
 	var content := VBoxContainer.new(); content.add_theme_constant_override("separation", 8); pad.add_child(content)
 	lower.add_child(scroll)
+	_lower_scroll = scroll; _lower_pad = pad
+	content.minimum_size_changed.connect(_fit_lower, CONNECT_DEFERRED)
 	_notes_box = VBoxContainer.new(); _notes_box.add_theme_constant_override("separation", 8); content.add_child(_notes_box)
 	var add := HBoxContainer.new(); add.add_theme_constant_override("separation", 8)
 	_note_edit = LineEdit.new(); _note_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -534,7 +582,8 @@ func _build_star_popup() -> void:
 	card.anchor_left = 0.0; card.anchor_right = 1.0; card.anchor_top = 1.0; card.anchor_bottom = 1.0
 	card.offset_top = -460
 	_star_popup.add_child(card)
-	var v := VBoxContainer.new(); v.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_theme_constant_override("separation", 18); card.add_child(v)
+	_star_pad = MarginContainer.new(); card.add_child(_star_pad)
+	var v := VBoxContainer.new(); v.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_theme_constant_override("separation", 18); _star_pad.add_child(v)
 	var t := _label("Rate this pose", TITLE); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
 	var row := HBoxContainer.new(); row.alignment = BoxContainer.ALIGNMENT_CENTER; row.add_theme_constant_override("separation", 10)
 	for i in 5:
@@ -585,7 +634,8 @@ func _build_drawer() -> void:
 	var panel := PanelContainer.new(); panel.add_theme_stylebox_override("panel", _panel(Ui.PANEL))
 	panel.anchor_right = 0.84; panel.anchor_bottom = 1.0
 	_drawer.add_child(panel)
-	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 0); panel.add_child(v)
+	_drawer_pad = MarginContainer.new(); panel.add_child(_drawer_pad)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 0); _drawer_pad.add_child(v)
 	var head := HBoxContainer.new(); head.custom_minimum_size.y = HEAD_H
 	var t := _label("  Poses", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t); head.add_child(_btn("✕", _toggle_drawer, TAP)); v.add_child(head)

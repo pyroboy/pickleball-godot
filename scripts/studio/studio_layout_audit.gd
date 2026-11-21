@@ -70,7 +70,8 @@ func _run(s: Node) -> Dictionary:
 ## null when hidden.
 const LAYOUT_NODES := ["TopBar", "Left", "PoseList", "Centre", "ViewToolbar", "Views", "ViewHint", "StatusLine",
 	"TimelineControls", "Scrubber", "Right", "Inspector", "FieldScroll", "Panels", "ViewSeg", "GizmoSeg", "OverlaySeg",
-	"SecondSeg", "StageSeg", "TransportSeg", "SpeedPicker", "VariantSeg", "TimeLabel", "AutoPoseBar"]
+	"SecondSeg", "StageSeg", "TransportSeg", "SpeedPicker", "VariantSeg", "TimeLabel", "AutoPoseBar",
+	"Column", "Scene", "Lower", "RingSheet", "SwingSheet", "AutoPoseChips", "Layers"]   # last row: phone layout
 
 func _layout_rects() -> Dictionary:
 	var out := {}
