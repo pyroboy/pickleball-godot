@@ -313,6 +313,8 @@ func adopt(ed) -> void:
 	ed._gizmo_show.set_pressed_no_signal(true)   # not _toggle_gizmo: that writes user:// view settings
 	if not phone: _setup_second_view()
 	is_ready = true
+	Sequence.swing_hold = hold_seconds   # Play = my swing for this hold (mobile_pose_sequence.gd)
+	preview.game_layers = true           # the key view, Hold, Play and AutoPose show the game's swing rules
 	preview.set_momentum(true)   # the Trajectory arc is the swing the game plays (tick dots)
 	select_pose("s00")
 	if phone:
@@ -1426,6 +1428,88 @@ func notify(t: String) -> void:
 	_set_status(t)
 	notice.emit(t)
 
+# ---------------------------------------------------------------- Hold (the long press)
+## Play shows "my swing": what the game plays for a human who holds Hit `hold_seconds` and lets
+## go (mobile_pose_sequence.gd swing_hold). The Hold button sets it by being held.
+const Sequence = preload("res://scripts/ui/mobile_pose_sequence.gd")
+const SwingShape = preload("res://scripts/human_swing_playback.gd")
+const ShotChoice = preload("res://scripts/human_shot_choice.gd")
+var hold_seconds := 0.6      # the hold Play replays (0.6 s: the paddle is at the Wind-up key, power is full)
+var holding := false         # the Hold button is down
+var _arc_stale := false      # the trajectory arc waits for the swing to finish before it rebuilds
+
+## Set the hold Play replays (seconds), rebuild the timeline and the arc for it.
+func set_hold(seconds: float) -> void:
+	hold_seconds = clampf(seconds, 0.0, Sequence.HOLD_MAX)
+	Sequence.swing_hold = hold_seconds
+	if not _ok(): return
+	engine._stop(); engine._timeline.invalidate()
+	preview.play_context_changed()
+	_timeline.update_marks()
+	_needs_sync = true
+
+## Hold button down: Hit is held. The wind-up plays as in a match until it is let go.
+func hold_begin() -> void:
+	if not _ok() or key == "" or not _timeline.motion() or engine.get("_action") or engine._serve: return
+	stop_drag()
+	engine._stop()
+	Sequence.swing_hold = Sequence.HOLD_MAX   # up to the release, every longer hold plays the same
+	engine._timeline.invalidate()
+	engine._toggle_play()
+	holding = engine._playing
+	_timeline.update_marks()
+
+## Hold button up: released. The swing plays from where the hand is, at the power of that hold.
+func hold_release() -> void:
+	if not holding: return
+	holding = false
+	var tl = engine._timeline
+	hold_seconds = clampf(tl.elapsed, 0.0, Sequence.HOLD_MAX)
+	Sequence.swing_hold = hold_seconds
+	tl._signature = ""
+	if tl._configure():
+		tl.elapsed = hold_seconds
+		tl._sample()
+	_arc_stale = true   # one rebuild when the swing has played, not in the middle of it
+	_timeline.update_marks()
+	_set_status(hold_status())
+
+func _exit_tree() -> void:
+	Sequence.swing_hold = -1.0   # the plain mobile editor keeps its own idealized preview
+
+## Called every frame by the studio.
+func _hold_tick() -> void:
+	if holding and _ok():
+		var tl = engine._timeline
+		if tl.elapsed > Sequence.HOLD_MAX - 0.02: tl.elapsed = Sequence.HOLD_MAX - 0.02   # still holding: stay wound up
+		if not engine._playing: hold_release()
+	elif _arc_stale and _ok() and not engine._playing:
+		_arc_stale = false
+		preview.play_context_changed()
+
+## The current hold in words (the phone's status line, the desktop time label).
+func hold_status() -> String:
+	var h: float = engine._timeline.elapsed if holding and _ok() else hold_seconds
+	var power: float = SwingShape.charge_for_hold(h)
+	if holding: return "Holding %.2f s · power %d %%%s" % [h, roundi(power * 100.0), _strong_text(h)]
+	if ShotChoice.is_tap(power): return "Tap %.2f s · touch shot" % h
+	return "Hold %.2f s · power %d %%%s" % [h, roundi(power * 100.0), _strong_text(h)]
+
+## What a hold past the Wind-up key adds, as the game's own held-hit report says it.
+func _strong_text(h: float) -> String:
+	if h <= 0.62 or not _ok(): return ""
+	var rep: Dictionary = engine._timeline.sequence.get("swing_report") if engine._timeline.sequence.get("swing_report") is Dictionary else {}
+	var w: float = float(rep.get("strong_weight", 0.0))
+	if w < 0.02: return " · arm at full reach"
+	return " · strong wind-up %d %%" % roundi(w * 100.0)
+
+## The game rule this stroke's swing runs under, in words, or "" (the forehand's forced body turn).
+func swing_rule_text() -> String:
+	if not _ok() or key == "" or engine._base or engine._serve or engine.get("_action"): return ""
+	var e: PostureDefinition = engine._edit
+	if e == null or e.posture_id != 0 or e.body_yaw_deg <= -30.0: return ""
+	return "game turns the body to −30° (key: %d°)" % roundi(e.body_yaw_deg)
+
 # ---------------------------------------------------------------- "my keys play"
 ## How this stroke's Wind-up / Finish keys reach play (drive_serve_motion.gd):
 ##   "on"      the whole authored pose plays (the default: the editor's keys are what plays)
@@ -1501,6 +1585,7 @@ func _process(delta: float) -> void:
 	pv.viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	if not _contact_on and pv.contact_preview and pv.contact_preview.visible: pv.contact_preview.visible = false
 	if _second.visible: _update_second_camera()
+	_hold_tick()
 	_timeline.tick()
 	_update_action_ball()
 	if engine._gizmo_hint.text != _engine_hint:   # scrub / play / key: "preview only" note

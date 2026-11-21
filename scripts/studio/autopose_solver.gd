@@ -217,7 +217,7 @@ func _eval(x: PackedFloat64Array) -> PackedVector3Array:
 	var t0 := Time.get_ticks_usec()
 	_apply(x)
 	_canon_arms()
-	_player.posture.force_posture_update(_cand)
+	_player.posture.force_posture_update(studio.preview.present(_cand))   # with the game's layers, as the preview draws it
 	var pts := _read()
 	_eval_usec.append(Time.get_ticks_usec() - t0)
 	_evals += 1

@@ -17,7 +17,7 @@ const STUDIO_SCRIPT := "res://scripts/studio/pose_studio.gd"
 const VERSION := 1
 const TICK := 1.0 / 30.0
 const MAX_LINE := 1 << 20
-const KEEPS_LOOP := ["ping", "shot", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
+const KEEPS_LOOP := ["ping", "shot", "hold", "poses", "fields", "metrics", "diff", "frame", "nodes", "timeline", "view", "toggle", "play", "ui", "ui_audit", "window"]
 
 var port := 8766
 var _server := TCPServer.new()
@@ -240,6 +240,16 @@ func _send(d: Dictionary) -> void:
 func _dispatch(req: Dictionary) -> Dictionary:
 	var cmd := str(req.get("cmd", ""))
 	if cmd == "ping": return {"ok": true, "version": VERSION, "ready": _ed != null, "window": _window_info()}
+	if cmd == "hold":   # test hook: the hold Play replays (seconds), or begin / release like the Hold button
+		if _studio == null: return _err("studio not running")
+		var what := str(req.get("action", "set"))
+		if what == "begin": _studio.hold_begin()
+		elif what == "release": _studio.hold_release()
+		else: _studio.set_hold(float(req.get("seconds", 0.6)))
+		var sq = _studio.engine._timeline.sequence if _studio.engine._timeline._configure() else null
+		return {"ok": true, "hold": _studio.hold_seconds, "holding": _studio.holding, "status": _studio.hold_status(),
+			"charge": sq.swing_charge if sq else null, "tap": sq.swing_tap if sq else null, "swing": sq.swing_active() if sq else false,
+			"report": sq.swing_report if sq else {}, "duration": sq.duration if sq else 0.0}
 	if cmd == "shot":   # test hook: the whole window as a PNG (UI checks by eye)
 		var path := str(req.get("path", ""))
 		if path == "": return _err("shot needs a path")

@@ -26,8 +26,7 @@ var play_button: Button
 var loop_toggle: Button
 var speed_buttons: Array[Button] = []
 var speed_index := 0
-var strong_button: Button
-var weak_button: Button
+var hold_button: Button
 var step_back: Button
 var step_fwd: Button
 var scrubber: ScrubTrack
@@ -80,13 +79,13 @@ func build(owner_studio) -> void:
 		b.pressed.connect(set_speed_index.bind(i))
 		sp.add_child(b)
 		speed_buttons.append(b)
-	var vr := Theme_.segment(row, "VariantSeg")
-	strong_button = Theme_.tool_button("StrongButton", "Strong", "", "Play a generated longer backswing (saved poses unchanged)", true)
-	strong_button.pressed.connect(play_variant.bind(1))
-	vr.add_child(strong_button)
-	weak_button = Theme_.tool_button("WeakButton", "Weak", "", "Play a generated shorter backswing (saved poses unchanged)", true)
-	weak_button.pressed.connect(play_variant.bind(2))
-	vr.add_child(weak_button)
+	# Hold: the long press, as the game plays it. Press and keep it down = holding Hit (the wind-up
+	# builds, power fills); let go = the swing. Play then replays that hold. (This replaces the
+	# old Strong / Weak previews: a short or a long hold shows them through the game's own code.)
+	hold_button = Theme_.tool_button("HoldButton", "Hold", "", "Hold Hit: press and keep down to wind up as in a match (power is full at 0.45 s, the Wind-up key is reached at 0.6 s, the strong wind-up at 1.2 s); let go to swing. Play replays the last hold.")
+	hold_button.button_down.connect(func(): studio.hold_begin())
+	hold_button.button_up.connect(func(): studio.hold_release())
+	tr.add_child(hold_button)
 	var ks := Theme_.segment(row, "KeysSeg")
 	keys_toggle = Theme_.tool_button("KeysPlayToggle", "My keys play", "", "On: the game and this timeline play the whole Wind-up and Finish pose you author. Off: the game builds those bodies and takes only the paddle position from your keys (posing joints there does not show in play).", true)
 	keys_toggle.pressed.connect(func(): studio.set_keys_play("on" if keys_toggle.button_pressed else "off"))
@@ -102,7 +101,7 @@ func build(owner_studio) -> void:
 		if i > 0 and speed_graph: speed_graph.apply_preset(["original", "linear", "in", "out", "inout", "whip"][i - 1])
 		ease_preset.select(0))
 	es.add_child(ease_preset)
-	_transport = [play_button, step_back, step_fwd, loop_toggle, strong_button, weak_button]
+	_transport = [play_button, step_back, step_fwd, loop_toggle, hold_button]
 	var srow := HBoxContainer.new(); srow.name = "ScrubRow"; srow.add_theme_constant_override("separation", Theme_.SP2)
 	add_child(srow)
 	scrubber = ScrubTrack.new(); scrubber.name = "Scrubber"
@@ -370,7 +369,7 @@ func refresh() -> void:
 		if stage_buttons[i].button_pressed != on: stage_buttons[i].set_pressed_no_signal(on)
 	var act := _is_action()
 	for b in _transport:
-		var dis: bool = not has or (act and (b == strong_button or b == weak_button))
+		var dis: bool = not has or (act and b == hold_button)
 		if b.disabled != dis: b.disabled = dis
 	for b in speed_buttons:
 		if b.disabled == has: b.disabled = not has
@@ -392,8 +391,6 @@ func refresh() -> void:
 		_was_playing = int(playing)
 		play_button.icon = Theme_.icon("pause" if playing else "play")
 		play_button.tooltip_text = ("Pause" if playing else "Play") + " (Space)"
-	if strong_button.button_pressed != (ed._variant_mode == 1): strong_button.set_pressed_no_signal(ed._variant_mode == 1)
-	if weak_button.button_pressed != (ed._variant_mode == 2): weak_button.set_pressed_no_signal(ed._variant_mode == 2)
 	var tl = ed._timeline
 	if active and tl.sequence.duration > 0.0:
 		var t: float = tl.elapsed / tl.sequence.duration
@@ -403,7 +400,7 @@ func refresh() -> void:
 			scrubber.set_value_no_signal(t); scrubber.queue_redraw()
 			_sync = false
 			scrubber.phase = String(tl.sample.get("phase", ""))
-			time_label.text = "%.3f / %.3f s · tick %d" % [tl.elapsed, tl.sequence.duration, roundi(tl.elapsed / TICK)]
+			time_label.text = studio.hold_status() if studio.holding else "%.3f / %.3f s · tick %d" % [tl.elapsed, tl.sequence.duration, roundi(tl.elapsed / TICK)]
 	else:
 		var code: int = int(ed._stage) * 4 + int(has) * 2 + int(ed._base)
 		if code != _last_code:

@@ -29,6 +29,7 @@ extends Control
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
+const LEAD_SECONDS := 0.6   # held_hit_motion.WINDUP_SECONDS: Ready -> Wind-up takes this long
 const TIP_ID := "paddle_tip"
 const TIP_LOCAL := Vector3(0, PaddleSize.LENGTH, 0)   # paddle node: +Y handle -> head, origin at the butt
 const TIP_COLOR := Color("ff9f43")
@@ -700,7 +701,7 @@ func path_pick(point: Vector2) -> float:
 	for i in _arc_dots.size():
 		var pr: float = preview.momentum_progress[i] if i < preview.momentum_progress.size() else -1.0
 		if pr < 0.0 and w > 0.0:   # a lead-in tick: a new Ready -> Wind-up key there
-			var v: float = Ramp.lead(preview._motion_definition, i * preview.TICK / w)
+			var v: float = Ramp.lead(preview._motion_definition, minf(i * preview.TICK / LEAD_SECONDS, 1.0))   # the held wind-up's own clock, whatever the hold length
 			if v < 0.05 or v > 0.95: continue
 			pr = studio.LEAD_IN + v
 		elif pr < 0.03 or pr > 0.97 or absf(pr - 0.5) < 0.04: continue

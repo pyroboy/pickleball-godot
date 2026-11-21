@@ -4,6 +4,19 @@ const Clock = preload("res://scripts/stroke_playback_clock.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
 const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
+const Swing = preload("res://scripts/human_swing_playback.gd")
+const ShotChoice = preload("res://scripts/human_shot_choice.gd")
+const ReadyMotion = preload("res://scripts/incoming_ready_motion.gd")
+## Pose Studio "my swing": when >= 0, a plain stroke plays what the game plays for a human who
+## holds Hit this many seconds and then releases (held wind-up, tap or hold release, strike and
+## follow-through through human_swing_playback.gd). -1 = the older idealized charge -> release.
+static var swing_hold := -1.0
+const HOLD_MAX := 1.5            # the strong wind-up is complete at 1.2 s; nothing changes after
+const SWING_STEP := 1.0 / 30.0   # the game's physics tick
+var _swing: Array = []           # baked frames at SWING_STEP: [pose, stroke progress, phase text]
+var swing_charge := 1.0          # power of the baked swing (0..1)
+var swing_tap := false           # it was a tap (a touch shot: drop intent, flat)
+var swing_report: Dictionary = {}   # held-hit report at release (strong_weight, limited, ...)
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Runtime = preload("res://scripts/runtime_motion_preview.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
@@ -60,6 +73,74 @@ func configure(def: PostureDefinition, selected_mode: int = Mode.STROKE, selecte
 		preparation_seconds = 0.0; prefix_seconds = 0.0
 		duration = stroke_seconds + (Motion.SERVE_HOLD_TIME if style >= 0 else Clock.hold_duration(source))
 	_bake_split()
+	_swing = []
+	if swing_hold >= 0.0 and mode == Mode.STROKE and style < 0 and variant == null and source.posture_id != 20: _bake_swing(player)
+
+func swing_active() -> bool: return not _swing.is_empty()
+
+## The swing a human gets for holding Hit `swing_hold` seconds, frame by frame, with the same
+## calls and the same order as human_contact_controller.gd: target = layers(held_hit_motion.sample),
+## eased toward with the game's half-life, fitted to reach; at release the strike starts from the
+## pose the hand has (in a match the strike waits for the ball and takes the real time to it:
+## here it starts at once and takes the stroke's strike time).
+## One bake serves every sequence of the same pose, hold and player (the timeline and the
+## trajectory arc each configure their own).
+static var _swing_cache: Dictionary = {}
+
+static func _pose_signature(def: PostureDefinition, ready_def: PostureDefinition) -> int:
+	var parts: Array = []
+	for r in [def, ready_def, def.windup_body, def.follow_through_body]:
+		if r == null: parts.append(null); continue
+		for prop in r.get_property_list():
+			if int(prop.usage) & PROPERTY_USAGE_SCRIPT_VARIABLE and not (r.get(prop.name) is Resource): parts.append(r.get(prop.name))
+	return hash(parts)
+
+func _bake_swing(player) -> void:
+	var hold: float = clampf(swing_hold, 0.0, HOLD_MAX)
+	swing_charge = Swing.charge_for_hold(hold)
+	swing_tap = ShotChoice.is_tap(swing_charge)
+	var cache_key: Array = [_pose_signature(source, ready), hold, player.get_instance_id() if player != null else 0, stance]
+	if _swing_cache.get("key") == cache_key:
+		var c: Dictionary = _swing_cache
+		_swing = c.frames; swing_report = c.report
+		preparation_seconds = hold; prefix_seconds = hold
+		release_seconds = c.strike; stroke_seconds = c.strike + c.sweep; full_seconds = stroke_seconds
+		duration = hold + stroke_seconds
+		return
+	var intent: String = "DROP" if swing_tap else "AUTO"
+	var spin: int = ShotChoice.SPIN.FLAT if swing_tap else ShotChoice.SPIN.TOPSPIN
+	var strike: float = Clock.strike_duration(source); var sweep: float = Clock.sweep_duration(source)
+	preparation_seconds = hold; prefix_seconds = hold
+	release_seconds = strike; stroke_seconds = strike + sweep; full_seconds = stroke_seconds
+	duration = hold + stroke_seconds
+	var held = Held.new()
+	var visual: PostureDefinition = ready.duplicate(true)
+	var strike_start: PostureDefinition = null
+	var finish_start: PostureDefinition = null
+	for i in ceili(duration / SWING_STEP - 0.001) + 1:
+		var t: float = minf(i * SWING_STEP, duration)
+		var p := 0.0; var phase := ""
+		if t <= hold and (i > 0 or hold > 0.0):
+			var target: PostureDefinition = Swing.layers(held.sample(source, ready, t, player, false, Path.sample, "studio"))
+			var previous: PostureDefinition = visual
+			visual = ReadyMotion.blend_pose(visual, target, SWING_STEP if i > 0 else 0.0, 0.055)
+			if player != null: visual = held.fit_live_preparation(visual, player, previous, SWING_STEP)
+			swing_report = held.report.duplicate()
+			phase = "Holding · Ready → Wind-up" if t <= Held.WINDUP_SECONDS else "Holding · strong wind-up"
+		elif t <= hold + strike:
+			if strike_start == null: strike_start = visual
+			var f: float = clampf((t - hold) / strike, 0.0, 1.0)
+			visual = Swing.strike_pose(source, f, swing_charge, false, spin, false, intent, {}, strike_start)
+			p = Swing.strike_progress(source, f); phase = "Strike"
+		else:
+			if strike_start == null: strike_start = visual
+			if finish_start == null:
+				finish_start = Swing.strike_pose(source, 1.0, swing_charge, false, spin, false, intent, {}, strike_start)
+			var tf: float = (t - hold - strike) / sweep
+			visual = Swing.finish_pose(source, tf, swing_charge, false, spin, false, intent, {}, finish_start)
+			p = Swing.finish_progress(source, tf); phase = "Follow-through"
+		_swing.append([visual, p, phase])
+	_swing_cache = {"key": cache_key, "frames": _swing, "report": swing_report, "strike": strike, "sweep": sweep}
 
 # A core-only certificate cannot be switched on inside an unvalidated full
 # action. This predicate is shared with pending Preview and its joint guide.
@@ -74,6 +155,9 @@ func _stroke_pose(progress: float) -> PostureDefinition:
 	var pose: PostureDefinition
 	if variant != null: pose = variant.sample(source, progress)
 	elif style >= 0: pose = ServeStore.sample(source, progress)
+	elif swing_hold >= 0.0 and mode == Mode.STROKE:   # my swing at this hold's power (no release blend)
+		var tap: bool = ShotChoice.is_tap(Swing.charge_for_hold(swing_hold))
+		pose = Swing.layers(Motion.sample_drive(source, progress, Swing.charge_for_hold(swing_hold), false, ShotChoice.SPIN.FLAT if tap else ShotChoice.SPIN.TOPSPIN, false, "DROP" if tap else "AUTO"))
 	else: pose = Motion.sample_drive(source, progress, 1.0) if runtime_motion else Path.sample(source, progress)
 	return scoped_pose(pose)
 
@@ -90,6 +174,9 @@ func _bake_split() -> void:
 ## Stroke progress (0 Wind-up .. 0.5 Contact .. 1 Finish) `t` seconds after the Wind-up, through
 ## the stroke's timing (durations, ease, speed ramp). Plain strokes.
 func progress_at(t: float) -> float:
+	if swing_active():   # my swing: even-pace (or eased) strike, then the follow-through ease
+		var tt: float = clampf(t, 0.0, stroke_seconds)
+		return Swing.strike_progress(source, tt / maxf(release_seconds, 0.001)) if tt <= release_seconds else Swing.finish_progress(source, (tt - release_seconds) / maxf(stroke_seconds - release_seconds, 0.001))
 	return clampf(float(Clock.state(source, clampf(t, 0.0, stroke_seconds), finish, ready).progress), 0.0, 1.0)
 
 ## Seconds after the Wind-up at which the stroke reaches progress p (the inverse; monotone).
@@ -116,6 +203,10 @@ func lead_progress(preparation_elapsed: float) -> float:
 
 func sample(seconds: float) -> Dictionary:
 	var elapsed := clampf(seconds, 0.0, duration)
+	if swing_active():
+		var fr: Array = _swing[clampi(roundi(elapsed / SWING_STEP), 0, _swing.size() - 1)]
+		return {"pose": scoped_pose(_stance_copy((fr[0] as PostureDefinition).duplicate(true))), "phase": fr[2], "progress": clampf(float(fr[1]), 0, 1),
+			"elapsed": elapsed, "duration": duration, "split": {}, "authored_key": -1, "context": true}
 	var t := elapsed
 	var pose: PostureDefinition
 	var phase := ""

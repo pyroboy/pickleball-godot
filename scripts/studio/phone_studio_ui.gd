@@ -81,6 +81,7 @@ var _curve_btns: Array[Button] = []
 var _speed: VBoxContainer       # speed sheet (replaces the lower third): the speed ramp graph
 var _speed_graph                # its graph (studio_speed_graph.gd, finger-sized)
 var _speed_del: Button          # Delete point (shown while a speed point is selected)
+var _hold: Button               # timeline row: hold Hit (press and keep down), lift to swing
 var _tl_info: Label             # under the timeline: what it is on, what posing does there
 var _keys_info: Label           # Swing sheet: how the Wind-up / Finish keys reach play
 var _keys_a: Button
@@ -408,6 +409,11 @@ func _build_lower(lower: VBoxContainer) -> void:
 	_scrub.key_mover = studio._timeline.move_key
 	_scrub.key_tapped.connect(studio._timeline.go_to_key)
 	row.add_child(_scrub)
+	# Hold: the long press as the game plays it. Finger down = holding Hit, lift = the swing.
+	_hold = _btn("Hold", func(): pass, 104, 68); _hold.name = "HoldButton"
+	_hold.button_down.connect(func(): studio.hold_begin())
+	_hold.button_up.connect(func(): studio.hold_release())
+	row.add_child(_hold)
 	# Icons, not "▶" text: the iPhone's font has no glyph for it (the button showed empty).
 	_play = _btn("", func(): studio._timeline.toggle_play(), 80, 68); row.add_child(_play)
 	_play.icon = StudioTheme.icon("play"); _play.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -939,11 +945,13 @@ func _refresh_pose() -> void:
 func _timeline_info(st: Dictionary) -> String:
 	if studio.key == "" or not studio.engine._has_motion(): return "One pose: drag rings to pose it"
 	var sk: float = studio._timeline.selected_path_key()
-	if bool(st.get("playing", false)): return "Playing"
+	if studio.holding: return studio.hold_status()
+	if bool(st.get("playing", false)): return "Playing · " + studio.hold_status()
 	if studio.at_key():
 		var name: String = ["Wind-up", "Contact", "Finish"][studio.stage]
 		if studio.stage != 1 and studio.keys_play_state() == "off": return "%s key · game-built, not this key: Swing → Play my keys" % name
-		return "%s key · drag rings to pose it" % name
+		var rule: String = studio.swing_rule_text()
+		return "%s key · %s" % [name, rule if rule != "" else "drag rings to pose it"]
 	if sk >= 0.0: return "Path key · drag its pink mark to move it in time"
 	return "Preview %.2f s · slide to W, C or F to pose" % float(st.get("seconds", 0.0))
 
@@ -973,6 +981,7 @@ func _process(delta: float) -> void:
 			if _swing.visible: _refresh_swing()
 		_scrub.queue_redraw()
 		_sync_scrub = false
+		_tint(_hold, studio.holding, Ui.GOLD)
 		var ic: Texture2D = StudioTheme.icon("pause" if bool(st.get("playing", false)) else "play")
 		if _play.icon != ic: _play.icon = ic
 	if _undo: _undo.disabled = (studio._undo as Array).is_empty()

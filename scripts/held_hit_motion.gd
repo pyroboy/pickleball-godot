@@ -22,7 +22,9 @@ func reset(clear_curves: bool = true) -> void:
 	if clear_curves: _curves.clear()
 	report.clear()
 
-func sample(base: PostureDefinition, ready: PostureDefinition, held_seconds: float, player = null, directional_only: bool = false) -> PostureDefinition:
+## `base_sampler` (optional): sample the strong extension from `base` itself, not the saved
+## library pose of that id (Pose Studio's unsaved working copy). The game passes none.
+func sample(base: PostureDefinition, ready: PostureDefinition, held_seconds: float, player = null, directional_only: bool = false, base_sampler: Callable = Callable(), cache_key: String = "") -> PostureDefinition:
 	var elapsed: float = maxf(held_seconds, 0.0)
 	var windup: PostureDefinition = Path.sample(base, 0.0)
 	var pose: PostureDefinition
@@ -32,7 +34,7 @@ func sample(base: PostureDefinition, ready: PostureDefinition, held_seconds: flo
 		report = {"stage": "ready_to_windup", "held_seconds": elapsed, "strong_weight": 0.0, "applied_distance_m": 0.0}
 	else:
 		var progress: float = 0.0 if directional_only else smoothstep(WINDUP_SECONDS, STRONG_SECONDS, elapsed)
-		pose = _strong_pose(base, windup, progress, player)
+		pose = extend_windup(base, windup, progress, player, base_sampler, cache_key)
 		report["stage"] = "windup_to_strong"
 		report["held_seconds"] = elapsed
 	# Identity follows the selected incoming stroke even while its geometry is Ready.

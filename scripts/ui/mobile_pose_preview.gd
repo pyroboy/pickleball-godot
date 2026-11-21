@@ -5,6 +5,7 @@ const ContactPreview = preload("res://scripts/ui/mobile_pose_contact_preview.gd"
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
 const SpeedRamp = preload("res://scripts/stroke_speed_ramp.gd")
+const SwingShape = preload("res://scripts/human_swing_playback.gd")
 const HeldHit = preload("res://scripts/held_hit_motion.gd")
 const PlaybackClock = preload("res://scripts/stroke_playback_clock.gd")
 const ElbowRuntime = preload("res://scripts/elbow_preset_runtime.gd")
@@ -163,11 +164,19 @@ func _disable_simulation(node:Node)->void:
 	if node is CollisionObject3D: node.collision_layer=0;node.collision_mask=0
 	if node is Area3D: node.monitoring=false;node.monitorable=false
 	for child in node.get_children():_disable_simulation(child)
+## Pose Studio: every pose drawn here passes through the rules the game lays over a human swing
+## (human_swing_playback.layers: the forehand's forced body turn), so the key view, Hold, Play
+## and AutoPose all show what a match shows. Off for the plain mobile editor.
+var game_layers := false
+func present(value: PostureDefinition) -> PostureDefinition:
+	return SwingShape.layers(value) if game_layers and value != null else value
+
 func show_pose(value:PostureDefinition)->void:
 	pose=value
 	if player==null:return
-	player.posture.transition_pose_blend=value
-	player.posture.force_posture_update(value)
+	var drawn: PostureDefinition = present(value)
+	player.posture.transition_pose_blend=drawn
+	player.posture.force_posture_update(drawn)
 	viewport.render_target_update_mode=SubViewport.UPDATE_ONCE
 	queue_redraw()
 	if gizmo:gizmo.sync_scene()
@@ -249,8 +258,8 @@ func set_joint_motion_context(sampler: Callable, signature: String) -> void:
 		for id in JOINT_NAMES: context_joint_samples[id] = PackedVector3Array()
 		for index in range(ARC_STEPS + 1):
 			var sample: PostureDefinition = sampler.call(float(index) / ARC_STEPS)
-			player.posture.transition_pose_blend = sample
-			player.posture.force_posture_update(sample)
+			player.posture.transition_pose_blend = present(sample)
+			player.posture.force_posture_update(present(sample))
 			for id in JOINT_NAMES: context_joint_samples[id].append(joint_world_position(id))
 		if displayed_pose != null: show_pose(displayed_pose)
 		joint_context_rebuild_count += 1
@@ -347,7 +356,15 @@ func _refresh_motion() -> void:
 		var timing_only: bool = motion_root != null and geometry == _geo_snapshot and momentum_heads.size() > 1 and not _settling
 		if geometry != _geo_snapshot: _retime_lead.clear(); _retime_stroke.clear()
 		_ensure_motion_visuals()
-		if timing_only and _retime_momentum():
+		if timing_only and Sequence.swing_hold >= 0.0 and _momentum_supported():
+			# My swing (Pose Studio Hold / Play) is a baked sequence, not a table by progress: the
+			# tick heads are solved again, but the 65-sample key arc and the ghosts are not.
+			var shown: PostureDefinition = pose if pose != null else _motion_definition
+			_rebuild_momentum()
+			show_pose(shown)
+			_rebuild_arc_mesh()
+			momentum_retime_dirty = false
+		elif timing_only and _retime_momentum():
 			momentum_retime_dirty = true; momentum_retime_frame = Engine.get_process_frames()
 		else:
 			_rebuild_motion()
@@ -356,6 +373,13 @@ func _refresh_motion() -> void:
 	_refresh_selected_joint_motion()
 	motion_root.visible = true
 	_request_redraw()
+
+## The play situation changed (Pose Studio's hold length): every cache built from a played
+## sequence is dropped and the arc rebuilt.
+func play_context_changed() -> void:
+	_motion_snapshot = PackedByteArray(); _geo_snapshot = PackedByteArray()
+	_retime_lead.clear(); _retime_stroke.clear()
+	_refresh_motion()
 
 ## After speed-only re-times (a fast table lookup, a few mm off at kinks): one exact rebuild,
 ## keeping the tables for the next drag. The speed graph calls it once the edit rests.
@@ -435,8 +459,8 @@ func _rebuild_motion() -> void:
 	# the visible paddle, so read the rendered head after every solved sample.
 	for index in range(ARC_STEPS + 1):
 		var sample: PostureDefinition = motion_sampler.call(_motion_definition, float(index) / ARC_STEPS) if motion_sampler.is_valid() else Path.sample(_motion_definition, float(index) / ARC_STEPS)
-		player.posture.transition_pose_blend = sample
-		player.posture.force_posture_update(sample)
+		player.posture.transition_pose_blend = present(sample)
+		player.posture.force_posture_update(present(sample))
 		_inbetween_root.capture_sample()
 		var paddle_transform: Transform3D = player.paddle_node.global_transform
 		sample_heads.append(paddle_transform * PaddleSize.HEAD_OFFSET)
@@ -454,8 +478,8 @@ func _rebuild_motion() -> void:
 			var windup: PostureDefinition = Path.sample(_motion_definition, 0.0)
 			for index in range(READY_ARC_STEPS + 1):
 				var sample: PostureDefinition = ReadyCurve.sample(ready_def, windup, float(index) / READY_ARC_STEPS)
-				player.posture.transition_pose_blend = sample
-				player.posture.force_posture_update(sample)
+				player.posture.transition_pose_blend = present(sample)
+				player.posture.force_posture_update(present(sample))
 				ready_heads.append(player.paddle_node.global_transform * PaddleSize.HEAD_OFFSET)
 	# Sampling is synchronous and invisible between viewport draws. Restore the
 	# exact current scrub/play pose, not Contact or the final sampled keyframe.
@@ -571,8 +595,8 @@ func _momentum_supported() -> bool:
 	return momentum_on and _motion_enabled and _motion_definition != null and _motion_definition.get("action_id") == null
 
 func _solved_head(p: PostureDefinition) -> Vector3:
-	player.posture.transition_pose_blend = p
-	player.posture.force_posture_update(p)
+	player.posture.transition_pose_blend = present(p)
+	player.posture.force_posture_update(present(p))
 	return player.paddle_node.global_transform * PaddleSize.HEAD_OFFSET
 
 func _rebuild_momentum() -> void:

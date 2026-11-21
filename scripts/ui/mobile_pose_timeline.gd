@@ -74,7 +74,7 @@ func _configure() -> bool:
 	if owner._base or not owner._has_motion(): return false
 	if owner.get("_action"): return _configure_action()
 	if sequence is ActionSequence: sequence = Sequence.new(); _signature = ""
-	var signature: String = owner._elbow_preset_panel.signature(owner._current)+":"+str(owner._variant_mode)+":"+str(_mode.selected)+":"+str(_stance.selected)+":"+str(_motion.selected)
+	var signature: String = owner._elbow_preset_panel.signature(owner._current)+":"+str(owner._variant_mode)+":"+str(_mode.selected)+":"+str(_stance.selected)+":"+str(_motion.selected)+":hold"+str(Sequence.swing_hold)
 	if signature != _signature:
 		sequence.configure(owner._current,_mode.selected,_stance.selected,owner._variant_mode,_motion.selected==0,owner._preview.player)
 		_signature=signature
