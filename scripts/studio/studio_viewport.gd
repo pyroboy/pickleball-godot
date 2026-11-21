@@ -114,6 +114,7 @@ var arc_stage := -1                     # key of the arc point being dragged (0 
 ## becomes a key); press a tick dot to add a key at that moment; a tap opens the key's options.
 const PATH_COLOR := Color("ff8fb1")
 var _arc_cols := PackedColorArray()   # tick dot colours by paddle speed (speed_color)
+var legend_lift := 0.0                  # raise the speed legend by this (the phone's chip row sits on the bottom edge)
 var _arc_peak := 0.0                    # their scale: the fastest tick (m/s)
 var _path_pts := PackedVector2Array()   # screen points of preview.momentum_path_heads
 var path_t := -1.0                       # progress of the key being dragged (-1 = none)
@@ -640,7 +641,7 @@ func _draw_arc(rect: Rect2) -> void:
 		if st == 1:   # Contact, with the strike's peak paddle speed
 			draw_circle(p, 4.0 * k, DOT_OUTLINE, true, -1.0, true)
 			draw_circle(p, 2.8 * k, cols[1], true, -1.0, true)
-			_draw_label(p + Vector2(4, 18) * k, "peak %.0f m/s" % float(preview.momentum_contact_speed))
+			if not touch: _draw_label(p + Vector2(4, 18) * k, "peak %.0f m/s" % float(preview.momentum_contact_speed))   # phone: the legend has it
 			continue
 		if st == studio.stage: continue
 		var hot: bool = arc_stage == st
@@ -656,7 +657,7 @@ func _draw_arc(rect: Rect2) -> void:
 func _draw_speed_legend(rect: Rect2, k: float) -> void:
 	if _arc_dots.is_empty(): return
 	var w := 90.0 * k; var hgt := 6.0 * k
-	var o := Vector2(rect.position.x + 12.0 * k, rect.end.y - 34.0 * k)
+	var o := Vector2(rect.position.x + 12.0 * k, rect.end.y - 34.0 * k - legend_lift)
 	for i in 30:
 		draw_rect(Rect2(o + Vector2(w * i / 30.0, 0), Vector2(w / 30.0 + 0.5, hgt)), speed_color(i / 29.0))
 	var font := get_theme_default_font()
@@ -949,7 +950,8 @@ func _draw_ap(rect: Rect2) -> void:
 		if t.is_finite():
 			if i >= 0 and _ap[i].is_finite() and _ap[i].distance_to(t) > 2.0: draw_dashed_line(_ap[i], t, DOT_HOVER, 1.5, 4.0)
 			draw_line(t + Vector2(-5, 0), t + Vector2(5, 0), DOT_HOVER, 1.5); draw_line(t + Vector2(0, -5), t + Vector2(0, 5), DOT_HOVER, 1.5)
-	var lab := ap_handle if ap_handle != "" else hover_ap
+	# Touch has no hover: a label only while a ring is dragged (a tap opens that ring's sheet).
+	var lab := ap_handle if ap_handle != "" or touch else hover_ap
 	var li := AP_IDS.find(lab)
 	if li >= 0 and _ap[li].is_finite():
 		_draw_label(_ap[li] + (LOCK_OFF if hover_lock else Vector2.ZERO), String(AP_NAMES.get(lab, lab)) if drag == Drag.AUTOPOSE

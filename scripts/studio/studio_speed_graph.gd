@@ -1,8 +1,8 @@
 extends Control
 ## Desktop Pose Studio: speed ramp graph under the timeline scrubber (same time axis).
 ## Three parts, Ready -> Wind-up, Strike, Follow-through (stroke_speed_ramp.gd). Each part shows
-## its relative speed (1 = the part's average speed, dashed line) as a coloured curve, with the
-## real solved paddle-head speed (m/s, from the trajectory arc) faint behind it.
+## its relative speed (1 = the part's average speed, the dashed "even" line) as one coloured
+## curve. (The real paddle speed in m/s is on the trajectory arc: its dot colours and legend.)
 ## Drag a part's start / end handle up or down to set the speed there. A hollow handle = the
 ## authored ease (untouched); the first drag switches the part to its own ramp. Double-click a
 ## handle: back to the authored ease. Press empty graph inside a part: a speed point there (up
@@ -13,7 +13,7 @@ extends Control
 const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 const H := 92.0
 const PAD := 8.0               # same horizontal inset as the scrub track
-const TOP := 14.0
+const TOP := 16.0
 const BOTTOM := 6.0
 const GRAB := 9.0
 const SAMPLES := 32
@@ -35,7 +35,7 @@ func _init() -> void:
 	custom_minimum_size = Vector2(160, H)
 	set_process(true)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	tooltip_text = "Speed ramp: drag a part's start / end handle up or down to set how fast the paddle moves there (1 = even speed). Hollow = authored ease; double-click a handle to go back to it. Click empty graph inside a part to add a speed point (drag it; right-click deletes). Grey: Ready → Wind-up · gold: Strike (Gameplay edit) · cyan: Follow-through. Faint line: real paddle speed (m/s)."
+	tooltip_text = "Speed ramp: drag a part's start / end handle up or down to set how fast the paddle moves there (1 = even speed). Hollow = authored ease; double-click a handle to go back to it. Click empty graph inside a part to add a speed point (drag it; right-click deletes). Grey: Ready → Wind-up · gold: Strike (Gameplay edit) · cyan: Follow-through. Real paddle speed (m/s): the dot colours on the trajectory."
 
 func _def():
 	if studio == null or not studio._ok() or studio.key == "" or studio.engine._base or studio.engine._serve or studio.engine.get("_action"): return null
@@ -58,11 +58,22 @@ func set_scale_k(scale_k: float) -> void:
 	custom_minimum_size = Vector2(160, H * scale_k)
 	queue_redraw()
 
-func _process(_d: float) -> void:
-	if is_visible_in_tree(): tick()
+var _pending := Vector2.ZERO
+var _has_pending := false
+func _flush_drag() -> void:
+	if _has_pending and _drag_part >= 0: _drag_to(_drag_part, _drag_end, _pending)
+	_has_pending = false
 
+func _process(_d: float) -> void:
+	if not is_visible_in_tree(): return
+	_flush_drag()
+	tick()
+
+const SETTLE_FRAMES := 12   # idle frames after the last speed edit before the exact arc rebuild
 func tick() -> void:
 	var pv = studio.preview if studio else null
+	if pv and pv.momentum_retime_dirty and _drag_part < 0 and Engine.get_process_frames() - pv.momentum_retime_frame >= SETTLE_FRAMES:
+		pv.settle_motion()
 	var rc: int = pv.momentum_rebuild_count if pv else -1
 	if rc != _seen_rebuild or studio.key != _seen_key:
 		_seen_rebuild = rc; _seen_key = studio.key
@@ -80,8 +91,8 @@ func _handles(part: int) -> Array:
 	var x0 := _x(x0f); var x1 := _x(x1f)
 	var inset := minf(10.0 * k, (x1 - x0) * 0.25)
 	if Ramp.has_points(d, part):
-		var out: Array = [Vector2(x0 + inset, _y(Ramp.speed(d, part, 0.0))), Vector2(x1 - inset, _y(Ramp.speed(d, part, 1.0)))]
-		for q in _sorted_points(d, part): out.append(Vector2(_x(lerpf(x0f, x1f, q[0])), _y(Ramp.speed(d, part, q[0]))))
+		var out: Array = [Vector2(x0 + inset, _y(_spd(d, part, 0.0))), Vector2(x1 - inset, _y(_spd(d, part, 1.0)))]
+		for q in _sorted_points(d, part): out.append(Vector2(_x(lerpf(x0f, x1f, q[0])), _y(_spd(d, part, q[0]))))
 		return out
 	var e: Vector2 = Ramp.ends(d, part) if Ramp.custom(d, part) else Ramp.authored_ends(d, part)
 	return [Vector2(x0 + inset, _y(e.x)), Vector2(x1 - inset, _y(e.y))]
@@ -142,12 +153,13 @@ func _gui_input(ev: InputEvent) -> void:
 			_moved = false
 			_select(Vector2i(h.x, h.y - 2) if h.y >= 2 else Vector2i(-1, -1))
 		elif _drag_part >= 0:
+			_flush_drag()
 			_drag_part = -1; _drag_end = -1
 			studio.end_edit(); accept_event(); queue_redraw()
 	elif ev is InputEventMouseMotion:
-		if _drag_part >= 0:
+		if _drag_part >= 0:   # applied once per frame (_process): several moves can arrive in one
 			_moved = true
-			_drag_to(_drag_part, _drag_end, ev.position); accept_event()
+			_pending = ev.position; _has_pending = true; accept_event()
 		else:
 			var h := _pick(ev.position)
 			if h != _hover: _hover = h; queue_redraw()
@@ -168,7 +180,15 @@ func _work(part: int) -> Dictionary:
 	var e: Vector2 = Ramp.ends(d, part) if Ramp.custom(d, part) else Ramp.authored_ends(d, part)
 	return {"e": e, "pts": []}
 
+var write_usec := 0            # cost of the last edit applied to the pose (preview rebuild included)
+var write_count := 0
 func _write(part: int, w: Dictionary) -> void:
+	var t0 := Time.get_ticks_usec()
+	_write_now(part, w)
+	write_usec = Time.get_ticks_usec() - t0; write_count += 1
+
+func _write_now(part: int, w: Dictionary) -> void:
+	_pc = [null, null, null]
 	var f: Array = Ramp.FIELDS[part]
 	var pts := PackedVector3Array()
 	for q in w.pts: pts.append(Vector3(snappedf(q[0], 0.005), snappedf(q[1], 0.01), 0.0))
@@ -256,59 +276,79 @@ func set_part(part: int, start: float, end: float, pts: Array = []) -> Dictionar
 	studio.end_edit()
 	return {"ok": a.get("ok", false) and b.get("ok", false) and c.get("ok", false), "error": a.get("error", b.get("error", c.get("error", "")))}
 
+## Speed of a part at x from this frame's cache (keys and their mean are worked out once per
+## part and redraw, not once per sample).
+var _pc: Array = [null, null, null]
+func _spd(d, part: int, x: float) -> float:
+	if not Ramp.has_points(d, part): return Ramp.speed(d, part, x)
+	if _pc[part] == null:
+		var kk: Array = Ramp.keys(d, part)
+		_pc[part] = [kk, Ramp.mean_of(kk)]
+	return Ramp.spline(_pc[part][0], x) / _pc[part][1]
+
+const TITLES := [["Ready → Wind-up", "Wind-up", "Prep"], ["Strike", "Hit"], ["Follow-through", "Finish", "End"]]
+var lock_note := "locked · Gameplay edit"   # under the Strike title while it is locked (the phone sets its own)
+
 func _draw() -> void:
+	_pc = [null, null, null]
 	draw_rect(Rect2(Vector2.ZERO, size), Color("0d1f2b"))
 	var font := get_theme_font("font"); var fs := int(round(11 * k))
 	var d = _def()
 	if d == null or _spans.size() < 3:
-		draw_string(font, Vector2(PAD, size.y * 0.5 + 4.0), "Speed ramp: strokes only", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("6f8796"))
+		draw_string(font, Vector2(PAD, size.y * 0.5 + 4.0), "Speed: pick a stroke (stances and serves have no speed ramp)", HORIZONTAL_ALIGNMENT_LEFT, size.x - 2.0 * PAD, fs, Color("6f8796"))
 		return
-	# 1 = even speed.
-	var y1 := _y(1.0)
-	for i in int((size.x - 2.0 * PAD) / 8.0):
-		draw_line(Vector2(PAD + i * 8.0, y1), Vector2(PAD + i * 8.0 + 4.0, y1), Color(1, 1, 1, 0.12), k)
-	# Real solved paddle-head speed (m/s) behind the parts.
-	var pv = studio.preview
-	var heads: PackedVector3Array = pv.momentum_heads if pv else PackedVector3Array()
-	if heads.size() > 2 and _dur > 0.0:
-		var sp := PackedFloat32Array(); var top := 0.001
-		for i in heads.size() - 1:
-			var v := heads[i].distance_to(heads[i + 1]) / TICK; sp.append(v); top = maxf(top, v)
-		var pts := PackedVector2Array()
-		for i in sp.size():
-			pts.append(Vector2(_x((i + 0.5) * TICK / _dur), size.y - BOTTOM * k - (size.y - (TOP + BOTTOM) * k) * sp[i] / top))
-		draw_polyline(pts, Color(0.75, 0.85, 0.95, 0.22), 1.5 * k, true)
-		draw_string(font, Vector2(size.x - PAD - 96.0 * k, 11.0 * k), "paddle peak %.1f m/s" % top, HORIZONTAL_ALIGNMENT_RIGHT, 96 * k, fs, Color(0.75, 0.85, 0.95, 0.5))
+	var top := TOP * k; var bottom := size.y - BOTTOM * k
+	# Part columns: a tint, a divider, a title that fits (shorter names for narrow parts).
 	for part in 3:
 		var x0 := _x(_spans[part][0]); var x1 := _x(_spans[part][1])
-		if part > 0: draw_line(Vector2(x0, (TOP - 4.0) * k), Vector2(x0, size.y - BOTTOM * k), Color(COLORS[part], 0.35), k)
+		var locked := _locked(part)
+		draw_rect(Rect2(x0, top, x1 - x0, bottom - top), Color(COLORS[part], 0.03 if locked else 0.07))
+		if part > 0: draw_line(Vector2(x0, 2.0 * k), Vector2(x0, bottom), Color(COLORS[part], 0.4), k)
+		for name in TITLES[part]:
+			var label: String = name
+			if font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= x1 - x0 - 8.0 * k:
+				draw_string(font, Vector2(x0 + 4.0 * k, 11.0 * k), label, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(COLORS[part], 0.5 if locked else 0.95))
+				break
+		if locked:   # a locked part says so where the finger lands
+			for n in int((x1 - x0) / (9.0 * k)) + 1:
+				var hx := x0 + n * 9.0 * k
+				draw_line(Vector2(hx, bottom), Vector2(minf(hx + (bottom - top) * 0.5, x1), bottom - minf((bottom - top), (x1 - hx) * 2.0)), Color(1, 1, 1, 0.045), k)
+			if font.get_string_size(lock_note, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x <= x1 - x0 - 8.0 * k:
+				draw_string(font, Vector2(x0 + 4.0 * k, top + 12.0 * k), lock_note, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color(1, 1, 1, 0.45))
+	# Scale: fast up, slow down, the dashed line = even speed.
+	var y1 := _y(1.0)
+	for i in int((size.x - 2.0 * PAD) / (8.0 * k)):
+		draw_line(Vector2(PAD + i * 8.0 * k, y1), Vector2(PAD + i * 8.0 * k + 4.0 * k, y1), Color(1, 1, 1, 0.16), k)
+	draw_string(font, Vector2(size.x - PAD - 60.0 * k, y1 - 3.0 * k), "even", HORIZONTAL_ALIGNMENT_RIGHT, 60.0 * k, fs, Color(1, 1, 1, 0.4))
+	draw_string(font, Vector2(size.x - PAD - 60.0 * k, top + 11.0 * k), "fast", HORIZONTAL_ALIGNMENT_RIGHT, 60.0 * k, fs, Color(1, 1, 1, 0.3))
+	draw_string(font, Vector2(size.x - PAD - 60.0 * k, bottom - 3.0 * k), "slow", HORIZONTAL_ALIGNMENT_RIGHT, 60.0 * k, fs, Color(1, 1, 1, 0.3))
+	# One curve per part, and its handles (all round: ends, then the speed points).
+	for part in 3:
+		var x0 := _x(_spans[part][0]); var x1 := _x(_spans[part][1])
+		var locked := _locked(part)
+		var custom := Ramp.custom(d, part)
 		var pts := PackedVector2Array()
 		for i in SAMPLES + 1:
 			var u := float(i) / SAMPLES
-			pts.append(Vector2(lerpf(x0, x1, u), _y(Ramp.speed(d, part, u))))
-		var custom := Ramp.custom(d, part)
-		var col: Color = COLORS[part]; col.a = 1.0 if custom else 0.6
-		draw_polyline(pts, col, (2.0 if custom else 1.5) * k, true)
-		if x1 - x0 > 60.0 * k:
-			draw_string(font, Vector2(x0 + 4.0 * k, 11.0 * k), Ramp.NAMES[part] + ("" if custom else " · authored"), HORIZONTAL_ALIGNMENT_LEFT, x1 - x0 - 8.0 * k, fs, Color(COLORS[part], 0.8))
+			pts.append(Vector2(lerpf(x0, x1, u), _y(_spd(d, part, u))))
+		var col: Color = COLORS[part]; col.a = 0.4 if locked else 1.0 if custom else 0.7
+		draw_polyline(pts, col, (2.5 if custom else 2.0) * k, true)
 		var hs := _handles(part)
-		var locked := _locked(part)
 		for e in hs.size():
 			var p: Vector2 = hs[e]
 			var hot := (_drag_part == part and _drag_end == e) or _hover == Vector2i(part, e)
 			var r := (5.0 + (1.5 if hot else 0.0)) * k
-			if e >= 2:   # a speed point: a round handle, ringed while selected
-				draw_circle(p, r + 1.5 * k, Color("122630"), true, -1.0, true)
-				draw_circle(p, r, Color("eef5fa") if hot else Color(COLORS[part], 0.45 if locked else 1.0), true, -1.0, true)
-				if selected == Vector2i(part, e - 2): draw_circle(p, r + 3.0 * k, Color("eef5fa"), false, 1.5 * k, true)
-				if hot: draw_string(font, p + Vector2(8.0, -6.0) * k, "×%.2f" % _speed_at(p.y), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("eef5fa"))
-				continue
-			var dia := PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0)])
-			draw_colored_polygon(dia, Color("122630"))
-			var c: Color = Color("eef5fa") if hot else Color(COLORS[part], 0.45 if locked else 1.0)
-			if custom: draw_colored_polygon(dia, c)
-			else: draw_polyline(dia + PackedVector2Array([dia[0]]), c, 1.5 * k, true)
-			if hot: draw_string(font, p + Vector2(8.0, -6.0) * k, "×%.2f" % _speed_at(p.y), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("eef5fa"))
+			var c: Color = Color("eef5fa") if hot else Color(COLORS[part], 0.4 if locked else 1.0)
+			draw_circle(p, r + 1.5 * k, Color("0d1f2b"), true, -1.0, true)
+			if custom or e >= 2: draw_circle(p, r, c, true, -1.0, true)
+			else: draw_circle(p, r, c, false, 1.5 * k, true)   # hollow: the authored ease, untouched
+			if e >= 2 and selected == Vector2i(part, e - 2): draw_circle(p, r + 3.5 * k, Color("eef5fa"), false, 1.5 * k, true)
+			if hot or (e >= 2 and selected == Vector2i(part, e - 2)):
+				var txt := "×%.2f" % _speed_at(p.y)
+				var tw := font.get_string_size(txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+				var at := Vector2(clampf(p.x + 9.0 * k, PAD, size.x - PAD - tw), maxf(p.y - 8.0 * k, top + fs))
+				draw_rect(Rect2(at + Vector2(-3.0 * k, -fs), Vector2(tw + 6.0 * k, fs + 4.0 * k)), Color(0.05, 0.12, 0.17, 0.9))
+				draw_string(font, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("eef5fa"))
 
 ## Every part back to the authored ease (one undo step).
 func reset_all() -> void:
@@ -334,4 +374,4 @@ func state() -> Dictionary:
 				"ends": [Ramp.ends(d, part).x, Ramp.ends(d, part).y] if Ramp.custom(d, part) else [Ramp.authored_ends(d, part).x, Ramp.authored_ends(d, part).y],
 				"handles": hs.map(func(h: Vector2): return [h.x, h.y]), "locked": _locked(part),
 				"points": _sorted_points(d, part)})
-	return {"shown": d != null, "size": [size.x, size.y], "parts": parts, "selected": [selected.x, selected.y]}
+	return {"shown": d != null, "size": [size.x, size.y], "parts": parts, "selected": [selected.x, selected.y], "write_usec": write_usec, "write_count": write_count, "retimes": studio.preview.momentum_retime_count if studio and studio.preview else 0, "retime_usec": studio.preview.momentum_retime_usec if studio and studio.preview else 0, "rebuilds": studio.preview.motion_rebuild_count if studio and studio.preview else 0}

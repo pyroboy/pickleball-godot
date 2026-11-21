@@ -87,6 +87,10 @@ func _bake_split() -> void:
 		_split_frames.append(split.sample())
 		t += SPLIT_STEP
 
+## Ready -> Wind-up blend progress after `preparation_elapsed` seconds of preparation.
+func lead_progress(preparation_elapsed: float) -> float:
+	return Ramp.lead(source,preparation_elapsed/Held.WINDUP_SECONDS) if Ramp.custom(source,Ramp.LEAD) else smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
+
 func sample(seconds: float) -> Dictionary:
 	var elapsed := clampf(seconds, 0.0, duration)
 	var t := elapsed
@@ -105,7 +109,7 @@ func sample(seconds: float) -> Dictionary:
 			windup = variant.sample_amount(source,0.0,0.0)
 			if preparation_elapsed > Held.WINDUP_SECONDS:
 				pose = variant.sample_amount(source,0.0,smoothstep(Held.WINDUP_SECONDS,Held.STRONG_SECONDS,preparation_elapsed))
-		var u: float = Ramp.lead(source,preparation_elapsed/Held.WINDUP_SECONDS) if Ramp.custom(source,Ramp.LEAD) else smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
+		var u: float = lead_progress(preparation_elapsed)
 		if pose == null:
 			pose = ReadyCurve.sample(ready,windup,u)
 		phase = "Charging · Ready → Wind-up" if preparation_elapsed <= Held.WINDUP_SECONDS else "Charging · Wind-up → Strong"

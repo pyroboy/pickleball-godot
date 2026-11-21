@@ -2547,7 +2547,7 @@ func ui_dump() -> Dictionary:
 			"autopose": _view_input.autopose_state() if _view_input else {}, "momentum": _view_input.arc_state() if _view_input else {}}
 	return {"ok": true, "ready": is_ready, "key": key, "stage": STAGES[stage], "dirty": _ok() and engine._dirty.has(engine._key),
 		"unsaved": unsaved_keys(), "quit_dialog": _quit_dlg != null and _quit_dlg.visible, "undo": _undo.size(), "redo": _redo.size(), "window": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
-		"preview": pv, "timeline": _timeline.state(), "phone_speed_graph": phone_ui._speed_graph.state() if phone and phone_ui and phone_ui._speed_graph else {}, "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
+		"preview": pv, "timeline": _timeline.state(), "phone_speed_graph": phone_ui._speed_graph.state() if phone and phone_ui and phone_ui._speed_graph else {}, "phone_layout": phone_ui.layout_state() if phone and phone_ui else {}, "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
 		"controls": tree}
 
 func _dump(n: Node) -> Array:

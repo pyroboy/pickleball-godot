@@ -4,6 +4,9 @@ const Ghosts = preload("res://scripts/ui/mobile_pose_ghosts.gd")
 const ContactPreview = preload("res://scripts/ui/mobile_pose_contact_preview.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
+const SpeedRamp = preload("res://scripts/stroke_speed_ramp.gd")
+const HeldHit = preload("res://scripts/held_hit_motion.gd")
+const PlaybackClock = preload("res://scripts/stroke_playback_clock.gd")
 const ElbowRuntime = preload("res://scripts/elbow_preset_runtime.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const SelectedGizmo = preload("res://scripts/ui/mobile_pose_gizmo.gd")
@@ -80,6 +83,19 @@ var momentum_key_times := PackedFloat32Array()   # their seconds from Ready
 var momentum_contact_speed := 0.0                # m/s: peak paddle-head speed of the strike
 var momentum_rebuild_count := 0
 var momentum_progress := PackedFloat32Array()   # stroke progress of each tick (-1 before Wind-up)
+const TIMING_PREFIX := "speed_"                  # PostureDefinition fields that change timing only (stroke_speed_ramp.gd)
+const RETIME_LEAD := 48                          # table sizes for the speed-only re-time
+const RETIME_STROKE := 64
+var _geo_snapshot := PackedByteArray()           # the definition without its timing fields
+var _retime_lead := PackedVector3Array()         # solved heads over the lead-in blend (0..1)
+var _retime_stroke := PackedVector3Array()       # solved heads over the stroke progress (0..1)
+var _retime_w := 0.0; var _retime_release := 0.0; var _retime_stroke_s := 0.0
+var _retime_finish: PostureDefinition; var _retime_ready: PostureDefinition
+var momentum_retime_count := 0
+var momentum_retime_dirty := false               # the arc shows re-timed (approximate) heads
+var momentum_retime_frame := 0                   # process frame of the last re-time
+var _settling := false
+var momentum_retime_usec := 0
 var momentum_path_tan := PackedVector3Array()   # path handles: solved world direction per unit progress (keys; zero for bend points)
 const TAN_STEP := 0.015                            # progress step for that direction (central difference)
 var momentum_path_t := PackedFloat32Array()      # path handles: the keys' progress, then bend points
@@ -281,7 +297,7 @@ func set_motion(def: PostureDefinition, enabled: bool = true) -> void:
 func set_motion_sampler(value: Callable) -> void:
 	if motion_sampler == value: return
 	motion_sampler = value
-	_motion_snapshot = PackedByteArray()
+	_motion_snapshot = PackedByteArray(); _geo_snapshot = PackedByteArray()
 
 func set_inbetween_count(value: int) -> void:
 	inbetween_count = clampi(value, 0, Ghosts.MAX_PER_GAP)
@@ -321,14 +337,34 @@ func _refresh_motion() -> void:
 		_refresh_selected_joint_motion()
 		_request_redraw()
 		return
-	var snapshot: PackedByteArray = var_to_bytes(_resource_state(_motion_definition))
+	var state: Dictionary = _resource_state(_motion_definition)
+	var snapshot: PackedByteArray = var_to_bytes(state)
 	if motion_root == null or snapshot != _motion_snapshot:
+		# Speed ramp fields change when the paddle is where, never the path: when only they
+		# changed, re-time the arc from a table of solved heads instead of solving every sample.
+		for field in state.keys(): if String(field).begins_with(TIMING_PREFIX): state.erase(field)
+		var geometry: PackedByteArray = var_to_bytes(state)
+		var timing_only: bool = motion_root != null and geometry == _geo_snapshot and momentum_heads.size() > 1 and not _settling
+		if geometry != _geo_snapshot: _retime_lead.clear(); _retime_stroke.clear()
 		_ensure_motion_visuals()
-		_rebuild_motion()
-		_motion_snapshot = snapshot
+		if timing_only and _retime_momentum():
+			momentum_retime_dirty = true; momentum_retime_frame = Engine.get_process_frames()
+		else:
+			_rebuild_motion()
+			momentum_retime_dirty = false
+		_motion_snapshot = snapshot; _geo_snapshot = geometry
 	_refresh_selected_joint_motion()
 	motion_root.visible = true
 	_request_redraw()
+
+## After speed-only re-times (a fast table lookup, a few mm off at kinks): one exact rebuild,
+## keeping the tables for the next drag. The speed graph calls it once the edit rests.
+func settle_motion() -> void:
+	if not momentum_retime_dirty or not _motion_enabled or not _setup_finished: return
+	_settling = true
+	_motion_snapshot = PackedByteArray()
+	_refresh_motion()
+	_settling = false
 
 func _resource_state(resource: Resource) -> Dictionary:
 	# Definitions are edited in place, including nested body keyframe dictionaries.
@@ -431,6 +467,11 @@ func _rebuild_motion() -> void:
 		var reduced_basis := actual.basis.scaled(Vector3.ONE * GHOST_SCALE)
 		_ghosts[stage].global_transform = Transform3D(reduced_basis,
 			actual * PaddleSize.HEAD_OFFSET - reduced_basis * PaddleSize.HEAD_OFFSET)
+	_rebuild_arc_mesh()
+	_refresh_inbetween()
+	motion_rebuild_count += 1
+
+func _rebuild_arc_mesh() -> void:
 	_arc_mesh.clear_surfaces()
 	var line: Array = _momentum_line() if momentum_heads.size() > 1 else [sample_heads, range(ARC_STEPS + 1).map(func(i): return _motion_color(float(i) / ARC_STEPS))]
 	var pts: PackedVector3Array = line[0]
@@ -450,13 +491,61 @@ func _rebuild_motion() -> void:
 			_add_arc_segment(_arc.to_local(ready_heads[index]), _arc.to_local(ready_heads[index + 1]),
 				READY_ARC_COLOR.lerp(STAGE_COLORS[0], float(index) / READY_ARC_STEPS), READY_ARC_COLOR.lerp(STAGE_COLORS[0], float(index + 1) / READY_ARC_STEPS))
 		_arc_mesh.surface_end()
-	_refresh_inbetween()
-	motion_rebuild_count += 1
+
+## Speed-only change: the tick heads again from dense tables of solved heads (lead-in by blend
+## progress, stroke by stroke progress), built once per path shape. No pose is solved per tick,
+## so a speed drag stays smooth. False = not a plain stroke: the caller rebuilds everything.
+func _retime_momentum() -> bool:
+	if not _momentum_supported(): return false
+	var t0 := Time.get_ticks_usec()
+	if _retime_stroke.is_empty():
+		var seq = Sequence.new()
+		seq.configure(_motion_definition, Sequence.Mode.STROKE, Sequence.Stance.AUTHORED, 0, true, player)
+		if seq.style >= 0 or seq.variant != null or seq.ready == null: return false
+		var displayed_pose: PostureDefinition = pose if pose != null else _motion_definition
+		var windup: PostureDefinition = seq._stroke_pose(0.0)
+		for i in RETIME_LEAD + 1:
+			_retime_lead.append(_solved_head(seq.scoped_pose(seq._stance_copy(ReadyCurve.sample(seq.ready, windup, float(i) / RETIME_LEAD)))))
+		for i in RETIME_STROKE + 1:
+			_retime_stroke.append(_solved_head(seq.scoped_pose(seq._stance_copy(seq._stroke_pose(float(i) / RETIME_STROKE)))))
+		show_pose(displayed_pose)
+		# Durations and the end poses do not depend on the speed fields: kept with the tables.
+		_retime_w = seq.prefix_seconds; _retime_release = seq.release_seconds; _retime_stroke_s = seq.stroke_seconds
+		_retime_finish = seq.finish; _retime_ready = seq.ready
+	var w: float = _retime_w
+	var end: float = w + _retime_stroke_s
+	var def: PostureDefinition = _motion_definition
+	var lead_custom: bool = SpeedRamp.custom(def, SpeedRamp.LEAD)
+	momentum_heads.clear(); momentum_progress.clear(); momentum_contact_speed = 0.0
+	for i in ceili(end / TICK - 0.001) + 1:
+		var t: float = minf(i * TICK, end)
+		if i * TICK < w:   # as mobile_pose_sequence.lead_progress
+			var u: float = SpeedRamp.lead(def, t / HeldHit.WINDUP_SECONDS) if lead_custom else smoothstep(0.0, HeldHit.WINDUP_SECONDS, t)
+			momentum_heads.append(_table_head(_retime_lead, u)); momentum_progress.append(-1.0)
+		else:
+			var p: float = clampf(float(PlaybackClock.state(def, t - w, _retime_finish, _retime_ready).progress), 0.0, 1.0)
+			momentum_heads.append(_table_head(_retime_stroke, p)); momentum_progress.append(p)
+	for i in range(floori(w / TICK), mini(ceili((w + _retime_release) / TICK), momentum_heads.size() - 1)):
+		momentum_contact_speed = maxf(momentum_contact_speed, momentum_heads[i].distance_to(momentum_heads[i + 1]) / TICK)
+	_rebuild_arc_mesh()
+	momentum_rebuild_count += 1; momentum_retime_count += 1
+	momentum_retime_usec = Time.get_ticks_usec() - t0
+	PerfMonitor.record("studio.momentum_retime", momentum_retime_usec)
+	return true
+
+## Catmull-Rom through the table (uniform in x): follows the curve between entries.
+static func _table_head(table: PackedVector3Array, x: float) -> Vector3:
+	var n := table.size()
+	var f: float = clampf(x, 0.0, 1.0) * float(n - 1)
+	var i: int = mini(int(f), n - 2)
+	var u: float = f - float(i)
+	var p0: Vector3 = table[maxi(i - 1, 0)]; var p1: Vector3 = table[i]; var p2: Vector3 = table[i + 1]; var p3: Vector3 = table[mini(i + 2, n - 1)]
+	return 0.5 * ((2.0 * p1) + (p2 - p0) * u + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u * u + (3.0 * p1 - p0 - 3.0 * p2 + p3) * u * u * u)
 
 func set_momentum(on: bool) -> void:
 	if momentum_on == on: return
 	momentum_on = on
-	_motion_snapshot = PackedByteArray()   # rebuild the arc either way
+	_motion_snapshot = PackedByteArray(); _geo_snapshot = PackedByteArray()   # rebuild the arc either way
 	_refresh_motion()
 
 func _momentum_supported() -> bool:
