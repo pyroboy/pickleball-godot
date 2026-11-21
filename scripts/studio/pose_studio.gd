@@ -1183,6 +1183,42 @@ func set_overlay(what: String, on: bool) -> void:
 func set_swing_curve(v: float) -> Dictionary:
 	return set_field("swing_path_blend", null, clampf(v, 0.0, 1.0))
 
+## Paddle path keys (swing arc): [[progress, Vector3 offset], ...] sorted by progress. Strokes only
+## (serves, stances and ball actions have none).
+func path_keys_supported() -> bool:
+	return _ok() and key != "" and not engine._base and not engine._serve and not engine.get("_action") and engine._has_motion()
+
+func path_keys() -> Array:
+	var out: Array = []
+	if not path_keys_supported(): return out
+	var c: Resource = engine._current
+	for i in mini(c.paddle_path_times.size(), c.paddle_path_offsets.size()): out.append([c.paddle_path_times[i], c.paddle_path_offsets[i]])
+	out.sort_custom(func(a, b): return a[0] < b[0])
+	return out
+
+## Replace the path keys (one undo step unless a drag's begin_edit is open). Progress is kept
+## off Wind-up / Contact / Finish (at least 0.02 away); offsets at most 0.8 m.
+func set_path_keys(keys: Array, refresh := true) -> Dictionary:
+	if not path_keys_supported(): return {"ok": false, "error": "path keys: strokes only"}
+	var times := PackedFloat32Array(); var offs := PackedVector3Array()
+	var sorted := keys.duplicate(); sorted.sort_custom(func(a, b): return a[0] < b[0])
+	for k in sorted:
+		var t: float = clampf(float(k[0]), 0.02, 0.98)
+		if absf(t - 0.5) < 0.02: t = 0.48 if t < 0.5 else 0.52
+		var o: Vector3 = k[1]
+		times.append(t); offs.append(o.limit_length(0.8))
+	var own := _txn == null
+	if own: begin_edit("path keys")
+	var prev_group: int = engine._group.selected
+	engine._group.select(5)
+	engine._changed("paddle_path_times", times, false)
+	engine._changed("paddle_path_offsets", offs, refresh)
+	engine._group.select(prev_group)
+	selected_field = "paddle_path_offsets"
+	if own: end_edit()
+	else: _after_change(true)
+	return {"ok": true, "keys": path_keys().size()}
+
 ## Not engine._ghost_count_changed: that writes user:// view settings.
 func set_ghost_count(n: int) -> void:
 	if preview == null: return
@@ -1363,7 +1399,7 @@ func _process(delta: float) -> void:
 	if _poll_frames % 15 == 0: _poll_external()
 	# During a viewport drag the pose list (badge columns) and top bar wait: a list column that
 	# appears re-widths the left column, resizes the preview and would cancel the drag.
-	var dragging: bool = _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE]
+	var dragging: bool = _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE, _view_input.Drag.PATH]
 	if dragging and not _drag_valid(): stop_drag(); dragging = false   # play / scrub / switch from anywhere
 	if _needs_sync:
 		_needs_sync = false
@@ -1804,7 +1840,7 @@ func set_gameplay_edit(on: bool) -> void:
 ## End the open viewport drag (gizmo / paddle tip) as one undo step: called before a stage or
 ## pose switch and play / scrub, so no drag keeps writing into another key.
 func stop_drag() -> void:
-	if _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE]:
+	if _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE, _view_input.Drag.PATH]:
 		_view_input.finish_drag()
 	if _autopose != null and _autopose.active: _autopose.release(false)   # a link-driven solve (no UI drag)
 	_aim = {}

@@ -69,7 +69,7 @@ const AP_RADIUS := 6.0
 const LOCK_OFF := Vector2(11, -11)   # lock icon centre from its handle (points)
 const LOCK_PICK := 7.0
 const PIN_COLOR := Color("71f5da")
-enum Drag { NONE, ORBIT, PAN, ZOOM, GIZMO, TIP, AUTOPOSE }
+enum Drag { NONE, ORBIT, PAN, ZOOM, GIZMO, TIP, AUTOPOSE, PATH }
 const LINK_DEVICE := 77           # device id of mouse events the TCP link pushes (pose_studio_link.gd _mods)
 
 var studio
@@ -108,6 +108,17 @@ const ARC_KEY_RADIUS := 7.0
 var _arc_dots := PackedVector2Array()
 var _arc_keys := PackedVector2Array()   # Wind-up, Contact, Finish points (preview points)
 var arc_stage := -1                     # key of the arc point being dragged (0 / 2), -1 = none
+## Paddle path keys on the arc (strokes): a filled square per key, a hollow one (bend point) in
+## the middle of each half that has no key. Drag one to bend / place the path there (a bend point
+## becomes a key); press a tick dot to add a key at that moment; a tap opens the key's options.
+const PATH_COLOR := Color("ff8fb1")
+var _path_pts := PackedVector2Array()   # screen points of preview.momentum_path_heads
+var path_t := -1.0                       # progress of the key being dragged (-1 = none)
+var _path_head0 := Vector3.INF
+var _path_off0 := Vector3.ZERO
+var _path_plane := Plane()
+var _path_grab := Vector2.ZERO
+var _path_moved := false
 
 func attach(owner_studio, pv) -> void:
 	studio = owner_studio; preview = pv
@@ -132,6 +143,7 @@ func _gui_input(event: InputEvent) -> void:
 		match drag:
 			Drag.GIZMO: preview.gizmo.input(event)
 			Drag.TIP: _tip_motion(event.position)
+			Drag.PATH: if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _path_motion(event.position)
 			Drag.AUTOPOSE:   # only motion with the left button held moves the handle (a stray hover event is not the drag)
 				if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _ap_motion(event)
 			Drag.ORBIT: if not _touch_block: orbit(event.relative)
@@ -202,6 +214,13 @@ func _button(e: InputEventMouseButton) -> void:
 			if e.pressed and drag in [Drag.GIZMO, Drag.TIP, Drag.AUTOPOSE]: cancel()   # right-click cancels a drag
 		MOUSE_BUTTON_LEFT:
 			if not e.pressed:
+				if drag == Drag.PATH:
+					drag = Drag.NONE
+					var t := path_t
+					path_t = -1.0
+					studio.end_edit(); studio.drag_changed()
+					if not _path_moved: studio.handle_tapped.emit("pathkey:%f" % t)
+					queue_redraw(); return
 				if drag == Drag.AUTOPOSE:
 					drag = Drag.NONE
 					var tapped: bool = int(studio.last_autopose.get("moves", 0)) == 0
@@ -229,6 +248,9 @@ func _button(e: InputEventMouseButton) -> void:
 				var lk := ap_lock_pick(e.position) if core == "" and not touch else ""
 				if lk != "":
 					studio.set_autopose_pin(lk); queue_redraw(); return
+				var pk := path_pick(e.position) if core == "" else -1.0
+				if pk >= 0.0:
+					_begin_path(pk, e); return
 				var ak := arc_pick(e.position) if core == "" else -1
 				if ak >= 0:
 					if ak != studio.stage: studio.set_stage(ak)
@@ -345,6 +367,10 @@ func finish_drag() -> void:
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
 		studio.drag_changed(); queue_redraw()
 		return
+	if drag == Drag.PATH:
+		drag = Drag.NONE; path_t = -1.0
+		studio.end_edit(); studio.drag_changed(); queue_redraw()
+		return
 	if drag != Drag.GIZMO and drag != Drag.TIP: return
 	drag = Drag.NONE
 	preview.cancel_gesture()
@@ -360,6 +386,9 @@ func cancel() -> void:
 		ap_handle = ""; ap_target = Vector3.INF; arc_stage = -1
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
 		studio.drag_changed(); queue_redraw()
+	elif drag == Drag.PATH:
+		drag = Drag.NONE; path_t = -1.0
+		studio.abort_edit(); studio.drag_changed(); queue_redraw()
 	elif drag == Drag.GIZMO or drag == Drag.TIP:
 		drag = Drag.NONE
 		preview.cancel_gesture()
@@ -526,7 +555,13 @@ func _update_arc() -> bool:
 		if dots[i].is_finite() != _arc_dots[i].is_finite() or (dots[i].is_finite() and dots[i].distance_squared_to(_arc_dots[i]) > 0.04): changed = true; break
 	for i in (keys.size() if not changed else 0):
 		if keys[i].is_finite() != _arc_keys[i].is_finite() or (keys[i].is_finite() and keys[i].distance_squared_to(_arc_keys[i]) > 0.04): changed = true; break
-	_arc_dots = dots; _arc_keys = keys
+	var pp := PackedVector2Array()
+	if _arc_shown() and studio.path_keys_supported():
+		for h in preview.momentum_path_heads: pp.append(preview._world_screen_position(h))
+	if pp.size() != _path_pts.size(): changed = true
+	for i in (pp.size() if not changed else 0):
+		if pp[i].is_finite() != _path_pts[i].is_finite() or (pp[i].is_finite() and pp[i].distance_squared_to(_path_pts[i]) > 0.04): changed = true; break
+	_arc_dots = dots; _arc_keys = keys; _path_pts = pp
 	return changed
 
 ## Wind-up (0) or Finish (2) arc point under `point` (-1 = none). The current key's point is
@@ -549,6 +584,16 @@ func _draw_arc(rect: Rect2) -> void:
 		if not p.is_finite() or not rect.has_point(p): continue
 		draw_circle(p, 3.2 * k, DOT_OUTLINE, true, -1.0, true)
 		draw_circle(p, 2.0 * k, Color(1, 1, 1, 0.92), true, -1.0, true)
+	for i in _path_pts.size():
+		var p: Vector2 = _path_pts[i]
+		if not p.is_finite() or not rect.has_point(p): continue
+		var bend: bool = preview.momentum_path_virtual[i] == 1
+		var hot: bool = drag == Drag.PATH and absf(preview.momentum_path_t[i] - path_t) < 0.001
+		var r := (5.5 if bend else 6.5) * k + (1.5 if hot else 0.0)
+		var sq := Rect2(p - Vector2(r, r), Vector2(r, r) * 2.0)
+		draw_rect(sq.grow(2.0), DOT_OUTLINE, true)
+		if bend: draw_rect(sq, DOT_HOVER if hot else PATH_COLOR, false, 2.0)
+		else: draw_rect(sq, DOT_HOVER if hot else PATH_COLOR, true)
 	var cols: Array = preview.STAGE_COLORS
 	for st in 3:
 		var p: Vector2 = _arc_keys[st]
@@ -568,14 +613,72 @@ func _draw_arc(rect: Rect2) -> void:
 		var tw := font.get_string_size("WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
 		draw_string(font, p + Vector2(-tw.x * 0.5, fs * 0.36), "WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, cols[st])
 
+## Path key / bend point (or a tick dot: a new key there) under `point`: its progress, -1 = none.
+func path_pick(point: Vector2) -> float:
+	_update_arc()
+	if not studio.path_keys_supported(): return -1.0
+	var best := -1.0
+	var best_d := _r(ARC_KEY_RADIUS + 2.0)
+	for i in _path_pts.size():
+		if not _path_pts[i].is_finite(): continue
+		var d := _path_pts[i].distance_to(point)
+		if d < best_d: best_d = d; best = preview.momentum_path_t[i]
+	if best >= 0.0: return best
+	best_d = _r(4.0)
+	for i in _arc_dots.size():
+		var pr: float = preview.momentum_progress[i] if i < preview.momentum_progress.size() else -1.0
+		if pr < 0.03 or pr > 0.97 or absf(pr - 0.5) < 0.04 or not _arc_dots[i].is_finite(): continue
+		var d := _arc_dots[i].distance_to(point)
+		if d < best_d: best_d = d; best = pr
+	return best
+
+func _begin_path(t: float, e: InputEventMouseButton) -> void:
+	var keys: Array = studio.path_keys()
+	var idx := -1
+	for i in keys.size(): if absf(float(keys[i][0]) - t) < 0.001: idx = i
+	var head := Vector3.INF
+	for i in preview.momentum_path_t.size(): if absf(preview.momentum_path_t[i] - t) < 0.001: head = preview.momentum_path_heads[i]
+	if not head.is_finite():   # a tick dot: its head on the arc
+		for i in preview.momentum_progress.size(): if absf(preview.momentum_progress[i] - t) < 0.0001: head = preview.momentum_heads[i]
+	if not head.is_finite(): return
+	preview.cancel_gesture()
+	studio.begin_edit("path key")
+	if idx < 0:
+		keys.append([t, Vector3.ZERO])
+		studio.set_path_keys(keys)
+		t = float(studio.path_keys().filter(func(k): return absf(float(k[0]) - t) < 0.03)[0][0]) if studio.path_keys().size() > 0 else t
+		_path_off0 = Vector3.ZERO
+	else: _path_off0 = keys[idx][1]
+	path_t = t
+	_path_head0 = head
+	_path_plane = Plane(-preview.camera.global_transform.basis.z, head)
+	_path_grab = e.position - preview._world_screen_position(head)
+	if not _path_grab.is_finite(): _path_grab = Vector2.ZERO
+	_path_moved = false
+	drag = Drag.PATH
+	studio.drag_changed(); queue_redraw()
+
+func _path_motion(point: Vector2) -> void:
+	var hit := _plane_hit(point - _path_grab, _path_plane)
+	if not hit.is_finite(): return
+	var d: Vector3 = hit - _path_head0
+	if d.length() > 0.002: _path_moved = true
+	var p = preview.player
+	var off: Vector3 = _path_off0 + Vector3(d.dot(p._get_forehand_axis()), d.y, d.dot(p._get_forward_axis()))
+	var keys: Array = studio.path_keys()
+	for k in keys: if absf(float(k[0]) - path_t) < 0.001: k[1] = off
+	studio.set_path_keys(keys)
+	_update_arc(); queue_redraw()
+
 ## Data for ui_dump / the link: the momentum arc in preview points.
 func arc_state() -> Dictionary:
 	_update_arc()
 	var pt = func(p: Vector2): return [p.x, p.y] if p.is_finite() else null
-	return {"shown": _arc_shown(), "ticks": _arc_dots.size(), "keys": Array(_arc_keys).map(pt),
+	return {"shown": _arc_shown(), "ticks": _arc_dots.size(), "dots": Array(_arc_dots).map(pt), "keys": Array(_arc_keys).map(pt),
 		"key_times": Array(preview.momentum_key_times), "contact_speed": preview.momentum_contact_speed,
 		"heads": Array(preview.momentum_heads).map(func(h: Vector3): return [snappedf(h.x, 0.001), snappedf(h.y, 0.001), snappedf(h.z, 0.001)]),
-		"dragging": arc_stage}
+		"dragging": arc_stage, "path": Array(_path_pts).map(pt), "path_t": Array(preview.momentum_path_t),
+		"path_bend": Array(preview.momentum_path_virtual), "progress": Array(preview.momentum_progress)}
 
 func _update_ap() -> bool:
 	var n := AP_IDS.size()

@@ -55,6 +55,7 @@ const STROKE_FIELDS := [
 	"ft_paddle_offset", "ft_paddle_rotation_deg", "ft_hip_uncoil_deg", "ft_front_foot_load",
 	"ft_duration_strike", "ft_duration_sweep", "ft_duration_settle", "ft_duration_hold", "ft_ease_curve",
 	"compact_finish_lateral_scale", "compact_motion_scale", "compact_finish_elbow_offset", "swing_path_blend", "contact_curve",
+	"paddle_path_times", "paddle_path_offsets",
 	"windup_body", "follow_through_body", "charge_duration",
 ]
 const BASE_FIELDS := [
@@ -354,6 +355,8 @@ static func _encode_fields(def: Resource, include_bake: bool = true) -> Dictiona
 static func _encode_value(value):
 	if value is Vector3:
 		return [value.x, value.y, value.z]
+	if value is PackedFloat32Array:
+		return Array(value)
 	if value is PackedVector3Array:
 		var encoded: Array = []
 		for point in value:
@@ -375,7 +378,7 @@ static func _valid_fields(fields, is_base: bool, nested: bool = false) -> bool:
 		for additive in ["right_foot_pitch_deg", "left_foot_pitch_deg"]:
 			if not fields.has(additive): required.erase(additive)
 		if not is_base:
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets"]:
 				if not fields.has(additive): required.erase(additive)
 		if fields.size() != required.size() or not fields.has_all(required): return false
 	var template: Resource = BasePose.new() if is_base else Posture.new()
@@ -391,6 +394,10 @@ static func _valid_fields(fields, is_base: bool, nested: bool = false) -> bool:
 		elif template.get(field) is Vector3:
 			if not _valid_vector(field, value):
 				return false
+		elif template.get(field) is PackedFloat32Array:   # path key times: progress inside (0, 1)
+			if not value is Array or value.size() > MAX_PATH_POINTS: return false
+			for k in value:
+				if not (k is int or k is float) or not is_finite(float(k)) or k <= 0.0 or k >= 1.0: return false
 		elif template.get(field) is PackedVector3Array:
 			if not value is Array or value.size() > MAX_PATH_POINTS:
 				return false
@@ -451,6 +458,8 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 		def.contact_curve = 0.5
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("paddle_in_hand_rotation_deg"):
 		def.paddle_in_hand_rotation_deg = 0.0
+	if def.get_script() == Posture and not fields.is_empty() and not fields.has("paddle_path_times"):
+		def.paddle_path_times = PackedFloat32Array(); def.paddle_path_offsets = PackedVector3Array()
 	for field in fields:
 		var value = fields[field]
 		if field in ["windup_body", "follow_through_body"]:
@@ -467,7 +476,8 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 
 static func _decode_value(field: String, value):
 	if field == "elbow_preset_bake": return value.duplicate(true)
-	if field in ["right_elbow_path", "left_elbow_path"]:
+	if field == "paddle_path_times": return PackedFloat32Array(value)
+	if field in ["right_elbow_path", "left_elbow_path", "paddle_path_offsets"]:
 		var path := PackedVector3Array()
 		for point in value:
 			path.append(Vector3(point[0], point[1], point[2]))
@@ -505,7 +515,7 @@ static func _prepare_approved_pose_imports(document: Dictionary, include_absent:
 			var payload: Dictionary = JSON.parse_string(approved.JSON_TEXT)
 			var fields: Dictionary = approved.applied_fields() if approved.has_method("applied_fields") else payload.fields.duplicate(true)
 			var defaults := _encode_fields(_export_packaged_default(int(id), false))
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets"]:
 				if not fields.has(additive): fields[additive] = previous.get(additive, defaults[additive])
 			for stage in ["windup_body", "follow_through_body"]:
 				# Sparse legacy keys are intentional: absence inherits Contact. Only

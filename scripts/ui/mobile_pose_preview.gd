@@ -74,6 +74,10 @@ var momentum_keys := PackedVector3Array()        # Wind-up, Contact, Finish head
 var momentum_key_times := PackedFloat32Array()   # their seconds from Ready
 var momentum_contact_speed := 0.0                # m/s: peak paddle-head speed of the strike
 var momentum_rebuild_count := 0
+var momentum_progress := PackedFloat32Array()   # stroke progress of each tick (-1 before Wind-up)
+var momentum_path_t := PackedFloat32Array()      # path handles: the keys' progress, then bend points
+var momentum_path_heads := PackedVector3Array()  # their heads on the arc
+var momentum_path_virtual := PackedByteArray()   # 1 = a bend point (no key there yet)
 var viewport: SubViewport
 var player
 var camera: Camera3D
@@ -439,6 +443,7 @@ func _solved_head(p: PostureDefinition) -> Vector3:
 
 func _rebuild_momentum() -> void:
 	momentum_heads.clear(); momentum_keys.clear(); momentum_key_times.clear(); momentum_contact_speed = 0.0
+	momentum_progress.clear(); momentum_path_t.clear(); momentum_path_heads.clear(); momentum_path_virtual.clear()
 	if not _momentum_supported(): return
 	var t0 := Time.get_ticks_usec()
 	var seq = Sequence.new()
@@ -446,7 +451,19 @@ func _rebuild_momentum() -> void:
 	var w: float = seq.prefix_seconds
 	var times := [w, w + seq.release_seconds, w + seq.stroke_seconds]
 	for i in ceili(times[2] / TICK - 0.001) + 1:
-		momentum_heads.append(_solved_head(seq.sample(minf(i * TICK, times[2])).pose))
+		var smp: Dictionary = seq.sample(minf(i * TICK, times[2]))
+		momentum_heads.append(_solved_head(smp.pose))
+		momentum_progress.append(float(smp.progress) if i * TICK >= w else -1.0)
+	# Path handles (strokes): every key, plus a bend point in the middle of each half without one.
+	if seq.style < 0:
+		var ks: Array = Array(_motion_definition.paddle_path_times)
+		var pts: Array = []
+		for k in ks: pts.append([float(k), 0])
+		for mid in [0.25, 0.75]:
+			if not ks.any(func(k): return absf(float(k) - mid) < 0.08): pts.append([mid, 1])
+		for p in pts:
+			momentum_path_t.append(p[0]); momentum_path_virtual.append(p[1])
+			momentum_path_heads.append(_solved_head(seq._stroke_pose(p[0])))
 	for t in times:
 		momentum_key_times.append(t); momentum_keys.append(_solved_head(seq.sample(t).pose))
 	# Peak paddle-head speed of the strike (Wind-up -> Contact), one tick at a time. (The strike

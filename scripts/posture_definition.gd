@@ -170,6 +170,12 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export var compact_finish_elbow_offset: Vector3 = Vector3.ZERO
 @export_enum("ExpoOut", "QuadOut", "SineInOut") var ft_ease_curve: int = 0
 @export_range(0.0, 1.0) var swing_path_blend: float = 1.0
+## Paddle path keys (Pose Studio swing arc): points the paddle passes through between the keys.
+## Key i is at stroke progress paddle_path_times[i] (0 = Wind-up, 0.5 = Contact, 1 = Finish;
+## never on those three) and pushes the paddle by paddle_path_offsets[i] (forehand, up,
+## forward metres) off the normal curve; Wind-up, Contact and Finish themselves never move.
+@export var paddle_path_times: PackedFloat32Array = PackedFloat32Array()
+@export var paddle_path_offsets: PackedVector3Array = PackedVector3Array()
 ## Shape only the bend around Contact. The middle value preserves existing motion.
 @export_range(0.0, 1.0) var contact_curve: float = 0.5
 @export var windup_body: Resource
@@ -345,6 +351,8 @@ func lerp_with(other, w: float):
 	o.compact_finish_elbow_offset = compact_finish_elbow_offset.lerp(other.compact_finish_elbow_offset, t)
 	o.ft_ease_curve = ft_ease_curve if t < 0.5 else other.ft_ease_curve
 	o.swing_path_blend = lerpf(swing_path_blend, other.swing_path_blend, t)
+	o.paddle_path_times = (paddle_path_times if t < 0.5 else other.paddle_path_times).duplicate()
+	o.paddle_path_offsets = (paddle_path_offsets if t < 0.5 else other.paddle_path_offsets).duplicate()
 	o.contact_curve = lerpf(contact_curve, other.contact_curve, t)
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body

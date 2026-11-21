@@ -10,6 +10,7 @@ extends Control
 
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
+const StudioTheme = preload("res://scripts/studio/studio_theme.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
 const Queue = preload("res://scripts/studio/phone_sync_queue.gd")
 const ScrubTrack = preload("res://scripts/studio/studio_timeline.gd").ScrubTrack
@@ -77,6 +78,10 @@ var _region_btns := {}       # region -> [Button x3]
 var _swing: VBoxContainer     # swing sheet (replaces the lower third): curve, speed, timing
 var _curve_btns: Array[Button] = []
 var _swing_info: Label
+var _path_info: Label
+var _path_del: Button
+var _path_clear: Button
+var _sel_path := -1.0   # progress of the path key tapped on the arc (-1 = none)
 var _handle := ""
 var _drawer: Control
 var _drawer_list: VBoxContainer
@@ -359,7 +364,10 @@ func _build_lower(lower: VBoxContainer) -> void:
 	_scrub.value_changed.connect(func(t): if not _sync_scrub: studio._timeline.seek(t))
 	_scrub.mark_moved.connect(studio._timeline._on_mark_moved)
 	row.add_child(_scrub)
-	_play = _btn("▶", func(): studio._timeline.toggle_play(), 80, 68); row.add_child(_play)
+	# Icons, not "▶" text: the iPhone's font has no glyph for it (the button showed empty).
+	_play = _btn("", func(): studio._timeline.toggle_play(), 80, 68); row.add_child(_play)
+	_play.icon = StudioTheme.icon("play"); _play.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_play.expand_icon = true; _play.add_theme_constant_override("icon_max_width", 40)
 	_stars_row = Button.new(); _stars_row.flat = true; _stars_row.focus_mode = Control.FOCUS_NONE
 	_stars_row.custom_minimum_size.y = 60; _stars_row.add_theme_stylebox_override("normal", _row_box())
 	_stars_row.pressed.connect(_open_stars)
@@ -478,6 +486,9 @@ func _build_sheet(sheet: VBoxContainer) -> void:
 		v.add_child(r)
 
 func _open_sheet(id: String) -> void:
+	if id.begins_with("pathkey:"):
+		_sel_path = float(id.get_slice(":", 1)); id = "swing"
+	elif id == "swing": _sel_path = -1.0
 	if id == "swing":
 		_handle = ""
 		_lower.visible = false; _sheet.visible = false; _swing.visible = true
@@ -503,7 +514,7 @@ func _build_swing(sheet: VBoxContainer) -> void:
 	var head := HBoxContainer.new()
 	var t := _label("Swing path", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
-	var how := _label("One dot per game tick: wide gaps = fast paddle. Drag W or F on the arc to move that key's paddle.", SMALL, Ui.MUTED)
+	var how := _label("Dots = game ticks (wide gaps = fast). Drag W / F to move that key's paddle, a pink square to bend the path; press a dot to add a key there.", SMALL, Ui.MUTED)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
 	var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
 	var cl := _label("Curve", SMALL); cl.custom_minimum_size.x = 100; r.add_child(cl)
@@ -517,12 +528,25 @@ func _build_swing(sheet: VBoxContainer) -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.add_theme_color_override("font_color", STAGE_COLORS[st])
 		keys.add_child(b)
 	v.add_child(keys)
+	var pr := HBoxContainer.new(); pr.add_theme_constant_override("separation", 8)
+	_path_info = _label("", SMALL); _path_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_path_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; pr.add_child(_path_info)
+	_path_del = _btn("Delete key", _delete_path_key, 190, 64); _path_del.add_theme_font_size_override("font_size", SMALL); pr.add_child(_path_del)
+	_path_clear = _btn("Clear", func(): studio.set_path_keys([]); _sel_path = -1.0; _refresh_swing(), 120, 64)
+	_path_clear.add_theme_font_size_override("font_size", SMALL); pr.add_child(_path_clear)
+	v.add_child(pr)
 	_swing_info = _label("", SMALL, Ui.MUTED); _swing_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	v.add_child(_swing_info)
 
 func _set_curve(value: float) -> void:
 	var r: Dictionary = studio.set_swing_curve(value)
 	if not r.get("ok", false): _show_toast(String(r.get("error", "Curve: cannot change it here")))
+	_refresh_swing()
+
+func _delete_path_key() -> void:
+	var keys: Array = studio.path_keys().filter(func(k): return absf(float(k[0]) - _sel_path) > 0.001)
+	studio.set_path_keys(keys)
+	_sel_path = -1.0
 	_refresh_swing()
 
 func _edit_key(st: int) -> void:
@@ -534,6 +558,15 @@ func _refresh_swing() -> void:
 	var cur: Resource = studio.engine._current
 	var blend = cur.get("swing_path_blend") if cur else null
 	for i in CURVES.size(): _tint(_curve_btns[i], blend != null and absf(float(blend) - float(CURVES[i][1])) < 0.17)
+	var keys: Array = studio.path_keys()
+	var sel: bool = keys.any(func(k): return absf(float(k[0]) - _sel_path) < 0.001)
+	if not studio.path_keys_supported(): _path_info.text = "Path keys: strokes only"
+	elif sel:
+		var o: Vector3 = keys.filter(func(k): return absf(float(k[0]) - _sel_path) < 0.001)[0][1]
+		_path_info.text = "Key at %d%% of the swing · %.0f cm off the curve" % [roundi(_sel_path * 100.0), o.length() * 100.0]
+	else: _path_info.text = "Path keys: %d" % keys.size() + ("" if keys.is_empty() else " · tap one to delete it")
+	_path_del.visible = sel
+	_path_clear.visible = not keys.is_empty() and not sel
 	var pv = studio.preview
 	var kt: PackedFloat32Array = pv.momentum_key_times
 	if kt.size() < 3:
@@ -744,7 +777,8 @@ func _process(delta: float) -> void:
 		_scrub.marks_draggable = tl.scrubber.marks_draggable
 		_scrub.queue_redraw()
 		_sync_scrub = false
-		_play.text = "❚❚" if bool(st.get("playing", false)) else "▶"
+		var ic: Texture2D = StudioTheme.icon("pause" if bool(st.get("playing", false)) else "play")
+		if _play.icon != ic: _play.icon = ic
 	if _undo: _undo.disabled = (studio._undo as Array).is_empty()
 	if _redo: _redo.disabled = (studio._redo as Array).is_empty()
 	if _toast and _toast.visible:
