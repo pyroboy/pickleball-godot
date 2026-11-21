@@ -91,6 +91,7 @@ var _key_time_row: HBoxContainer   # Swing sheet: move the selected path key ear
 var _key_time: HSlider
 var _key_time_sync := false
 var _preset_label: Label
+var _sheet_copy: Button        # ring sheet: copy the feet / knee at this key to the other keys
 var _sheet_unlock: Button      # ring sheet: unlock the Contact paddle (Gameplay edit)
 var _speed_unlock: Button      # Speed sheet: unlock the Strike part (gameplay timing)
 var _speed_how: Label           # one-line hint above the graph
@@ -531,6 +532,10 @@ func _build_sheet(sheet: VBoxContainer) -> void:
 	_sheet_unlock = _btn("", func(): studio.set_gameplay_edit(not studio.gameplay_edit); _refresh_sheet(); _refresh_chips(), 0, 64)
 	_sheet_unlock.name = "ContactUnlock"; _sheet_unlock.visible = false
 	v.add_child(_sheet_unlock)
+	# Feet / knees: the same pose at Wind-up, Contact and Finish in one tap.
+	_sheet_copy = _btn("", func(): studio.copy_to_all_keys(_handle); _refresh_sheet(), 0, 64)
+	_sheet_copy.name = "CopyAllKeys"; _sheet_copy.visible = false
+	v.add_child(_sheet_copy)
 	v.add_child(_label("Stiffness · stiff = moves less (arms: body follows more)", SMALL, Ui.MUTED))
 	for reg in REGIONS:
 		var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
@@ -784,6 +789,8 @@ func _refresh_sheet() -> void:
 	_tint(_sheet_pin, pinned and why == "", Ui.INK)
 	var contact_paddle: bool = studio._contact_paddle_handle(_handle)
 	_sheet_unlock.visible = contact_paddle
+	var copy_text: String = studio.copy_part_label(_handle)
+	_sheet_copy.visible = copy_text != ""; _sheet_copy.text = copy_text
 	_sheet_unlock.text = "Contact paddle unlocked · tap to lock" if studio.gameplay_edit else "Unlock Contact paddle"
 	_tint(_sheet_unlock, studio.gameplay_edit, Ui.GOLD)
 	if why.contains("Gameplay edit"): why = "the paddle at Contact is where the ball is hit. Unlocking it changes how shots play."

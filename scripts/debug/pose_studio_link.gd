@@ -262,6 +262,9 @@ func _dispatch(req: Dictionary) -> Dictionary:
 			"balls": ov.balls if is_instance_valid(ov) else _studio.last_test_balls, "report": ov.report if is_instance_valid(ov) else {},
 			"live_crouch": live.crouch_amount if live else null, "live_windup_crouch": (live.windup_body.values.get("crouch_amount") if live and live.windup_body else null),
 			"time_scale": Engine.time_scale}
+	if cmd == "copy_keys":   # test hook: the ring sheet's "Feet / Knee → all keys" for `handle`
+		if _studio == null: return _err("studio not running")
+		return _studio.copy_to_all_keys(str(req.get("handle", "")))
 	if cmd == "hold":   # test hook: the hold Play replays (seconds), or begin / release like the Hold button
 		if _studio == null: return _err("studio not running")
 		var what := str(req.get("action", "set"))

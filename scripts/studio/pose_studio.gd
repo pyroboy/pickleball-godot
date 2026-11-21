@@ -1649,6 +1649,56 @@ func set_keys_play(mode: String) -> Dictionary:
 	r["state"] = keys_play_state()
 	return r
 
+## Parts whose pose at this key can be copied to the other two keys (the phone ring sheet's
+## button). Feet: both feet and the stance they stand in, so they stay planted through the swing.
+const FEET_FIELDS := ["stance_width", "front_foot_forward", "back_foot_back", "lead_foot",
+	"right_foot_offset", "left_foot_offset", "right_foot_yaw_deg", "left_foot_yaw_deg", "right_foot_pitch_deg", "left_foot_pitch_deg"]
+
+func copy_part_fields(handle: String) -> Array:
+	if handle.ends_with("_foot") or handle.ends_with("_toe"): return FEET_FIELDS
+	if handle.ends_with("_knee"): return [handle + "_pole"]
+	return []
+
+## The button's text for this handle, or "" when it has none here (strokes at a key only).
+func copy_part_label(handle: String) -> String:
+	if not path_keys_supported() or not at_key() or copy_part_fields(handle).is_empty(): return ""
+	return "Feet → all keys" if copy_part_fields(handle) == FEET_FIELDS else "Knee → all keys"
+
+## Copy that part as posed at this key to the other two keys. One undo step.
+func copy_to_all_keys(handle: String) -> Dictionary:
+	if copy_part_label(handle) == "": return {"ok": false, "error": "nothing to copy for this part here"}
+	if _txn != null: end_edit()
+	stop_drag()
+	var fields: Array = copy_part_fields(handle)
+	var st: int = stage
+	var src: PostureDefinition = Path.endpoint(engine._current, st)
+	var copy: PostureDefinition = engine._current.duplicate(true)
+	var changed := 0
+	for other in 3:
+		if other == st: continue
+		var body: Resource = null
+		if other != 1:
+			body = copy.windup_body if other == 0 else copy.follow_through_body
+			if body == null: continue
+			body.values = body.values.duplicate(true)
+		for f in fields:
+			var v = src.get(f)
+			var old = copy.get(f) if other == 1 else body.values.get(f)
+			if old == v: continue
+			if other == 1: copy.set(f, v)
+			else: body.values[f] = v
+			changed += 1
+	if changed == 0:
+		notify("Already the same at every key."); return {"ok": true, "changed": 0}
+	begin_edit("copy to all keys")
+	engine._copies[_copy_key(key)] = copy
+	_reselect(st)
+	_update_dirty_flag()
+	end_edit()
+	var what: String = "Feet" if fields == FEET_FIELDS else "Knee"
+	notify("%s copied from %s to the other keys · undo brings them back" % [what, String(stage_names()[st])])
+	return {"ok": true, "changed": changed}
+
 ## The key (0 Wind-up, 1 Contact, 2 Finish) nearest in time to where the timeline is.
 func nearest_key_stage() -> int:
 	if not _ok() or not engine._has_motion(): return 1
