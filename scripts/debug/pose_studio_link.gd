@@ -521,7 +521,9 @@ func _c_view(r: Dictionary) -> Dictionary:
 	else:
 		if r.has("yaw"): pv.yaw = float(r["yaw"])
 		if r.has("pitch"): pv.pitch = clampf(float(r["pitch"]), -1.5, 1.5)
-		if r.has("distance"): pv.distance = clampf(float(r["distance"]), 1.4, 7.0); pv._manual_zoom = true
+		if r.has("distance"):
+			pv.distance = clampf(float(r["distance"]), 1.4, 7.0); pv._manual_zoom = true
+			if _studio != null and _studio._view_input != null: _studio._view_input.auto_fit = false
 		pv.update_camera()
 	await _frames(1)
 	return {"yaw": pv.yaw, "pitch": pv.pitch, "distance": pv.distance if pv._manual_zoom else maxf(pv.distance, pv._fitted_distance)}

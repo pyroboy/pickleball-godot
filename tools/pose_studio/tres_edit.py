@@ -14,7 +14,7 @@ import os
 import re
 
 STAGES = ("windup", "contact", "finish")
-KEY_RE = re.compile(r"^[sb]\d\d$")
+KEY_RE = re.compile(r"^[sba]\d\d$")
 FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _KEYFRAME_PROP = {"windup": "windup_body", "finish": "follow_through_body"}
 _NUM_RE = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|(?<![A-Za-z])(?:inf|nan)(?![A-Za-z])")
@@ -25,11 +25,11 @@ class TresEditError(ValueError):
 
 
 def pose_folder(key):
-    return "data/base_poses" if key[0] == "b" else "data/postures"
+    return {"b": "data/base_poses", "a": "data/ball_actions"}.get(key[0], "data/postures")
 
 
 def pose_file(key, root="."):
-    """Repo-relative path of the pose file for key (s00..s20, b00..b21)."""
+    """Repo-relative path of the pose file for key (s00..s20, b00..b21, a00..a01 ball actions)."""
     if not isinstance(key, str) or not KEY_RE.match(key):
         raise TresEditError(f"bad pose key: {key!r}")
     folder = pose_folder(key)

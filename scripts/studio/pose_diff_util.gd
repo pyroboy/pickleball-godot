@@ -14,6 +14,11 @@ const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
 const GripStore = preload("res://scripts/mobile_paddle_grip_store.gd")
 ## Serves (v00..v06) are code-built and tuned by this file, not a .tres.
 const SERVE_TUNING := "data/serve_tuning.json"
+## Ball pickup / throw (a00, a01): .tres files in data/ball_actions, edited like strokes.
+const BallActions = preload("res://scripts/ball_actions.gd")
+
+static func is_action_key(key: String) -> bool:
+	return key.begins_with("a")
 
 static func is_serve_key(key: String) -> bool:
 	return key.begins_with("v")
@@ -21,11 +26,13 @@ static func is_serve_key(key: String) -> bool:
 static func key_of(def: Resource) -> String:
 	if def is BasePoseDefinition: return "b%02d" % def.base_pose_id
 	if ServeStore.is_serve(def): return "v%02d" % ServeStore.style_id(def)
+	if BallActions.is_action(def): return "a%02d" % def.action_id
 	return "s%02d" % def.posture_id
 
 ## Mobile editor working-copy key ("stroke:13" / "base:4") for a pose key.
 static func copy_key(key: String) -> String:
 	if is_serve_key(key): return "serve:" + str(int(key.substr(1)))
+	if is_action_key(key): return "action:" + str(int(key.substr(1)))
 	return ("base:" if key.begins_with("b") else "stroke:") + str(int(key.substr(1)))
 
 ## The library resource the game holds for s13 / b04, or null.
@@ -35,6 +42,7 @@ static func live_def(key: String) -> Resource:
 	if key.begins_with("s"): return PostureLibrary.instance().get_def(id)
 	if key.begins_with("b"): return BasePoseLibrary.instance().get_def(id)
 	if is_serve_key(key): return ServeStore.get_def(id)
+	if is_action_key(key): return BallActions.get_def(id)
 	return null
 
 static func file_of(key: String) -> String:
@@ -55,7 +63,7 @@ static func load_disk(key: String) -> Resource:
 	var live := live_def(key)
 	if live == null or live.resource_path == "": return null
 	var r: Resource = ResourceLoader.load(live.resource_path, "", ResourceLoader.CACHE_MODE_IGNORE)
-	if r != null and key.begins_with("s"): PaddleRotation.normalize_pose(r)  # same as _select_pose's copy
+	if r != null and (key.begins_with("s") or is_action_key(key)): PaddleRotation.normalize_pose(r)  # same as _select_pose's copy
 	return r
 
 static func storage_props(r: Resource) -> Array:
@@ -124,4 +132,6 @@ static func reload_live(key: String) -> bool:
 	for n in storage_props(fresh):
 		var v = fresh.get(n)
 		live.set(n, v.duplicate(true) if (v is Dictionary or v is Array) else v)
+	if is_action_key(key):   # the game reads the key deltas from a cache
+		BallActions._deltas.erase(int(key.substr(1))); BallActions.revision += 1
 	return true

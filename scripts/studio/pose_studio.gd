@@ -86,7 +86,7 @@ const SHORTCUTS := [
 	["Tab / Shift+Tab", "next / previous key (wind-up, contact, finish)", "stage_cycle"],
 	["Alt+1 / Alt+2 / Alt+3", "wind-up / contact / finish key", "stage"],
 	["1 / 3 / 7 (or numpad)", "front / side / back view; Ctrl = opposite side", "view"],
-	["F", "frame the pose: orbit centre back to the hips, refit zoom", "frame"],
+	["F", "frame the pose: orbit centre back to the hips, refit zoom; the view then follows pose switches until you zoom or pan", "frame"],
 	["W / E", "gizmo move / rotate (toolbar shows the mode)", "gizmo"],
 	["L", "loop playback", "loop"],
 	["Up/Down (focused field)", "nudge one step; Shift = 0.1x", "nudge"],
@@ -359,8 +359,8 @@ func _build_top_bar(main: Control) -> void:
 	title.add_theme_color_override("font_color", Ui.MUTED)
 	bar.add_child(title)
 	_workspace = OptionButton.new(); _workspace.name = "Workspace"; _workspace.focus_mode = Control.FOCUS_NONE
-	_workspace.add_item("Strokes"); _workspace.add_item("Body stances"); _workspace.add_item("Serves")
-	_workspace.tooltip_text = "Pose type: strokes, body stances or serves (serves save to data/serve_tuning.json)"
+	_workspace.add_item("Strokes"); _workspace.add_item("Body stances"); _workspace.add_item("Serves"); _workspace.add_item("Ball actions")
+	_workspace.tooltip_text = "Pose type: strokes, body stances, serves (save to data/serve_tuning.json) or ball actions (pickup and throw between points, data/ball_actions)"
 	_workspace.item_selected.connect(_on_workspace)
 	bar.add_child(_workspace)
 	_pose_title = Theme_.header_label("PoseTitle", "")
@@ -430,12 +430,12 @@ func _build_centre(split2: Control) -> void:
 	_tool(views, "ViewFront", "Front", "", "Front view (1)", view.bind("front"))
 	_tool(views, "ViewSide", "Side", "", "Side view (3)", view.bind("side"))
 	_tool(views, "ViewBack", "Back", "", "Back view (7)", view.bind("back"))
-	_tool(views, "FrameButton", "", "frame", "Frame the pose: clear pan and zoom (F)", frame_pose)
+	_tool(views, "FrameButton", "", "frame", "Frame the pose: clear pan and zoom; the view follows pose switches again until you zoom or pan (F)", frame_pose)
 	var giz := Theme_.segment(tools, "GizmoSeg")
 	_move_btn = _tool(giz, "GizmoMove", "", "move", "Gizmo move (W)", set_gizmo_mode.bind(0).unbind(1), true)
 	_rotate_btn = _tool(giz, "GizmoRotate", "", "rotate", "Gizmo rotate (E)", set_gizmo_mode.bind(1).unbind(1), true)
 	var aps := Theme_.segment(tools, "AutoPoseSeg")
-	_ap_toggle = _tool(aps, "AutoPoseToggle", "AutoPose", "", "AutoPose (P): drag a hand, elbow, knee, foot, hips, chest, head or the paddle tip and the whole body follows (animation only; Shift = depth, Esc / right-click cancels). Its options show in the bar below.", func(on): set_autopose_mode(on), true)
+	_ap_toggle = _tool(aps, "AutoPoseToggle", "AutoPose", "", "AutoPose (P): drag a hand, elbow, knee, foot, hips, chest, head or the paddle tip and the whole body follows; shoulder and hip rings turn the upper body / hips, paddle edge diamonds roll the face (animation only; Shift = depth, Esc / right-click cancels). Its options show in the bar below.", func(on): set_autopose_mode(on), true)
 	var over := Theme_.segment(tools, "OverlaySeg")
 	_ghost_toggle = _tool(over, "GhostsToggle", "", "ghosts", "Show in-between ghosts", func(on): set_overlay("ghosts", on), true)
 	_ghost_count = SpinBox.new(); _ghost_count.name = "GhostCount"; _ghost_count.min_value = 0
@@ -688,6 +688,7 @@ func _key_from_copy(ck: String) -> String:
 	if ck.begins_with("stroke:"): return "s%02d" % int(ck.substr(7))
 	if ck.begins_with("base:"): return "b%02d" % int(ck.substr(5))
 	if ck.begins_with("serve:"): return "v%02d" % int(ck.substr(6))
+	if ck.begins_with("action:"): return "a%02d" % int(ck.substr(7))
 	return ""
 
 func _index_of(k: String) -> int:
@@ -766,8 +767,8 @@ func select_pose(k: String) -> bool:
 	if _compare != null: compare_end()
 	var live := PoseDiff.live_def(k)
 	if live == null: _set_status("Unknown pose " + k); return false
-	var ws := 1 if k.begins_with("b") else 2 if PoseDiff.is_serve_key(k) else 0
-	if engine._serve != (ws == 2) or engine._base != (ws == 1): engine._select_workspace(ws)
+	var ws := _workspace_of(k)
+	if engine._serve != (ws == 2) or engine._base != (ws == 1) or engine._action != (ws == 3): engine._select_workspace(ws)
 	engine._group.select(6)
 	key = k
 	var idx := _index_of(k)
@@ -804,8 +805,10 @@ func _reset_view_state() -> void:
 	select_joint("hips")
 	if autopose_on: _apply_autopose_view()
 	if _view_input:
-		preview.camera_target = _view_input.pose_centre()
-		preview.update_camera()
+		if _view_input.auto_fit: _view_input.follow_pose(false)
+		else:
+			preview.camera_target = _view_input.pose_centre()
+			preview.update_camera()
 
 func set_stage(i: int) -> void:
 	if not _ok() or key == "": return
@@ -813,6 +816,7 @@ func set_stage(i: int) -> void:
 	if _compare != null: compare_end()
 	engine._select_stage(clampi(i, 0, 2))
 	stage = engine._stage
+	if _view_input: _view_input.follow_pose(true)
 	_inspector.sync(); _timeline.refresh()
 	stage_changed.emit(stage)
 
@@ -826,7 +830,8 @@ func set_field(field: String, axis, value, force := false, refresh := true) -> D
 	var d := _descriptor(field)
 	if d.is_empty(): return {"ok": false, "error": "unknown field: " + field}
 	if not force and gameplay_locked(field):
-		_set_status("Locked: %s is a gameplay field here. Turn on Gameplay edit (top bar) to change it." % field)
+		_set_status("Locked: the Grab hand is where the ball is (the game puts it there). Edit Reach or Rise instead." if engine.get("_action") \
+			else "Locked: %s is a gameplay field here. Turn on Gameplay edit (top bar) to change it." % field)
 		_needs_sync = true
 		return {"ok": false, "error": "gameplay field locked: " + field, "locked": true}
 	var timing := _is_timing(field)
@@ -1179,7 +1184,17 @@ func _on_joint_selected(id: String) -> void:
 	_update_joint_label()
 
 func _on_workspace(i: int) -> void:
-	select_pose("b00" if i == 1 else "v00" if i == 2 else "s00")
+	select_pose(["s00", "b00", "v00", "a00"][clampi(i, 0, 3)])
+
+## Workspace index of a pose key: 0 strokes, 1 body stances, 2 serves, 3 ball actions.
+func _workspace_of(k: String) -> int:
+	return 1 if k.begins_with("b") else 2 if PoseDiff.is_serve_key(k) else 3 if PoseDiff.is_action_key(k) else 0
+
+## Key names on the timeline: wind-up / contact / finish, or the ball action's own keys.
+func stage_names() -> Array:
+	if _ok() and engine.get("_action") and engine._current != null:
+		return PoseDiff.BallActions.KEY_NAMES[int(engine._current.action_id)]
+	return ["Wind-up", "Contact", "Finish"]
 
 func _on_list_selected() -> void:
 	if _list_guard: return
@@ -1275,6 +1290,7 @@ func _process(delta: float) -> void:
 	if not _contact_on and pv.contact_preview and pv.contact_preview.visible: pv.contact_preview.visible = false
 	if _second.visible: _update_second_camera()
 	_timeline.tick()
+	_update_action_ball()
 	if engine._gizmo_hint.text != _engine_hint:   # scrub / play / key: "preview only" note
 		_engine_hint = engine._gizmo_hint.text; _update_joint_label()
 	_poll_frames += 1
@@ -1297,6 +1313,42 @@ func _process(delta: float) -> void:
 		_load_badges(); _refresh_list_badges()
 		_refresh_link()
 
+## Ball actions: a ball in the preview (on the floor until the Grab, in the hand while carried,
+## gone after the Release). Lives beside the preview player, never under it (camera fit, metrics).
+var _action_ball: MeshInstance3D = null
+func _update_action_ball() -> void:
+	var on: bool = bool(engine.get("_action")) and preview != null and is_instance_valid(preview.player) and engine._current != null
+	if not on:
+		if _action_ball: _action_ball.visible = false
+		return
+	var pl = preview.player
+	if _action_ball == null or not is_instance_valid(_action_ball):
+		_action_ball = MeshInstance3D.new(); _action_ball.name = "StudioActionBall"
+		var m := SphereMesh.new(); m.radius = 0.0375; m.height = 0.075
+		var mat := StandardMaterial3D.new(); mat.albedo_color = Color("e8f04a"); m.material = mat
+		_action_ball.mesh = m
+		pl.get_parent().add_child(_action_ball)
+	var pickup: bool = int(engine._current.action_id) == PoseDiff.BallActions.PICKUP
+	var tl = engine._timeline
+	var where := ""   # floor / hand / ""
+	if tl.active and not tl.sample.is_empty():
+		var phase := String(tl.sample.get("phase", ""))
+		var t: float = tl.elapsed
+		var times: Array = tl.sequence.times if tl.sequence.get("times") != null else []
+		if pickup: where = "floor" if times.is_empty() or t <= times[1] else "hand"
+		else: where = "hand" if times.is_empty() or t < times[1] else ""
+		if phase == "": where = ""
+	else:
+		where = ("floor" if engine._stage <= 1 else "hand") if pickup else ("hand" if engine._stage <= 1 else "")
+	_action_ball.visible = where != ""
+	if where == "floor":
+		var b: Vector3 = PoseDiff.BallActions.PICKUP_BALL
+		_action_ball.global_position = pl.global_position + pl._get_forehand_axis() * b.x + pl._get_forward_axis() * b.z + Vector3.UP * b.y
+	elif where == "hand":
+		var h: Vector3 = preview.joint_world_position("left_hand")
+		if h.is_finite(): _action_ball.global_position = h + Vector3.UP * 0.06
+		else: _action_ball.visible = false
+
 ## Edits made outside the studio UI (the TCP link) become undo steps and refresh the UI.
 func _poll_external() -> void:
 	if _txn != null or _compare != null or key == "": return
@@ -1304,7 +1356,7 @@ func _poll_external() -> void:
 	if ek != "" and ek != key:
 		key = ek; stage = engine._stage
 		if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
-		_workspace.select(1 if key.begins_with("b") else 2 if PoseDiff.is_serve_key(key) else 0)
+		_workspace.select(_workspace_of(key))
 		_remember(); _fill_list(); _inspector.rebuild(); _after_change(false)
 		pose_selected.emit(key)
 		return
@@ -1407,11 +1459,12 @@ func _all_keys() -> Array:
 	var out: Array = []
 	for d in PostureLibrary.instance().all_definitions(): out.append(PoseDiff.key_of(d))
 	for d in BasePoseLibrary.instance().all_definitions(): out.append(PoseDiff.key_of(d))
+	for d in PoseDiff.BallActions.all_definitions(): out.append(PoseDiff.key_of(d))
 	return out
 
 func _list_defs() -> Array:
 	var base := key.begins_with("b")
-	var defs: Array = BasePoseLibrary.instance().all_definitions() if base else PoseDiff.ServeStore.all_definitions() if PoseDiff.is_serve_key(key) else PostureLibrary.instance().all_definitions()
+	var defs: Array = BasePoseLibrary.instance().all_definitions() if base else PoseDiff.ServeStore.all_definitions() if PoseDiff.is_serve_key(key) else PoseDiff.BallActions.all_definitions() if PoseDiff.is_action_key(key) else PostureLibrary.instance().all_definitions()
 	var out := defs.duplicate()
 	out.sort_custom(func(a, b): return PoseDiff.key_of(a) < PoseDiff.key_of(b))
 	return out
@@ -1660,7 +1713,10 @@ func set_hand_slide(on: bool) -> void:
 ## paddle position and face fields at Contact (wind-up / finish store animation deltas: free),
 ## and zones / floor clearance / timing at every key (one value for the whole stroke).
 func gameplay_locked(field: String) -> bool:
-	if gameplay_edit or not _ok(): return false
+	if not _ok(): return false
+	# Ball actions: only the pickup Grab hand is fixed (the game puts it on the ball).
+	if engine.get("_action"): return field == "left_hand_offset" and engine._stage == 1 and int(engine._current.action_id) == 0
+	if gameplay_edit: return false
 	if field in POS or field in FACE_FIELDS: return not engine._base and engine._stage == 1
 	return field in GAMEPLAY_FIELDS
 
@@ -1781,7 +1837,7 @@ func autopose_pinned(id: String) -> bool:
 func _contact_paddle_handle(id: String) -> bool:
 	if not _ok() or engine._base or engine._stage != 1: return false
 	var main := main_hand_id()
-	return id == "paddle_tip" or (main != "" and id == main)
+	return id == "paddle_tip" or id in ViewportInput.AP_EDGES or (main != "" and id == main)
 
 ## Pin / unpin an AutoPose handle (lock icon click; link toggle autopose_pin). on = null flips.
 ## The Contact paddle (paddle hand, paddle tip) unpins only with Gameplay edit on.
@@ -1891,10 +1947,11 @@ func _apply_autopose_view() -> void:
 ## paddle unpinned (user decision 2026-11-21: edit contact points in AutoPose).
 func autopose_lock_reason(h: String) -> String:
 	if not _ok() or key == "": return "no pose"
-	if h == "paddle_tip" and not tip_available(): return "no paddle on this pose"
+	var edge: bool = h in ViewportInput.AP_EDGES
+	if (h == "paddle_tip" or edge) and not tip_available(): return "no paddle on this pose"
 	var main := "left" if main_hand_id() == "left_hand" else "right"
-	if engine._stage == 1 and not engine._base and (h == main + "_hand" or h == "paddle_tip") and not (gameplay_edit and autopose_paddle_free):
-		return "Contact paddle (gameplay): turn on Gameplay edit to move the contact point"
+	if engine._stage == 1 and not engine._base and (h == main + "_hand" or h == "paddle_tip" or edge) and not (gameplay_edit and autopose_paddle_free):
+		return "Contact paddle (gameplay): turn on Gameplay edit to %s" % ("roll the contact face" if edge else "move the contact point")
 	return ""
 
 func _autopose_hint() -> String:

@@ -6,6 +6,8 @@ const Path = preload("res://scripts/stroke_swing_path.gd")
 const Geometry = preload("res://scripts/paddle_clearance.gd")
 const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
 const PixelCards = preload("res://scripts/graphics/pixel_card_rig.gd")
+# Ball pickup / throw keys authored in the Pose Studio (data/ball_actions): timing + key deltas.
+const Actions = preload("res://scripts/ball_actions.gd")
 signal active_changed(active: bool)
 signal phase_changed(phase: String)
 signal finished(skipped: bool)
@@ -80,6 +82,8 @@ var _catch_open_time: = 0.0  # PASS phase time when the catching hand opened (re
 var _air_catch: = false
 var _run_approach: Array[bool] = [false, false]
 var _prev_ball_pos: = Vector3.INF
+# Which throw the pass uses (Actions.THROW lob / THROW_STRONG), chosen as PASS_PREP starts.
+var _throw_id: int = 1
 
 func setup(game: Node) -> void :
 	_game = game
@@ -332,24 +336,30 @@ func _perf_physics_process(delta: float) -> void:
 					_set_phase("BEND")
 		"BEND":
 			_pickup_wrist_position = _pickup_position - _hand_ball_offset(retriever, Vector3.DOWN)
-			var blend: float = smoothstep(0.0, BEND_TIME - 0.05, phase_elapsed)
-			_poses[retriever] = _make_pose(retriever, blend)
+			var bend_time: float = Actions.timing(Actions.PICKUP, "bend_time", BEND_TIME)
+			var blend: float = smoothstep(0.0, bend_time - 0.05, phase_elapsed)
+			var pick_delta: Dictionary = Actions.pickup_delta(Actions.deltas(Actions.PICKUP), blend, false) if Actions.has_edits(Actions.PICKUP) else {}
+			_poses[retriever] = _make_pose(retriever, blend, pick_delta)
 			_wrists[retriever] = _carry_wrist(retriever).lerp(_pickup_wrist_position, blend)
-			if phase_elapsed >= BEND_TIME and absf(_hand_surface_gap(retriever, _pickup_position)) < 0.012:
+			if not pick_delta.is_empty(): _wrists[retriever] += _hand_world(retriever, Actions.hand(pick_delta))
+			if phase_elapsed >= bend_time and absf(_hand_surface_gap(retriever, _pickup_position)) < 0.012:
 				pickup_contact_gap = _hand_surface_gap(retriever, _pickup_position)
 				_carry_team = retriever
 				_carry_offset = _pickup_position - _carry_anchor(retriever)
 				_grasp_direction = -(_players[_carry_team].left_arm_node.hand_mesh.global_basis * _players[_carry_team].left_arm_node.articulated_hand.palm_contact_basis.z).normalized()
 				_carry_direction = _grasp_direction
 				_set_phase("LIFT")
-			elif phase_elapsed > 1.8:
+			elif phase_elapsed > maxf(1.8, bend_time + 1.0):
 				_start_offscreen_return()
 		"LIFT":
-			var blend: float = smoothstep(0.0, LIFT_TIME - 0.08, phase_elapsed)
-			_poses[retriever] = _make_pose(retriever, 1.0 - blend)
+			var lift_time: float = Actions.timing(Actions.PICKUP, "lift_time", LIFT_TIME)
+			var blend: float = smoothstep(0.0, lift_time - 0.08, phase_elapsed)
+			var lift_delta: Dictionary = Actions.pickup_delta(Actions.deltas(Actions.PICKUP), 1.0 - blend, true) if Actions.has_edits(Actions.PICKUP) else {}
+			_poses[retriever] = _make_pose(retriever, 1.0 - blend, lift_delta)
 			_wrists[retriever] = (_pickup_wrist_position).lerp(_carry_wrist(retriever), blend)
-			_carry_direction = _lift_direction(retriever, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / (LIFT_TIME - 0.08)))
-			if phase_elapsed > LIFT_TIME:
+			if not lift_delta.is_empty(): _wrists[retriever] += _hand_world(retriever, Actions.hand(lift_delta))
+			_carry_direction = _lift_direction(retriever, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / (lift_time - 0.08)))
+			if phase_elapsed > lift_time:
 				if retriever == server:
 					_targets[server] = _serve_position(server)
 					_set_phase("CARRY")
@@ -359,11 +369,27 @@ func _perf_physics_process(delta: float) -> void:
 			var player = _players[retriever]
 			var windup: Vector3 = _carry_wrist(retriever) - player._get_forward_axis() * .1 - Vector3.UP * .1
 			var finish: Vector3 = _carry_wrist(retriever) + player._get_forward_axis() * .12 + Vector3.UP * .16
-			if phase_elapsed < .15:
-				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(windup, load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .15))
+			var windup_time: float = Actions.timing(_throw_id, "windup_time", .15)
+			var release_time: float = Actions.timing(_throw_id, "release_time", 0.55)
+			var swing_time: float = .4 if windup_time == .15 and release_time == 0.55 else maxf(release_time - windup_time, 0.05)
+			var throw_keys: Array = Actions.deltas(_throw_id) if Actions.has_edits(_throw_id) else []
+			var shoulder: Vector3 = player.left_arm_node.get_node("UpperArmPivot").global_position
+			if not throw_keys.is_empty():
+				windup += _hand_world(retriever, Actions.hand(throw_keys[0]))
+				finish += _hand_world(retriever, Actions.hand(throw_keys[1]))
+			if phase_elapsed < windup_time:
+				var w: float = load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / windup_time)
+				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(windup, w)
+				if not throw_keys.is_empty():
+					_wrists[retriever] = Actions.arc(shoulder, Vector3(_phase_entry_wrists[retriever]), windup, w)
+					_poses[retriever] = _make_pose(retriever, 0.0, Actions.mix({}, throw_keys[0], w))
 			else:
-				_wrists[retriever] = windup.lerp(finish, load("res://scripts/between_point_arm_path.gd").clock_weight((phase_elapsed - .15) / .4))
-			if phase_elapsed > 0.55 and _at_target(server) and (_settled_for_catch(server) or phase_elapsed > 3.5):
+				var w: float = load("res://scripts/between_point_arm_path.gd").clock_weight((phase_elapsed - windup_time) / swing_time)
+				_wrists[retriever] = windup.lerp(finish, w)
+				if not throw_keys.is_empty():
+					_wrists[retriever] = Actions.arc(shoulder, windup, finish, w)   # pendulum / over the top
+					_poses[retriever] = _make_pose(retriever, 0.0, Actions.mix(throw_keys[0], throw_keys[1], w))
+			if phase_elapsed > release_time and _at_target(server) and (_settled_for_catch(server) or phase_elapsed > 3.5):
 				_launch_pass(_game.ball.global_position)
 		"PASS":
 			var ball = _game.ball
@@ -380,7 +406,20 @@ func _perf_physics_process(delta: float) -> void:
 			var reach_clock: float = maxf(0.0, phase_elapsed - _catch_open_time) if not _air_catch else maxf(0.0, phase_elapsed - maxf(0.0, _planned_catch_time - 0.6))
 			if not pass_catch_declined:
 				_wrists[catcher] = Vector3(_phase_entry_wrists[catcher]).lerp(_catch_position - HAND_BALL_OFFSET, load("res://scripts/between_point_arm_path.gd").clock_weight(reach_clock / .35))
-			if retriever >= 0 and retriever != catcher: _wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(_carry_wrist(retriever), load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / .4))
+			if retriever >= 0 and retriever != catcher:
+				# After the throw: the hand follows through (Follow key) and returns to the carry.
+				var follow_time: float = Actions.timing(_throw_id, "follow_time", .4)
+				var back: Vector3 = _carry_wrist(retriever)
+				if not _air_catch and Actions.has_edits(_throw_id):
+					var tk: Array = Actions.deltas(_throw_id)
+					var follow: Dictionary = Actions.mix(tk[1], tk[2], load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / follow_time)) if phase_elapsed < follow_time \
+						else Actions.mix(tk[2], {}, clampf((phase_elapsed - follow_time) / Actions.RETURN_TIME, 0.0, 1.0))
+					_poses[retriever] = _make_pose(retriever, 0.0, follow)
+					back += _hand_world(retriever, Actions.hand(tk[2]) if phase_elapsed < follow_time else Actions.hand(follow))
+				var follow_w: float = load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / follow_time)
+				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(back, follow_w)
+				if not _air_catch and Actions.has_edits(_throw_id):
+					_wrists[retriever] = Actions.arc(_players[retriever].left_arm_node.get_node("UpperArmPivot").global_position, Vector3(_phase_entry_wrists[retriever]), back, follow_w)
 			var catchable: bool = observed_bounces > 0 or _air_catch
 			if not pass_catch_declined and catchable and ball.global_position.distance_to(_catch_position) < 0.8:
 				var shoulder: Vector3 = _players[catcher].left_arm_node.get_node("UpperArmPivot").global_position
@@ -515,7 +554,10 @@ func hand_presentation_for(actor_id: int) -> Dictionary:
 	if team < 0: return {}
 	if not _active: return {}
 	if team == retriever and phase == "BEND":
-		return {"mode": "PICKUP", "normal": Vector3.DOWN, "closure": smoothstep(0.4, 0.65, phase_elapsed), "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
+		var bend_time: float = Actions.timing(Actions.PICKUP, "bend_time", BEND_TIME)
+		var close_from: float = 0.4 if bend_time == BEND_TIME else bend_time - 0.02
+		var close_to: float = 0.65 if bend_time == BEND_TIME else bend_time + 0.23
+		return {"mode": "PICKUP", "normal": Vector3.DOWN, "closure": smoothstep(close_from, close_to, phase_elapsed), "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
 	if team == catcher and phase == "PASS" and not pass_catch_declined:
 		return {"mode": "CATCH_OPEN", "normal": Vector3.UP, "closure": 0.15, "elapsed": phase_elapsed, "transition": smoothstep(0.0, 0.2, phase_elapsed)}
 	if team == retriever and phase == "PASS" and not _air_catch and phase_elapsed < 0.2:
@@ -523,7 +565,9 @@ func hand_presentation_for(actor_id: int) -> Dictionary:
 	if team == _carry_team and phase in ["LIFT", "CARRY", "PASS_PREP", "CATCH", "SET_SERVE", "END_WALK", "END_TURN", "END_BLOCKED"]:
 		var closure: = 1.0
 		if phase == "CATCH": closure = lerpf(0.15, 1.0, smoothstep(0.0, 0.1, phase_elapsed))
-		elif phase == "PASS_PREP": closure = 1.0 - smoothstep(0.4, 0.55, phase_elapsed)
+		elif phase == "PASS_PREP":
+			var release_time: float = Actions.timing(_throw_id, "release_time", 0.55)
+			closure = 1.0 - smoothstep(0.4 if release_time == 0.55 else release_time - 0.15, release_time, phase_elapsed)
 		return {"mode": "CARRY", "normal": _carry_direction, "closure": closure, "elapsed": phase_elapsed}
 	return {}
 
@@ -717,6 +761,14 @@ func _perf_carry_wrist(team: int) -> Vector3:
 	var offset: Vector3 = - player._get_forehand_axis() * 0.26 + player._get_forward_axis() * 0.32 + Vector3.UP * 0.05
 	return player.global_position + offset.rotated(Vector3.UP, deg_to_rad(-_facing_yaw(team)))
 
+## A ball-hand offset in player axes (forehand side, up, toward the net) in world, turned with
+## the carry heading like _carry_wrist.
+func _hand_world(team: int, local: Vector3) -> Vector3:
+	if local == Vector3.ZERO: return Vector3.ZERO
+	var player = _players[team]
+	var offset: Vector3 = player._get_forehand_axis() * local.x + Vector3.UP * local.y + player._get_forward_axis() * local.z
+	return offset.rotated(Vector3.UP, deg_to_rad(-_facing_yaw(team)))
+
 func _actual_wrist(team: int) -> Vector3:
 	var arm = _players[team].left_arm_node
 	return arm.hand_mesh.global_transform * arm.articulated_hand.wrist_socket
@@ -729,35 +781,16 @@ func _carry_anchor(team: int) -> Vector3:
 func _at_target(team: int) -> bool:
 	return _players[team].global_position.distance_to(_targets[team]) < 0.06
 
-func _make_pose(team: int, bend: float) -> PostureDefinition:
+func _make_pose(team: int, bend: float, delta: Dictionary = {}) -> PostureDefinition:
 	var _pt := Time.get_ticks_usec()
-	var _pr = _perf_make_pose(team, bend)
+	var _pr = _perf_make_pose(team, bend, delta)
 	PerfMonitor.record("bp.make_pose", Time.get_ticks_usec() - _pt)
 	return _pr
 
-func _perf_make_pose(team: int, bend: float) -> PostureDefinition:
-	var pose: PostureDefinition = PostureLibrary.instance().get_def(_players[team].PaddlePosture.READY).duplicate(true)
-
-
-	pose.right_hand_offset = Vector3.ZERO
-	# A carry is a neutral handle grip, independent of the live READY regrip.
-	pose.main_grip_rotation_deg = pose.paddle_in_hand_rotation_deg
-	pose.right_shoulder_rotation_deg = Vector3(0, -8, 0)
-	pose.left_shoulder_rotation_deg = Vector3(0, 8, 0)
-	pose.shoulder_protraction_m = 0.05
-	pose.left_elbow_pole = Vector3( - 0.58, - 0.35, - 0.07)
-	pose.left_hand_mode = 4
-	pose.left_hand_offset = Vector3.ZERO
-	# Between points a player stands up: feet under the hips, no crouch (the athletic READY
-	# stance comes back in SET_SERVE). A pickup bends from there.
-	pose.crouch_amount = lerpf(0.0, 0.64, bend)
-	pose.body_pitch_deg = lerpf(0.0, 8.0, bend)
-	pose.torso_pitch_deg = lerpf(0.0, 12.0, bend)
-	pose.stance_width = lerpf(0.28, 0.5, bend)
-	pose.front_foot_forward = lerpf(0.02, pose.front_foot_forward, bend)
-	pose.back_foot_back = lerpf(-0.02, pose.back_foot_back, bend)
-	pose.head_track_ball_weight = 0.4
-	preload("res://scripts/player_carry_presentation.gd").apply(pose, bend)
+func _perf_make_pose(team: int, bend: float, delta: Dictionary = {}) -> PostureDefinition:
+	# Between points a player stands up (crouch 0, feet under the hips); a pickup bends from there.
+	var pose: PostureDefinition = Actions.stand_pose(PostureLibrary.instance().get_def(_players[team].PaddlePosture.READY), bend)
+	if not delta.is_empty(): Actions.add_to(pose, delta)
 	var facing: float = _facing_yaw(team)
 	if absf(facing) > 0.00001:
 		var turned: PostureDefinition = Path.rotate_guard(pose, facing)
@@ -881,8 +914,10 @@ func _perf_set_phase(value: String) -> void:
 	for team in _players.size(): _phase_entry_wrists[team] = _actual_wrist(team)
 	phase = value
 	phase_elapsed = 0.0
+	if value == "PASS_PREP" and retriever >= 0:
+		_throw_id = Actions.throw_for(_players[retriever].global_position.distance_to(_players[server].global_position))
 	phase_changed.emit(value)
-	PerfMonitor.note("between_phase", {"phase": value})
+	PerfMonitor.note("between_phase", {"phase": value, "throw": _throw_id} if value == "PASS_PREP" else {"phase": value})
 	var text: = "Ball pickup · Skip to serve"
 	if value in ["PASS_PREP", "PASS", "HELPER_WAIT", "CATCH"]: text = "Ball handover · Skip to serve"
 	elif value == "CARRY": text = "Getting ready to serve · Skip to serve"

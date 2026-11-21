@@ -34,10 +34,19 @@ const TIP_LOCAL := Vector3(0, PaddleSize.LENGTH, 0)
 
 # Points read per evaluation (indices).
 enum { R_HAND, L_HAND, R_ELBOW, L_ELBOW, R_KNEE, L_KNEE, R_FOOT, L_FOOT, HIPS, TORSO, HEAD, PADDLE,
-	TIP, R_ANKLE, L_ANKLE, R_THIGH, L_THIGH, GRIP, R_SHOULDER, L_SHOULDER, R_WRIST, L_WRIST, NPTS }
+	TIP, R_ANKLE, L_ANKLE, R_THIGH, L_THIGH, GRIP, R_SHOULDER, L_SHOULDER, R_WRIST, L_WRIST, EDGE_A, EDGE_B, NPTS }
 const HANDLES := {"right_hand": R_HAND, "left_hand": L_HAND, "right_elbow": R_ELBOW, "left_elbow": L_ELBOW,
 	"right_knee": R_KNEE, "left_knee": L_KNEE, "right_foot": R_FOOT, "left_foot": L_FOOT, "hips": HIPS,
-	"torso": TORSO, "chest": TORSO, "head": HEAD, "paddle": PADDLE, "paddle_tip": TIP}
+	"torso": TORSO, "chest": TORSO, "head": HEAD, "paddle": PADDLE, "paddle_tip": TIP,
+	"right_shoulder": R_SHOULDER, "left_shoulder": L_SHOULDER, "right_hip": R_THIGH, "left_hip": L_THIGH,
+	"paddle_edge_a": EDGE_A, "paddle_edge_b": EDGE_B}
+## Rotate handles (6c step 4): shoulders turn the upper body only (torso yaw / pitch / roll; hips and
+## feet hold), hips turn the pelvis (hip yaw, body pitch / roll; knees follow, feet planted), paddle
+## edges (rim, both sides of the head) turn the paddle in the hand along the handle
+## (paddle_in_hand_rotation_deg; hand and arm stay; at Contact gameplay, so only with Gameplay edit).
+const EDGE_HANDLES := ["paddle_edge_a", "paddle_edge_b"]
+const EDGE_A_LOCAL := Vector3(PaddleSize.HEAD_RADIUS, PaddleSize.HEAD_CENTER_Y, 0)
+const EDGE_B_LOCAL := Vector3(-PaddleSize.HEAD_RADIUS, PaddleSize.HEAD_CENTER_Y, 0)
 ## Base stiffness per region (the studio's 1.0x). Tuned 2026-11-20 with W_FOLLOW: a 15 cm hand
 ## drag moves the chest ~4 cm (median), the hips ~1 cm, the feet 0 (pinned).
 const STIFFNESS := {"arm": 1.0, "paddle": 1.0, "head": 1.0, "chest": 3.0, "hips": 16.0, "legs": 8.0, "foot": 2.0}
@@ -146,6 +155,8 @@ func _read() -> PackedVector3Array:
 	out[L_SHOULDER] = p.left_arm_node.upper_pivot.global_position
 	out[R_WRIST] = p.right_arm_node.anatomical_wrist_world
 	out[L_WRIST] = p.left_arm_node.anatomical_wrist_world
+	out[EDGE_A] = pt * EDGE_A_LOCAL
+	out[EDGE_B] = pt * EDGE_B_LOCAL
 	return out
 
 ## World points of every handle on `player` as it stands now (no evaluation): the AutoPose
@@ -240,8 +251,11 @@ func _p(list: Array, field: String, region: String, scale: float, comps := -1) -
 		var dv: float = float(disp) if c < 0 else float(disp[c])
 		var ev: float = float(edv) if c < 0 else float(edv[c])
 		var off: float = dv - ev
-		list.append({"field": field, "comp": c, "region": region, "scale": scale, "off": off,
-			"lo": float(d.min) + off, "hi": float(d.max) + off})
+		var lo: float = float(d.min) + off
+		var hi: float = float(d.max) + off
+		if stage != 1 and (field in ed.ROT or field == "paddle_in_hand_rotation_deg"):   # wrapping angles at wind-up / finish: half a turn either way
+			lo = dv - 180.0; hi = dv + 180.0
+		list.append({"field": field, "comp": c, "region": region, "scale": scale, "off": off, "lo": lo, "hi": hi})
 
 func _build_params(main: String) -> Array:
 	var sup := "left" if main == "right" else "right"
@@ -279,6 +293,15 @@ func _build_params(main: String) -> Array:
 		if full: chest.call(out); hips.call(out)
 	elif h == "hips":
 		hips.call(out); legs.call(out); chest.call(out)
+	elif h.ends_with("_shoulder"):   # rotate the upper body: hips and feet hold
+		for f in ["torso_yaw_deg", "torso_pitch_deg", "torso_roll_deg"]: _p(out, f, "chest", 10.0)
+	elif h.ends_with("_hip"):   # rotate the pelvis: the knees follow, feet stay planted
+		for f in ["hip_yaw_deg", "body_pitch_deg", "body_roll_deg"]: _p(out, f, "hips", 10.0)
+		legs.call(out)
+	elif h in EDGE_HANDLES:   # roll the face around the handle (Contact: gameplay, _p skips it unless freed)
+		# Turn the paddle in the hand (paddle_in_hand_rotation_deg: about the handle's long axis
+		# through the grip), so the hand and arm IK stay as they are; grip and tip pinned (begin).
+		_p(out, "paddle_in_hand_rotation_deg", "paddle", 10.0)
 	elif h == "torso" or h == "chest":
 		chest.call(out); hips.call(out)
 	elif h == "head":
@@ -313,7 +336,7 @@ func begin(h: String, opts: Dictionary = {}) -> Dictionary:
 	var main: String = "left" if studio.main_hand_id() == "left_hand" else "right"
 	var sup: String = "right" if main == "left" else "left"
 	var unpin_paddle: bool = (opts.get("unpin", []) is Array and (opts.get("unpin") as Array).has("paddle")) and bool(studio.gameplay_edit)
-	if stage == 1 and not _engine._base and (h == main + "_hand" or h == "paddle_tip" or h == "paddle") and not unpin_paddle:
+	if stage == 1 and not _engine._base and (h == main + "_hand" or h == "paddle_tip" or h == "paddle" or h in EDGE_HANDLES) and not unpin_paddle:
 		return {"ok": false, "error": "pinned at Contact: the paddle hand and paddle are the contact point (gameplay); Gameplay edit frees it", "locked": true}
 	var t0 := Time.get_ticks_usec()
 	_player = studio.preview.player
@@ -410,7 +433,7 @@ func begin(h: String, opts: Dictionary = {}) -> Dictionary:
 		var side: String = "right_foot" if pi in [R_FOOT, R_ANKLE] else "left_foot"
 		if h == side or (unpin.has(side) and not pinned.has(side)): continue
 		_pins.append([pi, _pts0[pi], W_PIN])
-	if stage == 1 and not _engine._base and not _paddle_free:
+	if (stage == 1 and not _engine._base and not _paddle_free) or h in EDGE_HANDLES:   # edges: roll along the handle
 		_pins.append([GRIP, _pts0[GRIP], W_PIN]); _pins.append([TIP, _pts0[TIP], W_PIN])
 	for up in opts.get("pins", []):
 		var pj: String = str(up.get("joint", "")) if up is Dictionary else str(up)

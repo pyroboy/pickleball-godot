@@ -28,7 +28,7 @@ import threading
 
 import tres_edit
 
-KEY_RE = re.compile(r"^[sb]\d\d$")
+KEY_RE = re.compile(r"^[sba]\d\d$")
 NOTE_ID_RE = re.compile(r"^n\d{1,6}$")
 FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 STAGES = ("windup", "contact", "finish")
@@ -40,7 +40,7 @@ AUTHORS = ("user", "claude")
 SOURCES = ("studio", "phone")
 TARGET_SHARE_5 = 0.8
 TARGET_MIN_STARS = 4
-POSE_TYPES = {"s": "stroke", "b": "base"}
+POSE_TYPES = {"s": "stroke", "b": "base", "a": "action"}
 SCRIPTS = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "scripts")
 _EXPORT_RE = re.compile(r"^@export\w*(?:\([^)]*\))?\s+var\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
 
@@ -95,11 +95,12 @@ def allowed_fields(key):
         def exports(name):
             with open(os.path.join(SCRIPTS, name), encoding="utf-8") as f:
                 return set(_EXPORT_RE.findall(f.read())) - {"windup_body", "follow_through_body"}
-        if kind == "stroke":
+        if kind in ("stroke", "action"):
             with open(os.path.join(SCRIPTS, "stroke_body_keyframe.gd"), encoding="utf-8") as f:
                 m = re.search(r"const FIELDS[^=]*=\s*\[(.*?)\]", f.read(), re.S)
             kf = set(re.findall(r'"([A-Za-z_][A-Za-z0-9_]*)"', m.group(1))) if m else set()
-            _ALLOWED[kind] = {"contact": exports("posture_definition.gd"), "windup": kf, "finish": kf}
+            contact = exports("posture_definition.gd") | (exports("ball_action_definition.gd") if kind == "action" else set())
+            _ALLOWED[kind] = {"contact": contact, "windup": kf, "finish": kf}
         else:
             _ALLOWED[kind] = {"contact": exports("base_pose_definition.gd")}
     return _ALLOWED[kind]
@@ -222,7 +223,7 @@ class Store:
 
     def pose_keys(self):
         keys = []
-        for prefix, folder in (("s", "data/postures"), ("b", "data/base_poses")):
+        for prefix, folder in (("s", "data/postures"), ("b", "data/base_poses"), ("a", "data/ball_actions")):
             for p in sorted(glob.glob(os.path.join(self.root, folder, "[0-9][0-9]_*.tres"))):
                 keys.append(f"{prefix}{os.path.basename(p)[:2]}")
         return keys

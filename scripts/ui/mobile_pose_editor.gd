@@ -17,6 +17,7 @@ const Path = preload("res://scripts/stroke_swing_path.gd")
 const Keyframe = preload("res://scripts/stroke_body_keyframe.gd")
 const Icons = preload("res://scripts/ui/mobile_pose_icons.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
+const BallActions = preload("res://scripts/ball_actions.gd")
 const Store = preload("res://scripts/mobile_pose_store.gd")
 const Gimbal = preload("res://scripts/ui/mobile_paddle_gimbal.gd")
 const Wrist = preload("res://scripts/paddle_wrist_reach.gd")
@@ -64,6 +65,8 @@ var _key := ""
 var _stage := 1
 var _base := false
 var _serve := false
+## Desktop Pose Studio only: ball pickup / throw (data/ball_actions), edited like strokes.
+var _action := false
 var _playing := false
 var _resume_playback := false
 var _progress := .5
@@ -304,11 +307,12 @@ func _layout()->void:
 		_dialog_box.size=Vector2(safe.size.x-40*_s,0)
 
 func _select_workspace(index:int)->void:
-	_base=index==1;_serve=index==2;_workspace.select(index);_pose_picker.clear()
+	_base=index==1;_serve=index==2;_action=index==3;_workspace.select(mini(index,2));_pose_picker.clear()
+	Fields.action_kind=-1
 	_group.set_item_disabled(5,_serve)
 	_category.set_item_disabled(8,_serve)
 	if _serve and _group.selected==5:_group.select(6);_category.select(0);_selected_joint="torso"
-	_definitions=ServeStore.all_definitions() if _serve else BasePoseLibrary.instance().all_definitions() if _base else PostureLibrary.instance().all_definitions()
+	_definitions=BallActions.all_definitions() if _action else ServeStore.all_definitions() if _serve else BasePoseLibrary.instance().all_definitions() if _base else PostureLibrary.instance().all_definitions()
 	for d in _definitions:_pose_picker.add_item(d.display_name)
 	for b in _stages:b.disabled=_base
 	_scrub.editable=not _base;_play.disabled=_base
@@ -320,7 +324,8 @@ func _select_pose(index:int)->void:
 	if index<0 or index>=_definitions.size():return
 	_stop();_pose_picker.select(index)
 	var d:Resource=_definitions[index]
-	_key="serve:"+str(ServeStore.style_id(d)) if _serve else ("base:" if _base else "stroke:")+str(d.get("base_pose_id" if _base else "posture_id"))
+	_key="serve:"+str(ServeStore.style_id(d)) if _serve else "action:"+str(d.action_id) if _action else ("base:" if _base else "stroke:")+str(d.get("base_pose_id" if _base else "posture_id"))
+	Fields.action_kind=int(d.action_id) if _action else -1
 	if not _copies.has(_key):
 		_copies[_key]=d.duplicate(true)
 		if not _base:PaddleRotation.normalize_pose(_copies[_key])
@@ -1047,7 +1052,7 @@ func _toggle_fine()->void:
 	_fine=not _fine;_fine_button.text="Fine" if _fine else "Normal";_build_fields()
 
 func _reset_field(field:String,axis:int)->void:
-	var saved:Resource=ServeStore.get_def(ServeStore.style_id(_current)) if _serve else BasePoseLibrary.instance().get_def(_current.base_pose_id) if _base else PostureLibrary.instance().get_def(_current.posture_id)
+	var saved:Resource=ServeStore.get_def(ServeStore.style_id(_current)) if _serve else BallActions.get_def(_current.action_id) if _action else BasePoseLibrary.instance().get_def(_current.base_pose_id) if _base else PostureLibrary.instance().get_def(_current.posture_id)
 	var source:Resource=ServeStore.endpoint(saved,_stage) if _serve and _stage!=1 else Path.endpoint(saved,_stage) if not _base and _stage!=1 and _group.selected!=5 else saved
 	var value:Variant=source.get(field)
 	if axis>=0:

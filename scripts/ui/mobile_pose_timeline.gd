@@ -1,6 +1,9 @@
 extends RefCounted
 ## Private elapsed-time transport. Authored key controls remain separate.
 const Sequence = preload("res://scripts/ui/mobile_pose_sequence.gd")
+## Desktop Pose Studio ball actions (pickup / throw) have their own timeline.
+const ActionSequence = preload("res://scripts/studio/ball_action_sequence.gd")
+const BallActions = preload("res://scripts/ball_actions.gd")
 var owner
 var sequence = Sequence.new()
 var active := false
@@ -69,6 +72,8 @@ func invalidate() -> void:
 
 func _configure() -> bool:
 	if owner._base or not owner._has_motion(): return false
+	if owner.get("_action"): return _configure_action()
+	if sequence is ActionSequence: sequence = Sequence.new(); _signature = ""
 	var signature: String = owner._elbow_preset_panel.signature(owner._current)+":"+str(owner._variant_mode)+":"+str(_mode.selected)+":"+str(_stance.selected)+":"+str(_motion.selected)
 	if signature != _signature:
 		sequence.configure(owner._current,_mode.selected,_stance.selected,owner._variant_mode,_motion.selected==0,owner._preview.player)
@@ -81,6 +86,18 @@ func _configure() -> bool:
 		elif _mode.selected != Sequence.Mode.STROKE:
 			_marks.append(sequence.prefix_seconds+sequence.full_seconds);_phase_picker.add_item("Ready")
 			_marks.append(sequence.duration);_phase_picker.add_item("Sequence end")
+	return true
+
+func _configure_action() -> bool:
+	var signature: String = "action:" + var_to_str(BallActions.key_times(owner._current)) + var_to_str(BallActions.deltas_of(owner._current))
+	if signature != _signature:
+		if not (sequence is ActionSequence): sequence = ActionSequence.new()
+		sequence.configure(owner._current)
+		_signature = signature
+		var names: Array = BallActions.KEY_NAMES[int(owner._current.action_id)]
+		_marks = [0.0, sequence.times[0], sequence.times[1], sequence.times[2], sequence.duration]
+		_phase_picker.clear()
+		for label in ["Start"] + names + ["End"]: _phase_picker.add_item(label)
 	return true
 
 func start(resume: bool) -> void:

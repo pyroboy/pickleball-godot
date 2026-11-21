@@ -12,6 +12,7 @@ const STAGE_NAMES := ["Wind-up", "Contact", "Finish"]
 const TICK := 1.0 / 30.0
 const SPEEDS := [1.0, 0.5, 0.25]
 const SPEED_TEXT := ["1x", "½x", "¼x"]
+const BallActions = preload("res://scripts/ball_actions.gd")
 
 var studio
 var stage_buttons: Array[Button] = []
@@ -31,6 +32,10 @@ var _transport: Array[Button] = []
 var _was_playing := -1
 var _last_t := -1.0
 var _last_code := -2   # -1 playing / scrubbed, else stage*4 + has*2 + base
+var _names: Array = STAGE_NAMES
+var _mark_txn := false
+var _mark_duration := 0.0   # sequence length when a key-time drag began (keeps the drag mapping still)
+var _mark_prefix := 0.0     # stroke wind-up hold (seconds before the strike) when a drag began
 
 func build(owner_studio) -> void:
 	studio = owner_studio
@@ -80,9 +85,10 @@ func build(owner_studio) -> void:
 	var srow := HBoxContainer.new(); srow.name = "ScrubRow"; srow.add_theme_constant_override("separation", Theme_.SP2)
 	add_child(srow)
 	scrubber = ScrubTrack.new(); scrubber.name = "Scrubber"
-	scrubber.tooltip_text = "Real-time sequence (charge -> release), drag to scrub. Marks: purple wind-up, gold contact, cyan finish. Scrubbing previews only; it does not change the edited key."
+	scrubber.tooltip_text = "Real-time sequence (charge -> release), drag to scrub. Marks: purple wind-up, gold contact, cyan finish. Scrubbing previews only. Drag a mark to change that key's time (strokes: contact and finish; needs Gameplay edit)."
 	scrubber.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scrubber.value_changed.connect(seek)
+	scrubber.mark_moved.connect(_on_mark_moved)
 	srow.add_child(scrubber)
 	time_label = Theme_.small_label("TimeLabel", "")
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -91,6 +97,56 @@ func build(owner_studio) -> void:
 	_size_time_label.call_deferred()
 	for sg in ["pose_selected", "stage_changed", "pose_edited", "pose_reloaded"]:
 		studio.connect(sg, update_marks.unbind(1))
+
+func _is_action() -> bool:
+	var ed = _ed()
+	return ed != null and bool(ed.get("_action"))
+
+## Stage buttons and the key label follow the pose type (ball actions have their own keys).
+func _relabel() -> void:
+	var names: Array = studio.stage_names()
+	if names == _names: return
+	_names = names
+	for i in 3:
+		stage_buttons[i].text = names[i]
+		stage_buttons[i].tooltip_text = "Edit the %s key (Alt+%d · Tab / Shift+Tab cycles)" % [String(names[i]).to_lower(), i + 1]
+	_last_code = -2
+
+## Strokes (not serves): contact and finish marks move; wind-up is the game's fixed hold.
+func _stroke_marks_draggable() -> bool:
+	var ed = _ed()
+	if ed == null or _is_action() or not motion() or not ed._timeline._configure(): return false
+	return int(ed._timeline.sequence.get("style")) < 0
+
+## Dragging a key mark on the track changes that key's time (one undo step).
+## Ball actions: their key-time fields. Strokes: contact = Strike time, finish = Sweep time
+## (gameplay fields: locked unless Gameplay edit is on).
+func _on_mark_moved(i: int, frac: float, done: bool) -> void:
+	var ed = _ed()
+	if ed == null: return
+	var act := _is_action()
+	if not act and (i == 0 or not _stroke_marks_draggable()): return
+	if not _mark_txn:
+		studio.stop_drag()
+		_mark_txn = true
+		var ok: bool = ed._timeline._configure()
+		_mark_duration = ed._timeline.sequence.duration if ok else 1.0
+		_mark_prefix = float(ed._timeline.sequence.prefix_seconds) if ok and not act else 0.0
+		studio.begin_edit("key time")
+	var t := frac * _mark_duration
+	if act:
+		var e: Array = BallActions.time_edit(ed._current, i, t)
+		studio.set_field(e[0], null, snappedf(e[1], 0.01))
+	elif i == 1:
+		studio.set_field("ft_duration_strike", null, snappedf(clampf(t - _mark_prefix, 0.01, 0.5), 0.01))
+	else:
+		var strike := maxf(0.01, float(ed._current.ft_duration_strike))
+		studio.set_field("ft_duration_sweep", null, snappedf(clampf(t - _mark_prefix - strike, 0.01, 0.5), 0.01))
+	if done:
+		_mark_txn = false
+		studio.end_edit()
+	update_marks()
+	refresh()
 
 ## Fixed width: the longest text it shows, so the track does not jump while playing.
 func _size_time_label() -> void:
@@ -135,7 +191,7 @@ func set_speed_index(i: int) -> void:
 
 func play_variant(mode: int) -> void:
 	var ed = _ed()
-	if not motion(): refresh(); return
+	if not motion() or _is_action(): refresh(); return
 	studio.stop_drag()
 	if ed._variant_mode == mode and not ed._playing:
 		# Second press on an idle variant: back to the authored swing.
@@ -174,6 +230,10 @@ func step(dir: int) -> void:
 ## edit / variant changes, never per frame.
 func update_marks() -> void:
 	var ed = _ed()
+	if studio: _relabel()
+	var act := _is_action()
+	scrubber.marks_draggable = act or _stroke_marks_draggable()
+	scrubber.fixed_marks = [] if act else [0]
 	if not motion() or not ed._timeline._configure():
 		scrubber.set_marks([], 0.0); return
 	var s = ed._timeline.sequence
@@ -192,8 +252,10 @@ func refresh() -> void:
 		if stage_buttons[i].disabled != dis: stage_buttons[i].disabled = dis
 		var on: bool = ed != null and studio.key != "" and ed._stage == i and not active and not playing
 		if stage_buttons[i].button_pressed != on: stage_buttons[i].set_pressed_no_signal(on)
+	var act := _is_action()
 	for b in _transport:
-		if b.disabled == has: b.disabled = not has
+		var dis: bool = not has or (act and (b == strong_button or b == weak_button))
+		if b.disabled != dis: b.disabled = dis
 	for b in speed_buttons:
 		if b.disabled == has: b.disabled = not has
 	if scrubber.editable != has: scrubber.editable = has
@@ -221,7 +283,7 @@ func refresh() -> void:
 			_sync = true
 			scrubber.set_value_no_signal(0.0); scrubber.phase = ""; scrubber.queue_redraw()
 			_sync = false
-			time_label.text = ("Key: " + STAGE_NAMES[ed._stage]) if has else ("Body stance (one key)" if ed._base else "Static pose")
+			time_label.text = ("Key: " + String(_names[ed._stage])) if has else ("Body stance (one key)" if ed._base else "Static pose")
 
 ## Studio _process hook: keep looping.
 func tick() -> void:
@@ -243,8 +305,13 @@ func state() -> Dictionary:
 ## Scrub track: a Range (0..1) drawn as a rail with stage markers, progress and a playhead.
 ## Click or drag anywhere on it to scrub. 28 pt tall.
 class ScrubTrack extends Range:
+	signal mark_moved(index: int, frac: float, done: bool)
 	const H := 28.0
+	const MARK_GRAB := 7.0        # points: a press this close to a mark drags the mark (ball actions)
 	var editable := true
+	var marks_draggable := false
+	var _mark := -1
+	var fixed_marks: Array = []   # mark indices that never drag (stroke wind-up)
 	var marks: Array = []          # [windup, contact, finish] fractions
 	var duration := 0.0
 	var phase := ""
@@ -265,12 +332,35 @@ class ScrubTrack extends Range:
 	func _gui_input(e: InputEvent) -> void:
 		if not editable: return
 		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+			if e.pressed and marks_draggable:
+				_mark = _mark_at(e.position.x)
+			if _mark >= 0:
+				mark_moved.emit(_mark, _frac(e.position.x), not e.pressed)
+				if not e.pressed: _mark = -1
+				accept_event(); return
 			_drag = e.pressed
 			if e.pressed: _set_from(e.position.x)
+			accept_event()
+		elif e is InputEventMouseMotion and _mark >= 0:
+			mark_moved.emit(_mark, _frac(e.position.x), false)
 			accept_event()
 		elif e is InputEventMouseMotion and _drag:
 			_set_from(e.position.x)
 			accept_event()
+		elif e is InputEventMouseMotion:
+			mouse_default_cursor_shape = Control.CURSOR_HSIZE if marks_draggable and _mark_at(e.position.x) >= 0 else Control.CURSOR_POINTING_HAND
+
+	func _frac(px: float) -> float:
+		return clampf((px - 8.0) / maxf(size.x - 16.0, 1.0), 0.0, 1.0)
+
+	func _mark_at(px: float) -> int:
+		var best := -1
+		var bd := MARK_GRAB
+		for i in mini(3, marks.size()):
+			if i in fixed_marks: continue
+			var d := absf(_x(float(marks[i])) - px)
+			if d <= bd: bd = d; best = i
+		return best
 
 	func _set_from(px: float) -> void:
 		value = clampf((px - 8.0) / maxf(size.x - 16.0, 1.0), 0.0, 1.0)

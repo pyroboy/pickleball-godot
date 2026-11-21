@@ -2,7 +2,8 @@
 
 Written 2026-11-20 from a planning session with the user. This file is the single source
 for the work; a new session should be able to execute from it without the chat history.
-Stage 0 is built. Start at stage 1 unless the user says otherwise.
+Stages 0-2, 6b, 6d, 8 and first parts of 9-10 are built. **Work from "Plan from here"
+at the top of section 5**; it replaces the order of the remaining stage items below.
 
 ---
 
@@ -335,6 +336,72 @@ Style rules for the studio window (`scripts/studio/studio_theme.gd` holds the nu
 Each stage: build, check by data, update this file's status line, tell the user in a few
 plain lines what works and what was not verified.
 
+### Plan from here (re-planned 2026-11-21)
+
+**Why re-plan.** The bottleneck is the user's eye, not tooling. The studio has not been
+used by the user, 0 of 43 poses are rated, and every motion piece (arm swing, reactions,
+partner tap, expressions, relaxed stand) is marked "look not yet checked". Stage 3, the
+actual goal, waits on ratings, and rating today is slow (open the studio, pick a pose, scrub
+three stages, rate). Second finding: the studio plays the authored wind-up / finish keys, but
+in AI play those keys are never used; dinks, drops, volleys and smashes are built from the
+contact pose in code (see 6c step 2, "FOUND"). So the user would be rating swings the game
+rarely shows, and several queued tools edit things that never reach the screen.
+
+New rule: **build tooling only when a rating or note asks for it.** Order:
+
+**R1. Review reel (build first).** A "Review" workspace in the studio that plays each item
+the way the game shows it, for fast rating. Folds in 6c step 6 (game-view preview, slow
+loop), stage 4's transition preview and stage 5's pose player.
+- Game camera and pixel card by default (orbit view one key away); loop Ready -> wind-up ->
+  contact -> finish -> Ready with the game's blend at 1x / 0.5x / 0.25x.
+- "Plays as" per stroke: dink / drop / volley / smash / full drive, using the code-built keys
+  from `drive_serve_motion.gd` for the compact kinds, defaulting to the kind the game plays
+  most for that pose (measured counts in 6c step 2). Body stances and serves too.
+- Motion items in the same reel: the motion bench course segments (walk, run, stop,
+  shuffle, diagonal), each reaction, partner tap, each expression, relaxed stand. They get
+  stars like poses (new pose type "motion"), so movement and reactions join the target.
+- Keys: 1-5 rate, N note pinned to the current time, Left / Right previous / next, Space
+  pause. Order: unrated first, then by how often the game plays it.
+- Check by data: sampled reel swing equals the `drive_serve_motion` output for that kind
+  and pose within 1 mm; a rating lands on the current version; the queue follows 4.1.
+
+**R2. User pass.** The user rates everything once in the reel (about 60 items, aim for
+30 minutes), leaving a note on anything under 5. Also one real match on the phone, noting
+what looks off (stage 5 "flag this moment" is the cheapest phone piece; build it only if
+writing notes from memory turns out not to work).
+
+**R3. Refinement loop (old stage 3).** Claude works the queue: lowest stars first, notes
+before checker flags, evidence in every reply. Claude-side checks that need no UI go into
+`tools/pose_check.py` here: clipping (6c step 5: body capsules, arm segment gaps, sampled
+transitions) and the transition table. Calibrate the checker against the stars (4.1).
+
+**R4. On demand: built only when notes point at them.** Likely first is the elbow, since
+the user already reported it.
+| Item | Built when | Notes |
+|---|---|---|
+| Elbow swivel arc handle + soft limits (old stage 6, 6c step 2 left) | First elbow note, or right after R2 | Field exists; limits come from poses rated 5 |
+| More AutoPose handles (6c step 4) | User asks for a specific one after trying AutoPose | Shoulders, hips, paddle edges built 2026-11-21 (user asked); head arrow not built |
+| Motion graphs (stage 4) | A timing / snap note the checker numbers can't explain | Data already in the `timed` capture |
+| Wrist-lag tuner (stage 4) | A paddle-lag note | Small; constants in `paddle_skin.gd` |
+| Backhand-face toggle (stage 7 step 2) | Front poses rated low, and open decision 6 answered | Variant data exists |
+| Movement / reaction tuning | Low stars on motion items | First move the card motion constants to one data file (identical values) so Claude tunes from notes; a studio workspace only if the user wants to tune them by hand |
+| Phone overrides import (stage 5) | Only if `user://mobile_pose_overrides_v1.json` on the phone has edits | Check first; then hide the phone editor |
+
+**Dropped or folded:**
+- Draggable wind-up / finish points on the arc: authored keys reach only full-charge drives
+  (0 uses in AI play), and the swing path is read by the AI and reach systems (gameplay).
+- Timing fields as draggable segments: timing is gameplay and locked anyway.
+- Reach-limit warning: AutoPose already reports reach stops in its status line.
+- Transition preview, phone pose player, game-view preview: in the reel (R1).
+- Copy pose / drafts: the backhand variant uses its own override block; "paste key as
+  change" stays under "Later, not queued".
+
+**Decision waiting on R2 (strategic fork).** If compact shots (dinks, drops) rate low, edits
+to authored keys can't fix them, and any body change moves gameplay (the paddle is clamped to
+reach from the shoulder). The fix then is to extend the stage 8 layer so cards draw strokes
+from a display-only solve with their own per-kind keys, gameplay skeleton untouched. That is
+a large build; decide it with the ratings in hand, not before.
+
 ### Stage 0. Pose checker: DONE (see 3.1)
 
 ### Stage 1. Studio core
@@ -629,6 +696,22 @@ Pose files matched the backup; nothing committed. Run in this order (each step e
    do not invent one. Hip dots or ring: `hip_yaw_deg`, feet planted, show hip-shoulder
    separation live. Head arrow, shown only when the head is selected: aims
    `head_yaw_deg` / `head_pitch_deg` and turns look-at-ball off for that key.
+   BUILT 2026-11-21 (user asked; no bench, studio only): rotate handles in AutoPose (violet ring
+   with a turn arc). Shoulders (`right_shoulder` / `left_shoulder`) solve `torso_yaw_deg`,
+   `torso_pitch_deg`, `torso_roll_deg` only (hips, feet hold). Hips (`right_hip` / `left_hip`, the
+   thigh sockets) solve `hip_yaw_deg`, `body_pitch_deg`, `body_roll_deg` plus the knee guides, feet
+   planted. Paddle edges (`paddle_edge_a` / `_b`, orange diamonds on the rim) turn the paddle in
+   the hand: `paddle_in_hand_rotation_deg` only (now listed in the editor fields, "Paddle: turn in
+   the hand"), about the handle through the grip, so hand, elbow and arm IK do not move (user:
+   "the paddle head rotation shouldn't affect the whole arm IK"); locked at Contact (face is
+   gameplay) unless Gameplay edit. Face angles at wind-up / finish are wrapping deltas: the solver
+   allows half a turn either way (the ±180 base range had stuck 22 of 80 rolls). Checked by link
+   on a scratch copy: 272 shoulder / hip drags (20 strokes, 8 stances, every key) wrote only those
+   fields, feet 0.01 cm, every undo clean; 80 edge drags (20 strokes, wind-up / finish) moved hand /
+   elbow / tip / shoulder 0.000 cm, wrote only the in-hand field; real mouse drags on all of them
+   commit as one undo step. Open: at some keys a new handle sits within 10 pt of another (s00 / s17
+   hips, s13 wind-up edge on the head): the nearest one wins the click. Wind-up / finish in-hand
+   turns reach only full-charge drives in game (code-built keys for the rest).
 5. **Clipping.** Body capsules (chest, belly, thighs) + head sphere from the solved joints;
    arm segments (upper arm, forearm, hand, paddle) keep >= ~3 cm in the solver (one-sided
    term) and in Relax. Transitions: read the game's blend first, sample ~10 points per
@@ -853,6 +936,37 @@ between points 69 -> 30 deg (average incl. pickups); fully standing drawn knees 
 instead of 4 (between 7.2 s vs 6.7 s, rally 17.1 vs 14.6 s). Per 100 shots: point endings 3.4 vs
 4.1, shot-plan mix unchanged within noise.
 
+### Stage 9b. Ball actions: pickup and throw (built 2026-11-21, user asked; dead ball only)
+User: pickup and throw poses with their own timeline (no wind-up / charge / finish). References:
+pickup "Pick up object, bending down" (youtube SCkpnp1bjkI: hip hinge, knees ~40 deg, torso ~70 deg,
+arm straight down, ~0.5 s down, slower rise); strong throw "Throwing A Ball Reference" (youtube
+2nUQDt_okyw: side-on stride, hand cocked behind the head, release high in front, follow across and
+down); weak throw = underhand lob with a pendulum arm (user).
+- Files `data/ball_actions/00_pickup.tres` (a00), `01_throw.tres` (a01 lob), `02_throw_strong.tres`
+  (a02), script `scripts/ball_action_definition.gd` (PostureDefinition + key times + `baseline`).
+  Made from the code by `tools/ball_actions_make.gd` (`-- --force` starts a file over).
+- Keys (stroke layout, so every studio tool works): pickup Reach / Grab / Rise, throws Wind-back /
+  Release / Follow. Key times: pickup `bend_time` (Grab), `lift_time`; throws `windup_time`,
+  `release_time` (ball leaves), `follow_time`. Drag a key mark on the timeline track or edit them in
+  Motion timing. The ball hand is `left_hand_offset` (range +-1.2 m in this workspace).
+- Game (`scripts/ball_actions.gd`, `between_point_controller.gd`): the code-built stand / bend and the
+  code wrist targets stay; the game adds each key's difference from `baseline` (blended by the bend for
+  the pickup, by the clock for throws) and uses the files' key times. An unedited file adds nothing.
+  The pickup Grab hand is always the ball (locked in the studio). Edited throws swing the hand on an
+  arc around the shoulder (pendulum for the lob, over the top for the strong throw). A pass of
+  `STRONG_THROW_M` (6 m) or more uses the strong throw.
+- Studio: workspace "Ball actions"; timeline stand -> keys -> stand built the way the game builds it
+  (`scripts/studio/ball_action_sequence.gd`); a ball in the preview (floor until Grab, in the hand,
+  gone after Release); Strong / Weak variants off.
+- Authored 2026-11-21 by link data: pickup Grab torso 65 deg, knees 20 / 33 deg, CoM 1 cm off the
+  feet, hand on the ball; bend 0.5 s, lift 0.7 s. Lob: hand back past the hip (0.85 m, 0.2 m behind),
+  through the bottom, release in front at 1.12 m, follow up to 1.40 m; 0.3 / 0.6 / 0.9 s. Strong:
+  side-on (right foot forward, left elbow back), hand behind the head (1.5 m), over the top (1.67 m),
+  release high in front, follow down across to 0.8 m; 0.35 / 0.55 / 0.9 s.
+- Checks: unedited files vs the original controller, bench seed 1 60 s: IDENTICAL. Authored, seeds 1
+  and 2, 120 s: 6 / 6 point breaks pick up (BEND -> LIFT, no off-screen helper) and pass (5 strong,
+  1 lob, every pass caught), 0 script errors. Look not yet checked by the user.
+
 ## 6. Decisions
 
 Decided by the user:
@@ -883,12 +997,24 @@ Open (ask the user; recommended default in brackets):
 
 | Stage | Status |
 |---|---|
+| **Plan from here** (section 5) | Re-planned 2026-11-21. Next: R1 review reel. The "Not started" rows below for stages 3-7 and the 9-10 workspaces now run through R1-R4 |
 | 0 Pose checker | Done 2026-11-20 (transition table, trace mining, card steps still to add) |
 | 1 Studio core | Desktop Pose Studio built 2026-11-20 (`scripts/studio/`, launch `tools/pose_studio.sh`); the browser version was built and dropped the same day (section 1). Checked end to end by data through the link (28/28): pose list 21 strokes / 22 stances, s13 metrics equal the checker capture on all 3 stages, inspector edit + undo + redo (field and metrics), save writes only the edited line and a no-change save is byte-identical, real mouse clicks on the pose list, a gizmo drag on the hips (one undo step), keys Space, comma/period, Cmd+Z, Shift+Cmd+Z, Cmd+S, ?, Esc, pixel cards present. Also: `.tres` writer and CLI unit tests 36/36, headless smoke check clean, the phone editor unchanged in a plain run. Not checked: how it looks (no screenshots), real OS mouse/keyboard (tests push events into the Godot window), `--window full`, second view drawing, the foot-plant stop path in the UI. Not yet used by the user. |
 | 2 Notes, versions, compare | Built into the studio as tabs; checked by data in a scratch store: a 5-star rating lands on the current version and shows stale after the next save, a note goes open -> addressed, the versions tab lists every version, its v001 vs v002 table equals the edit, and restore is byte-identical. Not checked: the history chart, a DIVERGED bench compare. |
 | Ratings (in stage 2) | System built; current count: 0 of 43 poses rated |
-| 6b AutoPose | Built and QA'd 2026-11-21 (2 reviewers, 384 UI drags + 16 Relax keys; gameplay fields 0 changes, pinned feet 0 drift, undo exact). Fixed: Stiffness double-click reset, undo label for multi-field steps, undo / redo / revert refused mid-drag, Relax reports the committed pose (not the prediction) when the reach check cuts it short, per-move time budget predicts the next iteration (s16 p95 8.7 -> 5.1 ms, max 15 -> 9.3), Contact paddle never unpins in AutoPose, display names and plain-click message. Still open: torso-turn reach refusals on s16 / s17 (Relax on s17 contact keeps 3%), balance guard limits on s10 / s16 / s17, balance may worsen inside 5 cm (b11 +1.4 cm), UI drags not bit-repeatable under the 6 ms budget (up to 0.6 deg), s00 finish paddle tip off screen in the default view. Next: stage 6c step 2 |
+| 6b AutoPose | Built and QA'd 2026-11-21 (2 reviewers, 384 UI drags + 16 Relax keys; gameplay fields 0 changes, pinned feet 0 drift, undo exact). Fixed: Stiffness double-click reset, undo label for multi-field steps, undo / redo / revert refused mid-drag, Relax reports the committed pose (not the prediction) when the reach check cuts it short, per-move time budget predicts the next iteration (s16 p95 8.7 -> 5.1 ms, max 15 -> 9.3), Contact paddle never unpins in AutoPose, display names and plain-click message. Still open: torso-turn reach refusals on s16 / s17 (Relax on s17 contact keeps 3%), balance guard limits on s10 / s16 / s17, balance may worsen inside 5 cm (b11 +1.4 cm), UI drags not bit-repeatable under the 6 ms budget (up to 0.6 deg), s00 finish paddle tip off screen in the default view (fixed 2026-11-21: the view follows pose switches until the user zooms or pans; 13 -> 0 of 104 pose stages with a joint or the tip off screen). Next: stage 6c step 2 |
 | 6c step 2 Elbow | Elbow swivel field built (visual only, bench IDENTICAL), all poses baked; stroke flips 7 -> 3. Next: limits, s10 decision, authored keys vs code-built keys |
-| 3 to 10 | Not started |
+| 6c steps 3-6 | Shoulder, hip and paddle-edge handles built 2026-11-21 (step 4, head arrow left). Not started: user try-out, clipping (body capsules, transitions, Ready / Pass-around keys), game-view preview and slow loop |
+| 6d Contact points, serves | Built 2026-11-21 (no bench by user decision); serves have no versions yet |
+| 3 Refinement loop | Not started (0 of 43 poses rated) |
+| 4 Motion analysis | Not started (no motion graphs, transition preview, timing segments, wrist-lag tuner, duplication / drafts) |
+| 5 Phone | Not started |
+| 6 Drag gizmos (desktop polish) | Partly: AutoPose covers move; no swivel arc handles, reach-limit warning or draggable wind-up / finish arc points |
+| 7 Backhand-face variant | Step 1 done, variant data built (nothing reads it); step 2 (studio toggle, draft s01) not started |
+| 8 Visual-only body layer | Built (card motion layer); idle sway / lean / crouch bob still on BodyPivot |
+| 9 Movement | Arm swing and shoulder counter-turn built, motion bench built; Movement workspace and gait tuning not started |
+| 10 Reactions | First batch, partner tap, standing expressions, relaxed stand built; Reactions workspace in the studio, later reactions, emotes, sound not started |
+| 9b Ball actions | Built and authored 2026-11-21 (pickup, lob, strong throw); dead ball only, unedited = IDENTICAL; look not yet checked by the user |
+| UI polish 2026-11-21 | Layout audit at 1280 x 800 and 1920 x 1080, every workspace, stage, panel tab, AutoPose on / off: 0 issues (only the Versions list scrolls at 1280 x 800) |
 
-Nothing from this work is committed.
+Committed on `visual-pass` (9f8df92, 1caf1a2 and later).

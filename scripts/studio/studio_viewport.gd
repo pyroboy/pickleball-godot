@@ -50,10 +50,17 @@ const DOT_HOVER := Color("ffdc62")
 const DOT_OUTLINE := Color("122630")
 const SELECT_COLOR := Color("71f5da")
 const AP_IDS := ["right_hand", "left_hand", "paddle_tip", "right_elbow", "left_elbow", "right_knee", "left_knee",
-	"right_foot", "left_foot", "hips", "chest", "head"]
+	"right_foot", "left_foot", "hips", "chest", "head", "right_shoulder", "left_shoulder", "right_hip", "left_hip",
+	"paddle_edge_a", "paddle_edge_b"]
+## Rotate handles (ring with a turn arc): drag turns that part, it does not move it.
+const AP_ROTATE := ["right_shoulder", "left_shoulder", "right_hip", "left_hip"]
+const AP_EDGES := ["paddle_edge_a", "paddle_edge_b"]
 const AP_NAMES := {"right_hand": "Right hand", "left_hand": "Left hand", "paddle_tip": "Paddle tip", "right_elbow": "Right elbow",
 	"left_elbow": "Left elbow", "right_knee": "Right knee", "left_knee": "Left knee", "right_foot": "Right foot",
-	"left_foot": "Left foot", "hips": "Hips", "chest": "Chest", "head": "Head"}
+	"left_foot": "Left foot", "hips": "Hips", "chest": "Chest", "head": "Head",
+	"right_shoulder": "Right shoulder (turn upper body)", "left_shoulder": "Left shoulder (turn upper body)",
+	"right_hip": "Right hip (turn hips)", "left_hip": "Left hip (turn hips)",
+	"paddle_edge_a": "Paddle edge (roll the face)", "paddle_edge_b": "Paddle edge (roll the face)"}
 const AP_ARM := Color("5fb8ff")
 const AP_LEG := Color("7ee081")
 const AP_BODY := Color("d59cff")
@@ -69,6 +76,7 @@ var studio
 var preview
 var drag := Drag.NONE
 var _left_nav := false   # current orbit/pan was started with the left button
+var auto_fit := true     # camera follows pose / stage switches until the user zooms or pans (F = on again)
 var hover_joint := ""
 var _dots := PackedVector2Array()
 var _last_mouse := Vector2.INF
@@ -227,11 +235,13 @@ func pan_by(rel: Vector2) -> void:
 func set_target(t: Vector3) -> void:
 	var c := Vector3(0, 1, 0)
 	preview.camera_target = c + (t - c).clamp(-TARGET_BOX, TARGET_BOX)
+	auto_fit = false
 	preview.update_camera()
 
 func set_distance(d: float) -> void:
 	preview.distance = clampf(d, DIST_MIN, DIST_MAX)
 	preview._manual_zoom = true
+	auto_fit = false
 	preview.update_camera()
 
 ## Pose centre: the solved hips (fallback: the phone's fixed target).
@@ -239,14 +249,25 @@ func pose_centre() -> Vector3:
 	var p: Vector3 = preview.joint_world_position("hips")
 	return p if p.is_finite() else Vector3(0, 1, 0)
 
-## F: orbit centre back to the hips, fit the distance on the pose once, then hold it (the
-## phone refits on every joint / stage change; a desktop camera stays where the user put it).
+## F: orbit centre back to the hips, fit the distance on the pose, and follow poses again
+## (auto_fit). Until the user zooms or pans, a pose switch refits and a stage switch only pulls
+## out (never in), so the paddle stays on screen and the zoom holds while comparing stages.
+## Once the user zooms or pans, the camera stays where they put it until F.
 func frame_pose() -> void:
 	preview.cancel_gesture()
+	auto_fit = true
+	_fit(FRAME_MIN_DIST)
+
+## Pose / stage switch while auto_fit: `grow_only` keeps the current distance as the minimum.
+func follow_pose(grow_only: bool) -> void:
+	if not auto_fit or drag != Drag.NONE: return
+	_fit(current_distance() if grow_only else FRAME_MIN_DIST)
+
+func _fit(minimum: float) -> void:
 	preview.camera_target = pose_centre()
-	preview.distance = FRAME_MIN_DIST
+	preview.distance = minimum
 	preview._manual_zoom = false
-	preview._fitted_distance = FRAME_MIN_DIST
+	preview._fitted_distance = minimum
 	preview._fit_camera_to_pose()
 	preview.distance = clampf(maxf(preview.distance, preview._fitted_distance), DIST_MIN, DIST_MAX)
 	preview._manual_zoom = true
@@ -444,7 +465,7 @@ func _update_ap() -> bool:
 	for i in n:
 		var id: String = AP_IDS[i]
 		var p3: Vector3 = w.get(id, Vector3.INF)
-		if id == "paddle_tip" and not tip_ok: p3 = Vector3.INF
+		if (id == "paddle_tip" or id in AP_EDGES) and not tip_ok: p3 = Vector3.INF
 		_ap_world[i] = p3
 		var p: Vector2 = preview._world_screen_position(p3) if p3.is_finite() else Vector2.INF
 		var old: Vector2 = _ap[i]
@@ -453,7 +474,8 @@ func _update_ap() -> bool:
 	return changed
 
 func _ap_color(id: String) -> Color:
-	if id in ["hips", "chest", "head"]: return AP_BODY
+	if id in ["hips", "chest", "head"] or id in AP_ROTATE: return AP_BODY
+	if id in AP_EDGES: return TIP_COLOR
 	if id.ends_with("_knee") or id.ends_with("_foot"): return AP_LEG
 	return TIP_COLOR if id == TIP_ID else AP_ARM
 
@@ -490,7 +512,19 @@ func _draw_ap(rect: Rect2) -> void:
 		var hot: bool = id == ap_handle or id == hover_ap
 		var col: Color = DOT_HOVER if hot else AP_LOCKED if locked else _ap_color(id)
 		var r := AP_RADIUS + (1.5 if hot else 0.0)
-		if id == TIP_ID:
+		if id in AP_EDGES:   # small diamond on the rim
+			r -= 1.5
+			var o := r + 2.0
+			draw_colored_polygon(PackedVector2Array([p + Vector2(0, -o), p + Vector2(o, 0), p + Vector2(0, o), p + Vector2(-o, 0)]), DOT_OUTLINE)
+			draw_polyline(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0), p + Vector2(0, -r)]), col, 2.0, true)
+		elif id in AP_ROTATE:   # ring + turn arc with an arrow head
+			draw_circle(p, r + 2.0, DOT_OUTLINE, true, -1.0, true)
+			draw_circle(p, r, col, false, 2.5, true)
+			draw_arc(p, r + 4.5, -PI * 0.9, -PI * 0.1, 10, DOT_OUTLINE, 3.5, true)
+			draw_arc(p, r + 4.5, -PI * 0.9, -PI * 0.1, 10, col, 1.6, true)
+			var a := p + Vector2(cos(-PI * 0.1), sin(-PI * 0.1)) * (r + 4.5)
+			draw_line(a, a + Vector2(-3.5, -2.0), col, 1.6, true); draw_line(a, a + Vector2(0.5, -4.0), col, 1.6, true)
+		elif id == TIP_ID:
 			var o := r + 2.5
 			draw_colored_polygon(PackedVector2Array([p + Vector2(0, -o), p + Vector2(o, 0), p + Vector2(0, o), p + Vector2(-o, 0)]), DOT_OUTLINE)
 			draw_polyline(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r, 0), p + Vector2(0, r), p + Vector2(-r, 0), p + Vector2(0, -r)]), col, 2.5, true)
