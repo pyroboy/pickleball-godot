@@ -16,6 +16,8 @@ static func points(preview)->PackedVector3Array:
 		if is_instance_valid(preview.contact_preview.block):_mesh_points(preview.contact_preview.block,result)
 		if is_instance_valid(preview.contact_preview.contact_marker):_mesh_points(preview.contact_preview.contact_marker,result)
 	if is_instance_valid(preview.gizmo) and is_instance_valid(preview.gizmo.scene_root):_mesh_points(preview.gizmo.scene_root,result)
+	# Pose Studio momentum arc (Trajectory on): its Wind-up / Contact / Finish points stay in view.
+	if preview.get("momentum_on") and preview._arc_visible:result.append_array(preview.momentum_keys)
 	return result
 static func distance_for(preview, target:Vector3, minimum:float)->float:
 	var aspect:float=float(preview.viewport.size.x)/maxf(preview.viewport.size.y,1)

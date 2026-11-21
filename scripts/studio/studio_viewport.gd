@@ -101,6 +101,13 @@ var _ap_plane := Plane()           # camera-facing plane through the handle (re-
 var _ap_offset := Vector2.ZERO     # mouse - handle at press: the handle keeps it (no jump on grab)
 var ap_target := Vector3.INF       # world point the handle is being dragged to
 var hover_lock := false            # the mouse is on hover_ap's lock icon
+## Momentum arc (preview.momentum_heads, Trajectory layer, AutoPose): a dot per game tick (their
+## spacing is the paddle's speed) and the Wind-up / Finish points. Dragging a point goes to that
+## key and drags its paddle (the paddle tip handle); a tap opens the swing options (phone).
+const ARC_KEY_RADIUS := 7.0
+var _arc_dots := PackedVector2Array()
+var _arc_keys := PackedVector2Array()   # Wind-up, Contact, Finish points (preview points)
+var arc_stage := -1                     # key of the arc point being dragged (0 / 2), -1 = none
 
 func attach(owner_studio, pv) -> void:
 	studio = owner_studio; preview = pv
@@ -199,7 +206,8 @@ func _button(e: InputEventMouseButton) -> void:
 					drag = Drag.NONE
 					var tapped: bool = int(studio.last_autopose.get("moves", 0)) == 0
 					studio.autopose_drag_end(true, "released")
-					if tapped: studio.handle_tapped.emit(ap_handle)
+					if tapped: studio.handle_tapped.emit("swing" if arc_stage >= 0 else ap_handle)
+					arc_stage = -1
 					ap_handle = ""; ap_target = Vector3.INF
 					studio.drag_changed()
 					_hover(e.position); queue_redraw()
@@ -221,6 +229,13 @@ func _button(e: InputEventMouseButton) -> void:
 				var lk := ap_lock_pick(e.position) if core == "" and not touch else ""
 				if lk != "":
 					studio.set_autopose_pin(lk); queue_redraw(); return
+				var ak := arc_pick(e.position) if core == "" else -1
+				if ak >= 0:
+					if ak != studio.stage: studio.set_stage(ak)
+					arc_stage = ak
+					_begin_ap("paddle_tip", e)
+					if drag != Drag.AUTOPOSE: arc_stage = -1
+					return
 				var h := core if core != "" else ap_pick(e.position, _r(PICK_RADIUS))
 				if h != "":
 					if e.alt_pressed: studio.set_autopose_pin(h); queue_redraw(); return
@@ -342,7 +357,7 @@ func cancel() -> void:
 	if drag == Drag.AUTOPOSE:   # Esc / right-click / focus loss: back to the pose from before the drag
 		drag = Drag.NONE
 		studio.autopose_drag_end(false, "cancelled")
-		ap_handle = ""; ap_target = Vector3.INF
+		ap_handle = ""; ap_target = Vector3.INF; arc_stage = -1
 		mouse_default_cursor_shape = Control.CURSOR_ARROW
 		studio.drag_changed(); queue_redraw()
 	elif drag == Drag.GIZMO or drag == Drag.TIP:
@@ -492,9 +507,75 @@ func _ap_motion(e: InputEventMouseMotion) -> void:
 	if not r.get("ok", false):   # the pose / key changed under the drag: the solver already let go
 		drag = Drag.NONE
 		studio.autopose_drag_end(false, "ended")
-		ap_handle = ""; ap_target = Vector3.INF
+		ap_handle = ""; ap_target = Vector3.INF; arc_stage = -1
 		studio.drag_changed()
 	_update_ap(); _update_dots(); queue_redraw()
+
+func _arc_shown() -> bool:
+	return studio != null and studio.autopose_on and preview._arc_visible and preview.momentum_heads.size() > 1 \
+		and preview.motion_root != null and preview.motion_root.visible
+
+func _update_arc() -> bool:
+	var dots := PackedVector2Array()
+	var keys := PackedVector2Array()
+	if _arc_shown():
+		for h in preview.momentum_heads: dots.append(preview._world_screen_position(h))
+		for h in preview.momentum_keys: keys.append(preview._world_screen_position(h))
+	var changed := dots.size() != _arc_dots.size() or keys.size() != _arc_keys.size()
+	for i in (dots.size() if not changed else 0):
+		if dots[i].is_finite() != _arc_dots[i].is_finite() or (dots[i].is_finite() and dots[i].distance_squared_to(_arc_dots[i]) > 0.04): changed = true; break
+	for i in (keys.size() if not changed else 0):
+		if keys[i].is_finite() != _arc_keys[i].is_finite() or (keys[i].is_finite() and keys[i].distance_squared_to(_arc_keys[i]) > 0.04): changed = true; break
+	_arc_dots = dots; _arc_keys = keys
+	return changed
+
+## Wind-up (0) or Finish (2) arc point under `point` (-1 = none). The current key's point is
+## left to its rings.
+func arc_pick(point: Vector2) -> int:
+	_update_arc()
+	if _arc_keys.size() < 3: return -1
+	var best := -1
+	var best_d := _r(ARC_KEY_RADIUS + 3.0)
+	for st in [0, 2]:
+		if st == studio.stage or not _arc_keys[st].is_finite(): continue
+		var d := _arc_keys[st].distance_to(point)
+		if d < best_d: best_d = d; best = st
+	return best
+
+func _draw_arc(rect: Rect2) -> void:
+	if _arc_keys.size() < 3: return
+	var k := TOUCH_DRAW if touch else 1.0
+	for p in _arc_dots:
+		if not p.is_finite() or not rect.has_point(p): continue
+		draw_circle(p, 3.2 * k, DOT_OUTLINE, true, -1.0, true)
+		draw_circle(p, 2.0 * k, Color(1, 1, 1, 0.92), true, -1.0, true)
+	var cols: Array = preview.STAGE_COLORS
+	for st in 3:
+		var p: Vector2 = _arc_keys[st]
+		if not p.is_finite() or not rect.has_point(p): continue
+		if st == 1:   # Contact, with the strike's peak paddle speed
+			draw_circle(p, 4.0 * k, DOT_OUTLINE, true, -1.0, true)
+			draw_circle(p, 2.8 * k, cols[1], true, -1.0, true)
+			_draw_label(p + Vector2(4, 18) * k, "peak %.0f m/s" % float(preview.momentum_contact_speed))
+			continue
+		if st == studio.stage: continue
+		var hot: bool = arc_stage == st
+		var r := ARC_KEY_RADIUS * k + (1.5 if hot else 0.0)
+		draw_circle(p, r + 2.0, DOT_OUTLINE, true, -1.0, true)
+		draw_circle(p, r, DOT_HOVER if hot else cols[st], false, 2.5, true)
+		var font := get_theme_default_font()
+		var fs := int(round(get_theme_default_font_size() * 0.8 * k))
+		var tw := font.get_string_size("WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs)
+		draw_string(font, p + Vector2(-tw.x * 0.5, fs * 0.36), "WF"[st / 2], HORIZONTAL_ALIGNMENT_LEFT, -1, fs, cols[st])
+
+## Data for ui_dump / the link: the momentum arc in preview points.
+func arc_state() -> Dictionary:
+	_update_arc()
+	var pt = func(p: Vector2): return [p.x, p.y] if p.is_finite() else null
+	return {"shown": _arc_shown(), "ticks": _arc_dots.size(), "keys": Array(_arc_keys).map(pt),
+		"key_times": Array(preview.momentum_key_times), "contact_speed": preview.momentum_contact_speed,
+		"heads": Array(preview.momentum_heads).map(func(h: Vector3): return [snappedf(h.x, 0.001), snappedf(h.y, 0.001), snappedf(h.z, 0.001)]),
+		"dragging": arc_stage}
 
 func _update_ap() -> bool:
 	var n := AP_IDS.size()
@@ -675,12 +756,13 @@ func _process(_delta: float) -> void:
 	if preview != null and is_visible_in_tree():
 		var a := _update_dots()
 		var b := _update_ap()
-		if a or b: queue_redraw()
+		var c := _update_arc()
+		if a or b or c: queue_redraw()
 
 func _draw() -> void:
 	if preview == null: return
 	var rect := Rect2(Vector2.ZERO, size)
-	if studio != null and studio.autopose_on: _draw_ap(rect); return
+	if studio != null and studio.autopose_on: _draw_arc(rect); _draw_ap(rect); return
 	var sel: String = preview.selected_joint
 	for i in _dots.size():
 		var p: Vector2 = _dots[i]

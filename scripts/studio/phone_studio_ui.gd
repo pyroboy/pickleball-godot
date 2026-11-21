@@ -27,6 +27,7 @@ const AP_NAMES := {"right_hand": "Right hand", "left_hand": "Left hand", "paddle
 	"left_shoulder": "Left shoulder", "right_hip": "Right hip", "left_hip": "Left hip", "paddle_edge_a": "Paddle edge", "paddle_edge_b": "Paddle edge"}
 const LEVELS := [["Loose", 0.5], ["Normal", 1.0], ["Stiff", 2.0]]
 const REGIONS := [["Arms", "arms"], ["Torso", "torso"], ["Legs", "legs"]]
+const CURVES := [["Straight", 0.0], ["Natural", 0.5], ["Round", 1.0]]
 
 var studio
 var _scene: Control
@@ -63,6 +64,9 @@ var _sheet_note: Label
 var _layers: VBoxContainer
 var _layer_btns := {}        # "ghosts" | "arc" | "contact" -> Button
 var _region_btns := {}       # region -> [Button x3]
+var _swing: VBoxContainer     # swing sheet (replaces the lower third): curve, speed, timing
+var _curve_btns: Array[Button] = []
+var _swing_info: Label
 var _handle := ""
 var _drawer: Control
 var _drawer_list: VBoxContainer
@@ -95,6 +99,9 @@ func build(owner_studio) -> void:
 	_sheet.add_theme_constant_override("separation", GAP)
 	col.add_child(_sheet)
 	_build_sheet(_sheet)
+	_swing = VBoxContainer.new(); _swing.name = "SwingSheet"; _swing.visible = false
+	col.add_child(_swing)
+	_build_swing(_swing)
 	_build_drawer()
 	_build_star_popup()
 	resized.connect(_fit)
@@ -102,12 +109,14 @@ func build(owner_studio) -> void:
 	studio.handle_tapped.connect(_open_sheet)
 	studio.pose_selected.connect(func(_k): _refresh_pose())
 	studio.pose_saved.connect(func(_k, _v): _refresh_pose())
+	studio.pose_edited.connect(func(_k): if _swing.visible: _refresh_swing.call_deferred())
 
 ## The lower third (and the ring sheet in its place) is a third of the screen height.
 func _fit() -> void:
 	var third: float = floor(size.y / 3.0)
 	_lower.custom_minimum_size.y = third
 	_sheet.custom_minimum_size.y = third
+	_swing.custom_minimum_size.y = third
 
 func mount_preview(pv: Control) -> void:
 	pv.reparent(_scene, false)
@@ -211,11 +220,12 @@ func _build_scene_overlay() -> void:
 	hp.position = Vector2(GAP, GAP)
 	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
 	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
+	views.add_child(_btn("Swing", func(): _open_sheet("swing"), 124, 64))
 	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 130, 64))
 	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
 	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
 	_scene.add_child(views)
-	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -346; views.offset_right = -GAP; views.offset_top = 72
+	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -478; views.offset_right = -GAP; views.offset_top = 72
 	_layers = VBoxContainer.new(); _layers.name = "Layers"; _layers.visible = false
 	_layers.add_theme_constant_override("separation", 8)
 	_layers.anchor_left = 1.0; _layers.anchor_right = 1.0; _layers.offset_left = -346; _layers.offset_right = -146; _layers.offset_top = 72 + 64 + 8
@@ -420,13 +430,69 @@ func _build_sheet(sheet: VBoxContainer) -> void:
 		v.add_child(r)
 
 func _open_sheet(id: String) -> void:
+	if id == "swing":
+		_handle = ""
+		_lower.visible = false; _sheet.visible = false; _swing.visible = true
+		if not _layer_on("arc"): _toggle_layer("arc")
+		_refresh_swing(); return
 	_handle = id
-	_lower.visible = false; _sheet.visible = true
+	_lower.visible = false; _swing.visible = false; _sheet.visible = true
 	_refresh_sheet()
 
 func _close_sheet() -> void:
 	_handle = ""
-	_sheet.visible = false; _lower.visible = true
+	_sheet.visible = false; _swing.visible = false; _lower.visible = true
+
+# ---------------------------------------------------------------- swing (trajectory)
+
+## Swing sheet: the momentum arc's options. The arc (Trajectory layer) is the swing the game
+## plays at full charge, a dot per game tick: wide gaps = fast paddle. Drag its W / F points to
+## move that key's paddle; Curve shapes the path between the keys (swing_path_blend).
+func _build_swing(sheet: VBoxContainer) -> void:
+	var bg := PanelContainer.new(); bg.add_theme_stylebox_override("panel", _row_box()); bg.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sheet.add_child(bg)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); bg.add_child(v)
+	var head := HBoxContainer.new()
+	var t := _label("Swing path", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
+	var how := _label("One dot per game tick: wide gaps = fast paddle. Drag W or F on the arc to move that key's paddle.", SMALL, Ui.MUTED)
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
+	var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
+	var cl := _label("Curve", SMALL); cl.custom_minimum_size.x = 100; r.add_child(cl)
+	for c in CURVES:
+		var b := _btn(c[0], _set_curve.bind(c[1]), 0, 64); b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.add_theme_font_size_override("font_size", SMALL); _curve_btns.append(b); r.add_child(b)
+	v.add_child(r)
+	var keys := HBoxContainer.new(); keys.add_theme_constant_override("separation", 8)
+	for st in [0, 2]:
+		var b := _btn("Edit " + ("Wind-up" if st == 0 else "Finish"), _edit_key.bind(st), 0, 64)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.add_theme_color_override("font_color", STAGE_COLORS[st])
+		keys.add_child(b)
+	v.add_child(keys)
+	_swing_info = _label("", SMALL, Ui.MUTED); _swing_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(_swing_info)
+
+func _set_curve(value: float) -> void:
+	var r: Dictionary = studio.set_swing_curve(value)
+	if not r.get("ok", false): _show_toast(String(r.get("error", "Curve: cannot change it here")))
+	_refresh_swing()
+
+func _edit_key(st: int) -> void:
+	studio.set_stage(st)
+	_close_sheet()
+
+func _refresh_swing() -> void:
+	if _swing_info == null or studio.key == "": return
+	var cur: Resource = studio.engine._current
+	var blend = cur.get("swing_path_blend") if cur else null
+	for i in CURVES.size(): _tint(_curve_btns[i], blend != null and absf(float(blend) - float(CURVES[i][1])) < 0.17)
+	var pv = studio.preview
+	var kt: PackedFloat32Array = pv.momentum_key_times
+	if kt.size() < 3:
+		_swing_info.text = "No swing arc for this pose (a single stance)." if not studio.engine._has_motion() else "Turn on Layers → Trajectory to see the arc."
+		return
+	_swing_info.text = "Strike peak %.1f m/s · Ready→Wind-up %.2f s · strike %.2f s · finish %.2f s (timing is gameplay: desktop studio)" % [
+		float(pv.momentum_contact_speed), kt[0], kt[1] - kt[0], kt[2] - kt[1]]
 
 func _toggle_pin() -> void:
 	if _handle == "": return
@@ -608,6 +674,7 @@ func _refresh_pose() -> void:
 		_tint(_keys[i], studio.stage == i, STAGE_COLORS[i])
 	_refresh_stars(); _refresh_tabs(); _refresh_chips()
 	if _handle != "": _refresh_sheet()
+	if _swing.visible: _refresh_swing()
 
 func _show_toast(t: String) -> void:
 	if t == "": return

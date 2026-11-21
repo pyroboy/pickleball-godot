@@ -308,6 +308,7 @@ func adopt(ed) -> void:
 	ed._gizmo_show.set_pressed_no_signal(true)   # not _toggle_gizmo: that writes user:// view settings
 	if not phone: _setup_second_view()
 	is_ready = true
+	preview.set_momentum(true)   # the Trajectory arc is the swing the game plays (tick dots)
 	select_pose("s00")
 	if phone:
 		_view_input.touch = true
@@ -830,7 +831,7 @@ func _reset_view_state() -> void:
 	if preview == null: return
 	if not _overlays_set:
 		_overlays_set = true
-		set_overlay("arc", false)
+		set_overlay("arc", phone)   # phone: the momentum arc (Trajectory) starts on
 		set_overlay("ghosts", false)
 		set_ghost_count(0)
 		set_overlay("contact", false)
@@ -1177,6 +1178,10 @@ func set_overlay(what: String, on: bool) -> void:
 		"contact":
 			_contact_on = on; _contact_toggle.set_pressed_no_signal(on)
 			if preview.contact_preview: preview.contact_preview.visible = on and preview._contact_enabled
+
+## Swing curve between the keys (swing_path_blend): 0 straight lines, 1 the full curve.
+func set_swing_curve(v: float) -> Dictionary:
+	return set_field("swing_path_blend", null, clampf(v, 0.0, 1.0))
 
 ## Not engine._ghost_count_changed: that writes user:// view settings.
 func set_ghost_count(n: int) -> void:
@@ -2450,7 +2455,7 @@ func ui_dump() -> Dictionary:
 			"contact": _contact_on, "contact_visible": preview.contact_preview != null and preview.contact_preview.visible,
 			"second_view": _second.visible, "drag": ViewportInput.Drag.keys()[_view_input.drag] if _view_input else "",
 			"hover": _view_input.hover_joint if _view_input else "", "dots": _view_input.dots_state() if _view_input else [],
-			"autopose": _view_input.autopose_state() if _view_input else {}}
+			"autopose": _view_input.autopose_state() if _view_input else {}, "momentum": _view_input.arc_state() if _view_input else {}}
 	return {"ok": true, "ready": is_ready, "key": key, "stage": STAGES[stage], "dirty": _ok() and engine._dirty.has(engine._key),
 		"unsaved": unsaved_keys(), "quit_dialog": _quit_dlg != null and _quit_dlg.visible, "undo": _undo.size(), "redo": _redo.size(), "window": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
 		"preview": pv, "timeline": _timeline.state(), "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
