@@ -11,11 +11,13 @@ class_name CardPartnerTap
 
 const RANGE: = 1.5            # m between partners (body centres) to start a tap
 const WINDOW: = 5.0           # s after the point end
-const REACH: = 0.32           # s to reach the meeting point
-const TAP_AT: = 0.42          # s: the tap nudge
-const HOLD: = 0.52            # s: start back
-const DONE: = 0.90             # s
+const TURN: = 0.45            # s: both turn to face each other first
+const REACH: = 0.85           # s: paddle tips at the meeting point
+const TAP_AT: = 0.98          # s: the tap nudge
+const HOLD: = 1.15            # s: start back (paddle first, then the turn)
+const DONE: = 1.75            # s
 const MEET_HEIGHT: = 1.15     # m above the court
+const LOOK_AHEAD: = 0.35      # s: partners must still be in range this far ahead
 const BUSY_PHASES: = ["BEND", "LIFT", "PICKUP", "CARRY", "PASS_PREP", "PASS", "PASS_RELEASE", "CATCH", "CATCH_OPEN"]
 
 static var _events: Dictionary = {}   # "<game id>:<team>" -> {"gen": int, "frame": int, "done": bool}
@@ -67,7 +69,7 @@ func _hands_busy(p) -> bool:
 	return idx >= 0 and (idx == int(bpc.get("retriever")) or idx == int(bpc.get("server")))
 
 ## Advance. `stop_reaction(p)` ends a player's card reaction when the tap starts.
-## Returns {} or {"w": 0..1 reach weight, "nudge": 0..1, "target": Vector3, "partner": player}.
+## Returns {} or {"turn": 0..1 face-the-partner weight, "w": 0..1 reach weight, "nudge": 0..1, "target": Vector3, "partner": player}.
 func update(delta: float, stop_reaction: Callable) -> Dictionary:
 	_connect()
 	if _game == null: return {}
@@ -86,7 +88,7 @@ func update(delta: float, stop_reaction: Callable) -> Dictionary:
 				and not _hands_busy(_player) and not _hands_busy(partner):
 			# Close now and still close at the reach (walking past or apart does not count).
 			var d: Vector3 = partner.global_position - _player.global_position
-			var ahead: Vector3 = d + (_vel(partner) - _vel(_player)) * TAP_AT
+			var ahead: Vector3 = d + (_vel(partner) - _vel(_player)) * LOOK_AHEAD
 			d.y = 0.0
 			ahead.y = 0.0
 			if d.length() <= RANGE and ahead.length() <= RANGE:
@@ -101,13 +103,13 @@ func update(delta: float, stop_reaction: Callable) -> Dictionary:
 		_t = -1.0
 		_point_t = -1.0
 		return {}
-	var w: float
-	if _t < REACH: w = smoothstep(0.0, REACH, _t)
-	elif _t < HOLD: w = 1.0
-	else: w = 1.0 - smoothstep(HOLD, DONE, _t)
-	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.06)
+	# Turn first, then reach; going back the paddle comes down before the body turns away.
+	var back_mid: float = lerpf(HOLD, DONE, 0.55)
+	var turn: float = smoothstep(0.0, TURN, _t) * (1.0 - smoothstep(back_mid - 0.1, DONE, _t))
+	var w: float = smoothstep(TURN * 0.6, REACH, _t) * (1.0 - smoothstep(HOLD, back_mid, _t))
+	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.07)
 	var mine: Vector3 = _player.global_position
 	var theirs: Vector3 = partner.global_position
 	var target: = (mine + theirs) * 0.5
 	target.y = mine.y + MEET_HEIGHT
-	return {"w": w, "nudge": nudge, "target": target, "partner": partner}
+	return {"turn": turn, "w": w, "nudge": nudge, "target": target, "partner": partner}

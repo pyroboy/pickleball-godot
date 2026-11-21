@@ -29,7 +29,8 @@ const SPEED_FULL: = 3.0       # m/s: full amplitude
 const STRIDE_REF: = 0.32      # metres of front-back foot split read as a full stride
 const WEIGHT_RATE: = 5.0      # 1/s fade in and out
 const SPEED_HALF_LIFE: = 0.08
-const TAP_TURN_DEG: = 12.0    # chest turn toward the partner for a paddle tap
+const TAP_TURN_DEG: = 70.0    # chest turn toward the partner for a paddle tap (face each other)
+const TAP_HIP_SHARE: = 0.35   # part of that turn the hips take, so the waist doesn't over-twist
 const TAP_LEAN_DEG: = 5.0     # lean toward a partner who is farther away (up to 1.7 m)
 const TAP_PADDLE_REACH: = 0.43  # m from the hand to the paddle tip (tips meet)
 const TAP_PUSH: = 0.004       # m: the tap's push along the reach
@@ -331,7 +332,8 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	if tap.is_empty(): return
 	_tapping = true
 	var w: float = float(tap.w)
-	if w <= 1e-4: return
+	var tw: float = float(tap.get("turn", w))
+	if tw <= 1e-4 and w <= 1e-4: return
 	var body: Node3D = player.body_pivot
 	var torso: Node3D = body.get_node_or_null("TorsoMesh")
 	if torso == null: return
@@ -340,14 +342,14 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	var to_p: Vector3 = tap.partner.global_position - player.global_position
 	to_p.y = 0.0
 	if fwd.length_squared() < 1e-6 or to_p.length_squared() < 1e-6: return
-	# Chest turns toward the partner (limited), then the paddle hand reaches the meeting point.
-	var yaw: float = clampf(fwd.normalized().signed_angle_to(to_p.normalized(), Vector3.UP), -deg_to_rad(TAP_TURN_DEG), deg_to_rad(TAP_TURN_DEG)) * w
+	# First the chest (and partly the hips) turn to face the partner, then the paddle hand reaches.
+	var yaw: float = clampf(fwd.normalized().signed_angle_to(to_p.normalized(), Vector3.UP), -deg_to_rad(TAP_TURN_DEG), deg_to_rad(TAP_TURN_DEG)) * tw
 	var hips: Node3D = body.get_node_or_null("HipsMesh")
 	var hip_p: Vector3 = _plain(hips if hips else body)
 	var turn: = _turn_about(hip_p, Vector3.UP, yaw)
 	# Farther apart: lean toward the partner so the paddles still meet.
 	var to_dir: Vector3 = to_p.normalized()
-	var lean_deg: float = TAP_LEAN_DEG * clampf((to_p.length() - 0.9) / 0.8, 0.0, 1.0) * w
+	var lean_deg: float = TAP_LEAN_DEG * clampf((to_p.length() - 0.9) / 0.8, 0.0, 1.0) * tw
 	if lean_deg > 0.01:
 		var axis: Vector3 = to_dir.cross(Vector3.UP).normalized()
 		var sgn: float = signf(axis.cross(_plain(torso) - hip_p).dot(to_dir))
@@ -356,6 +358,7 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 		if n == null: return
 		_deltas[n] = d * _deltas.get(n, Transform3D.IDENTITY)
 	add.call(torso, turn)
+	if hips != null: add.call(hips, _turn_about(hip_p, Vector3.UP, yaw * TAP_HIP_SHARE))
 	var head: Node3D = torso.get_node_or_null("HeadMesh")
 	if head != null: add.call(head, turn)
 	var aim: = Transform3D.IDENTITY
