@@ -12,6 +12,12 @@ extends RefCounted
 ## the part): with any, the speed is a smooth monotone curve through the start, the points and
 ## the end (never below 0), scaled so the part still ends exactly on its key in its duration.
 ## The graph shows and edits the real (scaled) speeds.
+##
+## Easing keys (the Pose Studio easing curve): a point with z = 1 is (x, progress, 1), a place the
+## part's progress curve passes through (x = time fraction, progress 0..1 inside the part). With
+## any, the part's progress is a monotone cubic through (0, 0), the keys and (1, 1), leaving the
+## start with slope `start` and arriving with slope `end` (the keys' ease handles). Without keys
+## that is exactly the Hermite ramp above. z = 0 points are the older speed points.
 enum { LEAD, STRIKE, FINISH }
 const FIELDS := [["speed_lead_start", "speed_lead_end"], ["speed_strike_start", "speed_strike_end"], ["speed_finish_start", "speed_finish_end"]]
 const NAMES := ["Ready → Wind-up", "Strike", "Follow-through"]
@@ -35,14 +41,57 @@ static func lead(def, x: float) -> float:
 	if not custom(def, LEAD): return smoothstep(0.0, 1.0, x)
 	if has_points(def, LEAD): return _integrated(def, LEAD, x)
 	var e := ends(def, LEAD)
+	if has_ease_keys(def, LEAD): return ease_value(ease_keys(def, LEAD), e.x, e.y, x)
 	return hermite(x, e.x, e.y)
+
+## The part has easing keys (z = 1 points).
+static func has_ease_keys(def, part: int) -> bool:
+	if not custom(def, part): return false
+	for p in points(def, part): if p.z >= 0.5: return true
+	return false
+
+## [[x, progress], ...] from (0, 0) to (1, 1): the part's easing keys, sorted, strictly rising.
+static func ease_keys(def, part: int) -> Array:
+	var mid: Array = []
+	for p in points(def, part): if p.z >= 0.5: mid.append([clampf(p.x, 0.03, 0.97), clampf(p.y, 0.01, 0.99)])
+	mid.sort_custom(func(a, b): return a[0] < b[0])
+	var out: Array = [[0.0, 0.0]]
+	for q in mid.slice(0, MAX_POINTS):
+		var last: Array = out[out.size() - 1]
+		if q[0] - last[0] < 0.01: continue
+		out.append([q[0], clampf(q[1], last[1] + 0.005, 0.995)])
+	out.append([1.0, 1.0])
+	return out
+
+## Progress at x of the monotone cubic through keys k, with slope s0 at the start and s1 at the
+## end. Inner slopes follow their neighbours; every slope is held to three times the steeper of
+## its two sides at most, so the curve never runs backwards.
+static func ease_value(k: Array, s0: float, s1: float, x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	var n := k.size()
+	var i := 0
+	while i < n - 2 and t > k[i + 1][0]: i += 1
+	var slope := func(j: int) -> float:
+		var after: float = (k[j + 1][1] - k[j][1]) / maxf(k[j + 1][0] - k[j][0], 0.0001) if j < n - 1 else -1.0
+		var before: float = (k[j][1] - k[j - 1][1]) / maxf(k[j][0] - k[j - 1][0], 0.0001) if j > 0 else -1.0
+		if j == 0: return clampf(s0, 0.0, 3.0 * after)
+		if j == n - 1: return clampf(s1, 0.0, 3.0 * before)
+		if before <= 0.0 or after <= 0.0: return 0.0
+		var ha: float = k[j + 1][0] - k[j][0]; var hb: float = k[j][0] - k[j - 1][0]
+		return minf(3.0 * (ha + hb) / ((2.0 * ha + hb) / before + (ha + 2.0 * hb) / after), 3.0 * minf(before, after))
+	var h: float = maxf(k[i + 1][0] - k[i][0], 0.0001)
+	var u: float = clampf((t - k[i][0]) / h, 0.0, 1.0)
+	var m0: float = slope.call(i) * h; var m1: float = slope.call(i + 1) * h
+	var y0: float = k[i][1]; var y1: float = k[i + 1][1]
+	return clampf((2*u*u*u - 3*u*u + 1) * y0 + (u*u*u - 2*u*u + u) * m0 + (-2*u*u*u + 3*u*u) * y1 + (u*u*u - u*u) * m1, 0.0, 1.0)
 
 static func points(def, part: int) -> PackedVector3Array:
 	var v = def.get(POINTS[part]) if def != null else null
 	return v if v is PackedVector3Array else PackedVector3Array()
 
+## The part has the older speed points (z = 0) and no easing keys.
 static func has_points(def, part: int) -> bool:
-	return custom(def, part) and points(def, part).size() > 0
+	return custom(def, part) and points(def, part).size() > 0 and not has_ease_keys(def, part)
 
 ## [[x, speed], ...] from start to end (x sorted, points kept inside 0.02..0.98).
 static func keys(def, part: int) -> Array:
@@ -106,6 +155,7 @@ static func normalized(def, part: int, x: float, linear_strike := false) -> floa
 	if custom(def, part):
 		if has_points(def, part): return _integrated(def, part, x)
 		var e := ends(def, part)
+		if has_ease_keys(def, part): return ease_value(ease_keys(def, part), e.x, e.y, x)
 		return hermite(x, e.x, e.y)
 	if part == LEAD: return smoothstep(0.0, 1.0, x)
 	if part == STRIKE and linear_strike: return clampf(x, 0.0, 1.0)

@@ -88,6 +88,7 @@ var _keys_b: Button
 var _key_time_row: HBoxContainer   # Swing sheet: move the selected path key earlier / later
 var _key_time: HSlider
 var _key_time_sync := false
+var _preset_label: Label
 var _speed_unlock: Button      # Speed sheet: unlock the Strike part (gameplay timing)
 var _speed_how: Label           # one-line hint above the graph
 var _swing_info: Label
@@ -308,7 +309,7 @@ func _build_scene_overlay() -> void:
 	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
 	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
 	views.add_child(_btn("Swing", func(): _open_sheet("swing"), 124, 64))
-	var spb := _btn("Speed", func(): _open_sheet("speed"), 124, 64); spb.name = "SpeedButton"; views.add_child(spb)
+	var spb := _btn("Easing", func(): _open_sheet("speed"), 124, 64); spb.name = "SpeedButton"; views.add_child(spb)
 	views.add_child(_btn("Layers", func(): _layers.visible = not _layers.visible; _refresh_layers(), 130, 64))
 	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
 	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
@@ -590,7 +591,7 @@ func _build_swing(sheet: VBoxContainer) -> void:
 		var b := _btn(c[0], _set_curve.bind(c[1]), 0, 64); b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.add_theme_font_size_override("font_size", SMALL); _curve_btns.append(b); r.add_child(b)
 	v.add_child(r)
-	var sp := _btn("Speed ramp…", func(): _open_sheet("speed"), 0, 64); sp.add_theme_font_size_override("font_size", SMALL)
+	var sp := _btn("Easing curve…", func(): _open_sheet("speed"), 0, 64); sp.add_theme_font_size_override("font_size", SMALL)
 	v.add_child(sp)
 	var keys := HBoxContainer.new(); keys.add_theme_constant_override("separation", 8)
 	for st in [0, 2]:
@@ -617,10 +618,10 @@ func _build_speed(sheet: VBoxContainer) -> void:
 	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 8); bg.add_child(v)
 	# Header: title, then only the actions that apply (never wider than the screen).
 	var head := HBoxContainer.new(); head.add_theme_constant_override("separation", 8)
-	var t := _label("Speed", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; t.clip_text = true; head.add_child(t)
-	_speed_del = _btn("Delete point", func(): if _speed_graph.delete_selected(): _show_toast("Speed point deleted"), 200, 64)
+	var t := _label("Easing", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; t.clip_text = true; head.add_child(t)
+	_speed_del = _btn("Delete key", func(): if _speed_graph.delete_selected(): _show_toast("Easing key deleted"), 180, 64)
 	_speed_del.name = "SpeedDeletePoint"; _speed_del.add_theme_font_size_override("font_size", SMALL); _speed_del.visible = false; head.add_child(_speed_del)
-	var rs := _btn("Reset", func(): _speed_graph.reset_all(); _show_toast("Speed back to the original"), 120, 64)
+	var rs := _btn("Reset", func(): _speed_graph.reset_all(); _show_toast("Easing back to the original"), 120, 64)
 	rs.name = "SpeedReset"; rs.add_theme_font_size_override("font_size", SMALL); head.add_child(rs)
 	var dn := _btn("Done", _close_sheet, 120, 64); dn.name = "SpeedDone"; head.add_child(dn); v.add_child(head)
 	_speed_how = _label(SPEED_HOW, SMALL, Ui.MUTED)
@@ -630,30 +631,43 @@ func _build_speed(sheet: VBoxContainer) -> void:
 	_speed_how.custom_minimum_size.y = ceilf(_speed_how.get_theme_font("font").get_height(SMALL) * 2.0) + 2.0
 	_speed_how.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	_speed_graph = SpeedGraph.new(); _speed_graph.name = "PhoneSpeedGraph"; _speed_graph.studio = studio
-	_speed_graph.set_scale_k(2.2); _speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_speed_graph.set_scale_k(2.2, 236.0); _speed_graph.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_speed_graph.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_speed_graph.lock_note = "locked"
-	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike speed changes how shots play. Tap Unlock Strike to edit it."))
+	_speed_graph.locked_pressed.connect(func(): _show_toast("Strike easing changes how shots play. Tap Unlock Strike to edit it."))
 	# The Strike (and the Wind-up / Contact key points it shares) is gameplay timing: an explicit unlock.
 	_speed_unlock = _btn("Unlock Strike", _toggle_strike_unlock, 0, 60); _speed_unlock.name = "SpeedUnlock"
 	_speed_unlock.add_theme_font_size_override("font_size", SMALL)
 	v.add_child(_speed_graph)
+	# Presets for the part last touched (all free parts until one is).
+	_preset_label = _label("Ease preset for: all parts", SMALL, Ui.MUTED); v.add_child(_preset_label)
+	var pr := HBoxContainer.new(); pr.add_theme_constant_override("separation", 6)
+	for p in [["Original", "original"], ["Linear", "linear"], ["In", "in"], ["Out", "out"], ["In-out", "inout"], ["Whip", "whip"]]:
+		var b := _btn(p[0], _apply_preset.bind(p[1]), 0, 60); b.name = "Preset_" + p[1]
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.add_theme_font_size_override("font_size", 20); b.clip_text = true
+		pr.add_child(b)
+	v.add_child(pr)
 	v.add_child(_speed_unlock)
 	_speed_graph.selection_changed.connect(_refresh_speed)
 
-const SPEED_HOW := "One curve: drag a dot up = faster, down = slower. Tap the line to add a point; the part's other points give way."
+const SPEED_HOW := "Steep = fast, flat = slow. Drag the end of a key's bar to ease out of / into it. Tap the curve to add a key."
+func _apply_preset(name: String) -> void:
+	if not _speed_graph.apply_preset(name): _show_toast("That part is locked: Unlock Strike first")
+
 func _toggle_strike_unlock() -> void:
 	studio.strike_speed_unlocked = not studio.strike_speed_unlocked
 	_speed_unlock.text = "Lock Strike again" if studio.strike_speed_unlocked else "Unlock Strike"
 	_tint(_speed_unlock, studio.strike_speed_unlocked, Ui.GOLD)
 	_speed_graph.queue_redraw()
-	_show_toast("Strike unlocked: its speed changes how shots play" if studio.strike_speed_unlocked else "Strike locked")
+	_show_toast("Strike unlocked: its easing changes how shots play" if studio.strike_speed_unlocked else "Strike locked")
 
 ## Header state for the selected speed point: Delete shows, the hint names the point.
 func _refresh_speed() -> void:
 	var sel: Vector2i = _speed_graph.selected
 	_speed_del.visible = sel.x >= 0
-	_speed_how.text = SPEED_HOW if sel.x < 0 else "Point selected: drag it, or Delete point. Tap elsewhere on the line for another."
+	_speed_how.text = SPEED_HOW if sel.x < 0 else "Key selected: drag it, or Delete key. Tap the curve elsewhere for another."
+	var part: int = _speed_graph.sel_part
+	_preset_label.text = "Ease preset for: " + (["Ready → Wind-up", "Strike", "Follow-through"][part] if part >= 0 else "all parts")
 
 func _set_curve(value: float) -> void:
 	var r: Dictionary = studio.set_swing_curve(value)

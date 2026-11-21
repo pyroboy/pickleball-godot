@@ -1262,8 +1262,8 @@ func set_speed_points(part: int, pts, refresh := true) -> Dictionary:
 	var out := PackedVector3Array()
 	for p in pts:
 		if out.size() >= SpeedRamp.MAX_POINTS: break
-		var v := Vector3(p[0], p[1], 0.0) if p is Array else Vector3(p.x, p.y, 0.0)
-		out.append(Vector3(clampf(v.x, 0.02, 0.98), clampf(v.y, 0.0, SpeedRamp.MAX_SPEED), 0.0))
+		var v := Vector3(p[0], p[1], p[2] if p.size() > 2 else 0.0) if p is Array else Vector3(p.x, p.y, p.z)
+		out.append(Vector3(clampf(v.x, 0.02, 0.98), clampf(v.y, 0.0, SpeedRamp.MAX_SPEED), 1.0 if v.z >= 0.5 else 0.0))   # z 1 = easing key (x, progress)
 	var own := _txn == null
 	if own: begin_edit("speed points")
 	var prev_group: int = engine._group.selected

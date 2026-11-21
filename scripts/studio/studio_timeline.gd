@@ -16,6 +16,7 @@ const BallActions = preload("res://scripts/ball_actions.gd")
 const SpeedGraph = preload("res://scripts/studio/studio_speed_graph.gd")
 var speed_graph
 var keys_toggle: Button
+var ease_preset: OptionButton
 var keys_bake: Button
 var _speed_spacer: Control
 
@@ -93,6 +94,14 @@ func build(owner_studio) -> void:
 	keys_bake = Theme_.tool_button("KeysBake", "Game pose → keys", "", "Copy the Wind-up and Finish the game builds now into this stroke's keys and switch My keys play on: play looks the same, and from then on your keys are what plays.")
 	keys_bake.pressed.connect(func(): studio.set_keys_play("bake"))
 	ks.add_child(keys_bake)
+	var es := Theme_.segment(row, "EaseSeg")
+	ease_preset = OptionButton.new(); ease_preset.name = "EasePreset"; ease_preset.focus_mode = Control.FOCUS_NONE
+	ease_preset.tooltip_text = "Easing preset for the part last touched in the easing curve below (every free part until one is)"
+	for p in ["Ease preset…", "Original", "Linear", "Ease in", "Ease out", "Ease in-out", "Whip"]: ease_preset.add_item(p)
+	ease_preset.item_selected.connect(func(i):
+		if i > 0 and speed_graph: speed_graph.apply_preset(["original", "linear", "in", "out", "inout", "whip"][i - 1])
+		ease_preset.select(0))
+	es.add_child(ease_preset)
 	_transport = [play_button, step_back, step_fwd, loop_toggle, strong_button, weak_button]
 	var srow := HBoxContainer.new(); srow.name = "ScrubRow"; srow.add_theme_constant_override("separation", Theme_.SP2)
 	add_child(srow)
