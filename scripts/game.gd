@@ -1912,6 +1912,16 @@ func cancel_aim_focus() -> void :
 	if aim_focus: aim_focus.cancel()
 
 # Mobile editor is an explicit, lazy Pause-menu workspace. No live rig is edited.
+## Phone Pose Studio (AutoPose, notes, stars; saves queue for the Mac sync, tools/phone_sync.sh).
+## It opens the mobile pose editor below as its engine (scripts/studio/pose_studio.gd, phone mode).
+var pose_studio_phone
+func open_pose_studio_phone() -> void:
+	if is_instance_valid(pose_studio_phone): return
+	var s = load("res://scripts/studio/pose_studio.gd").new()
+	s.phone = true
+	pose_studio_phone = s
+	add_child(s)
+
 func open_mobile_pose_editor() -> void:
 	if is_instance_valid(mobile_pose_editor): return
 	if not get_tree().paused: PauseController.open()

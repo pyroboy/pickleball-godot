@@ -44,7 +44,7 @@ static func run(studio_node: Node) -> Dictionary:
 
 func _run(s: Node) -> Dictionary:
 	studio = s
-	root = s.get("_root")
+	root = s.get("phone_ui") if s.get("phone") else s.get("_root")   # phone mode: audit the phone layout
 	if root == null: return {"ok": false, "error": "studio has no _root"}
 	var vp := root.get_viewport()
 	win = vp.get_visible_rect()

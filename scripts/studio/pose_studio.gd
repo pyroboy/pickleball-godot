@@ -13,6 +13,8 @@ signal stage_changed(stage)
 signal pose_edited(key)
 signal pose_saved(key, version)
 signal pose_reloaded(key)
+## Phone mode: an AutoPose drag released without moving (a tap on the ring).
+signal handle_tapped(id)
 
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
@@ -116,6 +118,11 @@ var key := ""                   # "s13" / "b04"
 var stage := 1
 var selected_field := ""        # last edited field (read by the notes panel)
 var is_ready := false
+## Phone (iPhone) mode, set before the node enters the tree: the phone layout
+## (scripts/studio/phone_studio_ui.gd) instead of the desktop window, on-device pose overrides
+## stay applied, and Save queues the edit for the Mac (scripts/studio/phone_sync_queue.gd).
+var phone := false
+var phone_ui = null
 var layout_override := Vector2i.ZERO   # link `window` emulate: lay out at this canvas size (tests, no real resize)
 var link_driving := false        # set by the link around ui_action / key / mouse: no ratings, no Verify
 var preview = null              # engine._preview (moved into the centre)
@@ -210,16 +217,19 @@ func _ready() -> void:
 	layer = 120
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("pose_studio")
-	# Studio process only: closing the window asks about unsaved working copies first.
-	get_tree().set_auto_accept_quit(false)
-	Store.skip_overrides = true
-	if PostureLibrary._singleton != null: PostureLibrary._singleton.load_or_default()
-	if BasePoseLibrary._singleton != null: BasePoseLibrary._singleton.load_or_default()
-	_apply_window_min()
-	_apply_desktop_scale()
-	get_tree().root.size_changed.connect(_apply_desktop_scale)
+	if not phone:
+		# Studio process only: closing the window asks about unsaved working copies first.
+		get_tree().set_auto_accept_quit(false)
+		Store.skip_overrides = true
+		PoseDiff.BallActions.skip_overrides = true
+		if PostureLibrary._singleton != null: PostureLibrary._singleton.load_or_default()
+		if BasePoseLibrary._singleton != null: BasePoseLibrary._singleton.load_or_default()
+		_apply_window_min()
+		_apply_desktop_scale()
+		get_tree().root.size_changed.connect(_apply_desktop_scale)
 	_build_ui()
-	_mount_panels()
+	if phone: _root.visible = false   # the desktop controls stay (the studio logic reads them), hidden
+	else: _mount_panels()
 	_setup.call_deferred()
 
 ## The project stretches a 720x1280 phone canvas; on the desktop the studio uses the window's
@@ -272,8 +282,16 @@ func adopt(ed) -> void:
 	engine = ed
 	ed._root.visible = false
 	preview = ed._preview
-	preview.reparent(_views, false)
-	_views.move_child(preview, 0)
+	if phone:
+		var dropped: Array = load("res://scripts/studio/phone_sync_queue.gd").cleanup_overrides()
+		if not dropped.is_empty(): print("[PoseStudio] phone: the build has the synced edits of %s; on-device copies dropped" % ", ".join(dropped))
+		phone_ui = load("res://scripts/studio/phone_studio_ui.gd").new()
+		add_child(phone_ui)
+		phone_ui.build(self)
+		phone_ui.mount_preview(preview)
+	else:
+		preview.reparent(_views, false)
+		_views.move_child(preview, 0)
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview.size_flags_stretch_ratio = 1.0
@@ -288,9 +306,13 @@ func adopt(ed) -> void:
 	_fix_preview_layout()
 	_build_view_hint()
 	ed._gizmo_show.set_pressed_no_signal(true)   # not _toggle_gizmo: that writes user:// view settings
-	_setup_second_view()
+	if not phone: _setup_second_view()
 	is_ready = true
 	select_pose("s00")
+	if phone:
+		_view_input.touch = true
+		set_autopose_mode(true)
+		phone_ui.studio_ready()
 	_view_input.frame_pose()
 	_set_status("Studio ready. Press ? for keys.")
 	print("[PoseStudio] ready")
@@ -348,8 +370,9 @@ func _build_ui() -> void:
 	_build_centre(_split2)
 	_build_right(_split2)
 	for s in [_split, _split2, _vsplit]: s.drag_ended.connect(_save_layout)
-	_load_layout()
-	_root.resized.connect(_queue_layout)
+	if not phone:   # phone: the desktop panes stay hidden, never laid out
+		_load_layout()
+		_root.resized.connect(_queue_layout)
 	_build_help()
 
 func _build_top_bar(main: Control) -> void:
@@ -632,7 +655,7 @@ func _save_layout() -> void:
 var _layout_queued := false
 var _layout_after_drag := false
 func _queue_layout() -> void:
-	if _layout_queued: return
+	if phone or _layout_queued: return   # phone: the desktop panes are hidden, never laid out
 	_layout_queued = true
 	_apply_layout.call_deferred()
 
@@ -681,6 +704,17 @@ func _fit(s: SplitContainer, child: Control, want: float, first: bool, vertical:
 # ================================================================ engine helpers
 
 func _ok() -> bool: return engine != null and is_instance_valid(engine)
+
+## What the working copy is compared with (unsaved dot, Save's diff): the pose file on disk; on
+## the phone, the pose as last saved on the device (the packaged file plus its on-device
+## override), so each queued save carries only the edits since the previous one.
+func _baseline(k: String) -> Resource:
+	if not phone: return PoseDiff.load_disk(k)
+	var live: Resource = PoseDiff.live_def(k)
+	if live == null: return null
+	var r: Resource = live.duplicate(true)
+	if not (r is BasePoseDefinition): PoseDiff.PaddleRotation.normalize_pose(r)
+	return r
 
 func _copy_key(k: String) -> String: return PoseDiff.copy_key(k)
 
@@ -775,7 +809,7 @@ func select_pose(k: String) -> bool:
 	if idx < 0: return false
 	engine._select_pose(idx)
 	stage = engine._stage
-	if not _disk.has(k) or _disk[k] == null: _disk[k] = PoseDiff.load_disk(k)
+	if not _disk.has(k) or _disk[k] == null: _disk[k] = _baseline(k)
 	_workspace.select(ws)
 	_pose_title.text = "%s  %s" % [k, String(live.display_name)]
 	_pose_title.tooltip_text = PoseDiff.file_of(k)
@@ -965,8 +999,8 @@ func _update_dirty_flag() -> void:
 func diff() -> Array:
 	if not _ok() or key == "": return []
 	# Serves: always a fresh build (code + tuning file); a cached one can share key data with the copy.
-	if PoseDiff.is_serve_key(key): return PoseDiff.diff(engine._current, PoseDiff.load_disk(key), false)
-	if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
+	if PoseDiff.is_serve_key(key): return PoseDiff.diff(engine._current, _baseline(key), false)
+	if _disk.get(key) == null: _disk[key] = _baseline(key)
 	return PoseDiff.diff(engine._current, _disk[key], engine._base)
 
 ## author: "user" (studio UI) or "claude" (link 'save').
@@ -981,6 +1015,7 @@ func save(message: String = "", author: String = "user") -> Dictionary:
 		return {"ok": true, "key": key, "changed": 0, "message": "no changes"}
 	var msg := message.strip_edges()
 	if msg == "": msg = "studio edit: " + ", ".join(changes.map(func(c): return c.field))
+	if phone: return _save_on_phone(changes, msg)
 	var path := ProjectSettings.globalize_path("user://pose_studio_changes_%s.json" % key)
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null: return {"ok": false, "error": "cannot write " + path}
@@ -1000,6 +1035,31 @@ func save(message: String = "", author: String = "user") -> Dictionary:
 	pose_saved.emit(k, ver)
 	return r
 
+## Phone save: queue the edit for the Mac (tools/phone_sync.sh applies it to the repo with
+## pose_notes.py, as the desktop Save does), then save it on the device so the game uses it now.
+func _save_on_phone(changes: Array, msg: String) -> Dictionary:
+	var Queue = load("res://scripts/studio/phone_sync_queue.gd")
+	var id: String = Queue.enqueue("save", {"key": key, "changes": changes, "message": msg})
+	if id == "": return {"ok": false, "error": "could not write the phone save queue"}
+	var ck := _copy_key(key)
+	var ok := true
+	if PoseDiff.is_action_key(key):
+		ok = PoseDiff.BallActions.save_override(int(key.substr(1)), engine._copies[ck])
+	else:
+		ok = engine._save_key(ck)
+	if not ok: return {"ok": false, "error": "queued for the Mac, but the on-device save failed", "queued": id}
+	var k := key
+	# Work on the pose exactly as stored on the device (the store rounds values when it encodes
+	# them), so the saved pose and its baseline match and the pose reads as saved.
+	engine._copies.erase(ck); engine._dirty.erase(ck)
+	_disk[k] = _baseline(k)
+	_reselect(stage)
+	_remember()
+	_after_change(false)
+	_set_status("Saved %s on the phone: %d change(s), waiting for the Mac sync" % [k, changes.size()])
+	pose_saved.emit(k, -1)
+	return {"ok": true, "key": k, "changed": changes.size(), "queued": id}
+
 ## Drop the working copy and reload from disk (undoable: the old copy is kept on the stack).
 func revert() -> void:
 	if not _ok() or key == "": return
@@ -1011,7 +1071,7 @@ func revert() -> void:
 	# outside write (pose_set.py, pose_notes.py, git) must not come back as the old pose.
 	PoseDiff.reload_live(key)
 	engine._copies.erase(engine._key); engine._dirty.erase(engine._key)
-	_disk[key] = PoseDiff.load_disk(key)
+	_disk[key] = _baseline(key)
 	_reselect(st)
 	end_edit()
 	_set_status("Reverted " + key)
@@ -1024,7 +1084,7 @@ func reload(k: String = "") -> bool:
 	if k == "": k = key
 	if not PoseDiff.reload_live(k): return false
 	engine._copies.erase(_copy_key(k)); engine._dirty.erase(_copy_key(k))
-	_disk[k] = PoseDiff.load_disk(k)
+	_disk[k] = _baseline(k)
 	if PoseDiff.is_serve_key(k) and engine._serve:
 		var st := stage
 		engine._select_workspace(2)   # its serve list holds the old serve objects: rebuild from the store
@@ -1223,7 +1283,7 @@ func unsaved_keys() -> Array:
 		var k := _key_from_copy(str(ck))
 		var cp = engine._copies.get(ck)
 		if k == "" or cp == null: continue
-		if not PoseDiff.diff(cp, PoseDiff.load_disk(k), k.begins_with("b")).is_empty(): out.append(k)
+		if not PoseDiff.diff(cp, _baseline(k), k.begins_with("b")).is_empty(): out.append(k)
 	out.sort()
 	return out
 
@@ -1355,7 +1415,7 @@ func _poll_external() -> void:
 	var ek: String = _key_from_copy(engine._key)
 	if ek != "" and ek != key:
 		key = ek; stage = engine._stage
-		if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
+		if _disk.get(key) == null: _disk[key] = _baseline(key)
 		_workspace.select(_workspace_of(key))
 		_remember(); _fill_list(); _inspector.rebuild(); _after_change(false)
 		pose_selected.emit(key)
@@ -2374,7 +2434,7 @@ func _shift_paddle(delta: Vector3) -> bool:
 
 ## Tree of named studio controls (names, types, visibility, values) for checks without images.
 func ui_dump() -> Dictionary:
-	var tree := _dump(_root)
+	var tree := _dump(phone_ui if phone and phone_ui else _root)
 	var pv := {}
 	if preview:
 		var gz = preview.gizmo

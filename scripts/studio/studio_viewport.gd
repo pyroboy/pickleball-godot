@@ -76,6 +76,12 @@ var studio
 var preview
 var drag := Drag.NONE
 var _left_nav := false   # current orbit/pan was started with the left button
+## Phone (touch) mode: finger-sized hit areas and rings; two fingers pan and pinch-zoom.
+var touch := false
+const TOUCH_SCALE := 2.6          # phone canvas points per desktop point for rings and hit areas
+var _touches := {}                # finger index -> position (touch mode)
+var _pinch := {}                  # two-finger gesture: {mid, dist}
+var _touch_block := false         # after a two-finger gesture: ignore the last finger until it lifts
 var auto_fit := true     # camera follows pose / stage switches until the user zooms or pans (F = on again)
 var hover_joint := ""
 var _dots := PackedVector2Array()
@@ -120,7 +126,7 @@ func _gui_input(event: InputEvent) -> void:
 			Drag.TIP: _tip_motion(event.position)
 			Drag.AUTOPOSE:   # only motion with the left button held moves the handle (a stray hover event is not the drag)
 				if event.button_mask & MOUSE_BUTTON_MASK_LEFT: _ap_motion(event)
-			Drag.ORBIT: orbit(event.relative)
+			Drag.ORBIT: if not _touch_block: orbit(event.relative)
 			Drag.PAN: pan_by(event.relative)
 			Drag.ZOOM: set_distance(current_distance() * exp(event.relative.y * DRAG_ZOOM_PER_PT))
 			_:
@@ -134,9 +140,40 @@ func _gui_input(event: InputEvent) -> void:
 			else: orbit(rel)
 	elif event is InputEventMagnifyGesture:
 		if drag == Drag.NONE and event.factor > 0.0: set_distance(current_distance() / event.factor)
+	elif touch and (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		_touch_event(event)
 	else:
 		return
 	accept_event()
+
+## Hit / ring size in this view's points (finger-sized on the phone).
+func _r(desktop_points: float) -> float:
+	return desktop_points * (TOUCH_SCALE if touch else 1.0)
+
+## Phone fingers. One finger arrives as the emulated left mouse (ring drag or orbit, above). A
+## second finger stops that orbit (or cancels a ring drag) and the two pan by their midpoint and
+## zoom by their spread; the finger left over does nothing until it lifts (no jump back to orbit).
+func _touch_event(e: InputEvent) -> void:
+	if e is InputEventScreenTouch:
+		if e.pressed: _touches[e.index] = e.position
+		else: _touches.erase(e.index)
+	else:
+		_touches[e.index] = e.position
+	if _touches.size() >= 2:
+		if drag == Drag.AUTOPOSE: cancel()
+		elif drag in [Drag.ORBIT, Drag.PAN]: drag = Drag.NONE; _left_nav = false
+		_touch_block = true
+		var ids: Array = _touches.keys()
+		var a: Vector2 = _touches[ids[0]]; var b: Vector2 = _touches[ids[1]]
+		var mid := (a + b) * 0.5
+		var dist := maxf(a.distance_to(b), 1.0)
+		if not _pinch.is_empty():
+			pan_by(mid - Vector2(_pinch.mid))
+			set_distance(current_distance() * float(_pinch.dist) / dist)
+		_pinch = {"mid": mid, "dist": dist}
+	else:
+		_pinch = {}
+		if _touches.is_empty(): _touch_block = false
 
 func _button(e: InputEventMouseButton) -> void:
 	match e.button_index:
@@ -159,7 +196,9 @@ func _button(e: InputEventMouseButton) -> void:
 			if not e.pressed:
 				if drag == Drag.AUTOPOSE:
 					drag = Drag.NONE
+					var tapped: bool = int(studio.last_autopose.get("moves", 0)) == 0
 					studio.autopose_drag_end(true, "released")
+					if tapped: studio.handle_tapped.emit(ap_handle)
 					ap_handle = ""; ap_target = Vector3.INF
 					studio.drag_changed()
 					_hover(e.position); queue_redraw()
@@ -177,11 +216,11 @@ func _button(e: InputEventMouseButton) -> void:
 			if drag != Drag.NONE: return
 			grab_focus()
 			if studio.autopose_on:   # AutoPose mode: handles only (no joint dots, no gizmo)
-				var core := ap_pick(e.position, AP_RADIUS + 2.0)   # on a ring: the handle wins over a nearby lock
-				var lk := ap_lock_pick(e.position) if core == "" else ""
+				var core := ap_pick(e.position, _r(AP_RADIUS + 2.0))   # on a ring: the handle wins over a nearby lock
+				var lk := ap_lock_pick(e.position) if core == "" and not touch else ""
 				if lk != "":
 					studio.set_autopose_pin(lk); queue_redraw(); return
-				var h := core if core != "" else ap_pick(e.position)
+				var h := core if core != "" else ap_pick(e.position, _r(PICK_RADIUS))
 				if h != "":
 					if e.alt_pressed: studio.set_autopose_pin(h); queue_redraw(); return
 					_begin_ap(h, e); return
@@ -511,7 +550,7 @@ func _draw_ap(rect: Rect2) -> void:
 		var locked: bool = studio.autopose_lock_reason(id) != ""
 		var hot: bool = id == ap_handle or id == hover_ap
 		var col: Color = DOT_HOVER if hot else AP_LOCKED if locked else _ap_color(id)
-		var r := AP_RADIUS + (1.5 if hot else 0.0)
+		var r := _r(AP_RADIUS) + (1.5 if hot else 0.0)
 		if id in AP_EDGES:   # small diamond on the rim
 			r -= 1.5
 			var o := r + 2.0
@@ -592,7 +631,7 @@ func pick(point: Vector2, radius: float = PICK_RADIUS, with_tip := true) -> Stri
 
 func _hover(point: Vector2) -> void:
 	if studio != null and studio.autopose_on:
-		var core := ap_pick(point, AP_RADIUS + 2.0)
+		var core := ap_pick(point, _r(AP_RADIUS + 2.0))
 		var lk := ap_lock_pick(point) if core == "" else ""
 		var h := core if core != "" else lk if lk != "" else ap_pick(point)
 		var on_lock: bool = lk != ""

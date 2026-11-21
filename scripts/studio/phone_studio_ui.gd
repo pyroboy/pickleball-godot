@@ -1,0 +1,592 @@
+extends Control
+## Phone Pose Studio layout (iPhone, portrait), AutoPose only. Drives the same PoseStudio as the
+## desktop window (pose_studio.gd, phone = true): AutoPose, undo, timeline, save all run there.
+## Layout (wireframe "Mobile Pose Studio", claude.ai artifact PDK9TMrqEWTLk4L5HEzAE8):
+##   top bar     menu (pose drawer), pose name, undo, redo, save
+##   scene       the 3D preview, two thirds of the screen: rings, view buttons, AutoPose chips
+##   lower third timeline (W / C / F keys, scrub, play), a small star row (opens big stars),
+##               Notes / Versions; tapping a ring swaps it for that ring's options
+## Canvas units (the project's 720-wide portrait canvas): 1 pt is about 1.85 units.
+
+const Ui = preload("res://scripts/ui/game_ui_theme.gd")
+const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
+const Queue = preload("res://scripts/studio/phone_sync_queue.gd")
+const ScrubTrack = preload("res://scripts/studio/studio_timeline.gd").ScrubTrack
+const STAGE_COLORS := [Color("bd80ff"), Color("ffdc62"), Color("58dfdb")]
+const STAGE_SHORT := ["W", "C", "F"]
+const FONT := 28
+const SMALL := 23
+const TITLE := 32
+const TAP := 80          # 44 pt touch target
+const HEAD_H := 96
+const GAP := 12
+const VIEWS := ["front", "side", "back"]
+const AP_NAMES := {"right_hand": "Right hand", "left_hand": "Left hand", "paddle_tip": "Paddle tip", "right_elbow": "Right elbow",
+	"left_elbow": "Left elbow", "right_knee": "Right knee", "left_knee": "Left knee", "right_foot": "Right foot",
+	"left_foot": "Left foot", "hips": "Hips", "chest": "Chest", "head": "Head", "right_shoulder": "Right shoulder",
+	"left_shoulder": "Left shoulder", "right_hip": "Right hip", "left_hip": "Left hip", "paddle_edge_a": "Paddle edge", "paddle_edge_b": "Paddle edge"}
+const LEVELS := [["Loose", 0.5], ["Normal", 1.0], ["Stiff", 2.0]]
+const REGIONS := [["Arms", "arms"], ["Torso", "torso"], ["Legs", "legs"]]
+
+var studio
+var _scene: Control
+var _lower: VBoxContainer
+var _sheet: VBoxContainer
+var _title_sub: Label
+var _title: Label
+var _undo: Button
+var _redo: Button
+var _save: Button
+var _keys: Array[Button] = []
+var _scrub
+var _play: Button
+var _stars_row: Button
+var _stars_label: Label
+var _small_stars: Array[Label] = []
+var _tab_notes: Button
+var _tab_versions: Button
+var _notes_box: VBoxContainer
+var _versions_box: VBoxContainer
+var _note_edit: LineEdit
+var _toast: Label
+var _toast_text := ""
+var _toast_time := 0.0
+var _chip_balance: Button
+var _chip_look: Button
+var _chip_pins: Button
+var _chip_stiff: Button
+var _view_btn: Button
+var _view_i := 0
+var _sheet_title: Label
+var _sheet_pin: Button
+var _region_btns := {}       # region -> [Button x3]
+var _handle := ""
+var _drawer: Control
+var _drawer_list: VBoxContainer
+var _drawer_open := {"Strokes": true, "Body stances": false, "Serves": false, "Ball actions": true}
+var _search: LineEdit
+var _star_popup: Control
+var _big_stars: Array[Button] = []
+var _tab := "notes"
+var _sync_scrub := false
+var _last_key := ""
+var _last_stage := -1
+
+func build(owner_studio) -> void:
+	studio = owner_studio
+	name = "PhoneStudio"
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	theme = _theme()
+	var bg := ColorRect.new(); bg.color = Ui.BACKDROP; bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); add_child(bg)
+	var col := VBoxContainer.new(); col.name = "Column"; col.add_theme_constant_override("separation", 0)
+	col.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); add_child(col)
+	_build_header(col)
+	_scene = Control.new(); _scene.name = "Scene"; _scene.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_scene.clip_contents = true
+	col.add_child(_scene)
+	_lower = VBoxContainer.new(); _lower.name = "Lower"; _lower.add_theme_constant_override("separation", 0)
+	col.add_child(_lower)
+	_build_lower(_lower)
+	_sheet = VBoxContainer.new(); _sheet.name = "RingSheet"; _sheet.visible = false
+	_sheet.add_theme_constant_override("separation", GAP)
+	col.add_child(_sheet)
+	_build_sheet(_sheet)
+	_build_drawer()
+	_build_star_popup()
+	resized.connect(_fit)
+	_fit.call_deferred()
+	studio.handle_tapped.connect(_open_sheet)
+	studio.pose_selected.connect(func(_k): _refresh_pose())
+	studio.pose_saved.connect(func(_k, _v): _refresh_pose())
+
+## The lower third (and the ring sheet in its place) is a third of the screen height.
+func _fit() -> void:
+	var third: float = floor(size.y / 3.0)
+	_lower.custom_minimum_size.y = third
+	_sheet.custom_minimum_size.y = third
+
+func mount_preview(pv: Control) -> void:
+	pv.reparent(_scene, false)
+	pv.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scene.move_child(pv, 0)
+	_build_scene_overlay()
+
+func studio_ready() -> void:
+	_refresh_pose()
+
+# ---------------------------------------------------------------- look
+
+func _theme() -> Theme:
+	var t := Theme.new()
+	t.default_font = Ui.sans_font()
+	t.default_font_size = FONT
+	for state in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
+		var b := StyleBoxFlat.new()
+		b.bg_color = Ui.SURFACE_PRESSED if state in ["pressed", "hover_pressed"] else Ui.SURFACE_HOVER if state == "hover" else Ui.SURFACE
+		if state == "focus": b.draw_center = false
+		b.border_color = Ui.BORDER; b.set_border_width_all(2); b.set_corner_radius_all(16)
+		b.content_margin_left = 18; b.content_margin_right = 18; b.content_margin_top = 8; b.content_margin_bottom = 8
+		t.set_stylebox(state, "Button", b)
+	t.set_color("font_color", "Button", Ui.INK); t.set_color("font_hover_color", "Button", Ui.INK)
+	t.set_color("font_pressed_color", "Button", Ui.INK); t.set_color("font_disabled_color", "Button", Ui.MUTED)
+	t.set_color("font_color", "Label", Ui.INK)
+	var le := StyleBoxFlat.new(); le.bg_color = Ui.PANEL; le.border_color = Ui.BORDER; le.set_border_width_all(2)
+	le.set_corner_radius_all(16); le.content_margin_left = 18; le.content_margin_right = 18
+	t.set_stylebox("normal", "LineEdit", le); t.set_stylebox("focus", "LineEdit", le)
+	t.set_color("font_color", "LineEdit", Ui.INK); t.set_color("font_placeholder_color", "LineEdit", Ui.MUTED)
+	return t
+
+func _btn(text: String, cb: Callable, w := 0.0, h := TAP) -> Button:
+	var b := Button.new(); b.text = text; b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(w, h)
+	b.pressed.connect(cb)
+	return b
+
+func _label(text: String, size_px := FONT, color := Ui.INK) -> Label:
+	var l := Label.new(); l.text = text
+	l.add_theme_font_size_override("font_size", size_px); l.add_theme_color_override("font_color", color)
+	return l
+
+func _panel(color: Color, radius := 0) -> StyleBoxFlat:
+	var s := StyleBoxFlat.new(); s.bg_color = color; s.set_corner_radius_all(radius)
+	return s
+
+func _tint(b: Button, on: bool, color := Ui.ACCENT) -> void:
+	var s := StyleBoxFlat.new()
+	s.bg_color = color if on else Ui.SURFACE; s.border_color = color if on else Ui.BORDER
+	s.set_border_width_all(2); s.set_corner_radius_all(16)
+	s.content_margin_left = 18; s.content_margin_right = 18
+	for st in ["normal", "hover", "pressed", "hover_pressed"]: b.add_theme_stylebox_override(st, s)
+	var ink := Ui.PANEL if on else Ui.INK
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color"]: b.add_theme_color_override(c, ink)
+
+# ---------------------------------------------------------------- top bar
+
+func _build_header(col: Control) -> void:
+	var bar := PanelContainer.new(); bar.name = "TopBar"; bar.add_theme_stylebox_override("panel", _panel(Ui.PANEL))
+	bar.custom_minimum_size.y = HEAD_H
+	col.add_child(bar)
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8)
+	bar.add_child(row)
+	row.add_child(_btn("☰", _toggle_drawer, TAP))
+	var names := VBoxContainer.new(); names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	names.alignment = BoxContainer.ALIGNMENT_CENTER; names.add_theme_constant_override("separation", 0)
+	var tap := Button.new(); tap.flat = true; tap.focus_mode = Control.FOCUS_NONE; tap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tap.pressed.connect(_toggle_drawer)
+	tap.add_child(names); names.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_title_sub = _label("", SMALL, Ui.MUTED); _title = _label("", TITLE)
+	_title.clip_text = true; _title.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	names.add_child(_title_sub); names.add_child(_title)
+	row.add_child(tap)
+	_undo = _btn("↶", func(): studio.undo(); _refresh_pose(), TAP); row.add_child(_undo)
+	_redo = _btn("↷", func(): studio.redo(); _refresh_pose(), TAP); row.add_child(_redo)
+	_save = _btn("Save", _do_save, 130); row.add_child(_save)
+	_tint(_save, true, Ui.BLUE)
+
+func _do_save() -> void:
+	var r: Dictionary = studio.save("", "user")
+	_show_toast(String(r.get("error", "")) if not r.get("ok", false) else
+		("Nothing to save" if int(r.get("changed", 0)) == 0 else "Saved on the phone · %d change(s) · syncs to the Mac" % int(r.get("changed", 0))))
+	_refresh_pose()
+
+# ---------------------------------------------------------------- scene overlay
+
+func _build_scene_overlay() -> void:
+	var hint := _label("Ring: drag or tap · empty space: orbit · 2 fingers: pan, pinch", SMALL)
+	var hp := PanelContainer.new(); hp.add_theme_stylebox_override("panel", _pill())
+	hp.mouse_filter = Control.MOUSE_FILTER_IGNORE; hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hp.add_child(hint); _scene.add_child(hp)
+	hp.position = Vector2(GAP, GAP)
+	var views := HBoxContainer.new(); views.add_theme_constant_override("separation", 8)
+	views.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT); views.position.x -= 0
+	_view_btn = _btn("Front", _next_view, 120, 64); views.add_child(_view_btn)
+	views.add_child(_btn("⤢", func(): studio.frame_pose(), 64, 64))
+	_scene.add_child(views)
+	views.anchor_left = 1.0; views.anchor_right = 1.0; views.offset_left = -200; views.offset_right = -GAP; views.offset_top = 72
+	var chips := HBoxContainer.new(); chips.name = "AutoPoseChips"; chips.add_theme_constant_override("separation", 8)
+	chips.anchor_left = 0.0; chips.anchor_right = 1.0; chips.anchor_top = 1.0; chips.anchor_bottom = 1.0
+	chips.offset_left = GAP; chips.offset_right = -GAP; chips.offset_top = -64 - GAP; chips.offset_bottom = -GAP
+	_chip_balance = _btn("Balance", func(): studio.set_autopose_balance(not studio.autopose_balance); _refresh_chips(), 0, 64)
+	_chip_look = _btn("Look", func(): studio.set_autopose_look(not studio.autopose_look); _refresh_chips(), 0, 64)
+	_chip_pins = _btn("Pins", func(): studio.reset_autopose_pins(); _refresh_chips(); _show_toast("Pins back to the feet"), 0, 64)
+	_chip_stiff = _btn("Stiff 1×", _cycle_stiffness, 0, 64)
+	var relax := _btn("Relax", _relax, 0, 64)
+	for c in [_chip_balance, _chip_look, _chip_pins, _chip_stiff, relax]:
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL; c.add_theme_font_size_override("font_size", SMALL); chips.add_child(c)
+	_scene.add_child(chips)
+	_toast = _label("", SMALL); _toast.visible = false; _toast.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; _toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_toast.add_theme_stylebox_override("normal", _pill())
+	_toast.anchor_left = 0.0; _toast.anchor_right = 1.0; _toast.anchor_top = 1.0; _toast.anchor_bottom = 1.0
+	_toast.offset_left = GAP * 2; _toast.offset_right = -GAP * 2; _toast.offset_top = -170; _toast.offset_bottom = -64 - GAP * 3
+	_scene.add_child(_toast)
+	_refresh_chips()
+
+func _pill() -> StyleBoxFlat:
+	var s := _panel(Color(Ui.PANEL, 0.88), 18)
+	s.content_margin_left = 16; s.content_margin_right = 16; s.content_margin_top = 8; s.content_margin_bottom = 8
+	return s
+
+func _next_view() -> void:
+	_view_i = (_view_i + 1) % VIEWS.size()
+	studio.view(VIEWS[_view_i])
+	_view_btn.text = String(VIEWS[_view_i]).capitalize()
+
+func _cycle_stiffness() -> void:
+	var now: float = float(studio.autopose_stiffness.get("all", 1.0))
+	var next := 2.0 if is_equal_approx(now, 1.0) else 0.5 if is_equal_approx(now, 2.0) else 1.0
+	studio.set_autopose_stiffness("all", next)
+	_refresh_chips()
+
+func _relax() -> void:
+	var r: Dictionary = studio.autopose_relax()
+	_show_toast("Relaxed this key" if r.get("ok", false) else String(r.get("error", "Relax: nothing to do")))
+
+func _refresh_chips() -> void:
+	if _chip_balance == null: return
+	_tint(_chip_balance, studio.autopose_balance)
+	_tint(_chip_look, studio.autopose_look)
+	var pins: int = (studio.autopose_pins as Dictionary).values().filter(func(v): return v).size()
+	_chip_pins.text = "Pins %d" % pins
+	var s: float = float(studio.autopose_stiffness.get("all", 1.0))
+	_chip_stiff.text = "Stiff %s×" % ("½" if is_equal_approx(s, 0.5) else str(int(s)))
+
+# ---------------------------------------------------------------- lower third
+
+func _build_lower(lower: VBoxContainer) -> void:
+	var tl := PanelContainer.new(); tl.add_theme_stylebox_override("panel", _row_box())
+	lower.add_child(tl)
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); tl.add_child(row)
+	for i in 3:
+		var b := _btn(STAGE_SHORT[i], studio.set_stage.bind(i), 72, 68)
+		b.add_theme_color_override("font_color", STAGE_COLORS[i])
+		_keys.append(b); row.add_child(b)
+	_scrub = ScrubTrack.new(); _scrub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_scrub.custom_minimum_size = Vector2(120, 68)
+	_scrub.value_changed.connect(func(t): if not _sync_scrub: studio._timeline.seek(t))
+	_scrub.mark_moved.connect(studio._timeline._on_mark_moved)
+	row.add_child(_scrub)
+	_play = _btn("▶", func(): studio._timeline.toggle_play(), 80, 68); row.add_child(_play)
+	_stars_row = Button.new(); _stars_row.flat = true; _stars_row.focus_mode = Control.FOCUS_NONE
+	_stars_row.custom_minimum_size.y = 60; _stars_row.add_theme_stylebox_override("normal", _row_box())
+	_stars_row.pressed.connect(_open_stars)
+	var sr := HBoxContainer.new(); sr.add_theme_constant_override("separation", 6); sr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sr.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); sr.offset_left = 18
+	_stars_row.add_child(sr)
+	for i in 5:
+		var st := _label("☆", 30, Ui.GOLD); st.mouse_filter = Control.MOUSE_FILTER_IGNORE; _small_stars.append(st); sr.add_child(st)
+	_stars_label = _label("Tap to rate", SMALL, Ui.MUTED); _stars_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sr.add_child(_stars_label)
+	lower.add_child(_stars_row)
+	var tabs := HBoxContainer.new(); tabs.add_theme_constant_override("separation", 0)
+	_tab_notes = _btn("Notes", func(): _tab = "notes"; _refresh_tabs(), 0, 64)
+	_tab_versions = _btn("Versions", func(): _tab = "versions"; _refresh_tabs(), 0, 64)
+	for t in [_tab_notes, _tab_versions]: t.size_flags_horizontal = Control.SIZE_EXPAND_FILL; tabs.add_child(t)
+	lower.add_child(tabs)
+	var scroll := ScrollContainer.new(); scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var pad := MarginContainer.new(); pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for side in ["left", "right", "top", "bottom"]: pad.add_theme_constant_override("margin_" + side, GAP)
+	scroll.add_child(pad)
+	var content := VBoxContainer.new(); content.add_theme_constant_override("separation", 8); pad.add_child(content)
+	lower.add_child(scroll)
+	_notes_box = VBoxContainer.new(); _notes_box.add_theme_constant_override("separation", 8); content.add_child(_notes_box)
+	var add := HBoxContainer.new(); add.add_theme_constant_override("separation", 8)
+	_note_edit = LineEdit.new(); _note_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_note_edit.custom_minimum_size.y = 72; _note_edit.placeholder_text = "Note on this moment…"
+	_note_edit.text_submitted.connect(func(_t): _add_note())
+	add.add_child(_note_edit); add.add_child(_btn("Add", _add_note, 110, 72))
+	_notes_box.add_child(add)
+	_versions_box = VBoxContainer.new(); _versions_box.add_theme_constant_override("separation", 6); content.add_child(_versions_box)
+
+func _row_box() -> StyleBoxFlat:
+	var s := _panel(Ui.PANEL)
+	s.content_margin_left = GAP; s.content_margin_right = GAP; s.content_margin_top = 8; s.content_margin_bottom = 8
+	return s
+
+func _add_note() -> void:
+	var text := _note_edit.text.strip_edges()
+	if text == "" or studio.key == "": return
+	var tl = studio._timeline.state()
+	Queue.enqueue("note", {"key": studio.key, "text": text, "stage": ["windup", "contact", "finish"][studio.stage],
+		"time_on_timeline": float(tl.get("t", 0.0)) if bool(tl.get("active", false)) else null})
+	_note_edit.text = ""
+	_show_toast("Note kept on the phone · syncs to the Mac")
+	_refresh_notes()
+
+func _refresh_tabs() -> void:
+	_tint(_tab_notes, _tab == "notes"); _tint(_tab_versions, _tab == "versions")
+	_notes_box.visible = _tab == "notes"; _versions_box.visible = _tab == "versions"
+	if _tab == "notes": _refresh_notes()
+	else: _refresh_versions()
+
+func _refresh_notes() -> void:
+	for c in _notes_box.get_children():
+		if c is Label or c is PanelContainer: c.queue_free()
+	var notes: Array = Queue.notes_for(studio.key)
+	if notes.is_empty(): _notes_box.add_child(_label("No notes on this pose yet", SMALL, Ui.MUTED)); return
+	for i in range(notes.size() - 1, -1, -1):
+		var n: Dictionary = notes[i]
+		var card := PanelContainer.new(); card.add_theme_stylebox_override("panel", _card())
+		var v := VBoxContainer.new(); card.add_child(v)
+		v.add_child(_label("%s · %s" % [String(n.get("stage", "")).capitalize(), n.get("status", "")], SMALL, Ui.MUTED))
+		var t := _label(String(n.get("text", "")), FONT); t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(t)
+		var reply = n.get("reply")
+		if reply is Dictionary and String(reply.get("text", "")) != "":
+			var rl := _label("Reply: " + String(reply.text), SMALL, Ui.BLUE); rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(rl)
+		_notes_box.add_child(card)
+
+func _card() -> StyleBoxFlat:
+	var s := _panel(Ui.SURFACE, 14); s.content_margin_left = 16; s.content_margin_right = 16; s.content_margin_top = 10; s.content_margin_bottom = 10
+	return s
+
+func _refresh_versions() -> void:
+	for c in _versions_box.get_children(): c.queue_free()
+	var saves: Array = Queue.pending_for(studio.key, "save")
+	if not saves.is_empty():
+		_versions_box.add_child(_label("%d save(s) on the phone, waiting for the Mac sync" % saves.size(), SMALL, Ui.GOLD))
+	var vs: Array = Queue.versions_for(studio.key)
+	if vs.is_empty() and saves.is_empty(): _versions_box.add_child(_label("No versions synced to this phone yet", SMALL, Ui.MUTED))
+	for i in range(vs.size() - 1, maxi(-1, vs.size() - 12), -1):
+		var r: Dictionary = vs[i]
+		var l := _label("v%03d · %s · %s" % [int(r.get("n", 0)), r.get("author", ""), r.get("message", "")], SMALL)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_versions_box.add_child(l)
+
+# ---------------------------------------------------------------- ring sheet (tap a ring)
+
+func _build_sheet(sheet: VBoxContainer) -> void:
+	sheet.add_theme_constant_override("separation", 10)
+	var bg := PanelContainer.new(); bg.add_theme_stylebox_override("panel", _row_box()); bg.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sheet.add_child(bg)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 10); bg.add_child(v)
+	var head := HBoxContainer.new()
+	_sheet_title = _label("", TITLE); _sheet_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(_sheet_title); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
+	var acts := HBoxContainer.new(); acts.add_theme_constant_override("separation", 8)
+	_sheet_pin = _btn("Pin", _toggle_pin, 0); _sheet_pin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var rp := _btn("Reset pins", func(): studio.reset_autopose_pins(); _refresh_sheet(); _refresh_chips(), 0); rp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var rx := _btn("Relax key", _relax, 0); rx.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _tint(rx, true, Ui.INK)
+	for b in [_sheet_pin, rp, rx]: acts.add_child(b)
+	v.add_child(acts)
+	v.add_child(_label("Stiffness · stiff = moves less (arms: body follows more)", SMALL, Ui.MUTED))
+	for reg in REGIONS:
+		var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
+		var name_l := _label(reg[0], SMALL); name_l.custom_minimum_size.x = 100; r.add_child(name_l)
+		var bs: Array = []
+		for lv in LEVELS:
+			var b := _btn(lv[0], _set_region.bind(reg[1], lv[1]), 0, 60); b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.add_theme_font_size_override("font_size", SMALL); bs.append(b); r.add_child(b)
+		_region_btns[reg[1]] = bs
+		v.add_child(r)
+
+func _open_sheet(id: String) -> void:
+	_handle = id
+	_lower.visible = false; _sheet.visible = true
+	_refresh_sheet()
+
+func _close_sheet() -> void:
+	_handle = ""
+	_sheet.visible = false; _lower.visible = true
+
+func _toggle_pin() -> void:
+	if _handle == "": return
+	var r: Dictionary = studio.set_autopose_pin(_handle)
+	if not r.get("ok", true): _show_toast(String(r.get("error", "")))
+	_refresh_sheet(); _refresh_chips()
+
+func _set_region(region: String, v: float) -> void:
+	studio.set_autopose_stiffness(region, v)
+	_refresh_sheet()
+
+func _refresh_sheet() -> void:
+	if _handle == "": return
+	_sheet_title.text = String(AP_NAMES.get(_handle, _handle))
+	var pinned: bool = studio.autopose_pinned(_handle)
+	_sheet_pin.text = "Pinned" if pinned else "Pin"
+	_tint(_sheet_pin, pinned, Ui.INK)
+	for region in _region_btns:
+		var now: float = float(studio.autopose_stiffness.get(region, 1.0))
+		var bs: Array = _region_btns[region]
+		for i in LEVELS.size(): _tint(bs[i], is_equal_approx(now, float(LEVELS[i][1])))
+
+# ---------------------------------------------------------------- stars
+
+func _build_star_popup() -> void:
+	_star_popup = Control.new(); _star_popup.visible = false
+	_star_popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim := Button.new(); dim.flat = true; dim.focus_mode = Control.FOCUS_NONE
+	dim.add_theme_stylebox_override("normal", _panel(Color(0, 0, 0, 0.45))); dim.add_theme_stylebox_override("hover", _panel(Color(0, 0, 0, 0.45)))
+	dim.add_theme_stylebox_override("pressed", _panel(Color(0, 0, 0, 0.45)))
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); dim.pressed.connect(func(): _star_popup.visible = false)
+	_star_popup.add_child(dim)
+	var card := PanelContainer.new(); card.add_theme_stylebox_override("panel", _sheet_box())
+	card.anchor_left = 0.0; card.anchor_right = 1.0; card.anchor_top = 1.0; card.anchor_bottom = 1.0
+	card.offset_top = -460
+	_star_popup.add_child(card)
+	var v := VBoxContainer.new(); v.alignment = BoxContainer.ALIGNMENT_CENTER; v.add_theme_constant_override("separation", 18); card.add_child(v)
+	var t := _label("Rate this pose", TITLE); t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(t)
+	var row := HBoxContainer.new(); row.alignment = BoxContainer.ALIGNMENT_CENTER; row.add_theme_constant_override("separation", 10)
+	for i in 5:
+		var b := Button.new(); b.flat = true; b.focus_mode = Control.FOCUS_NONE; b.text = "☆"
+		b.custom_minimum_size = Vector2(112, 112); b.add_theme_font_size_override("font_size", 88)
+		for c in ["font_color", "font_hover_color", "font_pressed_color"]: b.add_theme_color_override(c, Ui.GOLD)
+		b.pressed.connect(_rate.bind(i + 1))
+		_big_stars.append(b); row.add_child(b)
+	v.add_child(row)
+	var legend := _label("5 ship it · 4 small nit · 3 acceptable · 2 clearly wrong · 1 broken", SMALL, Ui.MUTED)
+	legend.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; v.add_child(legend)
+	var later := _btn("Not now", func(): _star_popup.visible = false, 0, 72); v.add_child(later)
+	add_child(_star_popup)
+
+func _sheet_box() -> StyleBoxFlat:
+	var s := _panel(Ui.PANEL); s.corner_radius_top_left = 28; s.corner_radius_top_right = 28
+	s.content_margin_left = 24; s.content_margin_right = 24; s.content_margin_top = 24; s.content_margin_bottom = 32
+	return s
+
+func _open_stars() -> void:
+	var n: int = Queue.stars_for(studio.key)
+	for i in 5: _big_stars[i].text = "★" if i < n else "☆"
+	_star_popup.visible = true
+
+func _rate(n: int) -> void:
+	Queue.enqueue("rate", {"key": studio.key, "stars": n})
+	_star_popup.visible = false
+	_refresh_stars()
+	if n < 5:
+		_tab = "notes"; _refresh_tabs()
+		_show_toast("%d stars · add a note on what is off" % n)
+	else: _show_toast("5 stars · ship it")
+
+func _refresh_stars() -> void:
+	var n: int = Queue.stars_for(studio.key)
+	for i in 5: _small_stars[i].text = "★" if i < n else "☆"
+	_stars_label.text = ("%d of 5" % n) if n > 0 else "Tap to rate"
+
+# ---------------------------------------------------------------- pose drawer (menu)
+
+func _build_drawer() -> void:
+	_drawer = Control.new(); _drawer.visible = false
+	_drawer.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var dim := Button.new(); dim.flat = true; dim.focus_mode = Control.FOCUS_NONE
+	for st in ["normal", "hover", "pressed"]: dim.add_theme_stylebox_override(st, _panel(Color(0, 0, 0, 0.45)))
+	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); dim.pressed.connect(_toggle_drawer)
+	_drawer.add_child(dim)
+	var panel := PanelContainer.new(); panel.add_theme_stylebox_override("panel", _panel(Ui.PANEL))
+	panel.anchor_right = 0.84; panel.anchor_bottom = 1.0
+	_drawer.add_child(panel)
+	var v := VBoxContainer.new(); v.add_theme_constant_override("separation", 0); panel.add_child(v)
+	var head := HBoxContainer.new(); head.custom_minimum_size.y = HEAD_H
+	var t := _label("  Poses", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(t); head.add_child(_btn("✕", _toggle_drawer, TAP)); v.add_child(head)
+	var sp := MarginContainer.new(); for side in ["left", "right", "bottom"]: sp.add_theme_constant_override("margin_" + side, GAP)
+	_search = LineEdit.new(); _search.placeholder_text = "Search name or key"; _search.custom_minimum_size.y = 72
+	_search.text_changed.connect(func(_t): _fill_drawer())
+	sp.add_child(_search); v.add_child(sp)
+	var scroll := ScrollContainer.new(); scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_drawer_list = VBoxContainer.new(); _drawer_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_drawer_list.add_theme_constant_override("separation", 0)
+	scroll.add_child(_drawer_list); v.add_child(scroll)
+	var foot := MarginContainer.new(); for side in ["left", "right", "top", "bottom"]: foot.add_theme_constant_override("margin_" + side, GAP)
+	var fr := HBoxContainer.new(); fr.add_theme_constant_override("separation", 8)
+	var pend := _btn("", func(): pass, 0); pend.name = "Pending"; pend.size_flags_horizontal = Control.SIZE_EXPAND_FILL; pend.disabled = true
+	fr.add_child(pend); fr.add_child(_btn("Exit", _exit, 140)); foot.add_child(fr); v.add_child(foot)
+	add_child(_drawer)
+
+func _toggle_drawer() -> void:
+	_drawer.visible = not _drawer.visible
+	if _drawer.visible: _fill_drawer()
+
+func _groups() -> Array:
+	var g := {"Strokes": [], "Body stances": [], "Serves": [], "Ball actions": []}
+	for d in PostureLibrary.instance().all_definitions(): g["Strokes"].append(d)
+	for d in BasePoseLibrary.instance().all_definitions(): g["Body stances"].append(d)
+	for d in PoseDiff.ServeStore.all_definitions(): g["Serves"].append(d)
+	for d in PoseDiff.BallActions.all_definitions(): g["Ball actions"].append(d)
+	return [["Strokes", g["Strokes"]], ["Body stances", g["Body stances"]], ["Serves", g["Serves"]], ["Ball actions", g["Ball actions"]]]
+
+func _fill_drawer() -> void:
+	for c in _drawer_list.get_children(): c.queue_free()
+	var q := _search.text.strip_edges().to_lower()
+	var unsaved: Array = studio.unsaved_keys()
+	for grp in _groups():
+		var name_s: String = grp[0]
+		var defs: Array = grp[1].duplicate()
+		defs.sort_custom(func(a, b): return PoseDiff.key_of(a) < PoseDiff.key_of(b))
+		var rows: Array = []
+		for d in defs:
+			var k := PoseDiff.key_of(d)
+			var label := "%s  %s" % [k, String(d.display_name)]
+			if q == "" or label.to_lower().contains(q): rows.append([k, label])
+		var open: bool = q != "" or bool(_drawer_open.get(name_s, false))
+		var hb := _btn("%s   %d  %s" % [name_s.to_upper(), rows.size(), "▾" if open else "▸"], _toggle_group.bind(name_s), 0, 72)
+		hb.alignment = HORIZONTAL_ALIGNMENT_LEFT; hb.add_theme_font_size_override("font_size", SMALL)
+		_drawer_list.add_child(hb)
+		if not open: continue
+		for r in rows:
+			var stars: int = Queue.stars_for(r[0])
+			var badge := ("  ●" if r[0] in unsaved else "") + ("   " + "★".repeat(stars) if stars > 0 else "")
+			var b := _btn(String(r[1]) + badge, _pick_pose.bind(r[0]), 0, TAP)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT; b.clip_text = true
+			if r[0] == studio.key: _tint(b, true, Ui.SURFACE_HOVER)
+			_drawer_list.add_child(b)
+	var pend = _drawer.find_child("Pending", true, false)
+	if pend: pend.text = "%d waiting for the Mac sync" % Queue.pending().size()
+
+func _toggle_group(n: String) -> void:
+	_drawer_open[n] = not bool(_drawer_open.get(n, false))
+	_fill_drawer()
+
+func _pick_pose(k: String) -> void:
+	_close_sheet()
+	studio.select_pose(k)
+	_drawer.visible = false
+
+func _exit() -> void:
+	_drawer.visible = false
+	var game = get_tree().current_scene
+	studio.queue_free()
+	if game and game.has_method("_close_mobile_pose_editor"): game._close_mobile_pose_editor()
+
+# ---------------------------------------------------------------- state
+
+func _refresh_pose() -> void:
+	if studio == null or studio.key == "": return
+	var d: Resource = PoseDiff.live_def(studio.key)
+	var groups := {"s": "Strokes", "b": "Body stances", "v": "Serves", "a": "Ball actions"}
+	_title_sub.text = "%s · %s" % [groups.get(studio.key.substr(0, 1), ""), studio.key]
+	_title.text = (String(d.display_name) if d else studio.key) + ("  ●" if studio.key in studio.unsaved_keys() else "")
+	var names: Array = studio.stage_names()
+	for i in 3:
+		_keys[i].text = String(names[i]).substr(0, 1)
+		_keys[i].disabled = not studio.engine._has_motion() and i != 1
+		_tint(_keys[i], studio.stage == i, STAGE_COLORS[i])
+	_refresh_stars(); _refresh_tabs(); _refresh_chips()
+	if _handle != "": _refresh_sheet()
+
+func _show_toast(t: String) -> void:
+	if t == "": return
+	_toast_text = t; _toast_time = 3.0
+	if _toast: _toast.text = t; _toast.visible = true
+
+func _process(delta: float) -> void:
+	if studio == null or not studio.is_ready: return
+	if studio.key != _last_key or studio.stage != _last_stage:
+		_last_key = studio.key; _last_stage = studio.stage; _refresh_pose()
+	var tl = studio._timeline
+	if tl and _scrub:
+		var st: Dictionary = tl.state()
+		_sync_scrub = true
+		if bool(st.get("active", false)): _scrub.set_value_no_signal(float(st.get("t", 0.0)))
+		_scrub.set_marks(tl.scrubber.marks, tl.scrubber.duration)
+		_scrub.marks_draggable = tl.scrubber.marks_draggable
+		_scrub.queue_redraw()
+		_sync_scrub = false
+		_play.text = "❚❚" if bool(st.get("playing", false)) else "▶"
+	if _undo: _undo.disabled = (studio._undo as Array).is_empty()
+	if _redo: _redo.disabled = (studio._redo as Array).is_empty()
+	if _toast and _toast.visible:
+		_toast_time -= delta
+		if _toast_time <= 0.0: _toast.visible = false
