@@ -11,10 +11,10 @@ class_name CardPartnerTap
 
 const RANGE: = 1.5            # m between partners (body centres) to start a tap
 const WINDOW: = 5.0           # s after the point end
-const REACH: = 0.22           # s to reach the meeting point
-const TAP_AT: = 0.30          # s: the tap nudge
-const HOLD: = 0.40            # s: start back
-const DONE: = 0.70             # s
+const REACH: = 0.32           # s to reach the meeting point
+const TAP_AT: = 0.42          # s: the tap nudge
+const HOLD: = 0.52            # s: start back
+const DONE: = 0.90             # s
 const MEET_HEIGHT: = 1.15     # m above the court
 const BUSY_PHASES: = ["BEND", "LIFT", "PICKUP", "CARRY", "PASS_PREP", "PASS", "PASS_RELEASE", "CATCH", "CATCH_OPEN"]
 
@@ -105,7 +105,7 @@ func update(delta: float, stop_reaction: Callable) -> Dictionary:
 	if _t < REACH: w = smoothstep(0.0, REACH, _t)
 	elif _t < HOLD: w = 1.0
 	else: w = 1.0 - smoothstep(HOLD, DONE, _t)
-	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.08)
+	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.06)
 	var mine: Vector3 = _player.global_position
 	var theirs: Vector3 = partner.global_position
 	var target: = (mine + theirs) * 0.5
