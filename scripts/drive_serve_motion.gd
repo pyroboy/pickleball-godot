@@ -56,10 +56,13 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 	var compact: PostureDefinition = _compact_or_overhead_definition(base, minf(charge, 0.58), is_volley, near_kitchen, shot_intent)
 	var windup: PostureDefinition = Path.endpoint(compact, 0)
-	windup.paddle_forehand_mul = lerpf(windup.paddle_forehand_mul, side * 0.44, strength)
+	# Full-charge Wind-up / Finish paddle: the pose's authored keys (Pose Studio, the momentum arc's
+	# W and F points); a pose without them keeps the built-in drive numbers.
+	var w_to: Vector3 = authored_paddle(base, 0, Vector3(side * 0.44, maxf(base.paddle_y_offset + 0.12, 0.1), -0.28))
+	windup.paddle_forehand_mul = lerpf(windup.paddle_forehand_mul, w_to.x, strength)
 	windup.paddle_forehand_mul += side * 0.12 * sin(PI * strength) * clampf((0.62 - absf(base.paddle_forehand_mul)) / 0.12, 0.0, 1.0)
-	windup.paddle_forward_mul = lerpf(windup.paddle_forward_mul, -0.28, strength)
-	windup.paddle_y_offset = lerpf(windup.paddle_y_offset, maxf(base.paddle_y_offset + 0.12, 0.1), strength)
+	windup.paddle_forward_mul = lerpf(windup.paddle_forward_mul, w_to.z, strength)
+	windup.paddle_y_offset = lerpf(windup.paddle_y_offset, w_to.y, strength)
 	windup.body_yaw_deg = lerpf(windup.body_yaw_deg, 18.0 * side, strength)
 	windup.hip_yaw_deg = lerpf(windup.hip_yaw_deg, 12.0 * side, strength)
 	windup.torso_yaw_deg = lerpf(windup.torso_yaw_deg, 19.0 * side, strength)
@@ -84,9 +87,10 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 	if right: windup.right_elbow_pole = pole
 	else: windup.left_elbow_pole = pole
 	var finish: PostureDefinition = Path.endpoint(compact, 2)
-	finish.paddle_forehand_mul = lerpf(finish.paddle_forehand_mul, -0.24 if base.family == 0 else 0.47, strength)
-	finish.paddle_forward_mul = lerpf(finish.paddle_forward_mul, 0.34, strength)
-	finish.paddle_y_offset = lerpf(finish.paddle_y_offset, maxf(base.paddle_y_offset + 0.34, 0.48), strength)
+	var f_to: Vector3 = authored_paddle(base, 2, Vector3(-0.24 if base.family == 0 else 0.47, maxf(base.paddle_y_offset + 0.34, 0.48), 0.34))
+	finish.paddle_forehand_mul = lerpf(finish.paddle_forehand_mul, f_to.x, strength)
+	finish.paddle_forward_mul = lerpf(finish.paddle_forward_mul, f_to.z, strength)
+	finish.paddle_y_offset = lerpf(finish.paddle_y_offset, f_to.y, strength)
 	finish.body_yaw_deg = lerpf(finish.body_yaw_deg, -12.0 * side, strength)
 	finish.hip_yaw_deg = lerpf(finish.hip_yaw_deg, -14.0 * side, strength)
 	finish.torso_yaw_deg = lerpf(finish.torso_yaw_deg, -10.0 * side, strength)
@@ -111,6 +115,14 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 
 
+
+## Paddle position (forehand, y, forward muls) of the pose's authored Wind-up (stage 0) or Finish
+## (2) key; `fallback` when the pose has no such key (its offset from Contact is under 5 cm).
+static func authored_paddle(base: PostureDefinition, stage: int, fallback: Vector3) -> Vector3:
+	var offset: Vector3 = base.charge_paddle_offset if stage == 0 else base.ft_paddle_offset
+	if offset.length_squared() < 0.0025: return fallback
+	var key: PostureDefinition = Path.endpoint(base, stage)
+	return Vector3(key.paddle_forehand_mul, key.paddle_y_offset, key.paddle_forward_mul)
 
 static func _two_hand_backhand_definition(base: PostureDefinition, charge: float, is_volley: bool, near_kitchen: bool, shot_intent: String) -> PostureDefinition:
 	if base.posture_id == 9: return base.lerp_with(base, 0.0)

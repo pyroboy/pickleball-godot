@@ -44,7 +44,7 @@ static func run(studio_node: Node) -> Dictionary:
 
 func _run(s: Node) -> Dictionary:
 	studio = s
-	root = s.get("_root")
+	root = s.get("phone_ui") if s.get("phone") else s.get("_root")   # phone mode: audit the phone layout
 	if root == null: return {"ok": false, "error": "studio has no _root"}
 	var vp := root.get_viewport()
 	win = vp.get_visible_rect()
@@ -70,7 +70,8 @@ func _run(s: Node) -> Dictionary:
 ## null when hidden.
 const LAYOUT_NODES := ["TopBar", "Left", "PoseList", "Centre", "ViewToolbar", "Views", "ViewHint", "StatusLine",
 	"TimelineControls", "Scrubber", "Right", "Inspector", "FieldScroll", "Panels", "ViewSeg", "GizmoSeg", "OverlaySeg",
-	"SecondSeg", "StageSeg", "TransportSeg", "SpeedPicker", "VariantSeg", "TimeLabel", "AutoPoseBar"]
+	"SecondSeg", "StageSeg", "TransportSeg", "SpeedPicker", "VariantSeg", "TimeLabel", "AutoPoseBar",
+	"Column", "Scene", "Lower", "RingSheet", "SwingSheet", "AutoPoseChips", "Layers"]   # last row: phone layout
 
 func _layout_rects() -> Dictionary:
 	var out := {}

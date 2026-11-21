@@ -67,6 +67,21 @@ var _ghosts: Array[Node3D] = []
 var _arc: MeshInstance3D
 var _arc_mesh: ImmediateMesh
 var _setup_finished := false
+## Momentum arc (Pose Studio): the paddle head at every game tick (1/30 s) of the swing the game
+## plays at full charge (Ready -> Wind-up -> Contact -> Finish: mobile_pose_sequence's runtime
+## motion), so the dot spacing is the paddle's speed. While on it replaces the authored-key tube.
+const Sequence = preload("res://scripts/ui/mobile_pose_sequence.gd")
+const TICK := 1.0 / 30.0
+var momentum_on := false
+var momentum_heads := PackedVector3Array()       # one per tick from Ready
+var momentum_keys := PackedVector3Array()        # Wind-up, Contact, Finish heads (exact times)
+var momentum_key_times := PackedFloat32Array()   # their seconds from Ready
+var momentum_contact_speed := 0.0                # m/s: peak paddle-head speed of the strike
+var momentum_rebuild_count := 0
+var momentum_progress := PackedFloat32Array()   # stroke progress of each tick (-1 before Wind-up)
+var momentum_path_t := PackedFloat32Array()      # path handles: the keys' progress, then bend points
+var momentum_path_heads := PackedVector3Array()  # their heads on the arc
+var momentum_path_virtual := PackedByteArray()   # 1 = a bend point (no key there yet)
 var viewport: SubViewport
 var player
 var camera: Camera3D
@@ -299,6 +314,7 @@ func _refresh_motion() -> void:
 	if _inbetween_root: _inbetween_root.visible = _motion_enabled and _ghosts_visible and inbetween_count > 0
 	if _inbetween_dirty and _motion_enabled: _refresh_inbetween()
 	if not _motion_enabled or not _setup_finished:
+		momentum_heads.clear(); momentum_keys.clear(); momentum_key_times.clear(); momentum_contact_speed = 0.0
 		_refresh_selected_joint_motion()
 		_request_redraw()
 		return
@@ -388,10 +404,12 @@ func _rebuild_motion() -> void:
 		for id in JOINT_NAMES: joint_samples[id].append(joint_world_position(id))
 		if index in [0, ARC_STEPS / 2, ARC_STEPS]:
 			ghost_transforms.append(paddle_transform)
-	# Ready -> Wind-up lead-in (plain strokes only: serves, variants and ball actions have
-	# their own samplers / no Ready start). Same sampler as playback and the held-Hit wind-up.
+	_rebuild_momentum()
+	# Ready -> Wind-up lead-in when the momentum arc (which already starts at Ready) is off.
+	# Plain strokes only: serves, variants and ball actions have their own samplers / no Ready
+	# start. Same sampler as playback and the held-Hit wind-up.
 	ready_heads.clear()
-	if not motion_sampler.is_valid() and _motion_definition.posture_id < 90:
+	if momentum_heads.size() <= 1 and not motion_sampler.is_valid() and _motion_definition.posture_id < 90:
 		var ready_def: PostureDefinition = PostureLibrary.instance().get_def(20)
 		if ready_def != null:
 			var windup: PostureDefinition = Path.sample(_motion_definition, 0.0)
@@ -411,16 +429,17 @@ func _rebuild_motion() -> void:
 		_ghosts[stage].global_transform = Transform3D(reduced_basis,
 			actual * PaddleSize.HEAD_OFFSET - reduced_basis * PaddleSize.HEAD_OFFSET)
 	_arc_mesh.clear_surfaces()
+	var line: Array = _momentum_line() if momentum_heads.size() > 1 else [sample_heads, range(ARC_STEPS + 1).map(func(i): return _motion_color(float(i) / ARC_STEPS))]
+	var pts: PackedVector3Array = line[0]
 	var has_motion := false
-	for index in range(ARC_STEPS):
-		if sample_heads[index].distance_squared_to(sample_heads[index + 1]) > 0.00000001:
+	for index in range(pts.size() - 1):
+		if pts[index].distance_squared_to(pts[index + 1]) > 0.00000001:
 			has_motion = true
 			break
 	if has_motion:
 		_arc_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-		for index in range(ARC_STEPS):
-			_add_arc_segment(_arc.to_local(sample_heads[index]), _arc.to_local(sample_heads[index + 1]),
-				_motion_color(float(index) / ARC_STEPS), _motion_color(float(index + 1) / ARC_STEPS))
+		for index in range(pts.size() - 1):
+			_add_arc_segment(_arc.to_local(pts[index]), _arc.to_local(pts[index + 1]), line[1][index], line[1][index + 1])
 		_arc_mesh.surface_end()
 	if ready_heads.size() > 1 and ready_heads[0].distance_squared_to(ready_heads[-1]) > 0.00000001:
 		_arc_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -430,6 +449,69 @@ func _rebuild_motion() -> void:
 		_arc_mesh.surface_end()
 	_refresh_inbetween()
 	motion_rebuild_count += 1
+
+func set_momentum(on: bool) -> void:
+	if momentum_on == on: return
+	momentum_on = on
+	_motion_snapshot = PackedByteArray()   # rebuild the arc either way
+	_refresh_motion()
+
+func _momentum_supported() -> bool:
+	return momentum_on and _motion_enabled and _motion_definition != null and _motion_definition.get("action_id") == null
+
+func _solved_head(p: PostureDefinition) -> Vector3:
+	player.posture.transition_pose_blend = p
+	player.posture.force_posture_update(p)
+	return player.paddle_node.global_transform * PaddleSize.HEAD_OFFSET
+
+func _rebuild_momentum() -> void:
+	momentum_heads.clear(); momentum_keys.clear(); momentum_key_times.clear(); momentum_contact_speed = 0.0
+	momentum_progress.clear(); momentum_path_t.clear(); momentum_path_heads.clear(); momentum_path_virtual.clear()
+	if not _momentum_supported(): return
+	var t0 := Time.get_ticks_usec()
+	var seq = Sequence.new()
+	seq.configure(_motion_definition, Sequence.Mode.STROKE, Sequence.Stance.AUTHORED, 0, true, player)
+	var w: float = seq.prefix_seconds
+	var times := [w, w + seq.release_seconds, w + seq.stroke_seconds]
+	for i in ceili(times[2] / TICK - 0.001) + 1:
+		var smp: Dictionary = seq.sample(minf(i * TICK, times[2]))
+		momentum_heads.append(_solved_head(smp.pose))
+		momentum_progress.append(float(smp.progress) if i * TICK >= w else -1.0)
+	# Path handles (strokes): every key, plus a bend point in the middle of each half without one.
+	if seq.style < 0:
+		var ks: Array = Array(_motion_definition.paddle_path_times)
+		var pts: Array = []
+		for k in ks: pts.append([float(k), 0])
+		for mid in [0.25, 0.75]:
+			if not ks.any(func(k): return absf(float(k) - mid) < 0.08): pts.append([mid, 1])
+		for p in pts:
+			momentum_path_t.append(p[0]); momentum_path_virtual.append(p[1])
+			momentum_path_heads.append(_solved_head(seq._stroke_pose(p[0])))
+	for t in times:
+		momentum_key_times.append(t); momentum_keys.append(_solved_head(seq.sample(t).pose))
+	# Peak paddle-head speed of the strike (Wind-up -> Contact), one tick at a time. (The strike
+	# eases into Contact, so the speed at the Contact instant itself says little.)
+	for i in range(floori(times[0] / TICK), mini(ceili(times[1] / TICK), momentum_heads.size() - 1)):
+		momentum_contact_speed = maxf(momentum_contact_speed, momentum_heads[i].distance_to(momentum_heads[i + 1]) / TICK)
+	momentum_rebuild_count += 1
+	PerfMonitor.record("studio.momentum_arc", Time.get_ticks_usec() - t0)
+
+## Tube points through the tick heads (Catmull-Rom, 4 per tick) and their colours: grey from
+## Ready, then the Wind-up -> Contact -> Finish colours.
+func _momentum_line() -> Array:
+	var h := momentum_heads
+	var pts := PackedVector3Array()
+	var cols: Array = []
+	var w: float = momentum_key_times[0]; var c: float = momentum_key_times[1]; var f: float = momentum_key_times[2]
+	for i in h.size() - 1:
+		var p0: Vector3 = h[maxi(i - 1, 0)]; var p1: Vector3 = h[i]; var p2: Vector3 = h[i + 1]; var p3: Vector3 = h[mini(i + 2, h.size() - 1)]
+		for k in 4:
+			var u := k / 4.0
+			pts.append(0.5 * ((2.0 * p1) + (p2 - p0) * u + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u * u + (3.0 * p1 - p0 - 3.0 * p2 + p3) * u * u * u))
+			var t := minf((i + u) * TICK, f)
+			cols.append(Color(0.62, 0.66, 0.70).lerp(STAGE_COLORS[0], t / maxf(w, 0.001)) if t < w else _motion_color(0.5 * (t - w) / maxf(c - w, 0.001) if t < c else 0.5 + 0.5 * (t - c) / maxf(f - c, 0.001)))
+	pts.append(h[h.size() - 1]); cols.append(STAGE_COLORS[2])
+	return [pts, cols]
 
 func _motion_color(progress: float) -> Color:
 	return STAGE_COLORS[0].lerp(STAGE_COLORS[1], progress * 2.0) if progress <= 0.5 else STAGE_COLORS[1].lerp(STAGE_COLORS[2], (progress - 0.5) * 2.0)

@@ -131,8 +131,34 @@ static func snapshot(def: Resource) -> Dictionary:
 static func get_def(id: int) -> Resource:
 	if id < 0 or id >= FILES.size(): return null
 	if not _defs.has(id):
-		_defs[id] = ResourceLoader.load(FILES[id]) if ResourceLoader.exists(FILES[id]) else null
+		var path: String = _override_path(id) if FileAccess.file_exists(_override_path(id)) and not skip_overrides else FILES[id]
+		_defs[id] = ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) if ResourceLoader.exists(path) else null
 	return _defs[id]
+
+## Phone Pose Studio: an action saved on the device (until the Mac sync puts it in the repo and a
+## new build ships it). The desktop studio shows the repo files only.
+const OVERRIDE_DIR := "user://ball_action_overrides"
+static var skip_overrides := false
+static func _override_path(id: int) -> String:
+	return OVERRIDE_DIR.path_join(FILES[id].get_file())
+
+static func save_override(id: int, def: Resource) -> bool:
+	if id < 0 or id >= FILES.size() or def == null: return false
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OVERRIDE_DIR))
+	var copy: Resource = def.duplicate(true)
+	if ResourceSaver.save(copy, _override_path(id)) != OK: return false
+	var live := get_def(id)
+	if live != null:
+		for p in copy.get_property_list():
+			if p.usage & PROPERTY_USAGE_STORAGE and p.name != "script" and not p.name.begins_with("resource_"): live.set(p.name, copy.get(p.name))
+	_deltas.erase(id)
+	revision += 1
+	return true
+
+## Drop an on-device action once the packaged one is the same (after a sync and a new build).
+static func drop_override(id: int) -> void:
+	if FileAccess.file_exists(_override_path(id)): DirAccess.remove_absolute(ProjectSettings.globalize_path(_override_path(id)))
+	_defs.erase(id); _deltas.erase(id); revision += 1
 
 static func all_definitions() -> Array:
 	var out: Array = []

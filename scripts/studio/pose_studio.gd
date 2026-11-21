@@ -13,6 +13,8 @@ signal stage_changed(stage)
 signal pose_edited(key)
 signal pose_saved(key, version)
 signal pose_reloaded(key)
+## Phone mode: an AutoPose drag released without moving (a tap on the ring).
+signal handle_tapped(id)
 
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
@@ -116,6 +118,11 @@ var key := ""                   # "s13" / "b04"
 var stage := 1
 var selected_field := ""        # last edited field (read by the notes panel)
 var is_ready := false
+## Phone (iPhone) mode, set before the node enters the tree: the phone layout
+## (scripts/studio/phone_studio_ui.gd) instead of the desktop window, on-device pose overrides
+## stay applied, and Save queues the edit for the Mac (scripts/studio/phone_sync_queue.gd).
+var phone := false
+var phone_ui = null
 var layout_override := Vector2i.ZERO   # link `window` emulate: lay out at this canvas size (tests, no real resize)
 var link_driving := false        # set by the link around ui_action / key / mouse: no ratings, no Verify
 var preview = null              # engine._preview (moved into the centre)
@@ -210,16 +217,19 @@ func _ready() -> void:
 	layer = 120
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("pose_studio")
-	# Studio process only: closing the window asks about unsaved working copies first.
-	get_tree().set_auto_accept_quit(false)
-	Store.skip_overrides = true
-	if PostureLibrary._singleton != null: PostureLibrary._singleton.load_or_default()
-	if BasePoseLibrary._singleton != null: BasePoseLibrary._singleton.load_or_default()
-	_apply_window_min()
-	_apply_desktop_scale()
-	get_tree().root.size_changed.connect(_apply_desktop_scale)
+	if not phone:
+		# Studio process only: closing the window asks about unsaved working copies first.
+		get_tree().set_auto_accept_quit(false)
+		Store.skip_overrides = true
+		PoseDiff.BallActions.skip_overrides = true
+		if PostureLibrary._singleton != null: PostureLibrary._singleton.load_or_default()
+		if BasePoseLibrary._singleton != null: BasePoseLibrary._singleton.load_or_default()
+		_apply_window_min()
+		_apply_desktop_scale()
+		get_tree().root.size_changed.connect(_apply_desktop_scale)
 	_build_ui()
-	_mount_panels()
+	if phone: _root.visible = false   # the desktop controls stay (the studio logic reads them), hidden
+	else: _mount_panels()
 	_setup.call_deferred()
 
 ## The project stretches a 720x1280 phone canvas; on the desktop the studio uses the window's
@@ -272,8 +282,16 @@ func adopt(ed) -> void:
 	engine = ed
 	ed._root.visible = false
 	preview = ed._preview
-	preview.reparent(_views, false)
-	_views.move_child(preview, 0)
+	if phone:
+		var dropped: Array = load("res://scripts/studio/phone_sync_queue.gd").cleanup_overrides()
+		if not dropped.is_empty(): print("[PoseStudio] phone: the build has the synced edits of %s; on-device copies dropped" % ", ".join(dropped))
+		phone_ui = load("res://scripts/studio/phone_studio_ui.gd").new()
+		add_child(phone_ui)
+		phone_ui.build(self)
+		phone_ui.mount_preview(preview)
+	else:
+		preview.reparent(_views, false)
+		_views.move_child(preview, 0)
 	preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview.size_flags_stretch_ratio = 1.0
@@ -288,9 +306,14 @@ func adopt(ed) -> void:
 	_fix_preview_layout()
 	_build_view_hint()
 	ed._gizmo_show.set_pressed_no_signal(true)   # not _toggle_gizmo: that writes user:// view settings
-	_setup_second_view()
+	if not phone: _setup_second_view()
 	is_ready = true
+	preview.set_momentum(true)   # the Trajectory arc is the swing the game plays (tick dots)
 	select_pose("s00")
+	if phone:
+		_view_input.touch = true
+		set_autopose_mode(true)
+		phone_ui.studio_ready()
 	_view_input.frame_pose()
 	_set_status("Studio ready. Press ? for keys.")
 	print("[PoseStudio] ready")
@@ -348,8 +371,9 @@ func _build_ui() -> void:
 	_build_centre(_split2)
 	_build_right(_split2)
 	for s in [_split, _split2, _vsplit]: s.drag_ended.connect(_save_layout)
-	_load_layout()
-	_root.resized.connect(_queue_layout)
+	if not phone:   # phone: the desktop panes stay hidden, never laid out
+		_load_layout()
+		_root.resized.connect(_queue_layout)
 	_build_help()
 
 func _build_top_bar(main: Control) -> void:
@@ -540,6 +564,7 @@ func _build_view_hint() -> void:
 	_hint.add_child(_joint_label)
 	preview.add_child(_hint)
 	preview.resized.connect(_layout_hint)
+	if phone: _hint.visible = false   # desktop keys / mouse hints; the phone layout has its own
 
 func _set_hint(t: String) -> void:
 	if _joint_label == null or _joint_label.text == t: return
@@ -557,7 +582,7 @@ func _layout_hint() -> void:
 	var wrap := tw + inner > maxw
 	_joint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap else TextServer.AUTOWRAP_OFF
 	_joint_label.custom_minimum_size.x = (maxw - inner) if wrap else 0.0
-	_hint.visible = _joint_label.text != ""
+	_hint.visible = _joint_label.text != "" and not phone
 	_hint.reset_size()
 	(func() -> void:
 		if _hint == null or preview == null: return
@@ -632,7 +657,7 @@ func _save_layout() -> void:
 var _layout_queued := false
 var _layout_after_drag := false
 func _queue_layout() -> void:
-	if _layout_queued: return
+	if phone or _layout_queued: return   # phone: the desktop panes are hidden, never laid out
 	_layout_queued = true
 	_apply_layout.call_deferred()
 
@@ -681,6 +706,17 @@ func _fit(s: SplitContainer, child: Control, want: float, first: bool, vertical:
 # ================================================================ engine helpers
 
 func _ok() -> bool: return engine != null and is_instance_valid(engine)
+
+## What the working copy is compared with (unsaved dot, Save's diff): the pose file on disk; on
+## the phone, the pose as last saved on the device (the packaged file plus its on-device
+## override), so each queued save carries only the edits since the previous one.
+func _baseline(k: String) -> Resource:
+	if not phone: return PoseDiff.load_disk(k)
+	var live: Resource = PoseDiff.live_def(k)
+	if live == null: return null
+	var r: Resource = live.duplicate(true)
+	if not (r is BasePoseDefinition): PoseDiff.PaddleRotation.normalize_pose(r)
+	return r
 
 func _copy_key(k: String) -> String: return PoseDiff.copy_key(k)
 
@@ -775,7 +811,7 @@ func select_pose(k: String) -> bool:
 	if idx < 0: return false
 	engine._select_pose(idx)
 	stage = engine._stage
-	if not _disk.has(k) or _disk[k] == null: _disk[k] = PoseDiff.load_disk(k)
+	if not _disk.has(k) or _disk[k] == null: _disk[k] = _baseline(k)
 	_workspace.select(ws)
 	_pose_title.text = "%s  %s" % [k, String(live.display_name)]
 	_pose_title.tooltip_text = PoseDiff.file_of(k)
@@ -795,7 +831,7 @@ func _reset_view_state() -> void:
 	if preview == null: return
 	if not _overlays_set:
 		_overlays_set = true
-		set_overlay("arc", false)
+		set_overlay("arc", phone)   # phone: the momentum arc (Trajectory) starts on
 		set_overlay("ghosts", false)
 		set_ghost_count(0)
 		set_overlay("contact", false)
@@ -965,8 +1001,8 @@ func _update_dirty_flag() -> void:
 func diff() -> Array:
 	if not _ok() or key == "": return []
 	# Serves: always a fresh build (code + tuning file); a cached one can share key data with the copy.
-	if PoseDiff.is_serve_key(key): return PoseDiff.diff(engine._current, PoseDiff.load_disk(key), false)
-	if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
+	if PoseDiff.is_serve_key(key): return PoseDiff.diff(engine._current, _baseline(key), false)
+	if _disk.get(key) == null: _disk[key] = _baseline(key)
 	return PoseDiff.diff(engine._current, _disk[key], engine._base)
 
 ## author: "user" (studio UI) or "claude" (link 'save').
@@ -981,6 +1017,7 @@ func save(message: String = "", author: String = "user") -> Dictionary:
 		return {"ok": true, "key": key, "changed": 0, "message": "no changes"}
 	var msg := message.strip_edges()
 	if msg == "": msg = "studio edit: " + ", ".join(changes.map(func(c): return c.field))
+	if phone: return _save_on_phone(changes, msg)
 	var path := ProjectSettings.globalize_path("user://pose_studio_changes_%s.json" % key)
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null: return {"ok": false, "error": "cannot write " + path}
@@ -1000,6 +1037,31 @@ func save(message: String = "", author: String = "user") -> Dictionary:
 	pose_saved.emit(k, ver)
 	return r
 
+## Phone save: queue the edit for the Mac (tools/phone_sync.sh applies it to the repo with
+## pose_notes.py, as the desktop Save does), then save it on the device so the game uses it now.
+func _save_on_phone(changes: Array, msg: String) -> Dictionary:
+	var Queue = load("res://scripts/studio/phone_sync_queue.gd")
+	var id: String = Queue.enqueue("save", {"key": key, "changes": changes, "message": msg})
+	if id == "": return {"ok": false, "error": "could not write the phone save queue"}
+	var ck := _copy_key(key)
+	var ok := true
+	if PoseDiff.is_action_key(key):
+		ok = PoseDiff.BallActions.save_override(int(key.substr(1)), engine._copies[ck])
+	else:
+		ok = engine._save_key(ck)
+	if not ok: return {"ok": false, "error": "queued for the Mac, but the on-device save failed", "queued": id}
+	var k := key
+	# Work on the pose exactly as stored on the device (the store rounds values when it encodes
+	# them), so the saved pose and its baseline match and the pose reads as saved.
+	engine._copies.erase(ck); engine._dirty.erase(ck)
+	_disk[k] = _baseline(k)
+	_reselect(stage)
+	_remember()
+	_after_change(false)
+	_set_status("Saved %s on the phone: %d change(s), waiting for the Mac sync" % [k, changes.size()])
+	pose_saved.emit(k, -1)
+	return {"ok": true, "key": k, "changed": changes.size(), "queued": id}
+
 ## Drop the working copy and reload from disk (undoable: the old copy is kept on the stack).
 func revert() -> void:
 	if not _ok() or key == "": return
@@ -1011,7 +1073,7 @@ func revert() -> void:
 	# outside write (pose_set.py, pose_notes.py, git) must not come back as the old pose.
 	PoseDiff.reload_live(key)
 	engine._copies.erase(engine._key); engine._dirty.erase(engine._key)
-	_disk[key] = PoseDiff.load_disk(key)
+	_disk[key] = _baseline(key)
 	_reselect(st)
 	end_edit()
 	_set_status("Reverted " + key)
@@ -1024,7 +1086,7 @@ func reload(k: String = "") -> bool:
 	if k == "": k = key
 	if not PoseDiff.reload_live(k): return false
 	engine._copies.erase(_copy_key(k)); engine._dirty.erase(_copy_key(k))
-	_disk[k] = PoseDiff.load_disk(k)
+	_disk[k] = _baseline(k)
 	if PoseDiff.is_serve_key(k) and engine._serve:
 		var st := stage
 		engine._select_workspace(2)   # its serve list holds the old serve objects: rebuild from the store
@@ -1116,6 +1178,46 @@ func set_overlay(what: String, on: bool) -> void:
 		"contact":
 			_contact_on = on; _contact_toggle.set_pressed_no_signal(on)
 			if preview.contact_preview: preview.contact_preview.visible = on and preview._contact_enabled
+
+## Swing curve between the keys (swing_path_blend): 0 straight lines, 1 the full curve.
+func set_swing_curve(v: float) -> Dictionary:
+	return set_field("swing_path_blend", null, clampf(v, 0.0, 1.0))
+
+## Paddle path keys (swing arc): [[progress, Vector3 offset], ...] sorted by progress. Strokes only
+## (serves, stances and ball actions have none).
+func path_keys_supported() -> bool:
+	return _ok() and key != "" and not engine._base and not engine._serve and not engine.get("_action") and engine._has_motion()
+
+func path_keys() -> Array:
+	var out: Array = []
+	if not path_keys_supported(): return out
+	var c: Resource = engine._current
+	for i in mini(c.paddle_path_times.size(), c.paddle_path_offsets.size()): out.append([c.paddle_path_times[i], c.paddle_path_offsets[i]])
+	out.sort_custom(func(a, b): return a[0] < b[0])
+	return out
+
+## Replace the path keys (one undo step unless a drag's begin_edit is open). Progress is kept
+## off Wind-up / Contact / Finish (at least 0.02 away); offsets at most 0.8 m.
+func set_path_keys(keys: Array, refresh := true) -> Dictionary:
+	if not path_keys_supported(): return {"ok": false, "error": "path keys: strokes only"}
+	var times := PackedFloat32Array(); var offs := PackedVector3Array()
+	var sorted := keys.duplicate(); sorted.sort_custom(func(a, b): return a[0] < b[0])
+	for k in sorted:
+		var t: float = clampf(float(k[0]), 0.02, 0.98)
+		if absf(t - 0.5) < 0.02: t = 0.48 if t < 0.5 else 0.52
+		var o: Vector3 = k[1]
+		times.append(t); offs.append(o.limit_length(0.8))
+	var own := _txn == null
+	if own: begin_edit("path keys")
+	var prev_group: int = engine._group.selected
+	engine._group.select(5)
+	engine._changed("paddle_path_times", times, false)
+	engine._changed("paddle_path_offsets", offs, refresh)
+	engine._group.select(prev_group)
+	selected_field = "paddle_path_offsets"
+	if own: end_edit()
+	else: _after_change(true)
+	return {"ok": true, "keys": path_keys().size()}
 
 ## Not engine._ghost_count_changed: that writes user:// view settings.
 func set_ghost_count(n: int) -> void:
@@ -1223,7 +1325,7 @@ func unsaved_keys() -> Array:
 		var k := _key_from_copy(str(ck))
 		var cp = engine._copies.get(ck)
 		if k == "" or cp == null: continue
-		if not PoseDiff.diff(cp, PoseDiff.load_disk(k), k.begins_with("b")).is_empty(): out.append(k)
+		if not PoseDiff.diff(cp, _baseline(k), k.begins_with("b")).is_empty(): out.append(k)
 	out.sort()
 	return out
 
@@ -1297,7 +1399,7 @@ func _process(delta: float) -> void:
 	if _poll_frames % 15 == 0: _poll_external()
 	# During a viewport drag the pose list (badge columns) and top bar wait: a list column that
 	# appears re-widths the left column, resizes the preview and would cancel the drag.
-	var dragging: bool = _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE]
+	var dragging: bool = _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE, _view_input.Drag.PATH]
 	if dragging and not _drag_valid(): stop_drag(); dragging = false   # play / scrub / switch from anywhere
 	if _needs_sync:
 		_needs_sync = false
@@ -1355,7 +1457,7 @@ func _poll_external() -> void:
 	var ek: String = _key_from_copy(engine._key)
 	if ek != "" and ek != key:
 		key = ek; stage = engine._stage
-		if _disk.get(key) == null: _disk[key] = PoseDiff.load_disk(key)
+		if _disk.get(key) == null: _disk[key] = _baseline(key)
 		_workspace.select(_workspace_of(key))
 		_remember(); _fill_list(); _inspector.rebuild(); _after_change(false)
 		pose_selected.emit(key)
@@ -1685,7 +1787,7 @@ func _handled() -> void:
 
 ## The paddle hand id on a stroke pose ("" on body stances / serves: no paddle channels there).
 func main_hand_id() -> String:
-	if not _ok() or engine._edit == null or engine._base or engine._serve: return ""
+	if not _ok() or engine._edit == null or engine._base: return ""
 	return "left_hand" if int(engine._edit.get("paddle_hand")) == 1 else "right_hand"
 
 ## engine.studio_gizmo_override: the paddle hand's Move gizmo becomes the paddle's own X / Y / Z
@@ -1738,7 +1840,7 @@ func set_gameplay_edit(on: bool) -> void:
 ## End the open viewport drag (gizmo / paddle tip) as one undo step: called before a stage or
 ## pose switch and play / scrub, so no drag keeps writing into another key.
 func stop_drag() -> void:
-	if _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE]:
+	if _view_input != null and _view_input.drag in [_view_input.Drag.GIZMO, _view_input.Drag.TIP, _view_input.Drag.AUTOPOSE, _view_input.Drag.PATH]:
 		_view_input.finish_drag()
 	if _autopose != null and _autopose.active: _autopose.release(false)   # a link-driven solve (no UI drag)
 	_aim = {}
@@ -2374,7 +2476,7 @@ func _shift_paddle(delta: Vector3) -> bool:
 
 ## Tree of named studio controls (names, types, visibility, values) for checks without images.
 func ui_dump() -> Dictionary:
-	var tree := _dump(_root)
+	var tree := _dump(phone_ui if phone and phone_ui else _root)
 	var pv := {}
 	if preview:
 		var gz = preview.gizmo
@@ -2389,7 +2491,7 @@ func ui_dump() -> Dictionary:
 			"contact": _contact_on, "contact_visible": preview.contact_preview != null and preview.contact_preview.visible,
 			"second_view": _second.visible, "drag": ViewportInput.Drag.keys()[_view_input.drag] if _view_input else "",
 			"hover": _view_input.hover_joint if _view_input else "", "dots": _view_input.dots_state() if _view_input else [],
-			"autopose": _view_input.autopose_state() if _view_input else {}}
+			"autopose": _view_input.autopose_state() if _view_input else {}, "momentum": _view_input.arc_state() if _view_input else {}}
 	return {"ok": true, "ready": is_ready, "key": key, "stage": STAGES[stage], "dirty": _ok() and engine._dirty.has(engine._key),
 		"unsaved": unsaved_keys(), "quit_dialog": _quit_dlg != null and _quit_dlg.visible, "undo": _undo.size(), "redo": _redo.size(), "window": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
 		"preview": pv, "timeline": _timeline.state(), "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),

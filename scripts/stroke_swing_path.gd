@@ -60,7 +60,7 @@ static func sample_with_endpoints(def: PostureDefinition, progress: float, windu
 	var m0: Vector3 = p1 - p0 if t <= 0.5 else tangent
 	var m1: Vector3 = tangent if t <= 0.5 else p2 - p1
 	var curved: = (2 * u * u * u - 3 * u * u + 1) * start + (u * u * u - 2 * u * u + u) * m0 + (-2 * u * u * u + 3 * u * u) * end + (u * u * u - u * u) * m1
-	var position: Vector3 = start.lerp(end, u).lerp(curved, def.swing_path_blend)
+	var position: Vector3 = start.lerp(end, u).lerp(curved, def.swing_path_blend) + path_offset(def, t)
 	if t > 0.5:
 		# Follow-through (the ball has left): the paddle sweeps around the body, not through it.
 		# Canonical frame is (x, y, -forward); Contact and Finish themselves never move.
@@ -94,6 +94,31 @@ static func sample_with_endpoints(def: PostureDefinition, progress: float, windu
 	return pose
 
 
+
+## Paddle path keys (PostureDefinition.paddle_path_times / _offsets): the offset off the normal
+## curve at progress t. Cubic Hermite through (0, 0), the keys, (0.5, 0), (1, 0); the slope is
+## zero at Wind-up, Contact and Finish (the paddle meets the ball on the same line).
+static func path_offset(def: PostureDefinition, t: float) -> Vector3:
+	var n: int = mini(def.paddle_path_times.size(), def.paddle_path_offsets.size())
+	if n == 0: return Vector3.ZERO
+	var ts: Array = [0.0, 0.5, 1.0]
+	var os: Array = [Vector3.ZERO, Vector3.ZERO, Vector3.ZERO]
+	for i in n:
+		var k: float = def.paddle_path_times[i]
+		if k <= 0.0 or k >= 1.0 or is_equal_approx(k, 0.5): continue
+		var j := ts.size()
+		for m in ts.size(): if ts[m] > k: j = m; break
+		ts.insert(j, k); os.insert(j, def.paddle_path_offsets[i])
+	var i := 0
+	while i < ts.size() - 2 and t > ts[i + 1]: i += 1
+	var h: float = ts[i + 1] - ts[i]
+	if h <= 0.0: return Vector3.ZERO
+	var s: float = clampf((t - ts[i]) / h, 0.0, 1.0)
+	var slope := func(m: int) -> Vector3:
+		if is_equal_approx(ts[m], 0.0) or is_equal_approx(ts[m], 0.5) or is_equal_approx(ts[m], 1.0): return Vector3.ZERO
+		return (os[m + 1] - os[m - 1]) / (ts[m + 1] - ts[m - 1])
+	var m0: Vector3 = slope.call(i); var m1: Vector3 = slope.call(i + 1)
+	return (2*s*s*s - 3*s*s + 1) * os[i] + (s*s*s - 2*s*s + s) * h * m0 + (-2*s*s*s + 3*s*s) * os[i + 1] + (s*s*s - s*s) * h * m1
 
 static func _sample_elbow_path(points: PackedVector3Array, t: float) -> Vector3:
 	var position: float = clampf(t, 0.0, 1.0) * float(points.size() - 1)

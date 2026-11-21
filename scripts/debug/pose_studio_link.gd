@@ -76,8 +76,10 @@ func _boot_studio(game: Node) -> bool:
 		var scr = load(STUDIO_SCRIPT)
 		if scr == null or not scr.can_instantiate():
 			push_error("PoseStudioLink: %s does not load; link-only mode" % STUDIO_SCRIPT); return false
-		_set_window_mode()
+		var phone_test := "--studio-phone" in OS.get_cmdline_user_args()   # the phone layout on the Mac (tests)
+		if not phone_test: _set_window_mode()
 		studio = scr.new()
+		studio.phone = phone_test
 		studio.name = "PoseStudio"
 		game.add_child(studio)
 	for i in 1200:   # up to ~20 s for the studio to open its engine
@@ -568,6 +570,8 @@ func _c_metrics(r: Dictionary) -> Dictionary:
 func _c_diff(_r) -> Dictionary:
 	if _key() == "": return _err("no pose selected")
 	var key := _key()
+	if _studio != null and is_instance_valid(_studio):   # the studio's own baseline (the phone's: the pose as saved on the device)
+		return {"key": key, "file": PoseDiff.file_of(key), "changes": _studio.diff()}
 	var disk: Resource = PoseDiff.load_disk(key)
 	if disk == null: return _err("cannot load file for " + key)
 	return {"key": key, "file": PoseDiff.file_of(key), "changes": PoseDiff.diff(_ed._current, disk, _ed._base)}

@@ -79,7 +79,7 @@ func _build() -> void :
 	_reset_button = _add_button(_main_list, _reset_caption(), _on_reset_requested)
 	_add_button(_main_list, "Practice drills", _on_practice)
 	_settings_button = _add_button(_main_list, "Settings", _on_settings)
-	_pose_button = _add_button(_main_list, "Pose editor", _on_pose_editor)
+	_pose_button = _add_button(_main_list, "Pose Studio", _on_pose_editor)
 	_menu_button = _add_button(_main_list, "Main menu", _confirm.bind("menu"))
 	var quit_button: = _add_button(_main_list, "Quit game", _confirm.bind("quit"))
 	UiTheme.make_quiet(quit_button)
@@ -267,8 +267,8 @@ func _is_wall() -> bool:
 
 func _on_pose_editor() -> void:
 	var game = get_tree().current_scene
-	if game and game.has_method("open_mobile_pose_editor"):
-		game.open_mobile_pose_editor()
+	if game and game.has_method("open_pose_studio_phone"):
+		game.open_pose_studio_phone()
 
 func focus_pose_editor() -> void:
 	_pose_button.grab_focus()
