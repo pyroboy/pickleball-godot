@@ -57,6 +57,7 @@ var _amt: = 0.0               # sprung swing amount, -1..1
 var _amt_v: = 0.0
 var _reactions = null         # CardReactions: between-point reactions (stage 10)
 var _spin: = 0.0
+var _tap_noted: = false
 var _tap = null               # CardPartnerTap: partner paddle tap between points
 var _tapping: = false
 var _expressions = null       # CardExpressions: idle / ready moods while standing
@@ -330,7 +331,9 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	var player = _rig._player
 	if not enabled() or _rig._raw or paddle_arm == null: return
 	var tap: Dictionary = _tap.update(delta, _stop_reaction)
-	if tap.is_empty(): return
+	if tap.is_empty():
+		_tap_noted = false
+		return
 	_tapping = true
 	var w: float = float(tap.w)
 	var tw: float = float(tap.get("turn", w))
@@ -370,6 +373,18 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	var to_meet: Vector3 = meet - shoulder
 	var hand_goal: Vector3 = meet - to_meet.normalized() * TAP_PADDLE_REACH if to_meet.length() > TAP_PADDLE_REACH + 0.05 else shoulder + to_meet * 0.5
 	var from: Vector3 = hand - shoulder
+	# A casual reach: the arm keeps its length and hangs below the line to the meeting point, far
+	# enough that the paddle, angled up from the hand, ends exactly there (shoulder, hand and
+	# paddle tip make a triangle). Standing too close for that would cross the paddles.
+	var span: float = to_meet.length()
+	var arm_len: float = from.length()
+	if span > absf(arm_len - TAP_PADDLE_REACH) + 0.02 and span < arm_len + TAP_PADDLE_REACH - 0.02:
+		var along: Vector3 = to_meet / span
+		var down: Vector3 = along.cross(along.cross(Vector3.UP))
+		if down.length_squared() > 1e-6:
+			down = down.normalized() * (1.0 if down.y < 0.0 else -1.0)
+			var cos_drop: float = clampf((arm_len * arm_len + span * span - TAP_PADDLE_REACH * TAP_PADDLE_REACH) / (2.0 * arm_len * span), -1.0, 1.0)
+			hand_goal = shoulder + (along * cos_drop + down * sqrt(1.0 - cos_drop * cos_drop)) * arm_len
 	var to: Vector3 = hand_goal - shoulder
 	if from.length_squared() > 1e-6 and to.length_squared() > 1e-6:
 		var q: = Quaternion(from.normalized(), to.normalized())
@@ -393,6 +408,12 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 		if shaft.length_squared() > 1e-6 and want.length_squared() > 1e-6:
 			var b: = Basis(Quaternion.IDENTITY.slerp(Quaternion(shaft.normalized(), want.normalized()), w))
 			_paddle_aim = Transform3D(b, grip - b * grip)
+			# Once per tap, at the touch: how close the drawn paddle tip came and how high it was.
+			if float(tap.nudge) > 0.5 and not _tap_noted:
+				_tap_noted = true
+				var tip: Vector3 = _paddle_aim * hd * (pxf * Vector3(0, preload("res://scripts/paddle_dimensions.gd").LENGTH, 0))
+				PerfMonitor.note("partner_tap", {"step": "reach", "tip_gap": tip.distance_to(Vector3(tap.target)), "tip_height": tip.y - PickleballConstants.FLOOR_Y,
+					"hand_height": (hd * _plain(paddle_arm.hand_pivot)).y - PickleballConstants.FLOOR_Y, "shoulder_height": shoulder.y - PickleballConstants.FLOOR_Y, "arm": from.length(), "shoulder_to_meet": to_meet.length(), "w": w})
 
 # ------------------------------------------------------------------ stand straight between points
 

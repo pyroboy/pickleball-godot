@@ -122,6 +122,7 @@ func setup(game) -> void:
 	_build_extras()
 	if _game.ball != null: _game.ball.hit_by_paddle.connect(_on_hit)
 	if _game.rally_scorer != null: _game.rally_scorer.rally_ended.connect(_on_rally_ended)
+	if _game.get("between_point_controller") != null: _game.between_point_controller.partner_tapped.connect(_on_partner_tap)
 
 func _material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
@@ -374,6 +375,16 @@ func _spawn_label(hitter, kind: String) -> void:
 	label.text = ShotNames.display(kind)
 	label.modulate = ShotNames.color(kind)
 	label.global_position = hitter.global_position + Vector3(0.0, 2.15, 0.0)
+	label.visible = true
+
+## Partners tapped paddles between points: the word pops where the paddles met.
+func _on_partner_tap(at: Vector3) -> void:
+	var label := _labels[_next_label]
+	_label_age[_next_label] = 0.0
+	_next_label = (_next_label + 1) % _labels.size()
+	label.text = "TAP"
+	label.modulate = Color(1.0, 0.92, 0.55)
+	label.global_position = at + Vector3(0.0, 0.35, 0.0)
 	label.visible = true
 
 func _spawn_dust(at: Vector3, size: float) -> void:

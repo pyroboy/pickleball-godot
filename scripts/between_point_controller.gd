@@ -82,6 +82,96 @@ var _prev_ball_pos: = Vector3.INF
 # Which throw the pass uses (Actions.THROW lob / THROW_STRONG), chosen as PASS_PREP starts.
 var _throw_id: int = 1
 
+# ---- Partner paddle tap: after a point the human and their partner walk to a meeting point,
+# stand a handshake apart, tap paddles (card_partner_tap.gd draws the reach) and walk on.
+signal partner_tapped(position: Vector3)
+const TAP_STAND: = 0.8          # m from the meeting point each partner stands (1.6 m apart: arm and paddle, relaxed)
+const TAP_TOUCH: = 0.98         # s after both have arrived: the paddles touch (CardPartnerTap.TAP_AT)
+const TAP_SECONDS: = 1.75       # s the tap takes (CardPartnerTap.DONE)
+const TAP_WALK_LIMIT: = 5.0     # s: a walk to the meeting point longer than this is dropped
+const TAP_HEIGHT: = 0.95        # m above the court floor: hand height, a handshake, not a high five
+var tap_meet: = Vector3.INF     # MeetPoint: the spot on the court the two paddles meet above
+var _tap_pair: Array = []       # the two player indices
+var _tap_spots: Array = []      # where each of them stands
+var _tap_state: = ""            # "" none, "WALK" going there, "TAP" tapping
+var _tap_clock: = 0.0
+var _tap_touched: = false
+
+func _plan_partner_tap() -> void:
+	_tap_state = ""; _tap_pair = []; _tap_spots = []; tap_meet = Vector3.INF; _tap_touched = false
+	if not _game.doubles_mode or _game.doubles_state.end_change_pending or phase != "APPROACH": return
+	var a: int = _players.find(_game.player_left)
+	if a < 0: return
+	var b: = -1
+	for index in _players.size():
+		if index != a and _players[index].get_team_id() == _players[a].get_team_id(): b = index
+	if b < 0 or retriever == a or retriever == b: return   # whoever fetches the ball has no time for it
+	var pa: Vector3 = _players[a].global_position; var pb: Vector3 = _players[b].global_position
+	# Between where they are and where they are going, so nobody walks out of their way.
+	var meet: Vector3 = (pa + pb + _targets[a] + _targets[b]) * 0.25
+	meet.y = PickleballConstants.FLOOR_Y   # the court floor (a player's own origin is a metre up)
+	var apart: Vector3 = pa - pb
+	apart.y = 0.0
+	apart = apart.normalized() if apart.length() > 0.2 else _players[a]._get_forehand_axis()
+	tap_meet = meet
+	_tap_pair = [a, b]
+	_tap_spots = [meet + apart * TAP_STAND, meet - apart * TAP_STAND]
+	_tap_state = "WALK"; _tap_clock = 0.0
+	PerfMonitor.note("partner_tap", {"step": "plan", "meet": tap_meet, "walk_a": pa.distance_to(_tap_spots[0]), "walk_b": pb.distance_to(_tap_spots[1]), "server_in_pair": server in _tap_pair})
+	_elapsed_limit = maxf(_elapsed_limit, TIMEOUT + TAP_WALK_LIMIT + TAP_SECONDS)
+
+func _tick_partner_tap(delta: float) -> void:
+	if _tap_state == "": return
+	if phase.begins_with("END") or retriever in _tap_pair:
+		PerfMonitor.note("partner_tap", {"step": "cancelled", "phase": phase})
+		_tap_state = ""; return
+	_tap_clock += delta
+	if _tap_state == "WALK":
+		var there: = true
+		for slot in 2:
+			var player = _players[_tap_pair[slot]]
+			var gap: Vector3 = Vector3(_tap_spots[slot]) - player.global_position
+			gap.y = 0.0
+			if gap.length() > 0.08 or player.current_velocity.length() > 0.05: there = false
+		if there:
+			PerfMonitor.note("partner_tap", {"step": "arrived", "walk_seconds": _tap_clock, "apart": _players[_tap_pair[0]].global_position.distance_to(_players[_tap_pair[1]].global_position), "phase": phase})
+			_tap_state = "TAP"; _tap_clock = 0.0
+		elif _tap_clock > TAP_WALK_LIMIT:
+			PerfMonitor.note("partner_tap", {"step": "dropped", "phase": phase})
+			_tap_state = ""
+	elif _tap_state == "TAP":
+		if not _tap_touched and _tap_clock >= TAP_TOUCH:
+			_tap_touched = true
+			partner_tapped.emit(tap_meet + Vector3.UP * TAP_HEIGHT)
+			PerfMonitor.note("partner_tap", {"step": "touch", "phase": phase})
+		if _tap_clock >= TAP_SECONDS: _tap_state = ""
+
+## Seconds into the tap for this player (both stand at the meeting point), or -1.
+func tap_clock_for(player) -> float:
+	return _tap_clock if _tap_state == "TAP" and _players.find(player) in _tap_pair else -1.0
+
+func tap_partner_of(player):
+	var index: int = _players.find(player)
+	if not index in _tap_pair: return null
+	return _players[_tap_pair[1 - _tap_pair.find(index)]]
+
+func _tap_velocity(team: int) -> Vector3:
+	if _tap_state == "TAP":
+		_motion_velocity[team] = Vector3.ZERO
+		return Vector3.ZERO
+	var offset: Vector3 = Vector3(_tap_spots[_tap_pair.find(team)]) - _players[team].global_position
+	offset.y = 0.0
+	var distance: float = offset.length()
+	var dt: float = maxf(get_physics_process_delta_time(), 1e-05)
+	var speed: float = minf(WALK_SPEED, minf(sqrt(2.0 * MOVE_BRAKE * distance), distance * 8.0))
+	var desired: Vector3 = offset.normalized() * speed if distance > 0.0001 else Vector3.ZERO
+	var previous: Vector3 = _motion_velocity[team]
+	var motion: Vector3 = previous.move_toward(desired, (MOVE_ACCEL if desired.length() > previous.length() else MOVE_BRAKE) * dt)
+	if motion.length() * dt > distance: motion = offset / dt
+	if distance < 0.01 and motion.length() < 0.025: motion = Vector3.ZERO
+	_motion_velocity[team] = motion
+	return motion
+
 func setup(game: Node) -> void :
 	_game = game
 	process_priority = 100
@@ -189,6 +279,7 @@ func cancel() -> void :
 		if is_instance_valid(player) and player.has_meta("between_bounded_admission"): player.remove_meta("between_bounded_admission")
 	if not _active: return
 	_active = false
+	_tap_state = ""
 	_end_route.cancel()
 	_motion_velocity.fill(Vector3.ZERO)
 	_run_id += 1
@@ -217,6 +308,7 @@ func _unhandled_key_input(event: InputEvent) -> void :
 func velocity_for(actor_id: int) -> Vector3:
 	var team: int = index_for_actor_id(actor_id)
 	if not _active or team < 0 or team >= _players.size() or _targets.size() != _players.size(): return Vector3.ZERO
+	if _tap_state != "" and team in _tap_pair: return _tap_velocity(team)
 	var offset: Vector3 = _targets[team] - _players[team].global_position
 	offset.y = 0.0
 	var distance: float = offset.length()
@@ -313,7 +405,9 @@ func _perf_physics_process(delta: float) -> void:
 			for team in _players.size():
 				_poses[team] = Path.blend_pose(_entry_poses[team], _poses[team], weight)
 				_wrists[team] = _entry_wrists[team].lerp(_wrists[team], weight)
-			if phase_elapsed > 0.35: _choose_retriever()
+			if phase_elapsed > 0.35:
+				_choose_retriever()
+				_plan_partner_tap()
 		"APPROACH":
 			if not _reachable_ball():
 				_start_offscreen_return()
@@ -527,6 +621,7 @@ func _perf_physics_process(delta: float) -> void:
 				_complete(false, "READY")
 
 	if _active:
+		_tick_partner_tap(delta)
 		for team in _players.size(): _players[team].present_between_point_physics(self, _poses[team], delta)
 		if _carry_team >= 0: _game.ball.global_position = _hand_ball_position(_carry_team, _carry_direction)
 		if phase == "SET_SERVE": _game.game_serve.accept_handover(_game.ball.global_position)
