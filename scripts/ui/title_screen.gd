@@ -31,6 +31,7 @@ var _finishing: = false
 var _progress_value: = 0.0
 var _overlay: Node
 var _motion: = 0.0
+var _redraw_clock: = 0.0
 var _buttons: Array[Button] = []
 var _portrait_fit_pending: = false
 const CONTROLS_REFLOW_GUARD_MSEC: = 300
@@ -43,6 +44,7 @@ func _ready() -> void :
  get_tree().paused = false
  Engine.time_scale = 1.0
  theme = UiTheme.create()
+ UiTheme.crisp(self)
  _panel = PanelContainer.new()
  _panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
  add_child(_panel)
@@ -64,13 +66,16 @@ func _ready() -> void :
  word.text = "THE COURT IS YOURS"
  word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
  word.add_theme_color_override("font_color", UiTheme.ACCENT)
- word.add_theme_font_size_override("font_size", 15)
+ UiTheme.use_pixel(word, 18)
  _content.add_child(word)
  var logo_panel: = PanelContainer.new()
  _logo_panel = logo_panel
  var paper: = StyleBoxFlat.new()
  paper.bg_color = Color("f6f3ec")
- paper.set_corner_radius_all(12)
+ paper.anti_aliasing = false
+ paper.set_corner_radius_all(4)
+ paper.border_color = Color("cfc8b6")   # paper bevel
+ paper.border_width_bottom = 5
  paper.content_margin_left = 14
  paper.content_margin_right = 14
  paper.content_margin_top = 16
@@ -89,20 +94,18 @@ func _ready() -> void :
  _hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
  _hint.add_theme_color_override("font_color", UiTheme.MUTED)
  _content.add_child(_hint)
- _play = _button("PLAY SINGLES", start_match)
- for style in ["normal", "hover", "pressed"]:
-  _play.add_theme_stylebox_override(style, UiTheme.button_style(UiTheme.ACCENT))
- for prop in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_disabled_color"]: _play.add_theme_color_override(prop, UiTheme.PANEL)
- _button("PLAY DOUBLES", _start_doubles)
- _button("PRACTICE", _start_practice)
- _controls = _button("CONTROLS", _toggle_controls)
- _settings = _button("SETTINGS", _open_settings)
+ _play = _button("Play doubles", _start_doubles)
+ UiTheme.make_primary(_play)
+ _button("Play singles", start_match)
+ _button("Practice", _start_practice)
+ _controls = _button("Controls", _toggle_controls)
+ _settings = _button("Settings", _open_settings)
  _status = Label.new()
  _status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
  _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
  _status.add_theme_font_size_override("font_size", 14)
  _status.add_theme_color_override("font_color", UiTheme.MUTED)
- _status.text = "DOUBLES: YOU + AI PARTNER vs 2 AI · SINGLES · PRACTICE"
+ _status.text = "Doubles: you + AI partner vs 2 AI"
  _content.add_child(_status)
  _progress = ProgressBar.new()
  _progress.show_percentage = true
@@ -158,7 +161,6 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  if restore_focus and not focus.has_focus(): focus.grab_focus()
  _content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
  theme.default_font_size = roundi(32 * s) if portrait else ceili(20 * s)
- _play.add_theme_color_override("font_disabled_color", UiTheme.MUTED if portrait else UiTheme.PANEL)
  var panel_style: StyleBoxFlat = _panel.get_theme_stylebox("panel")
  panel_style.content_margin_left = 20.0 * s if portrait else 0.0
  panel_style.content_margin_right = 20.0 * s if portrait else 0.0
@@ -167,8 +169,10 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  for side in ["left", "right", "top", "bottom"]:
   _margin.add_theme_constant_override("margin_" + side, roundi(26 * s) if portrait else roundi(20 * s))
  _content.add_theme_constant_override("separation", roundi(16 * s) if portrait else roundi(6 * s))
- _word.add_theme_font_size_override("font_size", roundi(28 * s) if portrait else ceili(16 * s))
- _status.add_theme_font_size_override("font_size", roundi(28 * s) if portrait else ceili(16 * s))
+ _word.add_theme_font_size_override("font_size", UiTheme.pixel_size(27 * s) if portrait else UiTheme.pixel_size(18 * s))
+ _status.add_theme_font_size_override("font_size", roundi(26 * s) if portrait else ceili(16 * s))
+ theme.set_font_size("font_size", "Button", UiTheme.pixel_size(36 * s) if portrait else UiTheme.pixel_size(18 * s))
+ theme.set_font_size("font_size", "ProgressBar", UiTheme.pixel_size(18 * s))
  if portrait:
   _hint.remove_theme_font_size_override("font_size")
   _progress.remove_theme_font_size_override("font_size")
@@ -184,8 +188,7 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  paper.content_margin_bottom = 16.0 * s if portrait else 8 * s
  for button in _buttons:
   button.custom_minimum_size.y = ceili(100 * s) if portrait else ceili(44 * s)
-  if portrait: button.add_theme_font_size_override("font_size", ceili(38 * s))
-  else: button.remove_theme_font_size_override("font_size")
+  button.remove_theme_font_size_override("font_size")
   # Let the scroll viewport cancel a pressed button when a finger starts a drag.
   button.mouse_filter = Control.MOUSE_FILTER_PASS
 
@@ -253,16 +256,63 @@ func _center_panel() -> void :
  var safe: = Layout.safe_rect(get_viewport())
  _panel.position = safe.position + (safe.size - _panel.size) * 0.5
 
+## Pixel-art court backdrop: night court with kitchen zones, a dithered sky band and a
+## ball bouncing across. Everything is drawn on a coarse pixel grid (PX) so it reads as
+## pixel art at any resolution; no textures, no per-frame allocations beyond the redraw.
+const PX: = 6.0
+const COURT_DARK: = Color("11303a")
+const COURT: = Color("1a4a50")
+const KITCHEN: = Color("1f5a5c")
+const LINE: = Color(0.86, 0.94, 0.86, 0.32)
+const BALL: = Color("e9f56a")
+
+func _snap(v: float) -> float:
+ return floorf(v / PX) * PX
+
+func _px_rect(x: float, y: float, w: float, h: float, color: Color) -> void:
+ draw_rect(Rect2(_snap(x), _snap(y), maxf(PX, _snap(w)), maxf(PX, _snap(h))), color)
+
 func _draw() -> void :
- draw_rect(Rect2(Vector2.ZERO, size), Color("102b36"))
- var outer: = Rect2(size.x * 0.09, size.y * 0.08, size.x * 0.82, size.y * 0.84)
- var line: = Color(0.47, 0.7, 0.73, 0.12)
- draw_rect(outer, line, false, 2.0)
- draw_line(Vector2(outer.position.x, size.y * 0.5), Vector2(outer.end.x, size.y * 0.5), line, 2.0)
- draw_line(Vector2(size.x * 0.5, outer.position.y), Vector2(size.x * 0.5, outer.end.y), line, 2.0)
+ draw_rect(Rect2(Vector2.ZERO, size), UiTheme.BACKDROP)
+ # Stepped pixel gradient (four hard bands, no smooth blend) behind the court.
+ for i in 4:
+  draw_rect(Rect2(0, size.y * (0.04 * i), size.x, size.y * 0.04), UiTheme.SURFACE.lerp(UiTheme.BACKDROP, 0.25 * i + 0.25))
+ # Court: a tall trapezoid-free top-down court, centred, with kitchen bands and lines.
+ var cw: = minf(size.x * 0.78, size.y * 0.44)
+ var ch: = minf(size.y * 0.8, cw * 2.2)
+ var cx: = (size.x - cw) * 0.5
+ var cy: = size.y * 0.12
+ _px_rect(cx - PX * 2, cy - PX * 2, cw + PX * 4, ch + PX * 4, COURT_DARK)
+ _px_rect(cx, cy, cw, ch, COURT)
+ var kitchen: = ch * 0.16
+ _px_rect(cx, cy + ch * 0.5 - kitchen, cw, kitchen * 2, KITCHEN)
+ for y in [cy, cy + ch * 0.5 - kitchen, cy + ch * 0.5 + kitchen, cy + ch - PX]:
+  _px_rect(cx, y, cw, PX * 0.5 if y != cy and y != cy + ch - PX else PX, LINE)
+ _px_rect(cx, cy, PX, ch, LINE)
+ _px_rect(cx + cw - PX, cy, PX, ch, LINE)
+ _px_rect(cx + cw * 0.5 - PX * 0.5, cy, PX, ch * 0.5 - kitchen, LINE)
+ _px_rect(cx + cw * 0.5 - PX * 0.5, cy + ch * 0.5 + kitchen, PX, ch * 0.5 - kitchen, LINE)
+ # Net: a lighter band with post caps.
+ _px_rect(cx - PX * 3, cy + ch * 0.5 - PX, cw + PX * 6, PX * 2, Color(0.92, 0.96, 0.9, 0.42))
+ _px_rect(cx - PX * 4, cy + ch * 0.5 - PX * 2, PX * 2, PX * 4, Color(0.92, 0.96, 0.9, 0.6))
+ _px_rect(cx + cw + PX * 2, cy + ch * 0.5 - PX * 2, PX * 2, PX * 4, Color(0.92, 0.96, 0.9, 0.6))
+ # Ball rally: crosses the court in a bouncing arc, with a ground shadow.
+ var phase: = fmod(_motion * 0.42, 2.0)
+ var along: = phase if phase < 1.0 else 2.0 - phase
+ var bx: = cx + cw * (0.22 + 0.56 * along)
+ var by: = cy + ch * (0.12 + 0.76 * along)
+ var hop: = absf(sin(along * PI * 2.0)) * ch * 0.06
+ _px_rect(bx - PX, by - PX * 0.5, PX * 3, PX, Color(0, 0, 0, 0.28))
+ _px_rect(bx - PX * 0.5, by - hop - PX * 2, PX * 2, PX * 2, BALL)
+ _px_rect(bx - PX * 0.5, by - hop - PX * 2, PX, PX, Color(1, 1, 0.85))
+ # Vignette corners in big pixel steps.
+ for i in 4:
+  var a: = 0.12 * (4 - i) / 4.0
+  draw_rect(Rect2(0, i * PX * 3, size.x, PX * 3), Color(0, 0, 0, a * 0.6))
+  draw_rect(Rect2(0, size.y - (i + 1) * PX * 3, size.x, PX * 3), Color(0, 0, 0, a))
  if _loading:
   var x: = size.x * 0.5 + sin(_motion * 4.0) * 30.0
-  draw_circle(Vector2(x, minf(size.y - 24.0, _panel.position.y + _panel.size.y + 18.0)), 5.0, UiTheme.ACCENT)
+  _px_rect(x, minf(size.y - 24.0, _panel.position.y + _panel.size.y + 18.0), PX * 2, PX * 2, UiTheme.ACCENT)
 
 func _process(delta: float) -> void:
  var _pt := Time.get_ticks_usec()
@@ -270,9 +320,13 @@ func _process(delta: float) -> void:
  PerfMonitor.record("proc.title_screen", Time.get_ticks_usec() - _pt)
 
 func _perf_process(delta: float) -> void:
- if not _loading or _finishing or _loading_quit_requested: return
+ # Ambient backdrop motion at ~15 fps (the pixel ball steps anyway; saves redraws).
  _motion += delta
- queue_redraw()
+ _redraw_clock += delta
+ if _redraw_clock >= 1.0 / 15.0 or _loading:
+  _redraw_clock = 0.0
+  queue_redraw()
+ if not _loading or _finishing or _loading_quit_requested: return
  var progress: Array = []
  var state: = ResourceLoader.load_threaded_get_status(GAME_PATH, progress)
  if not progress.is_empty():

@@ -23,6 +23,7 @@ func setup(game: Node) -> void :
 	add_child(dim)
 	_panel = PanelContainer.new()
 	_panel.theme = UiTheme.create()
+	UiTheme.crisp(_panel)
 	var style: = UiTheme.panel_style()
 	for side in ["left", "top", "right", "bottom"]: style.set("content_margin_" + side, 0.0)
 	_panel.add_theme_stylebox_override("panel", style)
@@ -48,10 +49,12 @@ func _clear() -> void :
 		child.queue_free()
 	_first_button = null
 
-func _label(text: String, size: int, color: Color = UiTheme.INK) -> void :
+func _label(text: String, size: int, color: Color = UiTheme.INK, pixel: bool = false) -> void :
 	var label: = Label.new()
 	label.text = text
 	label.set_meta("font_size", size)
+	label.set_meta("pixel", pixel)
+	if pixel: label.add_theme_font_override("font", UiTheme.pixel_font())
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
@@ -77,8 +80,8 @@ func open_practice() -> void :
 	_picker_generation += 1
 	_shown_result = false
 	_clear()
-	_label("PRACTICE · NO SCORE", 15, UiTheme.ACCENT)
-	_label("Find your rhythm.", 27)
+	_label("PRACTICE · NO SCORE", 15, UiTheme.ACCENT, true)
+	_label("Find your rhythm", 27, UiTheme.INK, true)
 	_label("Unscored practice. Exchange drills begin after the opening bounces. Your match score is kept. Pause to repeat, switch or return.", 16, UiTheme.MUTED)
 	if _game.practice_launcher.is_wall():
 		_button("Reset wall ball", _repeat)
@@ -145,10 +148,10 @@ func _perf_process(_delta: float) -> void:
 	var show_result: bool = _game.match_over and not get_tree().paused and not _game._tool_state_active()
 	if show_result and not _shown_result:
 		_clear()
-		_label("MATCH COMPLETE", 15, UiTheme.ACCENT)
+		_label("MATCH COMPLETE", 15, UiTheme.ACCENT, true)
 		var doubles: bool = _game.get("doubles_mode") == true
-		_label(("Your team wins!" if doubles else "You win!") if _game.match_winner == 0 else ("The other team wins this one" if doubles else "AI wins this one"), 30)
-		_label("%d  :  %d" % [_game.score_left, _game.score_right], 40)
+		_label(("Your team wins!" if doubles else "You win!") if _game.match_winner == 0 else ("The other team wins this one" if doubles else "AI wins this one"), 30, UiTheme.INK, true)
+		_label("%d – %d" % [_game.score_left, _game.score_right], 40, UiTheme.GOLD, true)
 		var target: int = int(_game.doubles_state.target_score) if doubles and _game.get("doubles_state") != null else 11
 		_label("%s · first to %d, win by 2" % ["Doubles" if doubles else "Singles", target], 16, UiTheme.MUTED)
 		_button("Rematch", _rematch)
@@ -181,10 +184,11 @@ func _fit() -> void :
 			# Landscape drags bubble to the scroll viewport, which consumes them.
 			widget.mouse_filter = Control.MOUSE_FILTER_STOP if portrait else Control.MOUSE_FILTER_PASS
 			widget.custom_minimum_size.y = (96.0 if portrait else 48.0) * scale
-			widget.add_theme_font_size_override("font_size", int(26 * scale) if portrait else ceili(16 * scale))
+			widget.add_theme_font_size_override("font_size", UiTheme.pixel_size(27 * scale) if portrait else UiTheme.pixel_size(18 * scale))
 		elif widget is Label:
 			var font_size: float = widget.get_meta("font_size", 16)
-			widget.add_theme_font_size_override("font_size", int(font_size * 1.35 * scale) if portrait else ceili(maxf(16.0, font_size) * scale))
+			var px: float = font_size * 1.35 * scale if portrait else maxf(16.0, font_size) * scale
+			widget.add_theme_font_size_override("font_size", UiTheme.pixel_size(px) if widget.get_meta("pixel", false) else int(px))
 
 func _input(event: InputEvent) -> void :
 	if _picker_open and event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:

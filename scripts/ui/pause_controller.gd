@@ -193,6 +193,22 @@ func open() -> void :
 	_show_pause_menu()
 	if RuntimePolicy.developer_tools: print("[PauseController] opened")
 
+## Leave the court for the title screen from the pause menu. Clears every pause reason this
+## controller owns first, so the title (and the next match) never start paused.
+func return_to_title() -> void :
+	var tree: = get_tree()
+	if tree == null: return
+	_cancel_scene_input()
+	_manual_paused = false
+	_overlay_pauses.clear()
+	_hide_pause_menu()
+	for key in ["open_practice", "local_doubles"]:
+		if tree.has_meta(key): tree.remove_meta(key)
+	tree.paused = false
+	Engine.time_scale = 1.0
+	tree.change_scene_to_file("res://scenes/title.tscn")
+	if RuntimePolicy.developer_tools: print("[PauseController] returned to title")
+
 func close() -> void :
 	if contact_reset_required():
 		_manual_paused = true

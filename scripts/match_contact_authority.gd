@@ -926,8 +926,15 @@ var _replay_pending: = false
 func _replay_point() -> void:
 	_replay_pending = false
 	if not is_instance_valid(game) or unresolved_continuation.is_empty(): return
-	game._reset_ball()   # cancels the rally without scoring, ball back to the server
-	game.scoreboard_ui.show_fault("Replay point", "Contact couldn't be resolved · no point awarded")
+	var practice = game.get("practice_launcher")
+	if practice != null and practice.is_active:
+		# Practice drills restart their own feed; a bare _reset_ball would leave the drill
+		# waiting on a match serve ("Hold to serve...").
+		practice.repeat_drill()
+		game.scoreboard_ui.show_fault("Replay ball", "Contact couldn't be resolved · next ball")
+	else:
+		game._reset_ball()   # cancels the rally without scoring, ball back to the server
+		game.scoreboard_ui.show_fault("Replay point", "Contact couldn't be resolved · no point awarded")
 	var pause = get_node_or_null("/root/PauseController")   # drop any pause the hold caused
 	if pause != null and pause.has_method("_set_pause_state"): pause._set_pause_state()
 

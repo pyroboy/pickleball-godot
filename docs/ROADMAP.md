@@ -105,7 +105,10 @@ Status: done, in progress, next, later.
   - [ ] iPhone check (60 fps feel; lag is per frame, so it reads the same at any frame rate)
 
 ### Phase 5: UI (later)
-- [ ] Pixel UI kit (5x7 font, bevelled panels without black outlines)
+- [x] Pixel UI kit (2026-11-21): original 5x7 font `assets/fonts/arjo_pixel.fnt`
+      (`tools/make_pixel_font.py`) for display text, sans body copy, bevelled panels and
+      press-sink buttons in `scripts/ui/game_ui_theme.gd`; title, pause, practice, settings
+      and HUD call-outs use it. Checks: `tools/pause_menu_test.gd`, `tools/wall_drill_test.gd`
 - [ ] Compact score pill, one-line coach toast, pixel joystick, HIT and shot wheel
 - [ ] Same inputs and touch targets as today
 

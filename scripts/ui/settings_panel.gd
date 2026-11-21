@@ -51,6 +51,7 @@ func _build() -> void :
 	var panel: Panel = Panel.new()
 	_panel = panel
 	panel.theme = UiTheme.create()
+	UiTheme.crisp(panel)
 	panel.anchor_left = 0.5
 	panel.anchor_top = 0.5
 	panel.anchor_right = 0.5
@@ -77,20 +78,15 @@ func _build() -> void :
 
 	var title: Label = Label.new()
 	title.text = "Settings"
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	_apply_bold(title, 800)
+	UiTheme.use_pixel(title, 27)
+	title.add_theme_color_override("font_color", UiTheme.INK)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
 
 	var close_btn: Button = Button.new()
 	close_btn.text = "Back"
 	close_btn.custom_minimum_size = Vector2(88, 44)
-	close_btn.add_theme_font_size_override("font_size", 20)
-	_apply_bold(close_btn, 700)
-	close_btn.add_theme_stylebox_override("normal", UiTheme.button_style(UiTheme.SURFACE))
-	close_btn.add_theme_stylebox_override("hover", UiTheme.button_style(Color("2d4c5e")))
-	close_btn.add_theme_stylebox_override("pressed", UiTheme.button_style(Color("0a1923")))
+	close_btn.add_theme_font_size_override("font_size", 18)
 	close_btn.pressed.connect(_on_close)
 	header.add_child(close_btn)
 	close_btn.grab_focus()
@@ -153,10 +149,9 @@ func _build_focus_visuals(parent: VBoxContainer) -> void:
 	parent.add_child(group)
 	var title: = Label.new()
 	title.text = "Slow-motion visuals"
-	title.add_theme_font_size_override("font_size", 22)
+	UiTheme.use_pixel(title, 18)
 	title.add_theme_color_override("font_color", UiTheme.ACCENT)
 	title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_apply_bold(title, 700)
 	group.add_child(title)
 	_slider_row(group, "Screen dimming", "video.focus_dim", 0.0, 0.35, 0.01)
 	_slider_row(group, "Blur strength", "video.focus_blur", 0.0, 1.5, 0.05)

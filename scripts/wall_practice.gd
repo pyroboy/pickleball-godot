@@ -14,6 +14,9 @@ const FRONT: = 0.0
 const TARGET_HALF_WIDTH: = 0.75
 const TARGET_BOTTOM: = 1.06
 const TARGET_TOP: = 1.78
+const FEED_ORIGIN: = Vector3(0.42, 1.25, 0.16)
+const FEED_TARGET: = Vector3(0.42, 0.95, 2.9)
+const FEED_SECONDS: = 0.95   # a touch slower than the old 0.7 s flight (the 0.85 s parked wait is gone)
 var game
 var practice
 var active: = false
@@ -33,7 +36,7 @@ var _incoming: = Vector3.ZERO
 var _flight: = -1
 var _cooldown: = 0.0
 var _sphere: = SphereShape3D.new()
-var _pending_feed: = 0.0
+var _go_live: = false
 
 func setup(owner_game, owner_practice) -> void :
 	game = owner_game
@@ -141,7 +144,7 @@ func enter() -> void :
 func leave() -> void :
 	if not active: return
 	active = false
-	_pending_feed = 0.0
+	_go_live = false
 	game.ball.wall_practice_active = false
 	game.ball.wall_return_ready = false
 	game.ball._net_contact_guard = null
@@ -172,44 +175,49 @@ func feed() -> void :
 	p.leg_ik.feet_initialized = false
 	game.player_right.global_position = Vector3(30, 1, -30)
 	game.player_right.hide()
-	game.ball.global_position = Vector3(0.42, 1.25, 0.16)
-	game.ball.linear_velocity = Vector3.ZERO
+	# Launch the feed right here, inside the drill reset, like every other drill. Parking the
+	# ball with RigidBody.freeze and launching it later from _process left the contact
+	# authority with a stale native sample: it held the point and the replay dropped the
+	# drill into a match serve ("Hold to serve...").
+	game.ball.global_position = FEED_ORIGIN
+	var launch: Dictionary = practice.solve_airborne_feed(FEED_ORIGIN, FEED_TARGET, FEED_SECONDS)
+	game.ball.freeze = false
+	game.ball.linear_velocity = launch.velocity
 	game.ball.angular_velocity = Vector3.ZERO
-	game.ball.freeze = true
-	game.ball.wall_return_ready = false
+	game.ball.wall_return_ready = true
+	# The drill-finish path parks the ball with RigidBody.freeze, which skips
+	# _integrate_forces; going live before a fresh native sample exists makes the contact
+	# authority hold the point. tick() puts the ball in play once physics has stepped it.
 	game.ball.is_in_play = false
+	_go_live = true
 	game.ball.last_hit_by = -1
 	game.ball.both_bounces_complete = true
 	game.ball.serving_side_bounced = true
 	game.ball.receiving_side_bounced = true
 	game.ball.flight_id += 1
+	# New flight after _reset_ball's contact reset: re-sync the authority to it, or its next
+	# ordered interval sees a changed flight and holds the point.
+	if game.contact_authority: game.contact_authority.reset()
 	game._set_game_state(game.GameState.PLAYING)
 	game.rally_scorer.cancel_rally()
 	game.scoreboard_ui._hide_temporary_ui()
 	game.aim_controller.reset()
-	_pending_feed = 0.85
 	_cooldown = 0.0
 	_previous = Vector3.INF
-	practice._set_status("Ready · ball coming")
+	practice._attempt_timer = 0.0
+	practice._set_status("Ball coming · hold HIT")
 
 func tick(delta: float) -> void :
 	if not active or practice._attempt_finished: return
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_flash = maxf(0.0, _flash - delta)
 	_target_material.albedo_color = Color("b8dc76") if _flash > 0 else Color("496f64")
-	if _pending_feed > 0:
-		_pending_feed -= delta
-		if _pending_feed <= 0:
-			var launch: Dictionary = practice.solve_airborne_feed(game.ball.global_position, Vector3(0.42, 0.95, 2.9), 0.7)
-			game.ball.freeze = false
-			game.ball.linear_velocity = launch.velocity
-			game.ball.angular_velocity = Vector3.ZERO
-			game.ball.is_in_play = true
-			game.ball.wall_return_ready = true
-			game.ball.flight_id += 1
-			practice._attempt_timer = 0.0
-			practice._set_status("Hold HIT · find the ball")
-		return
+	if _go_live:
+		var sample: Dictionary = game.ball.native_interval_sample()
+		if int(sample.get("frame", -1)) != Engine.get_physics_frames() or sample.get("frozen", true) or int(sample.get("flight", -1)) != game.ball.flight_id: return
+		_go_live = false
+		game.ball.is_in_play = true
+		if game.contact_authority: game.contact_authority.reset()
 	var ball = game.ball
 	if absf(ball.global_position.x) > HALF_WIDTH + 0.35 or ball.global_position.z < -0.4 or ball.global_position.z > 8.0:
 		_finish("Ball away")
@@ -217,7 +225,7 @@ func tick(delta: float) -> void :
 		_finish("Next ball")
 
 func on_floor_bounce(_position: Vector3) -> void :
-	if not active or practice._attempt_finished or _pending_feed > 0: return
+	if not active or practice._attempt_finished: return
 	if game.ball.bounces_since_last_hit >= 2: _finish("Two bounces")
 
 func on_paddle_hit(team: int) -> void :

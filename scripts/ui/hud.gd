@@ -325,6 +325,11 @@ func _build_labels() -> void :
 	for label in [fault, out_text, zone, speed, shot_type]:
 		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.8))
 		label.add_theme_constant_override("shadow_offset_y", 2)
+	# Semi pixel art HUD: scores and call-outs in the pixel display font (hard shadow),
+	# body/status text stays in the clean sans.
+	for label in [score, _pill_label, fault, out_text, shot_type, speed, _serve_label]:
+		label.add_theme_font_override("font", UiTheme.pixel_font())
+		UiTheme.crisp(label)
 	fault.hide()
 	out_text.hide()
 	zone.hide()
@@ -343,6 +348,8 @@ func _build_singles_feedback() -> void:
 	style.set_border_width_all(2)
 	_rally_banner.add_theme_stylebox_override("panel", style)
 	_rally_headline = _label("", 34, Color("effa92"), true)
+	_rally_headline.add_theme_font_override("font", UiTheme.pixel_font())
+	UiTheme.crisp(_rally_headline)
 	_rally_detail = _label("", 17, UiTheme.INK, true)
 	_rally_reason = _label("", 22, UiTheme.INK, true)
 	for label in [_rally_headline, _rally_reason, _rally_detail]:
