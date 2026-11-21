@@ -2,10 +2,29 @@ extends RefCounted
 ## A fixed wrist and two fixed link lengths leave one elbow-circle degree of
 ## freedom. Select the nearest plane inside the existing wrist budget without
 ## rotating or translating a seated hand, the paddle, body, or contact target.
+##
+## One wrist budget for the whole game: the reach preflight (`accepts`, cached yes / no,
+## live_transition_arm_reach) and the arm solve (`solve`, the elbow) use the same cost. The
+## preflight's planes (every 10 deg) are a subset of the solve's (every 5 deg) and its limit
+## (.98) is inside the solve's (1.0), so a body offset the preflight accepts is always one the
+## solve can fit; the preflight is only ever the stricter of the two.
 const Anatomy = preload("res://scripts/arm_anatomy.gd")
 const PaddleSize = preload("res://scripts/paddle_dimensions.gd")
 const PaddleClearance = preload("res://scripts/paddle_clearance.gd")
-const STEP := PI / 36.0
+const Screen = preload("res://scripts/qa_af_joint_region_screen.gd")
+const STEP := PI / 36.0          # 5 deg (qa_af_joint_region_screen qualifies against it)
+const SOLVE_LATTICE := 72        # elbow planes the solve samples (every 5 deg), then bisects
+const LATTICE := 36              # planes the preflight samples (every 10 deg): every one is also a solve plane
+const LATTICE_STEP := STEP * 2.0
+const FLEX_LIMIT: float = Anatomy.FLEXION_BUDGET_DEG
+const EXT_LIMIT: float = Anatomy.EXTENSION_BUDGET_DEG
+const RADIAL_LIMIT: float = Anatomy.RADIAL_BUDGET_DEG
+const ULNAR_LIMIT: float = Anatomy.ULNAR_BUDGET_DEG
+const AXIAL_LIMIT: float = Anatomy.AXIAL_BUDGET_DEG
+const CACHE_LIMIT := 512
+const CACHE_LIFETIME_TICKS := 60
+static var _accept_cache := {}
+static var _cache_epoch := -1
 
 static func displayed_report(player) -> Dictionary:
 	if player != null and "posture" in player and player.posture != null: player.posture.ensure_arm_pose()
@@ -67,7 +86,7 @@ static func solve(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand_basis:
 	reference = reference.normalized()
 	var original_angle := reference.signed_angle_to(radial, axis)
 	var best := INF
-	for index in range(72):
+	for index in range(SOLVE_LATTICE):
 		var angle := float(index) * STEP
 		var delta := wrapf(angle - original_angle, -PI, PI)
 		var candidate := center + reference.rotated(axis, angle) * radius
@@ -94,10 +113,79 @@ static func _fits(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis
 	return _cost(shoulder, wrist, elbow, hand, is_left) <= 1.0
 
 static func _cost(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis, is_left: bool) -> float:
-	var forearm := Anatomy.forearm_reference(shoulder, elbow, wrist, Vector3.UP, is_left)
-	var report := Anatomy.decompose(forearm, hand, -1.0 if is_left else 1.0)
-	# Keep a numerical reserve, never expand the production angular budgets.
-	return maxf(report.coupled_budget_ratio / .999, absf(report.forearm_axial_deg) / (Anatomy.AXIAL_BUDGET_DEG - .05))
+	return cost(shoulder, wrist, elbow, hand.orthonormalized(), is_left)
+
+## Wrist budget use of an elbow (<= 1 inside; a numerical reserve, never wider budgets): the
+## Anatomy.forearm_reference / decompose channel maths inlined with static types.
+static func cost(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand_orthonormal: Basis, left: bool) -> float:
+	var distal: Vector3 = (wrist - elbow).normalized()
+	var upper_dir: Vector3 = (elbow - shoulder).normalized()
+	var thumbward: Vector3 = -upper_dir + distal * upper_dir.dot(distal)
+	if thumbward.length_squared() < 1e-05: thumbward = Vector3.UP - distal * Vector3.UP.dot(distal)
+	var hint: Vector3 = thumbward * (-1.0 if left else 1.0)
+	var x: Vector3 = distal.normalized()
+	if x.length_squared() < 0.5: x = Vector3.RIGHT
+	var y: Vector3 = hint - x * hint.dot(x)
+	if y.length_squared() < 1e-05: y = Vector3.UP - x * Vector3.UP.dot(x)
+	if y.length_squared() < 1e-05: y = Vector3.FORWARD - x * Vector3.FORWARD.dot(x)
+	y = y.normalized()
+	var forearm := Basis(x, y, x.cross(y).normalized()).orthonormalized()
+	var relative: Basis = forearm.orthonormalized().inverse() * hand_orthonormal
+	var flexion: float = asin(clampf(relative.z.x, -1.0, 1.0))
+	var deviation: float = atan2(-relative.y.x, relative.x.x)
+	var axial: float = atan2(-relative.z.y, relative.z.z)
+	var sign_side: float = -1.0 if left else 1.0
+	var flex_deg: float = rad_to_deg(flexion)
+	var dev_deg: float = rad_to_deg(deviation) * sign_side
+	var axial_deg: float = rad_to_deg(axial) * sign_side
+	var flex_limit: float = FLEX_LIMIT if flex_deg >= 0 else EXT_LIMIT
+	var dev_limit: float = RADIAL_LIMIT if dev_deg >= 0 else ULNAR_LIMIT
+	var ellipse: float = pow(flex_deg / flex_limit, 2.0) + pow(dev_deg / dev_limit, 2.0)
+	return maxf(ellipse / .999, absf(axial_deg) / (AXIAL_LIMIT - .05))
+
+# ---------------------------------------------------------------- reach preflight
+
+## Some elbow plane fits this wrist within `maximum` (the reach preflight). Same cost and
+## LATTICE as `solve`; cached per exact input for CACHE_LIFETIME_TICKS.
+static func accepts(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis, upper: float, fore: float, left: bool, maximum: float = .98) -> bool:
+	var _pt := Time.get_ticks_usec()
+	var tick := Engine.get_physics_frames()
+	if _cache_epoch < 0 or tick < _cache_epoch or tick - _cache_epoch >= CACHE_LIFETIME_TICKS or _accept_cache.size() >= CACHE_LIMIT:
+		_accept_cache.clear(); _cache_epoch = tick
+	var key := var_to_bytes([shoulder, wrist, elbow, hand, upper, fore, left, maximum])
+	var hit = _accept_cache.get(key)
+	if hit == null:
+		hit = _accepts(shoulder, wrist, elbow, hand, upper, fore, left, maximum)
+		_accept_cache[key] = hit
+	PerfMonitor.record("reach.accepts", Time.get_ticks_usec() - _pt)
+	return hit
+
+static func _accepts(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis, upper: float, fore: float, left: bool, maximum: float) -> bool:
+	if not (shoulder.is_finite() and wrist.is_finite() and elbow.is_finite() and hand.is_finite() and is_finite(upper) and is_finite(fore) and is_finite(maximum)) or maximum > 1.0:
+		var full := solve(shoulder, wrist, elbow, hand, upper, fore, left)
+		return bool(full.feasible) and not float(full.cost) > maximum
+	var span: Vector3 = wrist - shoulder
+	var distance: float = span.length()
+	if distance < .00001 or distance >= upper + fore or distance <= absf(upper - fore): return false
+	var axis: Vector3 = span / distance
+	var along: float = (upper * upper - fore * fore + distance * distance) / (2.0 * distance)
+	var radius: float = sqrt(maxf(0.0, upper * upper - along * along))
+	var center: Vector3 = shoulder + axis * along
+	var radial: Vector3 = elbow - center
+	radial -= axis * radial.dot(axis)
+	if radial.length_squared() < .00000001: radial = Vector3.UP - axis * axis.y
+	if radial.length_squared() < .00000001: radial = Vector3.RIGHT - axis * axis.x
+	radial = radial.normalized()
+	var hand_orthonormal: Basis = hand.orthonormalized()
+	var initial: float = cost(shoulder, wrist, center + radial * radius, hand_orthonormal, left)
+	if initial <= 1.0: return not initial > maximum   # the solve keeps this plane as it is
+	var reference: Vector3 = hand.y - axis * hand.y.dot(axis)
+	if reference.length_squared() < .00000001: reference = hand.z - axis * hand.z.dot(axis)
+	reference = reference.normalized()
+	if Screen.enabled and Screen.rejects(shoulder, wrist, hand, hand_orthonormal, axis, center, distance, along, radius, reference, upper, fore, left, maximum, initial): return false
+	for index in LATTICE:
+		if cost(shoulder, wrist, center + reference.rotated(axis, float(index) * LATTICE_STEP) * radius, hand_orthonormal, left) <= maximum: return true
+	return false
 
 static func apply(player, pose, hands) -> void:
 	var _pt := Time.get_ticks_usec()

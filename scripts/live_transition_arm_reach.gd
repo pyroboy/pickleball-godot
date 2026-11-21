@@ -166,12 +166,12 @@ static func _perf_wrist_budgets_fit(player, pose, paddle: Transform3D, offset: V
 		var grip: Vector3 = paddle * (D.MAIN_GRIP_OFFSET + hand_offset) if main else paddle * (D.SUPPORT_GRIP_OFFSET + Vector3.UP * pose.support_grip_slide_m)
 		if not main: grip += player._get_forehand_axis() * hand_offset.x + Vector3.UP * hand_offset.y + player._get_forward_axis() * hand_offset.z
 		var wrist: Vector3 = grip + basis * Reach.socket(left)
-		if not preload("res://scripts/arm_budget_acceptance.gd").accepts(arm.upper_pivot.global_position + offset, wrist, arm.forearm_pivot.global_position + offset,
+		if not WristBudget.accepts(arm.upper_pivot.global_position + offset, wrist, arm.forearm_pivot.global_position + offset,
 			basis * arm.articulated_hand.anatomical_basis, arm.upper_arm_length, arm.forearm_length, left, .98): return false
 	var release: Dictionary = _serve_release(player, pose, offset)
 	if not release.is_empty():
 		var arm = player.right_arm_node if int(release.side) == 0 else player.left_arm_node
-		if not preload("res://scripts/arm_budget_acceptance.gd").accepts(arm.upper_pivot.global_position + offset, release.wrist, arm.forearm_pivot.global_position + offset,
+		if not WristBudget.accepts(arm.upper_pivot.global_position + offset, release.wrist, arm.forearm_pivot.global_position + offset,
 			release.basis * arm.articulated_hand.anatomical_basis, arm.upper_arm_length, arm.forearm_length, int(release.side) == 1, .98): return false
 	var carried: Dictionary = _carried_cup_frame(player, pose)
 	if not carried.is_empty():
