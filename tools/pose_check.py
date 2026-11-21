@@ -43,7 +43,8 @@ POP_UP = 0.08            # hips higher at contact than at both other stages (m)
 LEAN_FWD, LEAN_SIDE = 35.0, 20.0
 MIN_TRANSFER = 0.30      # centre of gravity back -> front gain from wind-up to finish
 CORNER, SNAP, ROLL_STEP, WRIST_STEP, ELBOW_JUMP = 30.0, 30.0, 40.0, 30.0, 0.15
-CLEARANCE = 0.10         # elbow to torso (m)
+CLEARANCE = 0.10         # elbow to torso (m); rough rule, only for captures without "clip"
+CLIP_PARTS = {"sleeve": "sleeve", "elbow": "elbow", "fore": "forearm", "paddle": "paddle"}   # timed "clip" (pose_data.gd)
 POP = 0.25               # joint travel in one game tick outside the strike (m)
 
 
@@ -288,7 +289,8 @@ def level_c(solved, rep):
             rep.add(k, 2, "C_roll", f"forearm rolls {sw['max_forearm_roll_step_deg']:.0f} deg in one step")
         if sw.get("max_wrist_step_deg", 0) > WRIST_STEP:
             rep.add(k, 2, "C_wrist_step", f"wrist flips {sw['max_wrist_step_deg']:.0f} deg in one step")
-        if sw["min_elbow_torso_clearance_m"] < CLEARANCE:
+        has_clip = any("clip" in f for f in (timed or {}).get("frames", []))
+        if not has_clip and sw["min_elbow_torso_clearance_m"] < CLEARANCE:
             rep.add(k, 2, "C_clearance", f"elbow passes {sw['min_elbow_torso_clearance_m']:.2f} m from the torso")
         ups = len(sw.get("elbow_up_steps", []))
         if ups and k not in OVERHEADS and k[0] == "s":
@@ -312,6 +314,15 @@ def level_c(solved, rep):
         worst = max(pops, default=(0, "", 0))
         if worst[0] > POP:
             rep.add(k, 2, "C_pop", f"{worst[1]} jumps {worst[0]:.2f} m in one tick at {worst[2]:.2f} s")
+        for label, span in (("C_clip_ready", lambda t: t <= start), ("C_clip_swing", lambda t: t > start)):
+            hits = [(f["t"], part) for f in fr if "clip" in f and span(f["t"])
+                    for part in ("sleeve", "elbow", "fore", "paddle")
+                    if ((not f["clip"][part]) if part == "sleeve" else f["clip"][part] > 0)]
+            if hits:
+                parts = sorted({CLIP_PARTS[p] for _, p in hits})
+                t0, t1 = min(t for t, _ in hits), max(t for t, _ in hits)
+                when = "Ready -> Wind-up" if label == "C_clip_ready" else "the swing"
+                rep.add(k, 2, label, f"{', '.join(parts)} through the body {t0:.2f}-{t1:.2f} s ({len({t for t, _ in hits})} ticks, {when})")
         flip = elbow_flip(fr)
         if flip:
             rep.add(k, 2, "C_elbow_flip", f"elbow swings {flip['deg']:.0f} deg around the arm ({flip['moved_m'] * 100:.0f} cm) in one tick at {flip['t']:.2f} s ({flip['cause']})")

@@ -19,12 +19,6 @@ static func distance_to_paddle_shape(local_point: Vector3) -> float:
 	var handle: float = cylinder.max(Vector2.ZERO).length() + minf(maxf(cylinder.x, cylinder.y), 0.0)
 	return minf(handle, distance_to_head_shape(local_point))
 
-static func face_clearance(player, pose: PostureDefinition) -> float:
-	var head: Vector3 = player.global_transform * Body.pivot_transform(player, pose) * Body.torso_transform(player, pose) * Vector3(0, 0.28, 0)
-	var paddle: Transform3D = Path.world_transform(player, pose)
-	return distance_to_paddle_shape(paddle.affine_inverse() * head) - 0.12
-
-
 static func head_outline_error_bound() -> float:
 	return PaddleDimensions.HEAD_RADIUS * (1.0 - cos(PI / (2.0 * PaddleDimensions.OUTLINE_ARC_STEPS)))
 
@@ -52,16 +46,6 @@ static func sample_head_surface() -> Array[Vector3]:
 static func signed_box_distance(point: Vector3, half_extents: Vector3) -> float:
 	var q: Vector3 = point.abs() - half_extents
 	return q.max(Vector3.ZERO).length() + minf(maxf(q.x, maxf(q.y, q.z)), 0.0)
-
-static func sampled_chest_clearance(player, pose: PostureDefinition, points: Array[Vector3]) -> float:
-	var chest: Transform3D = player.global_transform * Body.pivot_transform(player, pose) * Body.torso_transform(player, pose)
-	var paddle: Transform3D = Path.world_transform(player, pose)
-	var local: Transform3D = chest.affine_inverse() * paddle
-	var distance: float = INF
-	for point in points:
-		distance = minf(distance, signed_box_distance(local * point, Vector3(0.18, 0.16, 0.1)))
-	return distance
-
 
 static func closest_head_surface(point: Vector3, incoming: Vector3) -> Vector3:
 	var xy: = Vector2(point.x, point.y - PaddleDimensions.HEAD_CENTER_Y)

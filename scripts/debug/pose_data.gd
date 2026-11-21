@@ -10,6 +10,7 @@ const TIMED_KEYS := ["com_back_to_front", "com_over_base", "com_off_base_m", "fe
 	"shoulder_yaw", "separation", "hip_height", "left_knee_bend", "right_knee_bend", "right_elbow_bend",
 	"trunk_lean_fwd", "trunk_lean_side", "wrist_angle_deg", "wrist_flex_deg", "elbow_above_shoulder_m"]
 var settle := 12
+const Clear = preload("res://scripts/live_ready_clearance.gd")
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -79,6 +80,8 @@ func _timed_trace(ed) -> Dictionary:
 		for key in TIMED_KEYS: row[key] = m[key]
 		var pole = _authored_pole(ed._preview.player, ed._preview.pose)
 		if pole != null: row["pole"] = pole
+		var clip = _clip(ed._preview.player, ed._preview.pose)
+		if clip != null: row["clip"] = clip
 		frames.append(row)
 	var out := {"tick": TICK, "duration": _r3(total), "prefix": _r3(seq.prefix_seconds),
 		"contact_at": _r3(seq.prefix_seconds + seq.release_seconds),
@@ -86,6 +89,28 @@ func _timed_trace(ed) -> Dictionary:
 	tl.invalidate()
 	ed._stop()
 	return out
+
+## Paddle arm and paddle against the body, per tick, with the game's exact test
+## (live_ready_clearance.gd: skinned torso triangles, closed-body inside test):
+## sleeve = the gameplay sleeve triangles clear of the torso (what certifies READY);
+## elbow / fore / paddle = how many sampled points of the drawn elbow (pixel-card swivel),
+## drawn forearm and paddle shaft (wrist -> head) are inside the body. null = no torso mesh.
+func _clip(p, pose):
+	if p == null or pose == null or not (pose is PostureDefinition) or not p.body_pivot.has_meta("articulated_torso"): return null
+	var geo: Dictionary = Clear.body_geometry(p)
+	if not geo.get("valid", false): return null
+	var arm = p.left_arm_node if pose.paddle_hand == 1 else p.right_arm_node
+	var inv: Transform3D = geo.inverse
+	var el: Vector3 = preload("res://scripts/elbow_swivel.gd").visual_elbow_now(arm)
+	var wr: Vector3 = arm.hand_pivot.global_position
+	var head: Vector3 = p.paddle_node.get_node("Head").global_position
+	var inside := func(a: Vector3, b: Vector3, n: int) -> int:
+		var c := 0
+		for k in n + 1:
+			if Clear._inside(inv * a.lerp(b, float(k) / n), geo): c += 1
+		return c
+	return {"sleeve": Clear.arm_clear(arm, geo), "elbow": int(Clear._inside(inv * el, geo)),
+		"fore": inside.call(el, wr, 6), "paddle": inside.call(wr, head, 8)}
 
 ## The paddle arm's authored elbow pole in the player's frame (as `j`), before the game's
 ## stabilize / wrist conditioning (player_arm_ik.gd): the elbow swivel the pose asks for.
