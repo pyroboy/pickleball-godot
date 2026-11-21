@@ -204,6 +204,9 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export var speed_lead_points: PackedVector3Array = PackedVector3Array()
 @export var speed_strike_points: PackedVector3Array = PackedVector3Array()
 @export var speed_finish_points: PackedVector3Array = PackedVector3Array()
+## 1 = "my keys play": a full drive plays the whole authored Wind-up / Finish pose (body too).
+## 0 = the game builds those poses and takes only the paddle position from the keys.
+@export_enum("Game-built", "My keys") var play_authored_keys: int = 0
 @export var windup_body: Resource
 @export var follow_through_body: Resource
 @export var charge_duration: float = 0.3
@@ -376,6 +379,7 @@ func lerp_with(other, w: float):
 	o.speed_lead_points = (speed_lead_points if t < 0.5 else other.speed_lead_points).duplicate()
 	o.speed_strike_points = (speed_strike_points if t < 0.5 else other.speed_strike_points).duplicate()
 	o.speed_finish_points = (speed_finish_points if t < 0.5 else other.speed_finish_points).duplicate()
+	o.play_authored_keys = play_authored_keys if t < 0.5 else other.play_authored_keys
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)

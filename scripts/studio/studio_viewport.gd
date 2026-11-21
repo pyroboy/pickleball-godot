@@ -123,6 +123,7 @@ var _path_off0 := Vector3.ZERO
 var _path_plane := Plane()
 var _path_grab := Vector2.ZERO
 var _path_moved := false
+var _warned_keys := ""               # pose key already told that its Wind-up / Finish body is game-built
 var _pick_head := Vector3.INF          # arc head of the lead-in tick path_pick last returned
 
 func attach(owner_studio, pv) -> void:
@@ -512,9 +513,19 @@ func handle_screen(id: String) -> Vector2:
 func _begin_ap(h: String, e: InputEventMouseButton) -> void:
 	var b: Dictionary = studio.autopose_drag_begin(h)
 	if not b.get("ok", false):
+		if not studio.at_key() and studio.engine._has_motion():
+			# Between keys the pose is only a preview: go to the nearest key, where posing sticks.
+			var st: int = studio.nearest_key_stage()
+			studio.set_stage(st)
+			studio.notify("Posing edits a key. Moved to %s: drag the ring again." % ["Wind-up", "Contact", "Finish"][st])
+			return
 		studio._set_status("AutoPose: " + str(b.get("error", "cannot drag " + h)))
 		if touch: studio.handle_tapped.emit(h)   # phone: a locked ring still opens its options (they say why)
 		return
+	# A Wind-up / Finish pose the game rebuilds would not show in play: say so once per pose.
+	if studio.stage != 1 and studio.keys_play_state() == "off" and _warned_keys != studio.key:
+		_warned_keys = studio.key
+		studio.notify("This stroke's %s body is built by the game: your pose will not play yet. Turn on My keys play (Swing)." % ("Wind-up" if studio.stage == 0 else "Finish"))
 	preview.cancel_gesture()
 	var w: Vector3 = b.get("handle_start", Vector3.INF)
 	if not w.is_finite():

@@ -55,6 +55,15 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 
 	var compact: PostureDefinition = _compact_or_overhead_definition(base, minf(charge, 0.58), is_volley, near_kitchen, shot_intent)
+	if base.play_authored_keys == 1:
+		# "My keys play" (Pose Studio, per stroke): the whole authored Wind-up / Finish pose, body
+		# included, blended in by drive strength like the two-hand backhand. baked_keys() fills the
+		# keys with what the code below builds, so switching it on changes nothing until an edit.
+		if spin_mode == 1: def.paddle_pitch_base_deg -= 4.0 * strength
+		elif spin_mode == 2: def.paddle_pitch_base_deg += 12.0 * strength
+		_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 0), Path.endpoint(base, 0), strength), true)
+		_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 2), Path.endpoint(base, 2), strength), false)
+		return def
 	var windup: PostureDefinition = Path.endpoint(compact, 0)
 	# Full-charge Wind-up / Finish paddle: the pose's authored keys (Pose Studio, the momentum arc's
 	# W and F points); a pose without them keeps the built-in drive numbers.
@@ -115,6 +124,19 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 
 
+
+## A copy of `base` whose authored Wind-up / Finish keys are the ones the game builds for its
+## full-charge drive, with play_authored_keys on: it plays exactly as `base` did (game-built),
+## and from then on the keys are what plays. Pose Studio "My keys play".
+static func baked_keys(base: PostureDefinition) -> PostureDefinition:
+	var off: PostureDefinition = base.duplicate(true)
+	off.play_authored_keys = 0
+	var built: PostureDefinition = drive_definition(off, 1.0)
+	var out: PostureDefinition = base.duplicate(true)
+	_write_endpoint(out, Path.endpoint(built, 0), true)
+	_write_endpoint(out, Path.endpoint(built, 2), false)
+	out.play_authored_keys = 1
+	return out
 
 ## Paddle position (forehand, y, forward muls) of the pose's authored Wind-up (stage 0) or Finish
 ## (2) key; `fallback` when the pose has no such key (its offset from Contact is under 5 cm).
@@ -241,6 +263,10 @@ static func _compact_or_overhead_definition(base: PostureDefinition, charge: flo
 		def.right_elbow_path = PackedVector3Array();def.left_elbow_path = PackedVector3Array()
 	var kind: String = "DROP" if shot_intent == "DROP" else motion_kind(base, charge, is_volley, near_kitchen)
 	if kind == "DRIVE": return def
+	# "My keys play" on a stroke whose own swing is this compact / overhead motion (low and
+	# mid-low strokes, overheads): its authored Wind-up / Finish keys, in that same plain context.
+	# Volleys, drops and kitchen play keep the built motion (the keys were not posed for them).
+	if base.play_authored_keys == 1 and not near_kitchen and kind == motion_kind(base, 1.0): return def
 	var windup: PostureDefinition = base.lerp_with(base, 0.0)
 	var finish: PostureDefinition = base.lerp_with(base, 0.0)
 	if kind == "SMASH":

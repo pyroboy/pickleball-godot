@@ -81,6 +81,13 @@ var _curve_btns: Array[Button] = []
 var _speed: VBoxContainer       # speed sheet (replaces the lower third): the speed ramp graph
 var _speed_graph                # its graph (studio_speed_graph.gd, finger-sized)
 var _speed_del: Button          # Delete point (shown while a speed point is selected)
+var _tl_info: Label             # under the timeline: what it is on, what posing does there
+var _keys_info: Label           # Swing sheet: how the Wind-up / Finish keys reach play
+var _keys_a: Button
+var _keys_b: Button
+var _key_time_row: HBoxContainer   # Swing sheet: move the selected path key earlier / later
+var _key_time: HSlider
+var _key_time_sync := false
 var _speed_how: Label           # one-line hint above the graph
 var _swing_info: Label
 var _path_info: Label
@@ -136,6 +143,7 @@ func build(owner_studio) -> void:
 	resized.connect(_fit)
 	_fit.call_deferred()
 	studio.handle_tapped.connect(_open_sheet)
+	studio.notice.connect(_show_toast)
 	studio.pose_selected.connect(func(_k): _refresh_pose())
 	studio.pose_saved.connect(func(_k, _v): _refresh_pose())
 	studio.pose_edited.connect(func(_k): if _swing.visible: _refresh_swing.call_deferred())
@@ -382,15 +390,21 @@ func _refresh_chips() -> void:
 func _build_lower(lower: VBoxContainer) -> void:
 	var tl := PanelContainer.new(); tl.add_theme_stylebox_override("panel", _row_box())
 	lower.add_child(tl)
-	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); tl.add_child(row)
+	var tlv := VBoxContainer.new(); tlv.add_theme_constant_override("separation", 4); tl.add_child(tlv)
+	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 8); tlv.add_child(row)
+	# One line that says what the timeline is on and what a ring drag will do there.
+	_tl_info = _label("", SMALL, Ui.MUTED); _tl_info.clip_text = true; _tl_info.name = "TimelineInfo"; tlv.add_child(_tl_info)
 	for i in 3:
 		var b := _btn(STAGE_SHORT[i], studio.set_stage.bind(i), 72, 68)
 		b.add_theme_color_override("font_color", STAGE_COLORS[i])
 		_keys.append(b); row.add_child(b)
 	_scrub = ScrubTrack.new(); _scrub.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scrub.custom_minimum_size = Vector2(120, 68)
-	_scrub.value_changed.connect(func(t): if not _sync_scrub: studio._timeline.seek(t))
+	_scrub.name = "PhoneScrub"; _scrub.touch_k = 2.2
+	_scrub.value_changed.connect(func(t): if not _sync_scrub: studio._timeline.seek_from(t, _scrub))
 	_scrub.mark_moved.connect(studio._timeline._on_mark_moved)
+	_scrub.key_mover = studio._timeline.move_key
+	_scrub.key_tapped.connect(studio._timeline.go_to_key)
 	row.add_child(_scrub)
 	# Icons, not "▶" text: the iPhone's font has no glyph for it (the button showed empty).
 	_play = _btn("", func(): studio._timeline.toggle_play(), 80, 68); row.add_child(_play)
@@ -549,6 +563,24 @@ func _build_swing(sheet: VBoxContainer) -> void:
 	var head := HBoxContainer.new()
 	var t := _label("Swing path", TITLE); t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	head.add_child(t); head.add_child(_btn("Done", _close_sheet, 130, 64)); v.add_child(head)
+	# How the Wind-up / Finish keys reach play, and the switch.
+	_keys_info = _label("", SMALL); _keys_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(_keys_info)
+	var kr := HBoxContainer.new(); kr.add_theme_constant_override("separation", 8)
+	_keys_a = _btn("", func(): _keys_action(0), 0, 64); _keys_a.name = "KeysA"; _keys_a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_keys_b = _btn("", func(): _keys_action(1), 0, 64); _keys_b.name = "KeysB"; _keys_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for b in [_keys_a, _keys_b]: b.add_theme_font_size_override("font_size", SMALL); kr.add_child(b)
+	v.add_child(kr)
+	# The selected path key's time: earlier / later (also: drag its pink mark on the timeline).
+	_key_time_row = HBoxContainer.new(); _key_time_row.add_theme_constant_override("separation", 8); _key_time_row.visible = false
+	var kl := _label("Key time", SMALL); kl.custom_minimum_size.x = 110; _key_time_row.add_child(kl)
+	var kb := _btn("-", func(): _nudge_key(-1), 72, 64); kb.name = "KeyEarlier"; _key_time_row.add_child(kb)
+	_key_time = HSlider.new(); _key_time.name = "KeyTime"; _key_time.min_value = 0.0; _key_time.max_value = 1.0; _key_time.step = 0.001
+	_key_time.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _key_time.custom_minimum_size.y = 64; _key_time.focus_mode = Control.FOCUS_NONE
+	_key_time.value_changed.connect(func(f): if not _key_time_sync: _sel_path = studio._timeline.move_key(_sel_path, f, false))
+	_key_time.drag_ended.connect(func(_c): _sel_path = studio._timeline.move_key(_sel_path, _key_time.value, true); _refresh_swing())
+	_key_time_row.add_child(_key_time)
+	var ka := _btn("+", func(): _nudge_key(1), 72, 64); ka.name = "KeyLater"; _key_time_row.add_child(ka)
+	v.add_child(_key_time_row)
 	var how := _label("Dots = game ticks, blue slow to red fast. Drag W / F to move that key's paddle, a pink square to bend the path; press a dot to add a key. A tapped key shows orange tangent handles: drag one to steer the curve through it.", SMALL, Ui.MUTED)
 	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; v.add_child(how)
 	var r := HBoxContainer.new(); r.add_theme_constant_override("separation", 8)
@@ -623,6 +655,22 @@ func _auto_tangent() -> void:
 	vi.sel_key_t = _sel_path; vi.reset_tangent()
 	_show_toast("Curve through this key: automatic"); _refresh_swing()
 
+## The two buttons under "Wind-up & Finish" (their meaning follows the stroke's state).
+func _keys_action(i: int) -> void:
+	var state: String = studio.keys_play_state()
+	var r: Dictionary = studio.set_keys_play(("bake" if i == 0 else "on") if state == "off" else ("off" if i == 0 else "bake"))
+	if not r.get("ok", false): _show_toast(String(r.get("error", "Cannot change it here")))
+	_refresh_swing()
+
+## The selected path key one game tick earlier / later.
+func _nudge_key(dir: int) -> void:
+	var tl = studio._timeline
+	var f: float = tl.key_frac(_sel_path)
+	if f < 0.0: return
+	var dur: float = maxf(float(tl.scrubber.duration), 0.001)
+	_sel_path = tl.move_key(_sel_path, f + dir * (1.0 / 30.0) / dur, true)
+	_refresh_swing()
+
 func _delete_path_key() -> void:
 	var keys: Array = studio.path_keys().filter(func(k): return absf(float(k[0]) - _sel_path) > 0.001)
 	studio.set_path_keys(keys)
@@ -647,6 +695,24 @@ func _refresh_swing() -> void:
 			else "Key at %d%% of the swing · %.0f cm off the curve" % [roundi(_sel_path * 100.0), o.length() * 100.0]
 	else: _path_info.text = "Path keys: %d" % keys.size() + ("" if keys.is_empty() else " · tap one to delete it")
 	_path_del.visible = sel
+	var state: String = studio.keys_play_state()
+	_keys_a.visible = state == "off" or state == "on"; _keys_b.visible = _keys_a.visible
+	match state:
+		"off":
+			_keys_info.text = "Wind-up & Finish: the game builds the body, only your keys' paddle position plays. Posing joints there will not show."
+			_keys_a.text = "My keys play"; _keys_b.text = "…as I posed them"
+		"on":
+			_keys_info.text = "Wind-up & Finish: your keys play (whole pose)."
+			_keys_a.text = "Back to game-built"; _keys_b.text = "Reset keys to game pose"
+		"always": _keys_info.text = "Wind-up & Finish: your keys play for this stroke."
+		_: _keys_info.text = ""
+	_tint(_keys_a, state == "off")
+	_key_time_row.visible = sel
+	if sel:
+		var f: float = studio._timeline.key_frac(_sel_path)
+		_key_time_sync = true
+		_key_time.value = f
+		_key_time_sync = false
 	var custom_tan: bool = sel and keys.any(func(k): return absf(float(k[0]) - _sel_path) < 0.001 and k.size() > 2 and (k[2] as Vector3).length_squared() > 1e-10)
 	_path_auto.visible = custom_tan
 	_path_clear.visible = not keys.is_empty() and not sel
@@ -842,6 +908,18 @@ func _refresh_pose() -> void:
 	if _handle != "": _refresh_sheet()
 	if _swing.visible: _refresh_swing()
 
+## What the timeline is on, in words (and what posing does there).
+func _timeline_info(st: Dictionary) -> String:
+	if studio.key == "" or not studio.engine._has_motion(): return "One pose: drag rings to pose it"
+	var sk: float = studio._timeline.selected_path_key()
+	if bool(st.get("playing", false)): return "Playing"
+	if studio.at_key():
+		var name: String = ["Wind-up", "Contact", "Finish"][studio.stage]
+		if studio.stage != 1 and studio.keys_play_state() == "off": return "%s key · body is game-built: Swing → My keys play" % name
+		return "%s key · drag rings to pose it" % name
+	if sk >= 0.0: return "Path key · drag its pink mark to move it in time"
+	return "Preview %.2f s · slide to W, C or F to pose" % float(st.get("seconds", 0.0))
+
 func _show_toast(t: String) -> void:
 	if t == "": return
 	_toast_text = t; _toast_time = 3.0
@@ -858,6 +936,14 @@ func _process(delta: float) -> void:
 		if bool(st.get("active", false)): _scrub.set_value_no_signal(float(st.get("t", 0.0)))
 		_scrub.set_marks(tl.scrubber.marks, tl.scrubber.duration)
 		_scrub.marks_draggable = tl.scrubber.marks_draggable
+		_scrub.fixed_marks = tl.scrubber.fixed_marks
+		_scrub.key_marks = tl.scrubber.key_marks; _scrub.at_stage = tl.scrubber.at_stage; _scrub.sel_key = tl.scrubber.sel_key
+		var info := _timeline_info(st)
+		if _tl_info.text != info: _tl_info.text = info
+		var sk: float = tl.selected_path_key()   # a key picked on the timeline or the arc is the Swing sheet's key
+		if sk >= 0.0 and not is_equal_approx(sk, _sel_path):
+			_sel_path = sk
+			if _swing.visible: _refresh_swing()
 		_scrub.queue_redraw()
 		_sync_scrub = false
 		var ic: Texture2D = StudioTheme.icon("pause" if bool(st.get("playing", false)) else "play")

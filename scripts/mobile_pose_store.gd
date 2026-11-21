@@ -58,6 +58,7 @@ const STROKE_FIELDS := [
 	"ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak",
 	"paddle_path_times", "paddle_path_offsets", "ready_path_times", "ready_path_offsets",
 	"paddle_path_tangents", "ready_path_tangents",
+	"play_authored_keys",
 	"speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end",
 	"speed_lead_points", "speed_strike_points", "speed_finish_points",
 	"windup_body", "follow_through_body", "charge_duration",
@@ -71,7 +72,7 @@ const UNIT_FIELDS := [
 	"ft_front_foot_load", "compact_finish_lateral_scale", "compact_motion_scale", "swing_path_blend", "contact_curve", "stroke_overlay_mix",
 	"ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_peak",
 ]
-const INTEGER_MAX := {"left_hand_mode": 4, "lead_foot": 1, "paddle_hand": 1, "paddle_pitch_sign_source": 2,
+const INTEGER_MAX := {"left_hand_mode": 4, "play_authored_keys": 1, "lead_foot": 1, "paddle_hand": 1, "paddle_pitch_sign_source": 2,
 	"paddle_yaw_sign_source": 2, "paddle_roll_sign_source": 2, "ft_ease_curve": 2, "canonical_intent": 8}
 const POSITIVE_FIELDS := ["stance_width", "crouch_amount", "paddle_floor_clearance", "split_step_hop_height", "lunge_distance"]
 
@@ -383,7 +384,7 @@ static func _valid_fields(fields, is_base: bool, nested: bool = false) -> bool:
 		for additive in ["right_foot_pitch_deg", "left_foot_pitch_deg"]:
 			if not fields.has(additive): required.erase(additive)
 		if not is_base:
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points", "paddle_path_tangents", "ready_path_tangents"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "elbow_preset_bake", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points", "paddle_path_tangents", "ready_path_tangents", "play_authored_keys"]:
 				if not fields.has(additive): required.erase(additive)
 		if fields.size() != required.size() or not fields.has_all(required): return false
 	var template: Resource = BasePose.new() if is_base else Posture.new()
@@ -469,6 +470,8 @@ static func _apply_fields(def: Resource, fields: Dictionary) -> void:
 		def.ready_path_times = PackedFloat32Array(); def.ready_path_offsets = PackedVector3Array()
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("speed_lead_start"):
 		for f in ["speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end"]: def.set(f, -1.0)
+	if def.get_script() == Posture and not fields.is_empty() and not fields.has("play_authored_keys"):
+		def.play_authored_keys = 0
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("paddle_path_tangents"):
 		def.paddle_path_tangents = PackedVector3Array(); def.ready_path_tangents = PackedVector3Array()
 	if def.get_script() == Posture and not fields.is_empty() and not fields.has("speed_lead_points"):
@@ -530,7 +533,7 @@ static func _prepare_approved_pose_imports(document: Dictionary, include_absent:
 			var payload: Dictionary = JSON.parse_string(approved.JSON_TEXT)
 			var fields: Dictionary = approved.applied_fields() if approved.has_method("applied_fields") else payload.fields.duplicate(true)
 			var defaults := _encode_fields(_export_packaged_default(int(id), false))
-			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points", "paddle_path_tangents", "ready_path_tangents"]:
+			for additive in ["paddle_in_hand_rotation_deg", "contact_curve", "body_position_offset", "right_foot_pitch_deg", "left_foot_pitch_deg", "paddle_path_times", "paddle_path_offsets", "ready_curve_auto", "ready_curve_bow", "ready_curve_round", "ready_curve_dir_deg", "ready_curve_peak", "ready_path_times", "ready_path_offsets", "speed_lead_start", "speed_lead_end", "speed_strike_start", "speed_strike_end", "speed_finish_start", "speed_finish_end", "speed_lead_points", "speed_strike_points", "speed_finish_points", "paddle_path_tangents", "ready_path_tangents", "play_authored_keys"]:
 				if not fields.has(additive): fields[additive] = previous.get(additive, defaults[additive])
 			for stage in ["windup_body", "follow_through_body"]:
 				# Sparse legacy keys are intentional: absence inherits Contact. Only

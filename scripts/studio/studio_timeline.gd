@@ -15,6 +15,8 @@ const SPEED_TEXT := ["1x", "½x", "¼x"]
 const BallActions = preload("res://scripts/ball_actions.gd")
 const SpeedGraph = preload("res://scripts/studio/studio_speed_graph.gd")
 var speed_graph
+var keys_toggle: Button
+var keys_bake: Button
 var _speed_spacer: Control
 
 var studio
@@ -84,14 +86,23 @@ func build(owner_studio) -> void:
 	weak_button = Theme_.tool_button("WeakButton", "Weak", "", "Play a generated shorter backswing (saved poses unchanged)", true)
 	weak_button.pressed.connect(play_variant.bind(2))
 	vr.add_child(weak_button)
+	var ks := Theme_.segment(row, "KeysSeg")
+	keys_toggle = Theme_.tool_button("KeysPlayToggle", "My keys play", "", "On: the game and this timeline play the whole Wind-up and Finish pose you author. Off: the game builds those bodies and takes only the paddle position from your keys (posing joints there does not show in play).", true)
+	keys_toggle.pressed.connect(func(): studio.set_keys_play("on" if keys_toggle.button_pressed else "off"))
+	ks.add_child(keys_toggle)
+	keys_bake = Theme_.tool_button("KeysBake", "Game pose → keys", "", "Copy the Wind-up and Finish the game builds now into this stroke's keys and switch My keys play on: play looks the same, and from then on your keys are what plays.")
+	keys_bake.pressed.connect(func(): studio.set_keys_play("bake"))
+	ks.add_child(keys_bake)
 	_transport = [play_button, step_back, step_fwd, loop_toggle, strong_button, weak_button]
 	var srow := HBoxContainer.new(); srow.name = "ScrubRow"; srow.add_theme_constant_override("separation", Theme_.SP2)
 	add_child(srow)
 	scrubber = ScrubTrack.new(); scrubber.name = "Scrubber"
 	scrubber.tooltip_text = "Real-time sequence (charge -> release), drag to scrub. Marks: purple wind-up, gold contact, cyan finish. Scrubbing previews only. Drag a mark to change that key's time (strokes: contact and finish; needs Gameplay edit)."
 	scrubber.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scrubber.value_changed.connect(seek)
+	scrubber.value_changed.connect(seek_from.bind(scrubber))
 	scrubber.mark_moved.connect(_on_mark_moved)
+	scrubber.key_mover = move_key
+	scrubber.key_tapped.connect(go_to_key)
 	srow.add_child(scrubber)
 	time_label = Theme_.small_label("TimeLabel", "")
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
@@ -223,6 +234,76 @@ func seek(t: float) -> void:
 	update_marks()
 	refresh()
 
+## A scrub from a track (desktop scrubber or the phone's): a scrub that landed on Wind-up /
+## Contact / Finish selects that key (posing edits it: what you see there is what you edit);
+## on a path key it selects the key; anywhere else it previews that moment.
+func seek_from(t: float, track) -> void:
+	if _sync: return
+	var hit: Array = track.snap_hit
+	if hit.size() == 2 and String(hit[0]) == "stage":
+		select_path_key(-1.0)
+		if studio.stage != int(hit[1]) or not studio.at_key(): studio.set_stage(int(hit[1]))
+		return
+	seek(t)
+	select_path_key(float(hit[1]) if hit.size() == 2 else -1.0)
+
+## The selected path key (viewport tangent handles, the brighter timeline mark); -1 = none.
+func select_path_key(id: float) -> void:
+	var vi = studio.get("_view_input")
+	if vi != null and not is_equal_approx(vi.sel_key_t, id):
+		vi.sel_key_t = id; vi.queue_redraw()
+
+func selected_path_key() -> float:
+	var vi = studio.get("_view_input")
+	return float(vi.sel_key_t) if vi != null else -1.0
+
+## Fraction of the sequence at which path key `id` plays (through the speed ramp); -1 = unknown.
+func key_frac(id: float) -> float:
+	var ed = _ed()
+	if not motion() or not ed._timeline._configure(): return -1.0
+	var s = ed._timeline.sequence
+	if s.style >= 0: return -1.0
+	var dur: float = maxf(s.duration, 0.001)
+	if studio.is_lead_in(id): return s.time_of_lead(id - studio.LEAD_IN) / dur
+	return (s.prefix_seconds + s.time_of_progress(id)) / dur
+
+## Preview the moment a path key plays, and select it.
+func go_to_key(id: float) -> void:
+	var f := key_frac(id)
+	if f < 0.0: return
+	seek(f)
+	select_path_key(id)
+
+## Move path key `id` to fraction `frac` of the sequence (its time, through the speed ramp). A
+## lead-in key stays on the lead-in, a swing key on its side of Contact. One undo step per drag
+## (`done` ends it). Returns the key's new id.
+var _key_txn := false
+func move_key(id: float, frac: float, done: bool) -> float:
+	var ed = _ed()
+	if not motion() or not ed._timeline._configure() or not studio.path_keys_supported(): return id
+	var s = ed._timeline.sequence
+	var t: float = clampf(frac, 0.0, 1.0) * maxf(s.duration, 0.001)
+	var nid: float
+	if studio.is_lead_in(id):
+		nid = studio.LEAD_IN + clampf(s.lead_progress(clampf(t, 0.0, s.prefix_seconds)), 0.03, 0.97)
+	else:
+		var p: float = s.progress_at(t - s.prefix_seconds)
+		nid = clampf(p, 0.02, 0.48) if id < 0.5 else clampf(p, 0.52, 0.98)
+	if not _key_txn:
+		studio.stop_drag()
+		studio.begin_edit("key time"); _key_txn = true
+	if absf(nid - id) > 0.0005:
+		var keys: Array = studio.path_keys()
+		for k in keys: if absf(float(k[0]) - id) < 0.001: k[0] = nid
+		studio.set_path_keys(keys)
+	else: nid = id
+	if done:
+		_key_txn = false
+		studio.end_edit()
+	select_path_key(nid)
+	update_marks()
+	return nid
+
 ## One 30 Hz game tick along the real-time sequence.
 func step(dir: int) -> void:
 	var ed = _ed()
@@ -245,14 +326,27 @@ func update_marks() -> void:
 	if studio: _relabel()
 	var act := _is_action()
 	scrubber.marks_draggable = act or _stroke_marks_draggable()
-	scrubber.fixed_marks = [] if act else [0]
+	scrubber.fixed_marks = _fixed_marks()
 	if speed_graph: speed_graph.update_spans()
 	if not motion() or not ed._timeline._configure():
+		scrubber.key_marks = []
 		scrubber.set_marks([], 0.0); return
 	var s = ed._timeline.sequence
 	var dur: float = maxf(s.duration, 0.001)
+	var km: Array = []
+	if studio.path_keys_supported() and s.style < 0:
+		for k in studio.path_keys():
+			var id := float(k[0])
+			km.append([(s.time_of_lead(id - studio.LEAD_IN) if studio.is_lead_in(id) else s.prefix_seconds + s.time_of_progress(id)) / dur, id])
+	scrubber.key_marks = km
 	scrubber.set_marks([s.prefix_seconds / dur, (s.prefix_seconds + s.release_seconds) / dur,
 		(s.prefix_seconds + s.stroke_seconds) / dur], s.duration)
+
+## Marks a press cannot drag (it scrubs / snaps there instead): the stroke Wind-up always, and
+## Contact / Finish while their times are locked (gameplay timing: Gameplay edit off, the phone).
+func _fixed_marks() -> Array:
+	if _is_action(): return []
+	return [0, 1, 2] if studio.gameplay_locked("ft_duration_strike") else [0]
 
 ## Called every frame by the studio: only writes what changed.
 func refresh() -> void:
@@ -272,7 +366,19 @@ func refresh() -> void:
 	for b in speed_buttons:
 		if b.disabled == has: b.disabled = not has
 	if scrubber.editable != has: scrubber.editable = has
+	if keys_toggle:
+		var ks: String = studio.keys_play_state() if ed != null else ""
+		var on: bool = ks == "on" or ks == "always"
+		if keys_toggle.button_pressed != on: keys_toggle.set_pressed_no_signal(on)
+		var dis: bool = ks == "" or ks == "always"
+		if keys_toggle.disabled != dis: keys_toggle.disabled = dis; keys_bake.disabled = dis
 	if ed == null: return
+	var fm := _fixed_marks()
+	if scrubber.fixed_marks != fm: scrubber.fixed_marks = fm
+	var at: int = int(ed._stage) if has and studio.at_key() else -1
+	var sk := selected_path_key()
+	if scrubber.at_stage != at or not is_equal_approx(scrubber.sel_key, sk):
+		scrubber.at_stage = at; scrubber.sel_key = sk; scrubber.queue_redraw()
 	if _was_playing != int(playing):
 		_was_playing = int(playing)
 		play_button.icon = Theme_.icon("pause" if playing else "play")
@@ -294,7 +400,8 @@ func refresh() -> void:
 		if code != _last_code:
 			_last_code = code; _last_t = -1.0
 			_sync = true
-			scrubber.set_value_no_signal(0.0); scrubber.phase = ""; scrubber.queue_redraw()
+			scrubber.set_value_no_signal(float(scrubber.marks[ed._stage]) if has and int(ed._stage) < scrubber.marks.size() else 0.0)
+			scrubber.phase = ""; scrubber.queue_redraw()
 			_sync = false
 			time_label.text = ("Key: " + String(_names[ed._stage])) if has else ("Body stance (one key)" if ed._base else "Static pose")
 
@@ -313,15 +420,18 @@ func state() -> Dictionary:
 	return {"playing": ed != null and ed._playing, "loop": loop, "speed": SPEEDS[speed_index],
 		"variant": ed._variant_mode if ed else 0, "active": tl != null and tl.active,
 		"t": (tl.elapsed / maxf(tl.sequence.duration, 0.001)) if tl and tl.active else 0.0,
-		"seconds": tl.elapsed if tl and tl.active else 0.0, "marks": scrubber.marks,
+		"seconds": tl.elapsed if tl and tl.active else 0.0, "marks": scrubber.marks, "key_marks": scrubber.key_marks, "at_stage": scrubber.at_stage, "sel_key": scrubber.sel_key, "scrub_size": [scrubber.size.x, scrubber.size.y], "keys_play": studio.keys_play_state() if studio else "",
 		"speed_graph": speed_graph.state() if speed_graph else {}}
 
 ## Scrub track: a Range (0..1) drawn as a rail with stage markers, progress and a playhead.
 ## Click or drag anywhere on it to scrub. 28 pt tall.
 class ScrubTrack extends Range:
 	signal mark_moved(index: int, frac: float, done: bool)
+	signal key_tapped(id: float)
 	const H := 28.0
 	const MARK_GRAB := 7.0        # points: a press this close to a mark drags the mark (ball actions)
+	const SNAP := 9.0             # points: a scrub this close to a key lands on it (and selects it)
+	const KEY_COLOR := Color("ff8fb1")
 	var editable := true
 	var marks_draggable := false
 	var _mark := -1
@@ -330,6 +440,16 @@ class ScrubTrack extends Range:
 	var duration := 0.0
 	var phase := ""
 	var _drag := false
+	## Path keys (pink): [[fraction of the sequence, key id]] (id = the studio's key progress,
+	## LEAD_IN + v on the Ready -> Wind-up lead-in). Drag one to move its key in time.
+	var key_marks: Array = []
+	var sel_key := -1.0           # the selected path key (drawn brighter)
+	var at_stage := -1            # the key being edited (the playhead parks on its mark); -1 = scrubbing
+	var touch_k := 1.0            # grab / snap distances scale (phone)
+	var snap_hit: Array = []      # after a scrub: ["stage", i] / ["key", id] when it landed on a key, else []
+	var key_mover: Callable       # (id, frac, done) -> new id: moves a path key in time
+	var _kmark := -1.0
+	var _kmoved := false
 
 	func _init() -> void:
 		min_value = 0.0; max_value = 1.0; step = 0.0001
@@ -352,32 +472,65 @@ class ScrubTrack extends Range:
 				mark_moved.emit(_mark, _frac(e.position.x), not e.pressed)
 				if not e.pressed: _mark = -1
 				accept_event(); return
+			if e.pressed:
+				_kmark = _key_at(e.position.x); _kmoved = false
+			if _kmark >= 0.0:   # a path key's mark: drag = move the key in time, tap = go to it
+				if not e.pressed:
+					if _kmoved and key_mover.is_valid(): key_mover.call(_kmark, _frac(e.position.x), true)
+					else: key_tapped.emit(_kmark)
+					_kmark = -1.0
+				accept_event(); return
 			_drag = e.pressed
 			if e.pressed: _set_from(e.position.x)
 			accept_event()
 		elif e is InputEventMouseMotion and _mark >= 0:
 			mark_moved.emit(_mark, _frac(e.position.x), false)
 			accept_event()
+		elif e is InputEventMouseMotion and _kmark >= 0.0:
+			_kmoved = true
+			if key_mover.is_valid(): _kmark = float(key_mover.call(_kmark, _frac(e.position.x), false))
+			accept_event()
 		elif e is InputEventMouseMotion and _drag:
 			_set_from(e.position.x)
 			accept_event()
 		elif e is InputEventMouseMotion:
-			mouse_default_cursor_shape = Control.CURSOR_HSIZE if marks_draggable and _mark_at(e.position.x) >= 0 else Control.CURSOR_POINTING_HAND
+			mouse_default_cursor_shape = Control.CURSOR_HSIZE if (marks_draggable and _mark_at(e.position.x) >= 0) or _key_at(e.position.x) >= 0.0 else Control.CURSOR_POINTING_HAND
 
 	func _frac(px: float) -> float:
 		return clampf((px - 8.0) / maxf(size.x - 16.0, 1.0), 0.0, 1.0)
 
 	func _mark_at(px: float) -> int:
 		var best := -1
-		var bd := MARK_GRAB
+		var bd := MARK_GRAB * touch_k
 		for i in mini(3, marks.size()):
 			if i in fixed_marks: continue
 			var d := absf(_x(float(marks[i])) - px)
 			if d <= bd: bd = d; best = i
 		return best
 
+	## Path key mark under px: its id, -1 = none.
+	func _key_at(px: float) -> float:
+		var best := -1.0
+		var bd := MARK_GRAB * touch_k
+		for k in key_marks:
+			var d := absf(_x(float(k[0])) - px)
+			if d <= bd: bd = d; best = float(k[1])
+		return best
+
+	## Scrub to px, landing on a key when close (W / C / F first, then path keys).
 	func _set_from(px: float) -> void:
-		value = clampf((px - 8.0) / maxf(size.x - 16.0, 1.0), 0.0, 1.0)
+		var v := clampf((px - 8.0) / maxf(size.x - 16.0, 1.0), 0.0, 1.0)
+		snap_hit = []
+		var bd := SNAP * touch_k
+		for i in mini(3, marks.size()):
+			var d := absf(_x(float(marks[i])) - px)
+			if d <= bd: bd = d; v = float(marks[i]); snap_hit = ["stage", i]
+		if snap_hit.is_empty():
+			for k in key_marks:
+				var d := absf(_x(float(k[0])) - px)
+				if d <= bd: bd = d; v = float(k[0]); snap_hit = ["key", float(k[1])]
+		if is_equal_approx(value, v): value_changed.emit(v)   # the same spot can still change what is selected
+		else: value = v
 		queue_redraw()
 
 	func _draw() -> void:
@@ -386,16 +539,23 @@ class ScrubTrack extends Range:
 		draw_rect(Rect2(Vector2.ZERO, size), Color("0d1f2b"))
 		draw_rect(rail, Color("23404f"))
 		var dim := 1.0 if editable else 0.35
-		if editable and value > 0.0:
-			draw_rect(Rect2(rail.position, Vector2(_x(value) - 8.0, rail.size.y)), Color(0.52, 0.81, 1.0, 0.45))
+		var head: float = float(marks[at_stage]) if at_stage >= 0 and at_stage < marks.size() else value
+		if editable and head > 0.0:
+			draw_rect(Rect2(rail.position, Vector2(_x(head) - 8.0, rail.size.y)), Color(0.52, 0.81, 1.0, 0.45))
 		var cols := [Color("bd80ff"), Color("ffdc62"), Color("58dfdb")]
 		for i in mini(3, marks.size()):
 			var x := _x(float(marks[i]))
 			var c: Color = cols[i]; c.a = dim
-			draw_line(Vector2(x, 4.0), Vector2(x, size.y - 4.0), c, 2.0)
+			draw_line(Vector2(x, 4.0), Vector2(x, size.y - 4.0), c, 4.0 if i == at_stage else 2.0)
 			draw_colored_polygon(PackedVector2Array([Vector2(x - 4.0, 2.0), Vector2(x + 4.0, 2.0), Vector2(x, 7.0)]), c)
-		if editable and (value > 0.0 or not phase.is_empty()):
-			var px := _x(value)
+		for k in key_marks:   # path keys: small pink squares on the rail
+			var x := _x(float(k[0]))
+			var on: bool = absf(float(k[1]) - sel_key) < 0.001 or absf(float(k[1]) - _kmark) < 0.001
+			var r := (5.0 if on else 3.5) * maxf(1.0, touch_k * 0.7)
+			draw_rect(Rect2(x - r - 1.5, y - r - 1.5, (r + 1.5) * 2.0, (r + 1.5) * 2.0), Color("0d1f2b"))
+			draw_rect(Rect2(x - r, y - r, r * 2.0, r * 2.0), Color("eef5fa") if on else Color(KEY_COLOR, dim))
+		if editable and (at_stage >= 0 or value > 0.0 or not phase.is_empty()):
+			var px := _x(head)
 			draw_line(Vector2(px, 2.0), Vector2(px, size.y - 2.0), Color("eef5fa"), 2.0)
 			draw_circle(Vector2(px, y), 5.0, Color("eef5fa"))
 		if phase != "":

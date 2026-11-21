@@ -15,12 +15,14 @@ signal pose_saved(key, version)
 signal pose_reloaded(key)
 ## Phone mode: an AutoPose drag released without moving (a tap on the ring).
 signal handle_tapped(id)
+signal notice(text)   # a short message for the user (the phone shows a toast; the desktop its status line)
 
 const Ui = preload("res://scripts/ui/game_ui_theme.gd")
 const Fields = preload("res://scripts/ui/mobile_pose_fields.gd")
 const Path = preload("res://scripts/stroke_swing_path.gd")
 const SpeedRamp = preload("res://scripts/stroke_speed_ramp.gd")
 const ReadyCurve = preload("res://scripts/ready_windup_curve.gd")
+const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Store = preload("res://scripts/mobile_pose_store.gd")
 const ViewSettings = preload("res://scripts/mobile_pose_view_settings.gd")
 const PoseDiff = preload("res://scripts/studio/pose_diff_util.gd")
@@ -1418,6 +1420,58 @@ func _quit_save_all() -> void:
 func _set_status(t: String) -> void:
 	if _status: _status.text = t
 
+## A message the user must see wherever they are (status line and the phone's toast).
+func notify(t: String) -> void:
+	_set_status(t)
+	notice.emit(t)
+
+# ---------------------------------------------------------------- "my keys play"
+## How this stroke's Wind-up / Finish keys reach play (drive_serve_motion.gd):
+##   "always"  the game plays the authored keys anyway (two-hand backhands, strokes without a drive build)
+##   "on"      play_authored_keys: the whole authored pose plays
+##   "off"     the game builds the Wind-up / Finish body; only the paddle position of the keys plays
+##   ""        not a stroke
+func keys_play_state() -> String:
+	if not path_keys_supported(): return ""
+	var c: PostureDefinition = engine._current
+	if c.play_authored_keys == 1: return "on"
+	if c.family == 1 and c.left_hand_mode == 1: return "always"
+	if Motion.motion_kind(c, 1.0) == "DRIVE" and is_zero_approx(Motion.drive_strength(c, 1.0)): return "always"
+	return "off"
+
+## mode "on" / "off": the switch alone (the keys as they are). "bake": first copy the Wind-up and
+## Finish the game builds now into the keys, then switch on, so play looks the same until an edit.
+## One undo step.
+func set_keys_play(mode: String) -> Dictionary:
+	if not path_keys_supported(): return {"ok": false, "error": "strokes only"}
+	if _txn != null: end_edit()
+	stop_drag()
+	if mode == "bake":
+		var st: int = stage
+		begin_edit("my keys play")
+		engine._copies[_copy_key(key)] = Motion.baked_keys(engine._current)
+		_reselect(st)
+		_update_dirty_flag()
+		end_edit()
+		notify("Wind-up and Finish keys now hold the game's poses, and they are what plays. Pose them freely.")
+		return {"ok": true, "state": keys_play_state()}
+	var r: Dictionary = set_field("play_authored_keys", null, 1 if mode == "on" else 0, true)
+	if r.get("ok", false):
+		notify("Your Wind-up and Finish keys now play (whole pose)." if mode == "on" else "Wind-up and Finish bodies are built by the game again (your keys are kept).")
+	r["state"] = keys_play_state()
+	return r
+
+## The key (0 Wind-up, 1 Contact, 2 Finish) nearest in time to where the timeline is.
+func nearest_key_stage() -> int:
+	if not _ok() or not engine._has_motion(): return 1
+	var tl = engine._timeline
+	if not tl.active or not tl._configure(): return stage
+	var s = tl.sequence
+	var times := [s.prefix_seconds, s.prefix_seconds + s.release_seconds, s.prefix_seconds + s.stroke_seconds]
+	var best := 0
+	for i in 3: if absf(times[i] - tl.elapsed) < absf(times[best] - tl.elapsed): best = i
+	return best
+
 func _update_joint_label() -> void:
 	if preview == null: return
 	var id: String = preview.selected_joint
@@ -2547,7 +2601,7 @@ func ui_dump() -> Dictionary:
 			"autopose": _view_input.autopose_state() if _view_input else {}, "momentum": _view_input.arc_state() if _view_input else {}}
 	return {"ok": true, "ready": is_ready, "key": key, "stage": STAGES[stage], "dirty": _ok() and engine._dirty.has(engine._key),
 		"unsaved": unsaved_keys(), "quit_dialog": _quit_dlg != null and _quit_dlg.visible, "undo": _undo.size(), "redo": _redo.size(), "window": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
-		"preview": pv, "timeline": _timeline.state(), "phone_speed_graph": phone_ui._speed_graph.state() if phone and phone_ui and phone_ui._speed_graph else {}, "phone_layout": phone_ui.layout_state() if phone and phone_ui else {}, "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
+		"preview": pv, "timeline": _timeline.state(), "phone_speed_graph": phone_ui._speed_graph.state() if phone and phone_ui and phone_ui._speed_graph else {}, "phone_layout": phone_ui.layout_state() if phone and phone_ui else {}, "phone_scrub": {"size": [phone_ui._scrub.size.x, phone_ui._scrub.size.y], "info": phone_ui._tl_info.text, "key_marks": phone_ui._scrub.key_marks, "at_stage": phone_ui._scrub.at_stage, "marks": phone_ui._scrub.marks, "sel_path": phone_ui._sel_path} if phone and phone_ui else {}, "shortcuts": SHORTCUTS.map(func(s): return {"keys": s[0], "does": s[1], "id": s[2]}),
 		"controls": tree}
 
 func _dump(n: Node) -> Array:

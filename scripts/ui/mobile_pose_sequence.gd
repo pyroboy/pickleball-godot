@@ -87,6 +87,29 @@ func _bake_split() -> void:
 		_split_frames.append(split.sample())
 		t += SPLIT_STEP
 
+## Stroke progress (0 Wind-up .. 0.5 Contact .. 1 Finish) `t` seconds after the Wind-up, through
+## the stroke's timing (durations, ease, speed ramp). Plain strokes.
+func progress_at(t: float) -> float:
+	return clampf(float(Clock.state(source, clampf(t, 0.0, stroke_seconds), finish, ready).progress), 0.0, 1.0)
+
+## Seconds after the Wind-up at which the stroke reaches progress p (the inverse; monotone).
+func time_of_progress(p: float) -> float:
+	var lo := 0.0; var hi: float = stroke_seconds
+	for i in 24:
+		var mid := (lo + hi) * 0.5
+		if progress_at(mid) < p: lo = mid
+		else: hi = mid
+	return (lo + hi) * 0.5
+
+## Seconds of preparation at which the Ready -> Wind-up blend reaches v (inverse of lead_progress).
+func time_of_lead(v: float) -> float:
+	var lo := 0.0; var hi: float = Held.WINDUP_SECONDS
+	for i in 24:
+		var mid := (lo + hi) * 0.5
+		if lead_progress(mid) < v: lo = mid
+		else: hi = mid
+	return (lo + hi) * 0.5
+
 ## Ready -> Wind-up blend progress after `preparation_elapsed` seconds of preparation.
 func lead_progress(preparation_elapsed: float) -> float:
 	return Ramp.lead(source,preparation_elapsed/Held.WINDUP_SECONDS) if Ramp.custom(source,Ramp.LEAD) else smoothstep(0.0,Held.WINDUP_SECONDS,preparation_elapsed)
