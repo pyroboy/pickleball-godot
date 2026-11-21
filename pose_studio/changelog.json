@@ -1,6 +1,3572 @@
 {
  "versions": [
   {
+   "pose": "s08",
+   "n": 4,
+   "time": "2026-11-21T22:55:14",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.13",
+     "b": "0.155"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_pitch_signed_deg",
+     "a": "-12.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "35.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0, 0, 0)",
+     "b": "Vector3(0.5, -0.92, -0.45)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": null,
+     "b": "Vector3(-1.9371509e-09, 0.12, 8.34465e-09)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_rotation_deg",
+     "a": null,
+     "b": "Vector3(-138.74725, -45.7935, 136.3081)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": null,
+     "b": "Vector3(-0.68, 0.34000003, 0.62)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_rotation_deg",
+     "a": null,
+     "b": "Vector3(0.0, 0.0, -52.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "18.0",
+     "b": "-12.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.13",
+     "b": "0.0845"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-35.28",
+     "b": "23.4"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "12.0",
+     "b": "-14.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_pitch_deg",
+     "a": "3.0",
+     "b": "-9.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "19.0",
+     "b": "-10.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "-0.68",
+     "b": "0.72"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 4,
+   "time": "2026-11-21T22:55:13",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-42",
+     "b": "-18.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.5",
+     "b": "0.525"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "32.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_roll_signed_deg",
+     "a": "-35",
+     "b": "-45.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.9, 0.05)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "-20.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.6",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.2)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, -0.3, -0.25)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.05, 0.0, 0.1)",
+     "b": "Vector3(0.1476, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "15",
+     "b": "-18.0"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-20.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.9, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "10.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.8",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.1, 0, 0.25)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s18",
+   "n": 3,
+   "time": "2026-11-21T22:55:13",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "18",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.5",
+     "b": "0.525"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "-32.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "20",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0,0,-0.4)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(-0.04, -0.15, -0.25)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.12,0.1,0.02)",
+     "b": "Vector3(-0.1836, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-20",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "20.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-20",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.15,0,0.5)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s07",
+   "n": 4,
+   "time": "2026-11-21T22:55:12",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-42",
+     "b": "-18.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.385",
+     "b": "0.38"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "32.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_roll_signed_deg",
+     "a": "-35",
+     "b": "-20.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.6, 0.05)",
+     "b": "Vector3(0.06, -0.3, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "-20.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.1)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "70.3562965",
+     "b": "41.9858388"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, 0.08, -0.2)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.12, 0.28, 0.02)",
+     "b": "Vector3(0.0756, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "15",
+     "b": "-18.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.315",
+     "b": "0.355"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-20.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_roll_signed_deg",
+     "a": "-45",
+     "b": "-20.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.6, 0.2)",
+     "b": "Vector3(0.06, -0.3, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "10.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.1, 0, 0.1)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "45.8381269",
+     "b": "41.9858388"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s06",
+   "n": 4,
+   "time": "2026-11-21T22:55:12",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "10",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.26",
+     "b": "0.255"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "0.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "5",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.12)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0, 0.06, -0.12)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0, 0.12, 0.08)",
+     "b": "Vector3(0.0, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-8",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.19",
+     "b": "0.23"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "0.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-5",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, 0.04)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "32.6911671",
+     "b": "-8.40205646"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s17",
+   "n": 3,
+   "time": "2026-11-21T22:55:11",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-42",
+     "b": "-30.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.445"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "32.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_roll_signed_deg",
+     "a": "-35",
+     "b": "-45.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.9, 0.05)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "-20.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.6",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.2)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, -0.3, -0.25)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.05, 0.0, 0.1)",
+     "b": "Vector3(0.15066, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "15",
+     "b": "-30.0"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-20.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.9, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "10.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.8",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.1, 0, 0.12)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s05",
+   "n": 4,
+   "time": "2026-11-21T22:55:11",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "18",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.4",
+     "b": "0.385"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "-32.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "20",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0,0,-0.2)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "16.1072714",
+     "b": "-13.7852248"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(-0.04, 0.08, -0.2)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.12, 0.28, 0.02)",
+     "b": "Vector3(-0.074775815, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-20",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.32",
+     "b": "0.36"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "20.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-20",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.1,0,0.1)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "-21.1683767",
+     "b": "-13.7852248"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s16",
+   "n": 3,
+   "time": "2026-11-21T22:55:10",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "18",
+     "b": "30.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.36",
+     "b": "0.385"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "-32.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "20",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0,0,-0.4)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(-0.04, -0.15, -0.25)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.12,0.1,0.02)",
+     "b": "Vector3(-0.18405, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-20",
+     "b": "30.0"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "20.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-20",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.15,0,0.6)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s15",
+   "n": 4,
+   "time": "2026-11-21T22:55:09",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "10",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.13",
+     "b": "0.125"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "0.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "5",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.12)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0, 0.06, -0.12)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0, 0.1, 0.08)",
+     "b": "Vector3(0.0, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-8",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.06",
+     "b": "0.1"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "0.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-5",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, 0.04)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s14",
+   "n": 4,
+   "time": "2026-11-21T22:55:09",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-42",
+     "b": "-18.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.13",
+     "b": "0.125"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "32.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_roll_signed_deg",
+     "a": "-35",
+     "b": "-20.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-10.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(-0.1, -0.9, 0.05)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "-20.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.45",
+     "b": "-0.1"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.1)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "34.8642054",
+     "b": "115.2226958"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.04, -0.12, -0.2)",
+     "b": "Vector3(0.0, -0.065, -0.13)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.12, 0.12, 0.02)",
+     "b": "Vector3(0.08417532, 0.13, 0.052)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "15",
+     "b": "-18.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.06",
+     "b": "0.1"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-20.0",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_roll_signed_deg",
+     "a": "-45",
+     "b": "-20.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "8.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.1, -0.9, 0.2)",
+     "b": "Vector3(0.06, -0.6, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "10.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "10",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.65",
+     "b": "0.18"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.1, 0, 0.1)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "70.0496551",
+     "b": "115.2226958"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s13",
+   "n": 4,
+   "time": "2026-11-21T22:55:08",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "15",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.3",
+     "b": "0.099446124"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "10",
+     "b": "-2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "20",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0,0,-0.2)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "-20.0441788",
+     "b": "-33.0638427"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.1, -0.12, -0.45)",
+     "b": "Vector3(0.0, -0.0325, -0.065)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.3, 0.1, 0.08)",
+     "b": "Vector3(0.0, 0.065, 0.026)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-20",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.22",
+     "b": "0.074446124"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-20",
+     "b": "-2.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.5, 0.1)",
+     "b": "Vector3(0.47, -0.45, -0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.1,0,0.15)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "-4.08706482",
+     "b": "-33.0638427"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s04",
+   "n": 4,
+   "time": "2026-11-21T22:55:08",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "30",
+     "b": "15.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.18",
+     "b": "0.09"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "20",
+     "b": "8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.05, 0.75, -0.3)",
+     "b": "Vector3(-0.1, 0.6, -0.4)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.55, 0.6, -0.15)",
+     "b": "Vector3(0.35, 0.9, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "-10.0",
+     "b": "-22.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "25",
+     "b": "14.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.6",
+     "b": "-0.5"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.15)",
+     "b": "Vector3(0.0, 0.05, 0.08)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.24, -0.60, -0.88)",
+     "b": "Vector3(0.57, -0.56, -0.65)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_rotation_deg",
+     "a": "Vector3(-20, 0, 15)",
+     "b": "Vector3(-128.67682, -74.20677, 108.018135)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.53, -1.57, 0.1)",
+     "b": "Vector3(-0.23, -1.35, 0.09)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-25",
+     "b": "-9.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.15",
+     "b": "0.06"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-25",
+     "b": "-10.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.25, -0.05, 0)",
+     "b": "Vector3(-0.06, -0.02, -0.3)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.2, 0.3)",
+     "b": "Vector3(0.35, 0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.8",
+     "b": "0.55"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.1, 0, 0.08)",
+     "b": "Vector3(0.0, 0.05, 0.08)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "-33.6825622",
+     "b": "-36.00428695"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s03",
+   "n": 4,
+   "time": "2026-11-21T22:55:07",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "30",
+     "b": "15.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.18",
+     "b": "0.09"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "20",
+     "b": "8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.05, 0.75, -0.3)",
+     "b": "Vector3(-0.1, 0.6, -0.4)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.55, 0.6, -0.15)",
+     "b": "Vector3(0.35, 0.9, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "-10.0",
+     "b": "-22.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "25",
+     "b": "14.0"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "-0.6",
+     "b": "-0.5"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.15)",
+     "b": "Vector3(0.0, 0.0, 0.08)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "-25.44876575",
+     "b": "-31.3331001"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.12, 0.08, -1.28)",
+     "b": "Vector3(0.45, 0.34, -1.05)"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_rotation_deg",
+     "a": "Vector3(-20, 0, 15)",
+     "b": "Vector3(-128.67682, -74.20677, 108.018135)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-0.65, -0.67, -0.25)",
+     "b": "Vector3(-0.35, -0.45, -0.31)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-25",
+     "b": "-9.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.15",
+     "b": "0.06"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-25",
+     "b": "-10.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.25, -0.05, 0)",
+     "b": "Vector3(-0.06, -0.02, -0.3)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.3, -0.2, 0.3)",
+     "b": "Vector3(0.35, 0.9, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-15",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.8",
+     "b": "0.55"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(-0.1, 0, 0.08)",
+     "b": "Vector3(0.0, 0.0, 0.08)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "-31.84305567",
+     "b": "-31.3331001"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
+   "pose": "s10",
+   "n": 4,
+   "time": "2026-11-21T22:55:06",
+   "author": "claude",
+   "message": "Keys hold the game's Wind-up and Finish poses (keys now play by default)",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.445"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_pitch_signed_deg",
+     "a": "5.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_yaw_signed_deg",
+     "a": "22.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.25, -0.55, 0.0)",
+     "b": "Vector3(0.25, -0.47000003, 0.1)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_yaw_deg",
+     "a": "20.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "windup",
+     "field": "spine_curve_deg",
+     "a": "-10.899999999999999",
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, -0.18)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "42.42898144",
+     "b": "-6.16647194"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "windup",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_rotation_deg",
+     "a": "Vector3(82.5, -113, -50.900001525878906)",
+     "b": "Vector3(-109.34857, -69.409325, 33.5664)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(-1.514, -0.25, 0.2857)",
+     "b": "Vector3(-1.514, -0.25, 0.28570002)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_rotation_deg",
+     "a": "Vector3(0, 0, -152)",
+     "b": "Vector3(0.0, 0.0, -101.9)"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.273"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_yaw_signed_deg",
+     "a": "-18.0",
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.48, -0.35, -0.22)",
+     "b": "Vector3(0.25, -0.55, 0.05)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_yaw_deg",
+     "a": "-10.0",
+     "b": "5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_pitch_deg",
+     "a": "18",
+     "b": "6.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0, 0, 0.22)",
+     "b": "Vector3(0.0, 0.0, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "-84.3471194",
+     "b": "-6.16647194"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_pitch_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "main_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "paddle_in_hand_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_rotation_deg",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_slide_m",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_index_closure",
+     "a": null,
+     "b": "1.0"
+    },
+    {
+     "stage": "finish",
+     "field": "support_grip_style",
+     "a": null,
+     "b": "0.0"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_swivel_deg",
+     "a": null,
+     "b": "0.0"
+    }
+   ]
+  },
+  {
    "pose": "s00",
    "n": 5,
    "time": "2026-11-21T21:24:41",

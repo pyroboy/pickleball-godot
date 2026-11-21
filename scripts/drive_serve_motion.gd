@@ -56,7 +56,7 @@ static func drive_definition(base: PostureDefinition, charge: float, is_volley: 
 
 	var compact: PostureDefinition = _compact_or_overhead_definition(base, minf(charge, 0.58), is_volley, near_kitchen, shot_intent)
 	var ends: Array = _drive_endpoints(base, def, compact, strength, spin_mode)
-	if base.play_authored_keys == 1:
+	if base.game_built_keys != 1:
 		# "My keys play" (Pose Studio, per stroke): the game's own power scaling above, plus how far
 		# the authored Wind-up / Finish keys are from the game's full-power poses, scaled by
 		# strength. Unedited (baked_keys) that difference is zero at every power; at full power the
@@ -135,7 +135,7 @@ static func _add_pose_delta(pose: PostureDefinition, a: PostureDefinition, b: Po
 	if _delta_fields.is_empty():
 		for prop in pose.get_property_list():
 			if not (int(prop.usage) & PROPERTY_USAGE_SCRIPT_VARIABLE): continue
-			if prop.type in [TYPE_FLOAT, TYPE_VECTOR3, TYPE_INT, TYPE_BOOL] and not String(prop.name) in ["posture_id", "play_authored_keys", "schema_version"]:
+			if prop.type in [TYPE_FLOAT, TYPE_VECTOR3, TYPE_INT, TYPE_BOOL] and not String(prop.name) in ["posture_id", "play_authored_keys", "game_built_keys", "schema_version"]:
 				_delta_fields.append([String(prop.name), int(prop.type), String(prop.name).ends_with("_deg")])
 	for f in _delta_fields:
 		var va = a.get(f[0]); var vb = b.get(f[0])
@@ -164,11 +164,11 @@ static func _authored_windup(base: PostureDefinition) -> PostureDefinition:
 	return windup
 
 ## A copy of `base` whose authored Wind-up / Finish keys are the ones the game builds for its
-## full-charge drive, with play_authored_keys on: it plays exactly as `base` did (game-built),
+## full-charge drive, and "my keys play" on (game_built_keys 0): it plays exactly as the game-built
 ## and from then on the keys are what plays. Pose Studio "My keys play".
 static func baked_keys(base: PostureDefinition) -> PostureDefinition:
 	var off: PostureDefinition = base.duplicate(true)
-	off.play_authored_keys = 0
+	off.game_built_keys = 1
 	var built: PostureDefinition = drive_definition(off, 1.0)
 	var out: PostureDefinition = base.duplicate(true)
 	# The Wind-up as it plays: with the load turn of the paddle face the game adds there.
@@ -176,7 +176,7 @@ static func baked_keys(base: PostureDefinition) -> PostureDefinition:
 	Preparation.turn_shaft(windup, _windup_load_turn(off))
 	_write_endpoint(out, windup, true)
 	_write_endpoint(out, Path.endpoint(built, 2), false)
-	out.play_authored_keys = 1
+	out.game_built_keys = 0
 	return out
 
 ## Paddle position (forehand, y, forward muls) of the pose's authored Wind-up (stage 0) or Finish
@@ -312,7 +312,7 @@ static func _compact_or_overhead_definition(base: PostureDefinition, charge: flo
 	# "My keys play" on a stroke whose own swing is this compact / overhead motion (low and
 	# mid-low strokes, overheads): its authored Wind-up / Finish keys, in that same plain context.
 	# Volleys, drops and kitchen play keep the built motion (the keys were not posed for them).
-	if base.play_authored_keys == 1 and not near_kitchen and kind == motion_kind(base, 1.0):
+	if base.game_built_keys != 1 and not near_kitchen and kind == motion_kind(base, 1.0):
 		_write_endpoint(def, _authored_windup(base), true)
 		return def
 	var windup: PostureDefinition = base.lerp_with(base, 0.0)

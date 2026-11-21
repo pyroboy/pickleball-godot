@@ -525,7 +525,7 @@ func _begin_ap(h: String, e: InputEventMouseButton) -> void:
 	# A Wind-up / Finish pose the game rebuilds would not show in play: say so once per pose.
 	if studio.stage != 1 and studio.keys_play_state() == "off" and _warned_keys != studio.key:
 		_warned_keys = studio.key
-		studio.notify("This stroke's %s body is built by the game: your pose will not play yet. Turn on My keys play (Swing)." % ("Wind-up" if studio.stage == 0 else "Finish"))
+		studio.notify("This stroke's %s body is built by the game: your pose will not play. Swing → Play my keys." % ("Wind-up" if studio.stage == 0 else "Finish"))
 	preview.cancel_gesture()
 	var w: Vector3 = b.get("handle_start", Vector3.INF)
 	if not w.is_finite():

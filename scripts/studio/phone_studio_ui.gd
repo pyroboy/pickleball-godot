@@ -685,7 +685,7 @@ func _auto_tangent() -> void:
 ## The two buttons under "Wind-up & Finish" (their meaning follows the stroke's state).
 func _keys_action(i: int) -> void:
 	var state: String = studio.keys_play_state()
-	var r: Dictionary = studio.set_keys_play(("bake" if i == 0 else "on") if state == "off" else ("off" if i == 0 else "bake"))
+	var r: Dictionary = studio.set_keys_play("bake" if i == 1 else ("on" if state == "off" else "off"))
 	if not r.get("ok", false): _show_toast(String(r.get("error", "Cannot change it here")))
 	_refresh_swing()
 
@@ -726,14 +726,14 @@ func _refresh_swing() -> void:
 	_keys_a.visible = state == "off" or state == "on"; _keys_b.visible = _keys_a.visible
 	match state:
 		"off":
-			_keys_info.text = "Wind-up & Finish: the game builds the body, only your keys' paddle position plays. Posing joints there will not show."
-			_keys_a.text = "My keys play"; _keys_b.text = "…as I posed them"
+			_keys_info.text = "Wind-up & Finish: game-built. Only your keys' paddle position plays, so the keys you see are not what plays."
+			_keys_a.text = "Play my keys"; _keys_b.text = "Copy game pose to keys"
 		"on":
-			_keys_info.text = "Wind-up & Finish: your keys play (whole pose)."
-			_keys_a.text = "Back to game-built"; _keys_b.text = "Reset keys to game pose"
+			_keys_info.text = "Wind-up & Finish: your keys play, whole pose and paddle rotation."
+			_keys_a.text = "Use game-built instead"; _keys_b.text = "Copy game pose to keys"
 		"always": _keys_info.text = "Wind-up & Finish: your keys play for this stroke."
 		_: _keys_info.text = ""
-	_tint(_keys_a, state == "off")
+	_tint(_keys_a, state == "off")   # lit while the keys are NOT what plays: one tap fixes it
 	_key_time_row.visible = sel
 	if sel:
 		var f: float = studio._timeline.key_frac(_sel_path)
@@ -942,7 +942,7 @@ func _timeline_info(st: Dictionary) -> String:
 	if bool(st.get("playing", false)): return "Playing"
 	if studio.at_key():
 		var name: String = ["Wind-up", "Contact", "Finish"][studio.stage]
-		if studio.stage != 1 and studio.keys_play_state() == "off": return "%s key · body is game-built: Swing → My keys play" % name
+		if studio.stage != 1 and studio.keys_play_state() == "off": return "%s key · game-built, not this key: Swing → Play my keys" % name
 		return "%s key · drag rings to pose it" % name
 	if sk >= 0.0: return "Path key · drag its pink mark to move it in time"
 	return "Preview %.2f s · slide to W, C or F to pose" % float(st.get("seconds", 0.0))

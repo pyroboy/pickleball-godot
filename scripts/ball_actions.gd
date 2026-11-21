@@ -43,7 +43,7 @@ const EPS := 1e-4                                 # smaller changes are file rou
 const HAND := "left_hand_offset"
 ## Not part of the delta: stroke-only data (folded into the endpoints or unused between points).
 const SKIP_PREFIX := ["charge_", "ft_", "zone_", "ready_curve_", "ready_path_", "speed_"]
-const SKIP := ["play_authored_keys", "bend_time", "lift_time", "windup_time", "release_time", "follow_time", "swing_path_blend",
+const SKIP := ["play_authored_keys", "game_built_keys", "bend_time", "lift_time", "windup_time", "release_time", "follow_time", "swing_path_blend",
 	"paddle_floor_clearance", "stroke_overlay_mix", "transition_pose_blend"]
 
 static var _defs := {}

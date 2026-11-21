@@ -1428,37 +1428,39 @@ func notify(t: String) -> void:
 
 # ---------------------------------------------------------------- "my keys play"
 ## How this stroke's Wind-up / Finish keys reach play (drive_serve_motion.gd):
-##   "always"  the game plays the authored keys anyway (two-hand backhands, strokes without a drive build)
-##   "on"      play_authored_keys: the whole authored pose plays
-##   "off"     the game builds the Wind-up / Finish body; only the paddle position of the keys plays
+##   "on"      the whole authored pose plays (the default: the editor's keys are what plays)
+##   "always"  switched to game-built, but the game plays this stroke's keys anyway (two-hand
+##             backhands, strokes without a drive build)
+##   "off"     game_built_keys: the game builds the Wind-up / Finish body, only the paddle
+##             position of the keys plays
 ##   ""        not a stroke
 func keys_play_state() -> String:
 	if not path_keys_supported(): return ""
 	var c: PostureDefinition = engine._current
-	if c.play_authored_keys == 1: return "on"
+	if c.game_built_keys != 1: return "on"
 	if c.family == 1 and c.left_hand_mode == 1: return "always"
 	if Motion.motion_kind(c, 1.0) == "DRIVE" and is_zero_approx(Motion.drive_strength(c, 1.0)): return "always"
 	return "off"
 
-## mode "on" / "off": the switch alone (the keys as they are). "bake": first copy the Wind-up and
-## Finish the game builds now into the keys, then switch on, so play looks the same until an edit.
-## One undo step.
+## mode "on" / "off": the switch alone (the keys as they are). "bake": copy the Wind-up and Finish
+## the game builds into the keys and switch on, so play looks as the game-built swing until an
+## edit. One undo step.
 func set_keys_play(mode: String) -> Dictionary:
 	if not path_keys_supported(): return {"ok": false, "error": "strokes only"}
 	if _txn != null: end_edit()
 	stop_drag()
 	if mode == "bake":
 		var st: int = stage
-		begin_edit("my keys play")
+		begin_edit("game pose to keys")
 		engine._copies[_copy_key(key)] = Motion.baked_keys(engine._current)
 		_reselect(st)
 		_update_dirty_flag()
 		end_edit()
-		notify("Wind-up and Finish keys now hold the game's poses, and they are what plays. Pose them freely.")
+		notify("Wind-up and Finish keys now hold the game's own poses, and they are what plays. Pose them freely.")
 		return {"ok": true, "state": keys_play_state()}
-	var r: Dictionary = set_field("play_authored_keys", null, 1 if mode == "on" else 0, true)
+	var r: Dictionary = set_field("game_built_keys", null, 0 if mode == "on" else 1, true)
 	if r.get("ok", false):
-		notify("Your Wind-up and Finish keys now play (whole pose)." if mode == "on" else "Wind-up and Finish bodies are built by the game again (your keys are kept).")
+		notify("Your Wind-up and Finish keys play (whole pose)." if mode == "on" else "Wind-up and Finish bodies are built by the game (your keys are kept, but only their paddle position plays).")
 	r["state"] = keys_play_state()
 	return r
 
