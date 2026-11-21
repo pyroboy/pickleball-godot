@@ -269,6 +269,7 @@ func _dispatch(req: Dictionary) -> Dictionary:
 		elif what == "release": _studio.hold_release()
 		else: _studio.set_hold(float(req.get("seconds", 0.6)))
 		var sq = _studio.engine._timeline.sequence if _studio.engine._timeline._configure() else null
+		if sq and sq.has_method("ensure_swing"): sq.ensure_swing()
 		return {"ok": true, "hold": _studio.hold_seconds, "holding": _studio.holding, "status": _studio.hold_status(),
 			"charge": sq.swing_charge if sq else null, "tap": sq.swing_tap if sq else null, "swing": sq.swing_active() if sq else false,
 			"report": sq.swing_report if sq else {}, "duration": sq.duration if sq else 0.0}

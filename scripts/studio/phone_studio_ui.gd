@@ -967,7 +967,7 @@ func _process(delta: float) -> void:
 		_last_key = studio.key; _last_stage = studio.stage; _refresh_pose()
 	var tl = studio._timeline
 	if tl and _scrub:
-		var st: Dictionary = tl.state()
+		var st: Dictionary = tl.state(false)
 		_sync_scrub = true
 		if bool(st.get("active", false)): _scrub.set_value_no_signal(float(st.get("t", 0.0)))
 		_scrub.set_marks(tl.scrubber.marks, tl.scrubber.duration)

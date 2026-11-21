@@ -46,6 +46,7 @@ var sel_part := -1             # the part last touched (its column is tinted)
 var write_usec := 0            # cost of the last edit applied to the pose (preview update included)
 var write_count := 0
 
+var _stale := false
 var _spans: Array = []         # [[t0, t1] fractions of the sequence] per part
 var _dur := 0.0
 var _cum: Array = [0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0]   # height (0..1) of Ready, Wind-up, Contact, Finish
@@ -78,7 +79,19 @@ func _def():
 	return studio.engine._current if studio.engine._has_motion() else null
 
 ## Part spans from the engine's sequence (prefix = Ready -> Wind-up) and the height of each key.
+## The spans are owed: they are worked out when the graph is next drawn, pressed or asked for.
+## Measuring the path solves about a hundred poses, so it is not done on every edit while the
+## graph is hidden, and several edits in one frame cost one measurement.
 func update_spans() -> void:
+	_stale = true
+	queue_redraw()
+
+func _ensure_spans() -> void:
+	if not _stale: return
+	_stale = false
+	_compute_spans()
+
+func _compute_spans() -> void:
 	_spans.clear(); _dur = 0.0
 	if _def() == null or not studio.engine._timeline._configure(): queue_redraw(); return
 	var s = studio.engine._timeline.sequence
@@ -104,6 +117,7 @@ func _flush_drag() -> void:
 
 func _process(_d: float) -> void:
 	if not is_visible_in_tree(): return
+	_ensure_spans()
 	_flush_drag()
 	tick()
 
@@ -165,6 +179,7 @@ func _handle(key: int, side: int) -> Dictionary:
 
 ## Everything that can be pressed: [[id, point]].
 func _targets() -> Array:
+	_ensure_spans()
 	var out: Array = []
 	if _def() == null or _spans.size() < 3: return out
 	for key in 4:
@@ -209,6 +224,7 @@ func _apply(writes: Dictionary) -> void:
 ## The ease handle of `key` on `side` to `slope` (progress per time: 0 = at rest there, 1 = the
 ## part's even speed, 3 = as snappy as it goes). Ease in and ease out of a key are independent.
 func set_ease(key: int, side: int, slope: float) -> bool:
+	_ensure_spans()
 	var h := _handle(key, side)
 	if h.is_empty() or _part_locked(h.part): return false
 	var w := _part(h.part)
@@ -221,6 +237,7 @@ func set_ease(key: int, side: int, slope: float) -> bool:
 ## Easing key `idx` of `part` to time fraction x and progress n, kept between its neighbours.
 ## Returns false when the part is locked.
 func set_key(part: int, idx: int, x: float, n: float) -> bool:
+	_ensure_spans()
 	if _part_locked(part): return false
 	var w := _part(part)
 	if idx < 0 or idx >= w.keys.size(): return false
@@ -234,6 +251,7 @@ func set_key(part: int, idx: int, x: float, n: float) -> bool:
 
 ## A new easing key on the curve at time fraction x. Its index, -1 when full / locked / no room.
 func add_key(part: int, x: float) -> int:
+	_ensure_spans()
 	if _part_locked(part): return -1
 	var d = _def()
 	var w := _part(part)
@@ -248,6 +266,7 @@ func add_key(part: int, x: float) -> int:
 	return w.keys.find(added)
 
 func delete_key(part: int, idx: int) -> bool:
+	_ensure_spans()
 	if _part_locked(part): return false
 	var w := _part(part)
 	if idx < 0 or idx >= w.keys.size(): return false
@@ -261,6 +280,7 @@ func delete_selected() -> bool:
 	return selected.x >= 0 and delete_key(selected.x, selected.y)
 
 func reset_part(part: int) -> void:
+	_ensure_spans()
 	if _part_locked(part): return
 	var f: Array = Ramp.FIELDS[part]
 	studio.set_speed_points(part, [], false)
@@ -269,6 +289,7 @@ func reset_part(part: int) -> void:
 
 ## Every free part back to the original ease (one undo step).
 func reset_all() -> void:
+	_ensure_spans()
 	studio.begin_edit("easing reset")
 	for part in 3: reset_part(part)
 	studio.end_edit()
@@ -282,6 +303,7 @@ func reset_all() -> void:
 ## curve has at that key's moment; the parts' easing keys are cleared. Locked parts are skipped:
 ## returns how many were (0 = the whole curve took it), -1 for an unknown name.
 func apply_preset(name: String) -> int:
+	_ensure_spans()
 	if name != "original" and not WHOLE.has(name): return -1
 	if _spans.size() < 3: return -1
 	var skipped := 0
@@ -323,6 +345,7 @@ func _target_part(id: Vector2i) -> int:
 	return -1
 
 func _gui_input(ev: InputEvent) -> void:
+	_ensure_spans()
 	if _def() == null or _spans.size() < 3: return
 	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_RIGHT and ev.pressed:
 		var h := _pick(ev.position)
@@ -390,6 +413,7 @@ func _tag(font: Font, fs: int, at_pt: Vector2, txt: String) -> void:
 	draw_string(font, at, txt, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color("eef5fa"))
 
 func _draw() -> void:
+	_ensure_spans()
 	draw_rect(Rect2(Vector2.ZERO, size), Color("0d1f2b"))
 	var font := get_theme_font("font"); var fs := int(round(11 * k))
 	var d = _def()
@@ -471,6 +495,7 @@ func _draw() -> void:
 
 ## For the link / tests: the curve as data.
 func state() -> Dictionary:
+	_ensure_spans()
 	var d = _def()
 	var parts: Array = []; var keys: Array = []; var handles: Array = []
 	if d != null and _spans.size() == 3:

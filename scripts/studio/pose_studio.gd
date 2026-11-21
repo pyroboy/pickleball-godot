@@ -907,7 +907,9 @@ func set_field(field: String, axis, value, force := false, refresh := true) -> D
 			_needs_sync = true
 			return {"ok": true, "value": current, "clamped": clamped, "stopped": {"reason": reason, "at": current}}
 	var own := _txn == null
-	if own: begin_edit("set " + field)
+	if own:
+		begin_edit("set " + field)
+		if preview: preview.edit_open = false   # one value on its own: the trajectory is rebuilt at once
 	if _txn.field == "": _txn.field = field; _txn.axis = ax; _txn.old = current
 	elif _txn.field != field or _txn.axis != ax: _txn["fields"] = int(_txn.get("fields", 1)) + 1
 	var prev_group: int = engine._group.selected
@@ -929,11 +931,15 @@ func begin_edit(label: String = "edit") -> void:
 	if _compare != null: compare_end()
 	_txn = {"label": label, "key": key, "stage": stage, "field": "", "axis": -1, "old": null, "new": null,
 		"before": engine._current.duplicate(true), "before_sig": _sig(engine._current)}
+	if preview:   # a drag or a many-field edit: the trajectory catches up (mobile_pose_preview.gd)
+		preview.edit_open = true
+		preview.edit_shapes_path = label.begins_with("path") or label == "key time"
 
 func end_edit() -> void:
 	if _txn == null: return
 	var t: Dictionary = _txn
 	_txn = null
+	if preview: preview.end_open_edit()
 	if not _ok(): return
 	var sig := _sig(engine._current)
 	if sig == t.before_sig: _after_change(false); return
@@ -952,6 +958,7 @@ func end_edit() -> void:
 
 func cancel_edit() -> void:
 	_txn = null
+	if preview: preview.end_open_edit()
 
 ## Abandon the open step (Esc during a gizmo drag, focus loss): restore the pose from
 ## before it; nothing goes on the undo stack.
@@ -959,6 +966,7 @@ func abort_edit() -> void:
 	if _txn == null: return
 	var t: Dictionary = _txn
 	_txn = null
+	if preview: preview.end_open_edit()
 	if not _ok() or t.key != key: return
 	if t.before_sig == _sig(engine._current): return
 	engine._copies[_copy_key(key)] = t.before.duplicate(true)
@@ -1590,6 +1598,7 @@ func hold_status() -> String:
 ## What a hold past the Wind-up key adds, as the game's own held-hit report says it.
 func _strong_text(h: float) -> String:
 	if h <= 0.62 or not _ok(): return ""
+	if engine._timeline.sequence.has_method("ensure_swing"): engine._timeline.sequence.ensure_swing()
 	var rep: Dictionary = engine._timeline.sequence.get("swing_report") if engine._timeline.sequence.get("swing_report") is Dictionary else {}
 	var w: float = float(rep.get("strong_weight", 0.0))
 	if w < 0.02: return " · arm at full reach"

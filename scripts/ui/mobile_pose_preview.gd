@@ -354,6 +354,16 @@ func _refresh_motion() -> void:
 		for field in state.keys(): if String(field).begins_with(TIMING_PREFIX): state.erase(field)
 		var geometry: PackedByteArray = var_to_bytes(state)
 		var timing_only: bool = motion_root != null and geometry == _geo_snapshot and momentum_heads.size() > 1 and not _settling
+		# While an edit is open (a drag, or one action writing many values), the pose follows every
+		# change but the trajectory (about a hundred solved poses) waits: for a pause in the drag,
+		# or, when the drag shapes the trajectory itself, for a third of the time. _process and
+		# end_open_edit catch up.
+		if not timing_only and motion_root != null and edit_open and not _rebuild_now and (not edit_shapes_path or Time.get_ticks_msec() < _rebuild_due):
+			_rebuild_owed = true; _owed_msec = Time.get_ticks_msec()
+			_refresh_selected_joint_motion(); _request_redraw()
+			return
+		_rebuild_owed = false
+		var rebuild_began: int = Time.get_ticks_msec()
 		if geometry != _geo_snapshot: _retime_lead.clear(); _retime_stroke.clear()
 		_ensure_motion_visuals()
 		if timing_only and Sequence.swing_hold >= 0.0 and _momentum_supported():
@@ -369,10 +379,34 @@ func _refresh_motion() -> void:
 		else:
 			_rebuild_motion()
 			momentum_retime_dirty = false
+			_rebuild_due = Time.get_ticks_msec() + 2 * (Time.get_ticks_msec() - rebuild_began)
 		_motion_snapshot = snapshot; _geo_snapshot = geometry
 	_refresh_selected_joint_motion()
 	motion_root.visible = true
 	_request_redraw()
+
+var edit_open := false          # Pose Studio: an edit step is open (begin_edit .. end_edit)
+var edit_shapes_path := false   # that edit drags the trajectory itself (path keys, key times)
+const REBUILD_PAUSE_MSEC := 120
+var _rebuild_owed := false      # a trajectory rebuild was put off during the edit
+var _rebuild_now := false
+var _owed_msec := 0             # when it was last put off
+var _rebuild_due := 0           # no rebuild of a path drag before this (ticks msec)
+func _process(_delta: float) -> void:
+	if not _rebuild_owed: return
+	var now: int = Time.get_ticks_msec()
+	if now >= _rebuild_due if edit_shapes_path else now - _owed_msec >= REBUILD_PAUSE_MSEC: _rebuild_owed_motion()
+
+## The open edit ended: the trajectory is brought up to date now.
+func end_open_edit() -> void:
+	edit_open = false; edit_shapes_path = false
+	if _rebuild_owed: _rebuild_owed_motion()
+
+func _rebuild_owed_motion() -> void:
+	_rebuild_owed = false
+	_rebuild_now = true
+	_refresh_motion()
+	_rebuild_now = false
 
 ## The play situation changed (Pose Studio's hold length): every cache built from a played
 ## sequence is dropped and the arc rebuilt.

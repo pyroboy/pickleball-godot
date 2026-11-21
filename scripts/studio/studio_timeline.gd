@@ -424,14 +424,15 @@ func tick() -> void:
 		else: ed._toggle_play()
 	refresh()
 
-func state() -> Dictionary:
+## with_graph false leaves out the easing graph (measuring its spans is costly; the phone asks every frame).
+func state(with_graph := true) -> Dictionary:
 	var ed = _ed()
 	var tl = ed._timeline if ed else null
 	return {"playing": ed != null and ed._playing, "loop": loop, "speed": SPEEDS[speed_index],
 		"variant": ed._variant_mode if ed else 0, "active": tl != null and tl.active,
 		"t": (tl.elapsed / maxf(tl.sequence.duration, 0.001)) if tl and tl.active else 0.0,
 		"seconds": tl.elapsed if tl and tl.active else 0.0, "marks": scrubber.marks, "key_marks": scrubber.key_marks, "at_stage": scrubber.at_stage, "sel_key": scrubber.sel_key, "scrub_size": [scrubber.size.x, scrubber.size.y], "keys_play": studio.keys_play_state() if studio else "",
-		"speed_graph": speed_graph.state() if speed_graph else {}}
+		"speed_graph": speed_graph.state() if speed_graph and with_graph else {}}
 
 ## Scrub track: a Range (0..1) drawn as a rail with stage markers, progress and a playhead.
 ## Click or drag anywhere on it to scrub. 28 pt tall.

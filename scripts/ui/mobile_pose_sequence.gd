@@ -16,6 +16,8 @@ const SWING_STEP := 1.0 / 30.0   # the game's physics tick
 var _swing: Array = []           # baked frames at SWING_STEP: [pose, stroke progress, phase text]
 var swing_charge := 1.0          # power of the baked swing (0..1)
 var swing_tap := false           # it was a tap (a touch shot: drop intent, flat)
+var _swing_pending := false       # the frames are owed (see ensure_swing)
+var _swing_player = null
 var swing_report: Dictionary = {}   # held-hit report at release (strong_weight, limited, ...)
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Runtime = preload("res://scripts/runtime_motion_preview.gd")
@@ -73,10 +75,29 @@ func configure(def: PostureDefinition, selected_mode: int = Mode.STROKE, selecte
 		preparation_seconds = 0.0; prefix_seconds = 0.0
 		duration = stroke_seconds + (Motion.SERVE_HOLD_TIME if style >= 0 else Clock.hold_duration(source))
 	_bake_split()
-	_swing = []
-	if swing_hold >= 0.0 and mode == Mode.STROKE and style < 0 and variant == null and source.posture_id != 20: _bake_swing(player)
+	_swing = []; _swing_pending = false; _swing_player = player
+	if swing_hold >= 0.0 and mode == Mode.STROKE and style < 0 and variant == null and source.posture_id != 20:
+		# Only the times now; the frames are baked when something first samples the swing. An edit
+		# that writes many fields configures a sequence per field, and most are never sampled.
+		_swing_times(); _swing_pending = true
 
-func swing_active() -> bool: return not _swing.is_empty()
+func swing_active() -> bool: return _swing_pending or not _swing.is_empty()
+
+## Bake the swing's frames if that is still owed (sample does it itself).
+func ensure_swing() -> void:
+	if not _swing_pending: return
+	_swing_pending = false
+	_bake_swing(_swing_player)
+
+## The swing's power and times for the current hold (cheap; no pose is solved).
+func _swing_times() -> void:
+	var hold: float = clampf(swing_hold, 0.0, HOLD_MAX)
+	swing_charge = Swing.charge_for_hold(hold)
+	swing_tap = ShotChoice.is_tap(swing_charge)
+	var strike: float = Clock.strike_duration(source); var sweep: float = Clock.sweep_duration(source)
+	preparation_seconds = hold; prefix_seconds = hold
+	release_seconds = strike; stroke_seconds = strike + sweep; full_seconds = stroke_seconds
+	duration = hold + stroke_seconds
 
 ## The swing a human gets for holding Hit `swing_hold` seconds, frame by frame, with the same
 ## calls and the same order as human_contact_controller.gd: target = layers(held_hit_motion.sample),
@@ -204,6 +225,7 @@ func lead_progress(preparation_elapsed: float) -> float:
 func sample(seconds: float) -> Dictionary:
 	var elapsed := clampf(seconds, 0.0, duration)
 	if swing_active():
+		ensure_swing()
 		var fr: Array = _swing[clampi(roundi(elapsed / SWING_STEP), 0, _swing.size() - 1)]
 		return {"pose": scoped_pose(_stance_copy((fr[0] as PostureDefinition).duplicate(true))), "phase": fr[2], "progress": clampf(float(fr[1]), 0, 1),
 			"elapsed": elapsed, "duration": duration, "split": {}, "authored_key": -1, "context": true}
