@@ -62,6 +62,42 @@ const ARMS := {
 	"umbrella": [Vector3(0.25, -0.2, 0.6), Vector3(-0.1, 1.0, 0.2)],
 	"carry_pole": [Vector3(0.5, 0.35, 0.15), Vector3(-0.05, 1.0, -0.05)],
 	"carry_bag": [Vector3(0.18, -1.0, -0.05), Vector3(0.1, -1.0, 0.1)],
+	"chin_rest": [Vector3(0.15, -0.6, 0.8), Vector3(-0.2, 0.95, 0.15)],
+	"arm_on_knee": [Vector3(0.2, -0.75, 0.65), Vector3(0.0, -0.3, 1.0)],
+	"hand_on_thigh": [Vector3(0.2, -0.95, 0.3), Vector3(0.0, -0.35, 1.0)],
+	"pocket": [Vector3(0.2, -1.0, -0.1), Vector3(0.0, -1.0, 0.25)],
+	"wave_small": [Vector3(0.35, -0.2, 0.6), Vector3(0.2, 1.0, 0.2)],
+}
+
+
+## Leg presets: [thigh_dir, shin_dir] in the person's frame for the +x leg (the other leg
+## mirrors x). Seated thighs start at the seat; standing legs from the hips.
+const LEGS := {
+	"sit": [Vector3(0.05, -0.05, 1.0), Vector3(0.0, -1.0, 0.12)],
+	"wide": [Vector3(0.45, -0.05, 0.9), Vector3(0.1, -1.0, 0.1)],
+	"tucked": [Vector3(0.05, -0.05, 1.0), Vector3(0.0, -0.8, -0.6)],
+	"cross_over": [Vector3(-0.35, 0.25, 0.9), Vector3(0.05, -1.0, 0.15)],
+	"ankle_on_knee": [Vector3(0.6, 0.08, 0.8), Vector3(-1.0, 0.05, 0.1)],
+	"knee_up": [Vector3(0.12, 0.8, 0.6), Vector3(0.0, -1.0, -0.25)],
+	"stretch_out": [Vector3(0.08, -0.15, 1.0), Vector3(0.02, -0.5, 0.85)],
+	"stand": [Vector3(0.0, -1.0, 0.02), Vector3(0.0, -1.0, -0.02)],
+	"stand_wide": [Vector3(0.25, -1.0, 0.0), Vector3(0.12, -1.0, 0.0)],
+	"stand_bent": [Vector3(0.05, -1.0, 0.18), Vector3(0.0, -1.0, -0.2)],
+	"stand_cross": [Vector3(-0.14, -1.0, 0.05), Vector3(-0.1, -1.0, 0.0)],
+}
+## Postures: [right leg, left leg, extra hip push forward (m), lean].
+const POSTURES := {
+	"normal": ["sit", "sit", 0.0, 0.0],
+	"wide": ["wide", "wide", 0.0, 0.0],
+	"tucked": ["tucked", "tucked", 0.0, 0.06],
+	"crossed": ["cross_over", "sit", 0.0, 0.0],
+	"figure_four": ["ankle_on_knee", "sit", 0.0, -0.05],
+	"knee_up": ["knee_up", "sit", 0.0, -0.06],
+	"sprawl": ["stretch_out", "stretch_out", 0.1, -0.22],
+	"stand": ["stand", "stand", 0.0, 0.0],
+	"stand_wide": ["stand_wide", "stand_wide", 0.0, 0.0],
+	"contrapposto": ["stand_bent", "stand", 0.0, 0.0],
+	"cross_ankles": ["stand_cross", "stand", 0.0, 0.0],
 }
 
 
@@ -71,7 +107,7 @@ static func new_person(pos: Vector3, yaw: float, seated: bool, profile: int, sca
 		"arm_l": "idle_sit" if seated else "idle_stand", "arm_r": "idle_sit" if seated else "idle_stand",
 		"prop": "", "mode": "idle", "until": 0.0, "delay": 0.0, "then": "", "then_dur": 0.0,
 		"next_idle": 0.0, "idle_kind": "", "idle_until": 0.0, "rate": 6.0, "watch": true, "visible": true,
-		"cells": {}, "base_prop": 0}
+		"cells": {}, "base_prop": 0, "posture": "normal" if seated else "stand", "trait": "calm"}
 
 
 static func _arm(p: Dictionary, key: String, side: float) -> Array:
@@ -94,13 +130,26 @@ static func solve(p: Dictionary, ext: Dictionary) -> Dictionary:
 	var hip_y: float = (float(p.seat_h) + 0.06) if seated else (THIGH + SHIN + 0.07) * s
 	var j := {}
 	j.fwd = fwd
+	var posture: Array = POSTURES.get(p.posture, POSTURES.normal if seated else POSTURES.stand)
+	if seated != (str(posture[0]) in ["sit", "wide", "tucked", "cross_over", "ankle_on_knee", "knee_up", "stretch_out"]):
+		posture = POSTURES.normal if seated else POSTURES.stand
+	var hip_push: float = posture[2]
 	for side: float in [-1.0, 1.0]:
-		var hip := Vector3(side * 0.09 * s, hip_y, 0)
+		var hip := Vector3(side * 0.09 * s, hip_y, hip_push)
 		var knee: Vector3
 		var ankle: Vector3
+		var leg: Array = LEGS[posture[0] if side > 0.0 else posture[1]]
+		var td: Vector3 = leg[0]
+		var sd: Vector3 = leg[1]
+		td = Vector3(td.x * side, td.y, td.z).normalized()
+		sd = Vector3(sd.x * side, sd.y, sd.z).normalized()
 		if seated:
-			knee = hip + Vector3(side * 0.02, -0.02, THIGH * s)
-			ankle = Vector3(knee.x, 0.08, knee.z + 0.05)
+			knee = hip + td * THIGH * s
+			ankle = knee + sd * SHIN * s
+			if ankle.y < 0.07: ankle.y = 0.07
+		elif walk < 0.0:
+			knee = hip + td * THIGH * s
+			ankle = knee + sd * SHIN * s
 		elif walk >= 0.0:
 			var ph := walk + (0.0 if side > 0.0 else PI)
 			var swing := sin(ph)
@@ -108,15 +157,12 @@ static func solve(p: Dictionary, ext: Dictionary) -> Dictionary:
 			knee = hip + thigh_dir * THIGH * s
 			var bend := 0.75 * maxf(0.0, cos(ph))
 			ankle = knee + Vector3(0, -1, 0.55 * swing - bend).normalized() * SHIN * s
-		else:
-			knee = hip + Vector3(0, -THIGH * s, 0.02)
-			ankle = knee + Vector3(0, -SHIN * s, -0.02)
 		var tag := "l" if side < 0.0 else "r"
 		j["hip_" + tag] = root * hip
 		j["knee_" + tag] = root * knee
 		j["ankle_" + tag] = root * ankle
-	var pelvis := Vector3(0, hip_y, 0)
-	var upper := root * Transform3D(Basis(Vector3.RIGHT, float(p.lean)), pelvis)
+	var pelvis := Vector3(0, hip_y, hip_push)
+	var upper := root * Transform3D(Basis(Vector3.RIGHT, float(p.lean) + float(posture[3])), pelvis)
 	var shorts: Array = ext.get("shorts", [0.15, -0.15, 0.15])
 	var torso: Array = ext.get("torso", [0.2, -0.35, 0.2])
 	var head: Array = ext.get("head", [0.15, -0.15, 0.15])

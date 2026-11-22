@@ -705,9 +705,18 @@ func _person(pos: Vector3, yaw: float, seated: bool, crowd := true, scale_f := -
 	p.rate = _rng.randf_range(5.0, 7.0)
 	p.base_seated = seated
 	p.role = "crowd"
+	p.trait = TRAITS[(i * 3 + 1) % TRAITS.size()]
+	_pick_posture(p)
+	p.next_posture = _rng.randf_range(15.0, 40.0)
 	_people.append(p)
 	if crowd: _crowd.append(p)
 	return p
+
+
+func _pick_posture(p: Dictionary) -> void:
+	var table: Dictionary = TRAIT_SEATED if p.seated else TRAIT_STANDING
+	var options: Array = table.get(p.trait, ["normal"] if p.seated else ["stand"])
+	p.posture = options[_rng.randi() % options.size()]
 
 
 func _walker(kind := "") -> Dictionary:
@@ -722,6 +731,12 @@ func _walker(kind := "") -> Dictionary:
 	p.speed = 1.2
 	p.walk_phase = _rng.randf() * TAU
 	p.watch = false
+	# passers-by mostly ignore the game; some look, a few wave or stop to watch
+	var traits := ["nonchalant", "curious", "friendly", "busy", "nonchalant", "curious"]
+	p.trait = traits[_walkers.size() % traits.size()]
+	if kind == "umbrella": p.trait = "nonchalant"
+	if kind == "mother": p.trait = "busy"
+	if kind == "taho": p.trait = "calm"
 	_walkers.append(p)
 	return p
 
@@ -744,11 +759,15 @@ func _build_figures() -> void:
 	# next-game queue: two seated players with paddles (the middle chair holds their bag)
 	for qz: float in [-7.0, -5.4]:
 		var q := _person(Vector3(-6.55, 0, qz), PI * 0.5, true)
+		q.trait = "fan" if qz < -6.0 else "nonchalant"
+		_pick_posture(q)
 		q.prop = "paddle"
 		q.role = "queue"
 	# scorer at the table
 	_scorer = _person(Vector3(6.75, 0, -3.2), -PI * 0.5, true, false)
 	_scorer.role = "scorer"
+	_scorer.trait = "calm"
+	_scorer.posture = "normal"
 	# passers-by: errands on the street lanes, a taho vendor, a mother and her kid,
 	# someone under a payong, and a few far off behind the hall
 	for k in 4: _walker()
@@ -935,6 +954,33 @@ func _on_rally_ended(_winner: int, reason: String, _detail: String) -> void:
 	for p in _crowd:
 		var r := _rng.randf()
 		var seated: bool = p.base_seated
+		var tr: String = p.trait
+		var dozing: bool = p.idle_kind == "doze" and _t < float(p.idle_until)
+		match tr:
+			"nonchalant":
+				# barely looks up: a glance or a couple of claps, then back to the phone
+				if r < 0.25: _react(p, "clap_light", 0.7)
+				elif r < 0.45: _react(p, "glance", 0.6)
+				continue
+			"sleepy":
+				if big or dozing and r < 0.5: _react(p, "startle", 0.5, "clap_light", 0.8)
+				elif r < 0.4: _react(p, "clap_light", 0.8)
+				continue
+			"grumpy":
+				if reason in NET_REASONS or reason == "OUT_OF_BOUNDS": _react(p, "facepalm" if r < 0.5 else "hands_head", 1.1)
+				elif big: _react(p, "clap_light", 1.2)
+				continue
+			"calm":
+				if big: _react(p, "clap", _rng.randf_range(1.4, 2.0))
+				elif reason in NET_REASONS and r < 0.3: _react(p, "ooh", 0.8, "clap_light", 0.8)
+				else: _react(p, "clap_light", _rng.randf_range(1.0, 1.6))
+				continue
+			"chatty":
+				if big: _react(p, "cheer", 1.4, "chat", 2.0)
+				elif reason in NET_REASONS and r < 0.5: _react(p, "ooh", 0.8, "chat", 1.8)
+				else: _react(p, "clap", 1.0, "chat", 1.8)
+				continue
+		# fans (and anyone else): the full range
 		if big:
 			if seated and r < 0.5: _react(p, "stand_cheer", _rng.randf_range(1.8, 2.6), "clap", 1.0)
 			elif not seated and r < 0.5: _react(p, "jump", _rng.randf_range(1.4, 2.0), "clap", 1.0)
@@ -961,7 +1007,7 @@ func _on_rally_ended(_winner: int, reason: String, _detail: String) -> void:
 	_react(_neighbour, "wave" if big else "lean", 2.0)
 	# passers-by on the near lane stop, turn and clap on a big point
 	for w in _walkers:
-		if big and w.state == "walk" and Vector3(w.pos).z > LANE_B - 0.2 and w.kind != "far":
+		if big and w.state == "walk" and Vector3(w.pos).z > LANE_B - 0.2 and w.kind != "far" and w.trait in ["curious", "friendly"]:
 			w.state = "stop"
 			w.wait_until = _t + _rng.randf_range(1.4, 2.4)
 	_score_pending = _t + 0.5
@@ -1056,6 +1102,25 @@ func _set_score_labels() -> void:
 	_score_labels[1].text = str(right)
 
 
+## Personalities. Each spectator has one: it picks how they sit or stand, the habits they
+## fall into, whether they follow the ball, and how they take a point.
+const TRAITS := ["fan", "calm", "nonchalant", "grumpy", "sleepy", "chatty", "fan", "calm", "nonchalant", "chatty"]
+const TRAIT_IDLE := {
+	"fan": ["", "knees", "lean_in", "nod", "clap_light", "chat", "knees"],
+	"calm": ["", "", "hand_on_thigh", "drink", "nod", "shade", "scratch", "arms_crossed"],
+	"nonchalant": ["phone", "phone", "phone", "chin_rest", "", "drink", "fan"],
+	"grumpy": ["arms_crossed", "arms_crossed", "", "scratch", "chin_rest", "hands_hips"],
+	"sleepy": ["doze", "doze", "nod", "", "stretch", "lean_back"],
+	"chatty": ["chat", "chat", "chat", "", "drink", "gesture"],
+}
+const TRAIT_SEATED := {"fan": ["tucked", "normal"], "calm": ["crossed", "normal"], "nonchalant": ["figure_four", "sprawl"],
+	"grumpy": ["wide"], "sleepy": ["sprawl", "knee_up"], "chatty": ["crossed", "knee_up", "normal"]}
+const TRAIT_STANDING := {"fan": ["stand_wide"], "calm": ["stand", "contrapposto"], "nonchalant": ["cross_ankles", "contrapposto"],
+	"grumpy": ["stand_wide"], "sleepy": ["contrapposto"], "chatty": ["contrapposto", "stand"]}
+const SEATED_ONLY := ["knees", "lean_back", "lean_in", "doze", "chin_rest", "hand_on_thigh"]
+const STANDING_ONLY := ["hands_hips", "shift"]
+
+
 const IDLE_SEATED := ["", "knees", "lean_back", "fan", "drink", "phone", "chat", "scratch", "nod", "shade", "arms_crossed", "stretch", "knees", "chat"]
 const IDLE_STANDING := ["", "arms_crossed", "hands_hips", "shift", "phone", "drink", "chat", "scratch", "shade", "stretch", "fan", "hands_hips", "shift"]
 
@@ -1121,6 +1186,19 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 				lean = -0.18
 			"point":
 				arm_r = "point"
+			"clap_light":
+				arm_l = "clap_open" if int(_t * 3.5) % 2 == 0 else "clap_shut"
+				arm_r = arm_l
+			"startle":
+				arm_l = "wince"
+				arm_r = "wince"
+				bounce = 0.05
+				lean = -0.2
+			"chat":
+				head_yaw = 0.8 if Vector3(p.pos).x < -3.0 else -0.8
+				arm_r = "gesture_a" if beat == 0 else "gesture_b"
+			"glance":
+				head_pitch = -0.1
 			"flip":
 				arm_r = "reach_up"
 			"wave":
@@ -1133,18 +1211,57 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 	else:
 		# mannerisms: a few seconds of one idle habit, then a few seconds of nothing
 		if _t > float(p.next_idle):
-			var kinds: Array = IDLE_SEATED if seated else IDLE_STANDING
-			p.idle_kind = kinds[_rng.randi() % kinds.size()]
+			var kinds: Array = TRAIT_IDLE.get(p.trait, IDLE_SEATED if seated else IDLE_STANDING)
+			var pick: String = kinds[_rng.randi() % kinds.size()]
+			if (seated and pick in STANDING_ONLY) or (not seated and pick in SEATED_ONLY): pick = ""
+			p.idle_kind = pick
 			p.idle_until = _t + _rng.randf_range(2.0, 5.0)
 			p.next_idle = float(p.idle_until) + _rng.randf_range(1.5, 6.0)
 		var kind: String = p.idle_kind if _t < float(p.idle_until) else ""
-		if playing and kind in ["phone", "stretch", "fan", "lean_back"]: kind = ""   # eyes on the rally
+		var tr: String = p.trait
+		if playing and kind in ["phone", "stretch", "fan", "lean_back"] and tr != "nonchalant": kind = ""   # eyes on the rally
+		# resting arms by personality when no habit is playing
+		if kind == "":
+			match tr:
+				"grumpy": kind = "arms_crossed"
+				"nonchalant": kind = "phone" if p.role != "queue" else "chin_rest"
+				"fan": kind = "knees" if seated else ""
+				"sleepy": kind = "doze" if seated and not playing else ""
+		if p.role == "queue" and kind == "phone": kind = "chin_rest"
+		# now and then re-cross the legs or shift stance
+		if _t > float(p.next_posture):
+			_pick_posture(p)
+			p.next_posture = _t + _rng.randf_range(15.0, 40.0)
 		var slow := int(_t * 2.5 + float(p.rate)) % 2
 		match kind:
 			"knees":
 				arm_l = "knees"
 				arm_r = "knees"
 				lean = 0.25
+			"lean_in":
+				arm_l = "arm_on_knee"
+				arm_r = "arm_on_knee"
+				lean = 0.3
+			"clap_light":
+				arm_l = "clap_open" if int(_t * 3.0) % 2 == 0 else "clap_shut"
+				arm_r = arm_l
+			"doze":
+				arm_l = "hand_on_thigh"
+				arm_r = "hand_on_thigh"
+				head_pitch = 0.55
+				lean = 0.12
+			"chin_rest":
+				arm_r = "chin_rest"
+				arm_l = "arm_on_knee" if seated else "pocket"
+				lean = 0.22
+				head_pitch = 0.1
+			"hand_on_thigh":
+				arm_l = "hand_on_thigh"
+				arm_r = "hand_on_thigh"
+			"gesture":
+				arm_r = "gesture_a" if int(_t * 3.0) % 2 == 0 else "gesture_b"
+				arm_l = "gesture_b" if int(_t * 3.0) % 2 == 0 else "gesture_a"
+				head_yaw = 0.7 if Vector3(p.pos).x < -3.0 else -0.7
 			"lean_back":
 				arm_l = "behind_head"
 				arm_r = "behind_head"
@@ -1194,7 +1311,8 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 				arm_l = "fist_mid"
 				arm_r = "mouth"
 		# eyes on the ball while it is in play
-		if playing and have_ball and p.watch:
+		var attentive: bool = tr != "nonchalant" and kind != "doze"
+		if playing and have_ball and p.watch and attentive:
 			var to_ball := ball_local - Vector3(p.pos)
 			var facing := Vector3(sin(float(p.yaw)), 0, cos(float(p.yaw)))
 			var right := Vector3(facing.z, 0, -facing.x)
@@ -1297,6 +1415,31 @@ func _walk_pose(w: Dictionary, moving: bool, stride: float) -> void:
 			w.arm_l = "carry_bag"
 		_:
 			w.prop = ""
+			if w.get("leader") is Dictionary: return
+			match str(w.trait):
+				"nonchalant":
+					# eyes on the phone, walking right past the game
+					w.arm_l = "phone"
+					w.arm_r = "phone"
+					w.prop = "phone"
+					w.head_pitch = 0.35
+				"busy":
+					w.prop = "bag"
+					w.arm_l = "carry_bag"
+					w.lean = 0.12 if moving else 0.0
+				"curious":
+					# keeps glancing at the court while walking
+					if moving and int(_t / 2.5 + float(w.walk_phase)) % 3 != 0:
+						var to_court := -Vector3(w.pos)
+						var f := Vector3(sin(float(w.yaw)), 0, cos(float(w.yaw)))
+						var r := Vector3(f.z, 0, -f.x)
+						w.head_yaw = round(clampf(atan2(to_court.dot(r), to_court.dot(f)), -0.9, 0.9) / 0.3) * 0.3
+				"friendly":
+					# waves at the crowd while passing behind them
+					var x := Vector3(w.pos).x
+					if moving and x > -7.0 and x < 0.0 and absf(Vector3(w.pos).z - LANE_A) < 0.3:
+						w.arm_r = "wave_a" if int(_t * 5.0) % 2 == 0 else "wave_b"
+						w.head_yaw = 0.6 if float(w.yaw) > 0.0 else -0.6
 
 
 func _start_trip(w: Dictionary) -> void:
@@ -1315,6 +1458,9 @@ func _start_trip(w: Dictionary) -> void:
 	var start_x := side * 17.0
 	var r := _rng.randf()
 	if w.kind == "taho" or w.kind == "umbrella" or w.kind == "mother": r = minf(r, 0.39)   # they pass along
+	if w.trait in ["nonchalant", "busy"] and r >= 0.76 and r < 0.88: r = 0.1                 # no time for the game
+	if w.trait == "curious" and r < 0.4 and _rng.randf() < 0.5: r = 0.8                     # stops to watch
+	w.speed = (_rng.randf_range(1.6, 1.8) if w.trait == "busy" else w.speed)
 	if r < 0.4:
 		w.dest = "exit"
 		w.pos = Vector3(start_x, 0, lane)
