@@ -23,7 +23,7 @@ const STOP_X := 4.2              # where the rolling cart parks on the back lane
 const CART := Vector3(4.2, 0, -16.4)
 const VENDOR := Vector3(2.7, 0, -15.75)
 const QUEUE := [Vector3(4.2, 0, -15.45), Vector3(3.55, 0, -15.5), Vector3(2.9, 0, -15.55)]
-const LANE := -14.3          # this end's walking lane
+const LANE := -14.45         # this end's walking lane (between the curb sitters and the standing group)
 const JEEP_LANE := -16.4
 const JEEP_STOP := -2.9      # in front of the waiting shed
 const POST := Vector3(1.4, 0, -15.0)
@@ -271,15 +271,34 @@ static func _dama_table(w, props: SurfaceTool) -> void:
 
 
 static func _audience_seats(w, props: SurfaceTool) -> void:
-	var white: Color = w._c("#e8e7e0")
-	w._monobloc(props, Vector3(-4.6, 0, -12.0), 0.15, white)
-	w._monobloc(props, Vector3(-3.8, 0, -11.9), -0.05, w._c("#7fa4d8"))
-	w._monobloc(props, Vector3(0.0, 0, -12.0), -0.2, w._c("#d36a5c"))
-	var wood: Color = w._c("#9a7048")
-	Kit.box(props, Vector3(-2.0, 0.43, -12.4), Vector3(2.7, 0.06, 0.4), wood)
-	for lx: float in [-3.2, -0.8]:
-		Kit.box(props, Vector3(lx, 0.2, -12.4), Vector3(0.08, 0.4, 0.34), wood.darkened(0.15))
-	w._shadow(Vector3(-2.0, 0, -12.4), Vector2(2.9, 0.6), true)
+	# A looser crowd than the hall end's rows: people on the painted curb, on upside-down
+	# plastic crates, perched on a parked motorbike, one on a chair under a beach umbrella.
+	for cr in [[Vector3(-5.2, 0, -12.9), 0.4, "#f2c84b"], [Vector3(-4.55, 0, -13.15), -0.3, "#e0473b"]]:
+		var b := Basis(Vector3.UP, cr[1])
+		var at: Vector3 = cr[0]
+		Kit.box(props, at + Vector3(0, 0.17, 0), Vector3(0.46, 0.34, 0.34), w._c(cr[2]), b)
+		for k in 3: Kit.box(props, at + b * Vector3(-0.15 + k * 0.15, 0.17, 0.172), Vector3(0.05, 0.22, 0.01), w._c(cr[2]).darkened(0.3), b)
+		w._shadow(at, Vector2(0.6, 0.45), true)
+	# parked motorbike, side-on (two teens sit on it)
+	var mb := Vector3(-2.55, 0, -13.25)
+	for wx: float in [-0.6, 0.6]:
+		Kit.box(props, mb + Vector3(wx, 0.3, 0), Vector3(0.56, 0.56, 0.09), w._c("#26232a"), Basis(Vector3.BACK, PI * 0.25))
+		Kit.box(props, mb + Vector3(wx, 0.3, 0), Vector3(0.56, 0.56, 0.09), w._c("#26232a"))
+		Kit.box(props, mb + Vector3(wx, 0.3, 0.02), Vector3(0.18, 0.18, 0.1), w._c("#b9bcc0"))
+	Kit.box(props, mb + Vector3(0.0, 0.52, 0), Vector3(0.9, 0.22, 0.22), w._c("#3e7fd0"))
+	Kit.box(props, mb + Vector3(0.15, 0.7, 0), Vector3(0.8, 0.1, 0.26), w._c("#26232a"))
+	Kit.box(props, mb + Vector3(-0.55, 0.72, 0), Vector3(0.2, 0.42, 0.26), w._c("#3e7fd0"))
+	Kit.box(props, mb + Vector3(-0.62, 1.0, 0), Vector3(0.05, 0.04, 0.62), w._c("#26232a"))
+	w._shadow(mb, Vector2(1.7, 0.5))
+	# a chair under a striped beach umbrella
+	w._monobloc(props, Vector3(0.3, 0, -12.65), -0.2, w._c("#e8e7e0"))
+	var top := Vector3(0.75, 2.1, -12.95)
+	Kit.beam(props, Vector3(0.75, 0, -12.95), top, 0.035, w._c("#d8d6cf"))
+	for i in 8:
+		var a0 := TAU * i / 8.0
+		var a1 := TAU * (i + 1) / 8.0
+		Kit.tri(props, top + Vector3(0, 0.1, 0), top + Vector3(cos(a0) * 1.0, -0.25, sin(a0) * 1.0), top + Vector3(cos(a1) * 1.0, -0.25, sin(a1) * 1.0), w._c("#f29ac0") if i % 2 == 0 else w._c("#f2efe6"), 0.0, true)
+	w._shadow(Vector3(0.95, 0, -12.75), Vector2(1.9, 1.2))
 
 
 static func _side_pieces(w, props: SurfaceTool) -> void:
@@ -475,14 +494,25 @@ static func build_people(w) -> void:
 	st.vendor = v
 	st.queue = [null, null, null]
 	st.served_at = 0.0
-	# audience
-	w._person(Vector3(-4.6, 0, -12.0), 0.15, true)
-	w._person(Vector3(-3.8, 0, -11.9), -0.05, true)
-	w._person(Vector3(0.0, 0, -12.0), -0.2, true)
-	for bx: float in [-2.9, -2.0, -1.1]:
-		w._person(Vector3(bx, 0, -12.45), 0.0, true)
-	for sx: float in [-4.2, -1.2, 0.6]:
-		w._person(Vector3(sx, 0, -13.4), w._rng.randf_range(-0.2, 0.2), false)
+	# audience: on the curb, on crates, on the motorbike, under the umbrella, and a loose
+	# standing group by the sticker post (one leans on it)
+	for cs in [[-4.05, 0.2, "knee_up"], [-3.15, -0.1, "wide"], [-0.95, 0.35, "tucked"]]:
+		var c: Dictionary = w._person(Vector3(cs[0], 0, -14.05), cs[1], true)
+		c.seat_h = 0.15
+		c.posture = cs[2]
+	for cr in [[Vector3(-5.2, 0, -12.95), 0.4], [Vector3(-4.55, 0, -13.2), -0.3]]:
+		var c2: Dictionary = w._person(cr[0], cr[1], true)
+		c2.seat_h = 0.34
+	for bx: float in [-2.8, -2.25]:
+		var b: Dictionary = w._person(Vector3(bx, 0, -13.2), 0.15 if bx < -2.5 else -0.2, true)
+		b.seat_h = 0.72
+		b.posture = "wide" if bx < -2.5 else "crossed"
+	w._person(Vector3(0.3, 0, -12.65), -0.2, true)
+	var leaner: Dictionary = w._person(Vector3(1.15, 0, -14.85), 0.5, false)
+	leaner.posture = "cross_ankles"
+	leaner.trait = "nonchalant"
+	w._person(Vector3(1.95, 0, -14.95), -0.35, false)
+	w._person(Vector3(-1.7, 0, -14.9), 0.15, false)
 	# lolos at dama and a kibitzer
 	for side: float in [-1.0, 1.0]:
 		var l: Dictionary = w._person(Vector3(-6.6 + side * 0.55, 0, -12.6), -side * PI * 0.5, true, false)
