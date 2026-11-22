@@ -39,6 +39,8 @@ const STAND_EASE: = 0.35      # s to rise / sink
 const STAND_BEND: = 0.997     # hip-to-ankle as a share of leg length when standing (about 9 deg of knee)
 const STAND_MAX_RAISE: = 0.20 # m
 const STAND_MAX_SHIFT: = 0.15 # m the hips may shift to centre over the feet
+const STAND_UPRIGHT_DEG: = 18.0      # the torso comes back this far over the hips (the rally stance leans about 22 deg)
+const STAND_RISE_HALF_LIFE: = 0.05   # s: the lift follows the stride this smoothly while walking
 const SWING_OMEGA: = 28.0     # rad/s: critically damped spring on the swing (no frame pops)
 
 const CardReactionsScript = preload("res://scripts/graphics/card_reactions.gd")
@@ -65,6 +67,8 @@ var _expr_amount: = 0.0
 var _stand_w: = 0.0           # 0 athletic crouch .. 1 standing straight (between points), eased
 var _stand_p: = 0.0           # linear progress behind _stand_w
 var stand_raise: = 0.0        # m the body is lifted this frame (bench)
+var _stand_rise_prev: = 0.0
+var _tap_w: = 0.0             # 0..1 how far into a paddle tap this card is (turn or reach)
 var _free: Dictionary = {}    # arm -> 1 free .. 0 on the paddle (eased)
 var last_channels: Dictionary = {}   # reaction / expression channels applied this frame (bench)
 var _paddle_aim: = Transform3D.IDENTITY   # tap: paddle turned about the shown hand toward the partner
@@ -329,6 +333,7 @@ func _stop_reaction(p) -> void:
 
 func _partner_tap(delta: float, paddle_arm) -> void:
 	_tapping = false
+	_tap_w = 0.0
 	var player = _rig._player
 	if not enabled() or _rig._raw or paddle_arm == null: return
 	var tap: Dictionary = _tap.update(delta, _stop_reaction)
@@ -338,6 +343,7 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	_tapping = true
 	var w: float = float(tap.w)
 	var tw: float = float(tap.get("turn", w))
+	_tap_w = clampf(maxf(w, tw), 0.0, 1.0)
 	if tw <= 1e-4 and w <= 1e-4: return
 	var body: Node3D = player.body_pivot
 	var torso: Node3D = body.get_node_or_null("TorsoMesh")
@@ -529,13 +535,48 @@ func _drawn(n: Node3D) -> Vector3:
 	var d = _deltas.get(n)
 	return p if d == null else d * p
 
+## The torso and head come back over the hips (the rally stance leans forward, which reads as a
+## slouch on a player standing or walking about). The arms ride the shoulders and keep hanging
+## as they were. Not during a paddle tap: the reach is measured from the leaning shoulder.
+func _stand_upright(weight: float) -> void:
+	if weight <= 1e-3: return
+	var player = _rig._player
+	var body: Node3D = player.body_pivot
+	var torso: Node3D = body.get_node_or_null("TorsoMesh")
+	if torso == null: return
+	var fwd: Vector3 = body.get_global_transform_interpolated().basis * player._get_forward_axis()
+	fwd.y = 0.0
+	if fwd.length_squared() < 1e-6: return
+	fwd = fwd.normalized()
+	var side: = fwd.cross(Vector3.UP).normalized()
+	var hips: Node3D = body.get_node_or_null("HipsMesh")
+	var hip_p: Vector3 = _drawn(hips if hips else body)
+	var sgn: float = signf(side.cross(_drawn(torso) - hip_p).dot(fwd))
+	if sgn == 0.0: return
+	var back: = _turn_about(hip_p, side, -deg_to_rad(STAND_UPRIGHT_DEG) * weight * sgn)
+	var arm_moves: Array = []
+	for name in ["right_arm_node", "left_arm_node"]:
+		var arm = player.get(name)
+		if arm == null or arm.get("upper_pivot") == null: continue
+		var shoulder: Vector3 = _drawn(arm.upper_pivot)
+		arm_moves.append([arm, Transform3D(Basis.IDENTITY, back * shoulder - shoulder)])
+	_deltas[torso] = back * _deltas.get(torso, Transform3D.IDENTITY)
+	var head: Node3D = torso.get_node_or_null("HeadMesh")
+	if head != null: _deltas[head] = back * _deltas.get(head, Transform3D.IDENTITY)
+	for it in arm_moves:
+		for n in [it[0].upper_pivot, it[0].forearm_pivot, it[0].hand_pivot]:
+			if n != null: _deltas[n] = it[1] * _deltas.get(n, Transform3D.IDENTITY)
+
 func _stand_straight(delta: float, swinging: bool) -> void:
 	stand_raise = 0.0
 	var player = _rig._player
 	var want: = 0.0
 	if enabled() and not _rig._raw and not swinging and _expressions != null and _expressions.shown_context() == "idle" \
 			and not (_tap != null and _tap._hands_busy(player)) and not _ball_action_playing():
-		want = 1.0 - smoothstep(0.3, 1.0, _speed)
+		# Between points the walk stays upright too (the athletic crouch is for the rally); any
+		# other time the stance comes back as soon as the player moves.
+		var strolling: bool = player.has_method("_between_point_owner") and player._between_point_owner() != null
+		want = 1.0 if strolling else 1.0 - smoothstep(0.3, 1.0, _speed)
 	# This player's own speed (CardProfile), eased in and out rather than linear.
 	var ease: float = STAND_EASE
 	if _expressions != null:
@@ -543,7 +584,10 @@ func _stand_straight(delta: float, swinging: bool) -> void:
 		if _expressions._context() == "live": ease = minf(ease, 0.15)   # the rally started: no lag
 	_stand_p = move_toward(_stand_p, want, delta / ease) if delta > 0.0 else want
 	_stand_w = smoothstep(0.0, 1.0, _stand_p)
-	if _stand_w <= 1e-3: return
+	if _stand_w <= 1e-3:
+		_stand_rise_prev = 0.0
+		return
+	_stand_upright(_stand_w * (1.0 - _tap_w))
 	var legs: Array = []
 	for name in ["right_leg_node", "left_leg_node"]:
 		var leg = player.get(name)
@@ -570,8 +614,12 @@ func _stand_straight(delta: float, swinging: bool) -> void:
 		if flat >= reach: rise = 0.0
 		else: rise = minf(rise, maxf(0.0, sqrt(reach * reach - flat * flat) - off.y))
 		info.append([leg, hip, knee, ankle, l1, l2])
-	if rise == INF or rise <= 1e-4: return
+	if rise == INF: return
 	rise = minf(rise, STAND_MAX_RAISE) * _stand_w
+	# Walking, the room to rise changes with every stride: follow it smoothly (no step pops).
+	if delta > 0.0 and _speed > 0.3: rise = lerpf(rise, _stand_rise_prev, pow(0.5, delta / STAND_RISE_HALF_LIFE))
+	_stand_rise_prev = rise
+	if rise <= 1e-4: return
 	stand_raise = rise
 	var up: = Transform3D(Basis.IDENTITY, Vector3.UP * rise + shift)
 	var add: = func(n: Node3D, d: Transform3D) -> void:

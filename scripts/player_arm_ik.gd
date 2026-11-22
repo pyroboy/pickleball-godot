@@ -7,6 +7,10 @@ const HandPresentation = preload("res://scripts/player_hand_presentation.gd")
 const ElbowPreset = preload("res://scripts/elbow_preset_runtime.gd")
 const LiveArmBudget = preload("res://scripts/live_arm_budget.gd")
 const ElbowSwivel = preload("res://scripts/elbow_swivel.gd")
+## Support hand in "Paddle grip" mode: within NEAR metres of the paddle neck it is gripping (its
+## elbow is aimed from the wrist); FAR or more off it, the pose's own elbow guide decides.
+const SUPPORT_GRIP_ELBOW_NEAR := 0.04
+const SUPPORT_GRIP_ELBOW_FAR := 0.16
 var _hands
 ## Experiment switch (Pose Studio, stage 6c step 2): false = the paddle arm's elbow follows the
 ## authored pole without the wrist correction below. Default true: unchanged game.
@@ -110,6 +114,11 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 			var wrist: Vector3 = HandPresentation.wrist_for(support_arm, mount)
 			support_pole_world = ArmAnatomy.stabilized_pole(support_arm.upper_pivot.global_position, wrist, support_pole_world, pole_reference_axis * side)
 			var orientation_grip_weight: float = _hands.support_orientation_grip_weight()
+			# The elbow is aimed from the gripping wrist only while the hand really is on the paddle.
+			# A pose that moves the hand off it (hand target offset) keeps the "Paddle grip" mode, and
+			# this rule then held the elbow up at shoulder height whatever the pose's elbow guide said.
+			if not external_target.is_finite():
+				orientation_grip_weight *= 1.0 - smoothstep(SUPPORT_GRIP_ELBOW_NEAR, SUPPORT_GRIP_ELBOW_FAR, support_offset.length())
 			if orientation_grip_weight > 1e-05:
 				var distal: Vector3 = mount.basis * support_arm.articulated_hand.anatomical_basis.x
 				var shoulder: Vector3 = support_arm.upper_pivot.global_position
