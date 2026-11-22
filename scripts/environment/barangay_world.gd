@@ -144,6 +144,9 @@ func setup(game: Node, parent: Node3D) -> void:
 	_build_end = 0
 	_build_figures()
 	_build_shadows()
+	# pause menu "Court view": which end's scenery faces the camera (saved setting)
+	Settings.settings_changed.connect(func(key: String, _v): if key == "video.court_view_swapped": _apply_view())
+	_apply_view()
 
 
 # ------------------------------------------------------------------ helpers
@@ -1089,6 +1092,18 @@ func _move_shadow(i: int, pos: Vector3, hidden := false) -> void:
 
 # ------------------------------------------------------------------ runtime
 
+## Court view: with the swap on, the whole world turns half a turn so the other end's
+## scenery faces the camera (the court is symmetric, so play is unchanged). The floor
+## pattern, the sun on each end and which end animates all follow.
+func _apply_view() -> void:
+	var swapped := bool(Settings.get_value("video.court_view_swapped", false))
+	transform.basis = Basis(Vector3.UP, PI) if swapped else Basis.IDENTITY
+	_floor.set_shader_parameter("flip", -1.0 if swapped else 1.0)
+	for m in [_toon, _grimy]: m.set_shader_parameter("light_dir", transform.basis * LIGHT)
+	for m in [_toon_n, _grimy_n]: m.set_shader_parameter("light_dir", transform.basis * _near.transform.basis * LIGHT)
+	_live_end = (1 if _flipped else 0) ^ (1 if swapped else 0)
+	for p in _people: p.erase("sig")  # redraw everyone once
+
 func _process(delta: float) -> void:
 	if _mm_fig == null: return
 	var t0 := Time.get_ticks_usec()
@@ -1097,8 +1112,7 @@ func _process(delta: float) -> void:
 	var flipped: bool = _game != null and _game.has_method("view_flipped") and bool(_game.view_flipped())
 	if flipped != _flipped:
 		_flipped = flipped
-		_live_end = 1 if flipped else 0   # the camera now faces the other end
-		for p in _people: p.erase("sig")  # redraw everyone once
+		_apply_view()                     # the camera now faces the other end
 		_react_all("clap", 1.8)      # applause for the change of ends
 	_tick_t += delta
 	if _tick_t >= TICK:
