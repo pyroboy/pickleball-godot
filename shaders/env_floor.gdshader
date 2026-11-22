@@ -73,9 +73,15 @@ float ring(float d, float w) {
 }
 
 // faded basketball markings: 1 on a line, 0 off
-float bball_lines(vec2 p) {
+// The old basketball court, scaled with the slab (cut to 80 %): a full-size layout
+// (15 x 28 m) shrunk so its boundary sits just inside the new slab edge, like the
+// undersized courts painted on most barangay slabs. Line width stays 6 cm.
+uniform float bball_scale = 0.796;
+
+float bball_lines(vec2 p_world) {
+	vec2 p = p_world / bball_scale;
 	vec2 a = abs(p);
-	float w = 0.03;
+	float w = 0.03 / bball_scale;
 	float on = 0.0;
 	on = max(on, ring(a.x - 7.35, w) * step(a.y, 13.85));
 	on = max(on, ring(a.y - 13.85, w) * step(a.x, 7.35));
