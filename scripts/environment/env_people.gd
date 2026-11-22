@@ -44,7 +44,7 @@ const ARMS := {
 	"lean_in": [Vector3(0.2, -0.85, 0.6), Vector3(0.0, -0.55, 0.85)],
 	"stretch": [Vector3(0.2, 1.0, 0.0), Vector3(-0.3, 1.0, 0.0)],
 	"counter": [Vector3(0.25, -0.35, 0.9), Vector3(-0.35, 0.0, 1.0)],
-	"phone": [Vector3(0.15, -0.85, 0.5), Vector3(-0.25, 0.55, 1.0)],
+	"phone": [Vector3(0.15, -0.9, 0.45), Vector3(-0.25, 0.15, 1.0)],   # held low, at the chest
 	"hold_paddle": [Vector3(0.12, -1.0, 0.3), Vector3(0.1, -0.2, 1.0)],
 	"point": [Vector3(0.15, 0.25, 1.0), Vector3(0.05, 0.2, 1.0)],
 	"reach_up": [Vector3(0.2, 0.6, 0.8), Vector3(0.1, 0.9, 0.5)],

@@ -54,7 +54,8 @@ const PROP_SLOTS := 3            # cube props per person (paddle, bottle, fan, p
 const LANE_A := -14.6            # street lanes behind the crowd (local z)
 const LANE_B := -15.9            # only west of the tricycles (x < 5)
 const LANE_FAR := -27.6
-var _last_cam := Vector3.INF          # behind the hall, seen between the buildings
+var _last_cam := Vector3.INF
+var _playing := false          # behind the hall, seen between the buildings
 var _crowd: Array = []           # the ones who react as a crowd
 var _chickens: Array = []
 var _chicks: Array = []          # follow the first chicken (the hen)
@@ -945,7 +946,7 @@ func _on_bounce(pos: Vector3) -> void:
 			chick.mode = "run"
 			chick.next = _t + 1.2
 	for p in _crowd:
-		if Vector3(p.pos).distance_to(local) < 2.6: _react(p, "wince", 0.7)
+		if Vector3(p.pos).distance_to(local) < 2.6: _react(p, "flinch", 0.6)
 	if Vector3(_dog.pos).distance_to(local) < 4.0: _dog_bark(1.2)
 
 
@@ -1049,13 +1050,14 @@ func _dog_bark(duration: float) -> void:
 
 func _step() -> void:
 	var playing := _game != null and int(_game.get("game_state")) == PLAYING
+	_playing = playing
 	var ball_local := Vector3.ZERO
 	var have_ball := _ball != null and is_instance_valid(_ball)
 	if have_ball: ball_local = to_local((_ball as Node3D).get_global_transform_interpolated().origin)
 	if _check_speed and have_ball:
 		_check_speed = false
 		if (_ball as RigidBody3D).linear_velocity.length() > 14.0:
-			for k in 3: _react(_crowd[_rng.randi() % _crowd.size()], "ooh", 0.6)
+			for k in 3: _react(_crowd[_rng.randi() % _crowd.size()], "flinch", 0.5)
 	_update_score()
 	for w in _walkers: _step_walker(w)
 	var cam := get_viewport().get_camera_3d()
@@ -1117,6 +1119,9 @@ const TRAIT_SEATED := {"fan": ["tucked", "normal"], "calm": ["crossed", "normal"
 	"grumpy": ["wide"], "sleepy": ["sprawl", "knee_up"], "chatty": ["crossed", "knee_up", "normal"]}
 const TRAIT_STANDING := {"fan": ["stand_wide"], "calm": ["stand", "contrapposto"], "nonchalant": ["cross_ankles", "contrapposto"],
 	"grumpy": ["stand_wide"], "sleepy": ["contrapposto"], "chatty": ["contrapposto", "stand"]}
+## While the ball is in play the crowd keeps its arms down (raised arms behind the far
+## players read as noise); bigger habits wait for the point to end.
+const PLAY_HABITS := ["", "knees", "lean_in", "arms_crossed", "hands_hips", "hand_on_thigh", "phone", "doze", "nod", "shift"]
 const SEATED_ONLY := ["knees", "lean_back", "lean_in", "doze", "chin_rest", "hand_on_thigh"]
 const STANDING_ONLY := ["hands_hips", "shift"]
 
@@ -1199,6 +1204,9 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 				arm_r = "gesture_a" if beat == 0 else "gesture_b"
 			"glance":
 				head_pitch = -0.1
+			"flinch":
+				lean = -0.15
+				bounce = 0.03
 			"flip":
 				arm_r = "reach_up"
 			"wave":
@@ -1219,15 +1227,16 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 			p.next_idle = float(p.idle_until) + _rng.randf_range(1.5, 6.0)
 		var kind: String = p.idle_kind if _t < float(p.idle_until) else ""
 		var tr: String = p.trait
-		if playing and kind in ["phone", "stretch", "fan", "lean_back"] and tr != "nonchalant": kind = ""   # eyes on the rally
+		if playing and not (kind in PLAY_HABITS): kind = ""
+		if playing and kind == "phone" and tr != "nonchalant": kind = ""   # eyes on the rally
 		# resting arms by personality when no habit is playing
 		if kind == "":
 			match tr:
 				"grumpy": kind = "arms_crossed"
-				"nonchalant": kind = "phone" if p.role != "queue" else "chin_rest"
+				"nonchalant": kind = "phone" if p.role != "queue" else ("hand_on_thigh" if playing else "chin_rest")
 				"fan": kind = "knees" if seated else ""
 				"sleepy": kind = "doze" if seated and not playing else ""
-		if p.role == "queue" and kind == "phone": kind = "chin_rest"
+		if p.role == "queue" and kind == "phone": kind = "hand_on_thigh" if playing else "chin_rest"
 		# now and then re-cross the legs or shift stance
 		if _t > float(p.next_posture):
 			_pick_posture(p)
@@ -1308,8 +1317,10 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 				arm_l = "lean_in"
 				if p.role != "queue": arm_r = "lean_in"
 			if _rally_hits >= 10 and not seated:
-				arm_l = "fist_mid"
-				arm_r = "mouth"
+				# tension without raised arms
+				arm_l = "arms_crossed"
+				arm_r = "arms_crossed"
+				lean = 0.12
 		# eyes on the ball while it is in play
 		var attentive: bool = tr != "nonchalant" and kind != "doze"
 		if playing and have_ball and p.watch and attentive:
@@ -1437,7 +1448,7 @@ func _walk_pose(w: Dictionary, moving: bool, stride: float) -> void:
 				"friendly":
 					# waves at the crowd while passing behind them
 					var x := Vector3(w.pos).x
-					if moving and x > -7.0 and x < 0.0 and absf(Vector3(w.pos).z - LANE_A) < 0.3:
+					if moving and not _playing and x > -7.0 and x < 0.0 and absf(Vector3(w.pos).z - LANE_A) < 0.3:
 						w.arm_r = "wave_a" if int(_t * 5.0) % 2 == 0 else "wave_b"
 						w.head_yaw = 0.6 if float(w.yaw) > 0.0 else -0.6
 
