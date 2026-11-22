@@ -868,9 +868,10 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
 	var pos: Vector3 = st.cart_pos
 	# whole 5 cm moves and 1/16-rad turns so the pixels jump cleanly
-	cart.position = Vector3(round(pos.x * 20.0) / 20.0, 0.0, round(pos.z * 20.0) / 20.0)
+	var drawn := Kit.pull(pos)   # drawn pulled in with the scenery (pavement cut)
+	cart.position = Vector3(round(drawn.x * 20.0) / 20.0, 0.0, round(drawn.z * 20.0) / 20.0)
 	cart.rotation.y = round(float(st.cart_yaw) * 24.0) / 24.0
-	var shadow_at: Vector3 = cart.position + Basis(Vector3.UP, cart.rotation.y) * Vector3(0.15, 0, -0.5)
+	var shadow_at: Vector3 = pos + Basis(Vector3.UP, cart.rotation.y) * Vector3(0.15, 0, -0.5)
 	w._move_shadow(int(st.cart_shadow), w._end_pos(shadow_at, 1), not cart.visible)
 	var doors: Array = st.cart_doors
 	var opened := smoothstep(0.0, 1.0, float(st.cart_open))
@@ -1076,7 +1077,8 @@ static func _step_jeep(w, st: Dictionary, dt: float) -> void:
 				st.jeep_state = "away"
 				st.jeep_next = t + w._rng.randf_range(25.0, 45.0)
 	# step the position in whole 5 cm moves so the pixels jump cleanly
-	jeep.position = Vector3(round(float(st.jeep_x) * 20.0) / 20.0, 0.0, JEEP_LANE)
+	var drawn := Kit.pull(Vector3(float(st.jeep_x), 0.0, JEEP_LANE))
+	jeep.position = Vector3(round(drawn.x * 20.0) / 20.0, 0.0, round(drawn.z * 20.0) / 20.0)
 
 
 ## Audience members now and then walk over to buy while the cart is open.

@@ -34,7 +34,7 @@ const PixelFont := preload("res://assets/fonts/arjo_pixel.fnt")
 
 const SEED := 20261122
 const GROUND_Y := 0.066          # just under the court surface (top 0.075)
-const SLAB := Vector2(7.5, 14.0)
+const SLAB := Vector2(6.0, 11.2)   # cut to 80 %; scenery is drawn pulled in (Kit.pull)
 const TICK := 1.0 / 12.0         # figures move in 12 Hz steps (pixel-art timing, no crawl)
 const LIGHT := Vector3(-0.4, 0.7, 0.6)
 const PLAYING := 2               # game.gd GameState.PLAYING
@@ -110,8 +110,11 @@ func setup(game: Node, parent: Node3D) -> void:
 	var bld := Kit.begin()
 	var props := Kit.begin()
 	var cloth := Kit.begin()
-	_build_curb(props)
-	_build_net_poles(game, props)
+	# the curb and net poles are laid out from the slab and court: never pulled
+	var edge := Kit.begin()
+	_build_curb(edge)
+	_build_net_poles(game, edge)
+	_add_mesh("BarangayCourtEdge", edge)
 	_build_house(bld, cloth)
 	_build_hall(bld, cloth)
 	_build_store(bld)
@@ -122,9 +125,9 @@ func setup(game: Node, parent: Node3D) -> void:
 	_build_queue(props)
 	_build_scorer(props)
 	_build_background(bld)
-	_add_mesh("BarangayBuildings", bld, _grimy)
-	_add_mesh("BarangayProps", props)
-	_add_mesh("BarangayCloth", cloth)
+	_add_mesh("BarangayBuildings", bld, _grimy, null, true)
+	_add_mesh("BarangayProps", props, null, null, true)
+	_add_mesh("BarangayCloth", cloth, null, null, true)
 	# the pandesal end: authored "far = -z" in a child turned half a turn, lit to match
 	_near = Node3D.new()
 	_near.name = "PandesalEnd"
@@ -138,9 +141,9 @@ func setup(game: Node, parent: Node3D) -> void:
 	var np := Kit.begin()
 	var nc := Kit.begin()
 	PandesalEnd.build_geometry(self, nb, np, nc)
-	_add_mesh("PandesalBuildings", nb, _grimy_n, _near)
-	_add_mesh("PandesalProps", np, _toon_n, _near)
-	_add_mesh("PandesalCloth", nc, _toon_n, _near)
+	_add_mesh("PandesalBuildings", nb, _grimy_n, _near, true)
+	_add_mesh("PandesalProps", np, _toon_n, _near, true)
+	_add_mesh("PandesalCloth", nc, _toon_n, _near, true)
 	_build_end = 0
 	_build_figures()
 	_build_shadows()
@@ -155,13 +158,68 @@ func _c(code: String) -> Color:
 	return Pal.hex(code)
 
 
-func _add_mesh(label: String, st: SurfaceTool, material: Material = null, parent: Node3D = null) -> void:
+func _add_mesh(label: String, st: SurfaceTool, material: Material = null, parent: Node3D = null, pulled := false) -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = label
-	mi.mesh = st.commit()
+	if pulled:
+		var arrays := st.commit_to_arrays()
+		Kit.warp_arrays(st, arrays)
+		# Pulled in, an end's tall scenery (wires, bunting, roofs) would hang in front of
+		# the camera when that end is behind it, so each end's meshes hide then. Props
+		# along the court sides (the end's own half) stay: split them off first.
+		if label.ends_with("Props"):
+			var side := _split_side(arrays)
+			if not side.is_empty():
+				var smi := MeshInstance3D.new()
+				smi.name = label + "Side"
+				var sm := ArrayMesh.new()
+				sm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, side)
+				smi.mesh = sm
+				smi.material_override = material if material != null else _toon
+				smi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				(parent if parent != null else self).add_child(smi)
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mi.mesh = mesh
+		_end_meshes[_build_end].append(mi)
+	else:
+		mi.mesh = st.commit()
 	mi.material_override = material if material != null else _toon
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	(parent if parent != null else self).add_child(mi)
+
+
+var _end_meshes := {0: [], 1: []}
+
+
+## Moves triangles whose centre is along the court sides (end-local z > -10) out of
+## `arrays` into a new arrays set, which is returned (empty when there are none).
+func _split_side(arrays: Array) -> Array:
+	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var keep := PackedInt32Array()
+	var side := PackedInt32Array()
+	for i in range(0, v.size(), 3):
+		var cz := (v[i].z + v[i + 1].z + v[i + 2].z) / 3.0
+		(side if cz > -10.0 else keep).append(i)
+	if side.is_empty(): return []
+	var out := []
+	for which: PackedInt32Array in [keep, side]:
+		var a := []
+		a.resize(Mesh.ARRAY_MAX)
+		for slot in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_COLOR]:
+			var src = arrays[slot]
+			if src == null: continue
+			var dst = src.duplicate()
+			dst.resize(which.size() * 3)
+			var o := 0
+			for i in which:
+				for k in 3:
+					dst[o] = src[i + k]
+					o += 1
+			a[slot] = dst
+		out.append(a)
+	for slot in Mesh.ARRAY_MAX: arrays[slot] = out[0][slot]
+	return out[1]
 
 
 ## End-local (authored "far = -z") to this node's space for the end being built.
@@ -186,7 +244,7 @@ func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0)
 	l.shaded = false
 	l.double_sided = false
 	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	l.position = pos
+	l.position = Kit.pull(pos)
 	l.rotation.y = yaw
 	l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	(_near if _build_end == 1 else self).add_child(l)
@@ -205,6 +263,7 @@ func _build_floor(game: Node) -> void:
 	for k in cols: _floor.set_shader_parameter(k, _c(cols[k]))
 	_floor.set_shader_parameter("gain", Pal.GAIN)
 	_floor.set_shader_parameter("slab_half", SLAB)
+	_floor.set_shader_parameter("gutter_x", Vector2(SLAB.x + 0.28, SLAB.x + 0.64))
 	var ground := MeshInstance3D.new()
 	ground.name = "BarangayGround"
 	var plane := PlaneMesh.new()
@@ -264,7 +323,7 @@ func _build_curb(st: SurfaceTool) -> void:
 			if _rng.randf() < 0.25:   # a worn patch on top
 				Kit.box(st, p + Vector3(0, 0.051, 0), Vector3(w * 0.5, 0.004, seg * 0.4) if along_z else Vector3(seg * 0.4, 0.004, w * 0.5), bare)
 	# the gutter's outer lip on the +x side
-	var lip_x := 8.22
+	var lip_x := SLAB.x + 0.72
 	var lip := _c("#8f8b84")
 	var k := 0
 	var zz := -SLAB.y - 0.3
@@ -957,7 +1016,7 @@ func _build_figures() -> void:
 	# ball kids: one on the ground behind the far baseline, one squatting by the right
 	# net post, one behind the near baseline (off screen until needed)
 	for spec in [[Vector3(5.0, 0, -10.5), 0.3, "knee_up", 0.12], [Vector3(6.45, 0, 1.0), -PI * 0.5, "tucked", 0.25],
-			[Vector3(0.8, 0, 11.2), PI, "knee_up", 0.12]]:
+			[Vector3(0.8, 0, 10.4), PI, "knee_up", 0.12]]:
 		var k := _person(spec[0], spec[1], true, false, 0.7)
 		k.role = "ballkid"
 		k.end = -1
@@ -1024,6 +1083,7 @@ func _build_figures() -> void:
 		var moving: bool = p.role == "walker"
 		if pos.y < 0.5 and (pos.z > -18.6 or moving):
 			p.shadow = _shadow(pos, Vector2(0.7, 0.5))
+			if p.role == "ballkid": _shadow_real[int(p.shadow)] = true
 	for ch in _chickens:
 		ch.base = base
 		base += Fig.CHICKEN_PARTS
@@ -1075,12 +1135,18 @@ func _build_shadows() -> void:
 	add_child(mmi)
 
 
+var _shadow_real := {}   # shadow indices in real court space (ball kids), not pulled
+
+
 func _write_shadow(i: int) -> void:
 	var spec: Array = _shadow_specs[i]
 	var p: Vector2 = spec[0]
 	var s: Vector2 = spec[1]
 	# the sun is behind the camera, up and to the left: shadows fall a little right and back
 	var flat := Basis(Vector3(s.x, 0, 0), Vector3(0, 0, -s.y), Vector3(0, 1, 0))
+	if not _shadow_real.has(i):
+		var q := Kit.pull(Vector3(p.x, 0, p.y))
+		p = Vector2(q.x, q.z)
 	_mm_shadow.set_instance_transform(i, Transform3D(flat, Vector3(p.x + s.x * 0.08, GROUND_Y + 0.012 + i * 0.00002, p.y - s.y * 0.12)))
 	_mm_shadow.set_instance_custom_data(i, Color(float(spec[2]), 0, 0, 0))
 
@@ -1102,6 +1168,8 @@ func _apply_view() -> void:
 	for m in [_toon, _grimy]: m.set_shader_parameter("light_dir", transform.basis * LIGHT)
 	for m in [_toon_n, _grimy_n]: m.set_shader_parameter("light_dir", transform.basis * _near.transform.basis * LIGHT)
 	_live_end = (1 if _flipped else 0) ^ (1 if swapped else 0)
+	for e in _end_meshes:
+		for mi: MeshInstance3D in _end_meshes[e]: mi.visible = e == _live_end
 	for p in _people: p.erase("sig")  # redraw everyone once
 
 func _process(delta: float) -> void:
@@ -1303,9 +1371,13 @@ func _step() -> void:
 		if not cam_moved and sig == p.get("sig", []): continue
 		p.sig = sig
 		changed = true
+		# drawn pulled in with the scenery (ball kids live in real court space)
+		var real: Vector3 = p.pos
+		if p.role != "ballkid": p.pos = Kit.pull(real)
 		var j := People.solve(p, _cards.extents(int(p.profile)))
 		_cards.write(i, p, j, cam_local)
 		_pose_props(p, j)
+		p.pos = real
 	if changed: _cards.commit()
 	for ch in _chickens: _step_chicken(ch)
 	_step_chicks()
@@ -1930,7 +2002,7 @@ func _step_chicks() -> void:
 
 
 func _pose_cat(cat: Dictionary) -> void:
-	var root := Transform3D(Basis(Vector3.UP, float(cat.yaw)), Vector3(cat.pos))
+	var root := Transform3D(Basis(Vector3.UP, float(cat.yaw)), Kit.pull(Vector3(cat.pos)))
 	var b: int = cat.base
 	var flick := 0.5 * sin(float(cat.step) * 0.9)
 	_mm_fig.set_instance_transform(b + 0, root * Transform3D(Basis.from_scale(Vector3(0.18, 0.2, 0.3)), Vector3(0, 0.12, 0)))

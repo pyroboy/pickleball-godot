@@ -1,4 +1,5 @@
 extends RefCounted
+const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 ## Low-poly 3D figures for the environment (visual only): people, chickens, a dog.
 ## Every body part is one instance of a unit cube in a single MultiMesh (one draw call
 ## for every figure), coloured per instance and shaded by shaders/env_toon.gdshader.
@@ -142,7 +143,7 @@ static func new_chicken(pos: Vector3, colors: Dictionary) -> Dictionary:
 
 
 static func pose_chicken(mm: MultiMesh, k: Dictionary) -> void:
-	var root := Transform3D(Basis(Vector3.UP, float(k.yaw)), Vector3(k.pos))
+	var root := Transform3D(Basis(Vector3.UP, float(k.yaw)), Kit.pull(Vector3(k.pos)))
 	var b: int = k.base
 	var down: bool = k.head_down
 	var step: int = k.step
@@ -173,7 +174,7 @@ static func new_dog(pos: Vector3, colors: Dictionary) -> Dictionary:
 
 
 static func pose_dog(mm: MultiMesh, d: Dictionary) -> void:
-	var root := Transform3D(Basis(Vector3.UP, float(d.yaw)), Vector3(d.pos))
+	var root := Transform3D(Basis(Vector3.UP, float(d.yaw)), Kit.pull(Vector3(d.pos)))
 	var b: int = d.base
 	var mode: String = d.mode
 	var lying := mode == "sleep"
@@ -217,7 +218,7 @@ static func new_chick(pos: Vector3) -> Dictionary:
 ## Chicks are drawn a little larger than life (about 0.16 m tall) so they still read
 ## as yellow fluff at the far end of the court.
 static func pose_chick(mm: MultiMesh, k: Dictionary) -> void:
-	var root := Transform3D(Basis(Vector3.UP, float(k.yaw)), Vector3(k.pos))
+	var root := Transform3D(Basis(Vector3.UP, float(k.yaw)), Kit.pull(Vector3(k.pos)))
 	var b: int = k.base
 	var down: bool = k.head_down
 	var step: int = k.step
