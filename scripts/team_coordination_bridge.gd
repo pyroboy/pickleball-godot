@@ -19,6 +19,8 @@ var _last_advanced_frame:=-1
 var _clock:=0.0
 var _seen_generation:=-1
 var _style_preferences_frame:=-1
+var _noted_owner:Dictionary={}
+var _noted_flight:Dictionary={}
 
 func setup(owner) -> bool:
  game=owner
@@ -217,7 +219,8 @@ func advise(brain,ordinary_offer:Dictionary,delta:float) -> Dictionary:
   "time":float(reported.get("time",-1.0)),"reachable":bool(reported.get("reachable",false)),
   "stroke_started":brain.ai_is_charging and brain.coordination_forward_progress>0.0 and brain._pose_alignment_tick==Engine.get_physics_frames()-1,
   "stroke_progress":brain.coordination_forward_progress if brain.ai_is_charging else 0.0,
-  "committed_visible":bool(brain.ai_is_charging),"ready":bool(brain._perception_ready),"sample_age":age,"latency":latency}
+  "committed_visible":bool(brain.ai_is_charging),"ready":bool(brain._perception_ready),"sample_age":age,"latency":latency,
+  "pending":bool(reported.get("deferred",false))}
  policy.publish(id,own)
  for teammate_id in observed.visible:
   var teammate=game.get_player_by_actor_id(int(teammate_id))
@@ -225,6 +228,17 @@ func advise(brain,ordinary_offer:Dictionary,delta:float) -> Dictionary:
    policy.publish(int(teammate_id),_human_offer(brain,observed.visible[teammate_id],observed.age,observed.latency,observed.ready,flight,int(observed.bounces)))
  var decision:Dictionary=policy.decision(id)
  last_decision_by_actor[id]=decision.duplicate(true)
+ # One bench note per change of owner (a few per rally): who took the ball and both offers.
+ var team:int=actor.get_team_id();var owner:int=int(decision.get("owner",-1))
+ if owner!=int(_noted_owner.get(team,-1)) or flight!=int(_noted_flight.get(team,-1)):
+  if owner>=0:
+   var offers:Dictionary=decision.get("offers",{})
+   var note:Dictionary={"team":team,"owner":owner,"flight":flight,"reason":str(decision.get("reason","")),"changed":flight==int(_noted_flight.get(team,-1)) and int(_noted_owner.get(team,-1))>=0,"receiver":int(decision.get("required_receiver",-1))}
+   for other in offers:
+    var tag:String="own" if int(other)==owner else "other"
+    for field in offers[other]:note[tag+"_"+str(field)]=offers[other][field]
+   PerfMonitor.note("team_claim",note)
+  _noted_owner[team]=owner;_noted_flight[team]=flight
  return decision
 
 func may_begin_stroke(actor) -> bool:

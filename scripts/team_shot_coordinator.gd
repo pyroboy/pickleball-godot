@@ -7,6 +7,17 @@ const MIDDLE_DEADBAND := 0.55
 const CHASE_MIN_RUN := 0.05        # m: an offer with no run target is not a chase
 const CHASE_KEEP_ADVANTAGE := 0.5  # m the current chaser is favoured by, so partners don't swap
 const HUMAN_SIDE_MARGIN := 0.2     # m past the partners' midpoint, toward the human, that makes a ball the human's
+# Who takes the ball: the partner for whom it is the easier ball, not simply whoever could touch it
+# first. A metre of running weighs like RUN_COST seconds of waiting, and a run that needs more
+# than STRAIN_SPEED m/s all the way weighs extra. (Before: 0.06 s per metre, so the partner who
+# could lunge across and reach a drive a moment earlier took it from the one it was going to.)
+const RUN_COST := 0.30
+const STRAIN_SPEED := 2.5
+const STRAIN_COST := 0.08
+# A partner whose brain has not planned this ball yet (the AIs plan one per tick) is waited for
+# this long (from when it was first seen planning) before the other one is given it. Before, the
+# first to plan claimed it and kept it.
+const PLAN_WAIT_SECONDS := 0.12
 var roster: Dictionary = {}
 var teams: Dictionary = {0: [], 1: []}
 var _context_key: Array = []
@@ -17,6 +28,7 @@ var _decisions: Dictionary = {}
 var _cover: Dictionary = {}
 var _frame := -1
 var _time := 0.0
+var _plan_wait: Dictionary = {}   # team -> time a partner was first seen still planning this ball
 var generation := 0
 var last_reset_reason := "unconfigured"
 
@@ -52,7 +64,7 @@ func set_tendencies(actor_id:int, values:Dictionary) -> bool:
 
 func reset(reason: String) -> void:
  generation+=1;last_reset_reason=reason
- _offers.clear();_claims.clear();_decisions.clear();_cover.clear();_context_key=[];_context={};_frame=-1
+ _offers.clear();_claims.clear();_decisions.clear();_cover.clear();_plan_wait.clear();_context_key=[];_context={};_frame=-1
 
 func begin_frame(frame: int, simulation_time: float, public_context: Dictionary) -> void:
  if frame<0 or not is_finite(simulation_time):reset("invalid public clock");return
@@ -60,7 +72,7 @@ func begin_frame(frame: int, simulation_time: float, public_context: Dictionary)
   int(public_context.get("service_token",-1)),int(public_context.get("required_receiver",-1)),
   int(public_context.get("incoming_team",-1)),bool(public_context.get("in_play",false)),bool(public_context.get("eligible_play",false))]
  if key!=_context_key or frame<_frame:
-  _offers.clear();_claims.clear();_decisions.clear();_cover.clear();generation+=1
+  _offers.clear();_claims.clear();_decisions.clear();_cover.clear();generation+=1;_plan_wait.clear()
   last_reset_reason="public flight, lifecycle or service eligibility changed"
  _context_key=key;_context=public_context.duplicate(true);_frame=frame;_time=simulation_time
  for old_frame in _offers.keys():
@@ -83,7 +95,7 @@ func publish(actor_id: int, observation: Dictionary) -> bool:
   "reachable":bool(observation.get("reachable",false)) and time>=0.0 and ready,
   "committed":bool(observation.get("committed_visible",false)) and ready,"ready":ready,
   "stroke_started":bool(observation.get("stroke_started",false)) and ready,"stroke_progress":float(observation.get("stroke_progress",0.0)),
-  "sample_age":age,"latency":latency}
+  "sample_age":age,"latency":latency,"pending":bool(observation.get("pending",false))}
  offer.make_read_only()
  if not _offers.has(_frame):_offers[_frame]={}
  if _offers[_frame].has(actor_id):return false
@@ -135,14 +147,25 @@ func _cost(offer: Dictionary) -> float:
  var actor:Dictionary=roster[int(offer.actor_id)]
  var crossing:bool=absf(Vector3(offer.target).x)<MIDDLE_DEADBAND or Vector3(offer.target).x*Vector3(actor.home).x<0.0
  var poach:float=float(actor.poach_tendency)*.06 if crossing else 0.0
- return maxf(0.0,float(offer.deadline)-_time)+travel.length()*.06+reversal-poach
+ var eta:float=maxf(0.0,float(offer.deadline)-_time)
+ var strain:float=maxf(0.0,travel.length()/maxf(eta,.05)-STRAIN_SPEED)*STRAIN_COST if travel.length()>.3 else 0.0
+ return eta+travel.length()*RUN_COST+strain+reversal-poach
 
 func _resolve_team(team: int) -> Dictionary:
  var prior:Dictionary=_offers.get(_frame-1,{})
  var ids:Array=teams[team]
  var complete:bool=prior.has(ids[0]) and prior.has(ids[1])
  var selected:=-1;var best:=INF;var reason:="waiting for prior completed observation frame"
- if complete:
+ # Nobody has the ball yet and a partner is still to plan it: wait a moment for both plans.
+ var planning:bool=false
+ if complete and not _claims.has(team):
+  for id in ids:
+   if bool(prior[id].get("pending",false)) and _may_chase(prior[id],team):planning=true
+  if planning:
+   if not _plan_wait.has(team):_plan_wait[team]=_time
+   planning=_time-float(_plan_wait[team])<PLAN_WAIT_SECONDS
+ if planning:reason="waiting for both partners' plans"
+ if complete and not planning:
   reason="no legal reachable offer"
   for id in ids:
    var offer:Dictionary=prior[id]
@@ -182,7 +205,13 @@ func _resolve_team(team: int) -> Dictionary:
  var targets:Dictionary={}
  for id in ids:
   targets[id]=prior[id].target if selected==id else _cover_target(id,selected,prior)
- return {"frame":_frame,"generation":generation,"owner":selected,"reason":reason,"targets":targets,
+ # What each partner offered (bench note "team_claim": who took the ball and what the other could have done).
+ var offers:Dictionary={}
+ if complete:
+  for id in ids:
+   var run:Vector3=Vector3(prior[id].target)-Vector3(prior[id].root);run.y=0.0
+   offers[id]={"run":run.length(),"eta":maxf(0.0,float(prior[id].deadline)-_time),"reachable":_eligible(prior[id],team),"x":Vector3(prior[id].root).x,"z":Vector3(prior[id].root).z,"contact_x":Vector3(prior[id].contact).x,"contact_z":Vector3(prior[id].contact).z,"contact_y":Vector3(prior[id].contact).y,"offered":bool(prior[id].reachable),"ready":bool(prior[id].ready),"cost":_cost(prior[id])}
+ return {"frame":_frame,"generation":generation,"owner":selected,"reason":reason,"targets":targets,"offers":offers,
   "source_frame":_frame-1,"complete_observations":complete,"required_receiver":int(_context.get("required_receiver",-1))}
 
 func _cover_target(id: int, owner: int, offers: Dictionary) -> Vector3:
