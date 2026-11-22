@@ -35,6 +35,13 @@ var server: = 0
 var retriever: = -1
 var observed_bounces: = 0
 var used_offscreen_helper: = false
+# Ball kids (court world, visual): a game meta "ball_kids" provider fetches balls the
+# players should not walk to and throws them to the server from its own hand. When none
+# is available (practice, tests) or a kid is late, the off-screen toss below is used.
+const KID_MIN_WALK: = 5.0          # m: a nearer player picks the ball up themself
+const KID_WAIT_LIMIT: = 6.0        # s after the server is set before falling back
+var used_ball_kid: = false
+var _kid_fetch: = false
 var catch_after_bounce: = false
 var pickup_contact_gap: = INF
 var catch_contact_gap: = INF
@@ -304,6 +311,8 @@ func begin(presentations: Array = []) -> bool:
 	_elapsed_limit = TIMEOUT
 	observed_bounces = 0
 	used_offscreen_helper = false
+	used_ball_kid = false
+	_kid_fetch = false
 	catch_after_bounce = false
 	pickup_contact_gap = INF
 	catch_contact_gap = INF
@@ -348,6 +357,8 @@ func cancel() -> void :
 	if not _active: return
 	_active = false
 	_taps = []
+	if _kid_fetch and _ball_kids() != null: _ball_kids().cancel_fetch()
+	_kid_fetch = false
 	_end_route.cancel()
 	_motion_velocity.fill(Vector3.ZERO)
 	for team in _players.size():
@@ -828,6 +839,13 @@ func _perf_choose_retriever() -> void:
 		_start_offscreen_return()
 		return
 	if _try_air_catch(): return
+	# A ball well away from everyone goes to a ball kid when there is one.
+	var nearest: int = _nearest_retriever(_game.ball.global_position)
+	if nearest >= 0 and _ball_kids() != null:
+		var walk: float = _players[nearest].global_position.distance_to(_pickup_root(_game.ball.global_position, _players[nearest]))
+		if walk > KID_MIN_WALK:
+			_start_offscreen_return()
+			return
 	retriever = _nearest_retriever(_game.ball.global_position)
 	_targets[retriever] = _pickup_root(_game.ball.global_position, _players[retriever])
 	_run_approach[retriever] = _players[retriever].global_position.distance_to(_targets[retriever]) > RUN_DECISION_DISTANCE
@@ -1017,6 +1035,9 @@ func _perf_start_offscreen_return() -> void:
 	used_offscreen_helper = true
 	_carry_team = -1
 	retriever = -1
+	var kids = _ball_kids()
+	_kid_fetch = kids != null and _game.ball.global_position.is_finite() and kids.request_fetch(_game.ball.global_position, _serve_position(server))
+	used_ball_kid = _kid_fetch
 	_game.ball.visible = false
 	_game.ball.freeze = true
 	for index in _players.size(): _targets[index] = _serve_position(index)
@@ -1027,11 +1048,22 @@ func _perf_start_offscreen_return() -> void:
 
 func _await_helper_position() -> void :
 	var token: int = _run_id
+	var waited: = 0.0
 	while _active and phase == "HELPER_WAIT" and token == _run_id:
 		await get_tree().physics_frame
 		if not _active or phase != "HELPER_WAIT" or token != _run_id: return
 		if get_tree().paused or _game._tool_state_active(): continue
 		if _at_target(server):
+			if _kid_fetch:
+				var kids = _ball_kids()
+				var hand: Vector3 = kids.throw_origin(_targets[server]) if kids != null else Vector3.INF
+				if hand.is_finite():
+					_launch_pass(hand)
+					return
+				waited += get_physics_process_delta_time()
+				if waited < KID_WAIT_LIMIT and kids != null: continue
+				if kids != null: kids.cancel_fetch()
+				_kid_fetch = false
 			var origin: Vector3 = _targets[server] + Vector3(7.0, 0.7, 0.0) + _players[server]._get_forward_axis() * 2.5
 			var camera: Camera3D = _game.main_camera
 			while camera != null and camera.is_position_in_frustum(origin) and origin.x < 100.0:
@@ -1196,6 +1228,11 @@ func _all_support_ready(include_server: bool = true) -> bool:
 		if not include_server and index == server: continue
 		if not _ready_to_pickup(index): return false
 	return true
+
+func _ball_kids():
+	var kids = _game.get_meta("ball_kids", null) if _game != null else null
+	if kids == null or not is_instance_valid(kids) or not kids.has_method("request_fetch") or not kids.available(): return null
+	return kids
 
 func _nearest_retriever(point: Vector3) -> int:
 	var best: int = -1

@@ -43,12 +43,15 @@ var _t := 0.0
 var _tick_t := 0.0
 var _flipped := false
 var _toon: ShaderMaterial
+var _grimy: ShaderMaterial
 var _floor: ShaderMaterial
 
 var _mm_fig: MultiMesh
 var _mm_shadow: MultiMesh
 var _people: Array = []          # all people (crowd, watchers, tindera, neighbour, queue, scorer, walkers)
 var _walkers: Array = []         # passers-by on the street lanes behind the far end
+var _kids: Array = []            # ball kids: fetch balls the players should not walk to
+var _fetch_kid: Dictionary = {}  # the kid on the current fetch, if any
 var _cards                       # People.CardBatch: every person's pixel cards, one mesh
 const PROP_SLOTS := 3            # cube props per person (paddle, bottle, fan, phone, umbrella, bag, taho)
 const LANE_A := -14.6            # street lanes behind the crowd (local z)
@@ -87,20 +90,28 @@ func setup(game: Node, parent: Node3D) -> void:
 	var apron := game.find_child("CourtApron", true, false)
 	if apron is Node3D: apron.visible = false       # the floor shader draws slab and dirt
 	_build_floor(game)
+	# buildings get the weathered material (dirt, streaks, peeling paint, rust)
+	_grimy = _toon.duplicate()
+	_grimy.set_shader_parameter("grime", 1.0)
+	_grimy.set_shader_parameter("grime_dirt", Pal.hex("#7d6a54"))
+	_grimy.set_shader_parameter("grime_bare", Pal.hex("#a9a59c"))
+	_grimy.set_shader_parameter("grime_rust", Pal.hex("#9a5a3c"))
+	var bld := Kit.begin()
 	var props := Kit.begin()
 	var cloth := Kit.begin()
 	_build_curb(props)
 	_build_net_poles(game, props)
-	_build_house(props, cloth)
-	_build_hall(props, cloth)
-	_build_store(props)
+	_build_house(bld, cloth)
+	_build_hall(bld, cloth)
+	_build_store(bld)
 	_build_poles(props, cloth)
 	_build_tricycle(props, Vector3(6.9, 0, -16.2), Pal.hex("#3a6fc4"), 0.12)
 	_build_tricycle(props, Vector3(8.9, 0, -15.9), Pal.hex("#d64a3a"), -0.1)
 	_build_crowd_area(props)
 	_build_queue(props)
 	_build_scorer(props)
-	_build_background(props)
+	_build_background(bld)
+	_add_mesh("BarangayBuildings", bld, _grimy)
 	_add_mesh("BarangayProps", props)
 	_add_mesh("BarangayCloth", cloth)
 	_build_figures()
@@ -113,11 +124,11 @@ func _c(code: String) -> Color:
 	return Pal.hex(code)
 
 
-func _add_mesh(label: String, st: SurfaceTool) -> void:
+func _add_mesh(label: String, st: SurfaceTool, material: Material = null) -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = label
 	mi.mesh = st.commit()
-	mi.material_override = _toon
+	mi.material_override = material if material != null else _toon
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -347,35 +358,129 @@ func _build_house(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	_shadow(Vector3(x1 + 1.1, 0, (zf + zb) * 0.5), Vector2(2.2, zf - zb), true)
 
 
+const HALL := {"x0": -6.2, "x1": -0.6, "zf": -21.0, "zb": -27.0, "floor": 0.45, "porch": 1.6}
+
+
+## Ground height for walkers: the hall's raised porch and its front steps.
+func _ground_y(pos: Vector3) -> float:
+	var x0: float = HALL.x0
+	var x1: float = HALL.x1
+	var zf: float = HALL.zf
+	var pf: float = zf + float(HALL.porch)
+	if pos.x < x0 or pos.x > x1 or pos.z < zf - 0.2: return 0.0
+	if pos.z <= pf: return HALL.floor
+	if absf(pos.x + 3.4) < 0.8 and pos.z < pf + 0.9: return float(HALL.floor) - floor((pos.z - pf) / 0.3) * 0.15
+	return 0.0
+
+
 func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
-	# Barangay hall: cream walls, blue trim, a porch on three columns, sign and flagpole.
-	var x0 := -6.2
-	var x1 := -0.6
-	var zf := -21.0
-	var zb := -27.0
+	# Barangay hall: raised concrete floor and steps, a porch with columns and a
+	# balustrade, a fascia with the sign under a gable pediment, a hipped GI roof,
+	# louvred windows, a side window with an awning and an aircon, a meter box, a
+	# downspout, a water drum, a porch bench and potted plants.
+	var x0: float = HALL.x0
+	var x1: float = HALL.x1
+	var zf: float = HALL.zf
+	var zb: float = HALL.zb
+	var fh: float = HALL.floor
+	var pf: float = zf + float(HALL.porch)
 	var cx := (x0 + x1) * 0.5
-	var wall := _c("#e3d6b0")
+	var dx := -3.4
+	var wall := _c("#e6d7ad")
+	var dado := _c("#7b98b6")
 	var blue := _c("#3e6fb2")
-	Kit.box(st, Vector3(cx, 1.7, (zf + zb) * 0.5), Vector3(x1 - x0, 3.4, zf - zb), wall)
-	Kit.box(st, Vector3(cx, 0.15, zf + 0.01), Vector3(x1 - x0, 0.3, 0.04), blue)
-	Kit.box(st, Vector3(cx, 3.3, zf + 0.01), Vector3(x1 - x0, 0.2, 0.04), blue)
-	for wx: float in [-5.2, -1.6]:
-		_window(st, Vector3(wx, 1.7, zf + 0.03), Vector2(1.0, 1.1), blue, true)
-	Kit.box(st, Vector3(-3.4, 1.1, zf + 0.03), Vector3(1.1, 2.2, 0.05), _c("#6a4a32"))
-	Kit.box(st, Vector3(-2.4, 1.5, zf + 0.04), Vector3(0.7, 0.55, 0.04), _c("#a07a50"))       # bulletin board
-	for k in 4:
-		Kit.box(st, Vector3(-2.6 + (k % 2) * 0.32, 1.38 + (k / 2) * 0.24, zf + 0.065), Vector3(0.22, 0.17, 0.01), [_c("#f2f0ea"), _c("#f2c84b"), _c("#9ec9e8"), _c("#f29ac0")][k])
-	# porch roof on columns
-	var pz := zf + 1.3
-	for col_x: float in [x0 + 0.2, cx, x1 - 0.2]:
-		Kit.box(st, Vector3(col_x, 1.45, pz), Vector3(0.22, 2.9, 0.22), _c("#efe6c8"))
-	Kit.box(st, Vector3(cx, 2.95, (zf + pz) * 0.5), Vector3(x1 - x0 + 0.4, 0.1, 1.5), _c("#d4c49b"))
-	Kit.box(st, Vector3(cx, 3.65, pz + 0.05), Vector3(4.5, 0.72, 0.06), _c("#2f5fa8"))            # sign board
-	Kit.box(st, Vector3(cx, 3.65, pz + 0.02), Vector3(4.66, 0.86, 0.04), _c("#f4f1e8"))
-	_label("BARANGAY HALL", Vector3(cx, 3.65, pz + 0.1), 0.44, Color(1.0, 0.97, 0.88))
-	_shade_strip(st, x0, x1, zf + 0.02, 2.9, 0.55, wall)
-	_gi_roof(st, x0 - 0.4, x1 + 0.4, zf + 0.2, zb - 0.3, 4.2, 3.6, false)
-	_shadow(Vector3(cx + 0.6, 0, zf - 0.4), Vector2(x1 - x0 + 1.0, 1.4), true)
+	var white := _c("#efe9da")
+	var concrete := _c("#a29d93")
+	# raised base, porch floor and steps
+	Kit.box(st, Vector3(cx, fh * 0.5, (zb + pf) * 0.5), Vector3(x1 - x0 + 0.2, fh, pf - zb), concrete)
+	Kit.box(st, Vector3(cx, fh + 0.015, (zf + pf) * 0.5), Vector3(x1 - x0 + 0.2, 0.03, pf - zf), _c("#b5ae9f"))
+	Kit.box(st, Vector3(cx, fh - 0.04, pf + 0.02), Vector3(x1 - x0 + 0.22, 0.08, 0.06), _c("#8f8a80"))
+	for i in 3:
+		var h := fh - (i + 1) * 0.15 + 0.15
+		Kit.box(st, Vector3(dx, h * 0.5, pf + (i + 0.5) * 0.3), Vector3(1.6, h, 0.3), _c("#9c978d").darkened(0.04 * i))
+	# walls with a two-tone dado and a cornice
+	Kit.box(st, Vector3(cx, (fh + 3.75) * 0.5, (zf + zb) * 0.5), Vector3(x1 - x0, 3.75 - fh, zf - zb), wall)
+	Kit.box(st, Vector3(cx, fh + 0.45, zf + 0.012), Vector3(x1 - x0, 0.9, 0.02), dado)
+	Kit.box(st, Vector3(cx, fh + 0.92, zf + 0.02), Vector3(x1 - x0, 0.05, 0.04), white)
+	Kit.box(st, Vector3(cx, 3.68, zf + 0.04), Vector3(x1 - x0 + 0.12, 0.16, 0.1), blue)
+	# double door: wood frame, glass upper panels
+	Kit.box(st, Vector3(dx, fh + 1.15, zf + 0.02), Vector3(1.55, 2.35, 0.04), _c("#5e4232"))
+	for side: float in [-1.0, 1.0]:
+		Kit.box(st, Vector3(dx + side * 0.36, fh + 1.45, zf + 0.04), Vector3(0.55, 1.1, 0.02), _c("#9ec3d8"))
+		Kit.box(st, Vector3(dx + side * 0.36, fh + 0.5, zf + 0.04), Vector3(0.55, 0.65, 0.02), _c("#6f4f3a"))
+	Kit.box(st, Vector3(dx, fh + 1.15, zf + 0.05), Vector3(0.04, 2.3, 0.02), _c("#3e2c22"))
+	# louvred windows either side of the door
+	for wx: float in [-5.3, -1.5]:
+		_window(st, Vector3(wx, fh + 1.55, zf + 0.03), Vector2(1.05, 1.2), white, false)
+		for k in 6:
+			Kit.box(st, Vector3(wx, fh + 1.05 + k * 0.2, zf + 0.06), Vector3(1.0, 0.05, 0.03), _c("#c8d6dc"))
+	# bulletin board with notices
+	Kit.box(st, Vector3(-2.35, fh + 1.45, zf + 0.04), Vector3(0.75, 0.6, 0.04), _c("#a07a50"))
+	for k in 5:
+		Kit.box(st, Vector3(-2.58 + (k % 3) * 0.23, fh + 1.33 + (k / 3) * 0.26, zf + 0.065), Vector3(0.18, 0.2, 0.01), [_c("#f2f0ea"), _c("#f2c84b"), _c("#9ec9e8"), _c("#f29ac0"), _c("#f2f0ea")][k])
+	# porch: columns with bases and capitals, balustrade either side of the steps
+	var cols := [x0 + 0.2, -4.75, -2.05, x1 - 0.2]
+	for col_x: float in cols:
+		Kit.box(st, Vector3(col_x, fh + 0.1, pf - 0.18), Vector3(0.38, 0.2, 0.38), white)
+		Kit.box(st, Vector3(col_x, (fh + 3.05) * 0.5, pf - 0.18), Vector3(0.26, 3.05 - fh, 0.26), _c("#f1ead6"))
+		Kit.box(st, Vector3(col_x, 3.02, pf - 0.18), Vector3(0.36, 0.1, 0.36), white)
+	var bays := [[x0 + 0.33, -4.88], [-4.62, dx - 0.85], [dx + 0.85, -2.18], [-1.92, x1 - 0.33]]
+	for bay in bays:
+		var b0: float = bay[0]
+		var b1: float = bay[1]
+		if b1 - b0 < 0.2: continue
+		Kit.box(st, Vector3((b0 + b1) * 0.5, fh + 0.86, pf - 0.18), Vector3(b1 - b0, 0.07, 0.12), white)
+		Kit.box(st, Vector3((b0 + b1) * 0.5, fh + 0.1, pf - 0.18), Vector3(b1 - b0, 0.06, 0.1), white)
+		var bx := b0 + 0.08
+		while bx < b1 - 0.04:
+			Kit.box(st, Vector3(bx, fh + 0.48, pf - 0.18), Vector3(0.06, 0.72, 0.06), _c("#ddd6c4"))
+			bx += 0.17
+	# porch roof slab and a deep fascia that carries the sign
+	Kit.box(st, Vector3(cx, 3.12, (zf + pf) * 0.5 + 0.05), Vector3(x1 - x0 + 0.3, 0.12, pf - zf + 0.3), _c("#d9cfb2"))
+	Kit.box(st, Vector3(cx, 3.3, pf + 0.12), Vector3(x1 - x0 + 0.3, 0.6, 0.12), white)
+	Kit.box(st, Vector3(cx, 3.02, pf + 0.19), Vector3(x1 - x0 + 0.3, 0.06, 0.02), blue)
+	Kit.box(st, Vector3(cx, 3.33, pf + 0.2), Vector3(4.2, 0.46, 0.04), blue)
+	_label("BARANGAY HALL", Vector3(cx, 3.33, pf + 0.23), 0.36, Color(1.0, 0.97, 0.88))
+	# gable pediment over the entrance, with a round vent
+	var pz := pf + 0.13
+	var gl := Vector3(-5.35, 3.6, pz)
+	var gr := Vector3(-1.45, 3.6, pz)
+	var gt := Vector3(dx, 4.85, pz)
+	Kit.tri(st, gl, gr, gt, wall, 0.0, true)
+	Kit.beam(st, gl + Vector3(-0.1, -0.02, 0.03), gt + Vector3(0, 0.08, 0.03), 0.12, blue)
+	Kit.beam(st, gr + Vector3(0.1, -0.02, 0.03), gt + Vector3(0, 0.08, 0.03), 0.12, blue)
+	Kit.box(st, Vector3(dx, 3.62, pz + 0.02), Vector3(3.95, 0.08, 0.06), blue)
+	Kit.cylinder(st, Vector3(dx, 4.0, pz + 0.01), 0.22, 0.22, 0.03, _c("#3a3640"), 8)
+	for k in 3: Kit.box(st, Vector3(dx, 4.12 + k * 0.08 - 0.08, pz + 0.04), Vector3(0.36, 0.025, 0.02), white)
+	# pediment roof wings back to the main roof
+	_gi_roof(st, -5.5, dx, pz + 0.15, zf, 3.55, 4.95, false)
+	_gi_roof(st, dx, -1.3, zf, pz + 0.15, 4.95, 3.55, false)
+	# main hipped GI roof
+	_gi_roof(st, x0 - 0.4, x1 + 0.4, zf + 0.25, (zf + zb) * 0.5, 3.8, 4.7, false)
+	_gi_roof(st, x0 - 0.4, x1 + 0.4, (zf + zb) * 0.5, zb - 0.3, 4.7, 3.8, false)
+	_shade_strip(st, x0, x1, zf + 0.022, 3.05, 0.5, wall)
+	# right side wall: window with an awning, an aircon, a meter box, downspout, drum
+	var sx := x1 + 0.01
+	Kit.box(st, Vector3(sx + 0.02, fh + 1.55, -23.0), Vector3(0.04, 1.1, 1.0), _c("#34303a"))
+	for k in 5: Kit.box(st, Vector3(sx + 0.05, fh + 1.1 + k * 0.22, -23.0), Vector3(0.03, 0.05, 0.95), _c("#c8d6dc"))
+	_gi_roof(st, sx, sx + 0.6, -23.6, -22.4, fh + 2.35, fh + 2.2, true)
+	Kit.box(st, Vector3(sx + 0.25, fh + 0.9, -24.4), Vector3(0.5, 0.45, 0.7), _c("#e8e6e0"))
+	for k in 4: Kit.box(st, Vector3(sx + 0.51, fh + 0.82 + k * 0.06, -24.4), Vector3(0.01, 0.02, 0.62), _c("#8a8f94"))
+	Kit.box(st, Vector3(sx + 0.06, 2.0, -21.6), Vector3(0.1, 0.4, 0.3), _c("#b9bcc0"))
+	Kit.beam(st, Vector3(sx + 0.06, 2.2, -21.6), Vector3(sx + 0.06, 3.7, -21.6), 0.03, _c("#2e2c30"))
+	Kit.beam(st, Vector3(x1 + 0.08, 3.75, zf + 0.1), Vector3(x1 + 0.08, 0.15, zf + 0.1), 0.08, _c("#8e9396"))
+	Kit.box(st, Vector3(x1 + 0.18, 0.12, zf + 0.1), Vector3(0.28, 0.08, 0.12), _c("#8e9396"))
+	Kit.cylinder(st, Vector3(x1 + 0.55, 0, -22.4), 0.3, 0.3, 0.85, _c("#3e7fd0"), 8)
+	Kit.cylinder(st, Vector3(x1 + 0.55, 0.85, -22.4), 0.31, 0.31, 0.04, _c("#2f5fa8"), 8)
+	# porch bench and potted plants by the steps
+	Kit.box(st, Vector3(-5.2, fh + 0.42, zf + 0.45), Vector3(1.4, 0.06, 0.35), _c("#9a7048"))
+	Kit.box(st, Vector3(-5.2, fh + 0.66, zf + 0.3), Vector3(1.4, 0.3, 0.05), _c("#9a7048"))
+	for lx: float in [-5.8, -4.6]: Kit.box(st, Vector3(lx, fh + 0.2, zf + 0.45), Vector3(0.06, 0.4, 0.3), _c("#7d5638"))
+	for px: float in [dx - 1.05, dx + 1.05]:
+		Kit.cylinder(st, Vector3(px, 0, pf + 0.45), 0.2, 0.25, 0.4, _c("#b5603e"), 6)
+		for k in 3:
+			Kit.box(st, Vector3(px + (k - 1) * 0.1, 0.55 + (k % 2) * 0.12, pf + 0.45), Vector3(0.22, 0.32, 0.22), [_c("#5f9a55"), _c("#6fab5e"), _c("#4f8a49")][k], Basis(Vector3.UP, k * 0.7))
+	_shadow(Vector3(cx + 0.6, 0, pf + 0.3), Vector2(x1 - x0 + 1.0, 1.2), true)
 	_shadow(Vector3(x1 + 0.8, 0, (zf + zb) * 0.5), Vector2(1.6, zf - zb), true)
 	# flagpole with a Philippine flag that waves (cloth mesh: sway grows along the flag)
 	var fx := 0.4
@@ -423,7 +528,13 @@ func _build_store(st: SurfaceTool) -> void:
 	var cx := (x0 + x1) * 0.5
 	var wall := _c("#86bccd")
 	Kit.box(st, Vector3(cx, 1.55, (zf + zb) * 0.5), Vector3(x1 - x0, 3.1, zf - zb), wall)
-	Kit.box(st, Vector3(cx, 0.2, zf + 0.01), Vector3(x1 - x0, 0.4, 0.03), _c("#6a9aa8"))
+	# concrete lower wall, painted plywood planks above it
+	Kit.box(st, Vector3(cx, 0.45, zf + 0.012), Vector3(x1 - x0, 0.9, 0.03), _c("#a7a29a"))
+	Kit.box(st, Vector3(cx, 0.92, zf + 0.03), Vector3(x1 - x0, 0.05, 0.05), _c("#8f8a82"))
+	var plank := x0 + 0.3
+	while plank < x1:
+		Kit.box(st, Vector3(plank, 1.7, zf + 0.008), Vector3(0.025, 1.6, 0.012), wall.darkened(0.18))
+		plank += 0.3
 	var wx0 := 3.4
 	var wx1 := 6.6
 	Kit.box(st, Vector3((wx0 + wx1) * 0.5, 1.6, zf + 0.02), Vector3(wx1 - wx0, 1.3, 0.04), _c("#2c2830"))
@@ -452,6 +563,28 @@ func _build_store(st: SurfaceTool) -> void:
 		var cp := Vector3(8.05, 0.16 + k * 0.3, zf + 0.5)
 		Kit.box(st, cp, Vector3(0.45, 0.3, 0.32), _c("#e6b93c"))
 		Kit.box(st, cp + Vector3(0, 0.16, 0), Vector3(0.4, 0.04, 0.28), _c("#4a3a2a"))
+	# posters and a chalk menu board on the front
+	var posters := [[6.95, 1.75, "#f2c84b", "#e0473b"], [7.0, 1.2, "#f2f0ea", "#3e7fd0"], [3.1, 2.15, "#f29ac0", "#2f4f86"]]
+	for pz in posters:
+		Kit.box(st, Vector3(pz[0], pz[1], zf + 0.03), Vector3(0.36, 0.48, 0.01), _c(pz[2]))
+		Kit.box(st, Vector3(pz[0], float(pz[1]) + 0.1, zf + 0.036), Vector3(0.28, 0.1, 0.01), _c(pz[3]))
+		Kit.box(st, Vector3(pz[0], float(pz[1]) - 0.1, zf + 0.036), Vector3(0.24, 0.04, 0.01), _c(pz[3]))
+	Kit.box(st, Vector3(3.1, 1.45, zf + 0.03), Vector3(0.42, 0.62, 0.03), _c("#2f4a3a"))
+	for k in 4: Kit.box(st, Vector3(3.08 - (k % 2) * 0.03, 1.62 - k * 0.12, zf + 0.05), Vector3(0.28 - (k % 2) * 0.06, 0.025, 0.01), _c("#e6e2d6"))
+	# chest freezer and a bench out front, an LPG tank, a meter box with its wire
+	Kit.box(st, Vector3(3.25, 0.42, -18.05), Vector3(0.9, 0.84, 0.6), _c("#ecebe6"))
+	Kit.box(st, Vector3(3.25, 0.86, -18.05), Vector3(0.92, 0.05, 0.62), _c("#3e7fd0"))
+	Kit.box(st, Vector3(3.25, 0.6, -17.74), Vector3(0.5, 0.12, 0.01), _c("#d23b34"))
+	_shadow(Vector3(3.25, 0, -18.05), Vector2(1.0, 0.7), true)
+	Kit.box(st, Vector3(6.95, 0.38, -17.75), Vector3(0.9, 0.06, 0.32), _c("#9a7048"))
+	for lx: float in [6.6, 7.3]: Kit.box(st, Vector3(lx, 0.18, -17.75), Vector3(0.06, 0.36, 0.28), _c("#7d5638"))
+	_shadow(Vector3(6.95, 0, -17.75), Vector2(1.0, 0.4), true)
+	Kit.cylinder(st, Vector3(8.55, 0, -18.8), 0.17, 0.17, 0.6, _c("#c9332c"), 8)
+	Kit.cylinder(st, Vector3(8.55, 0.6, -18.8), 0.07, 0.07, 0.08, _c("#b9bcc0"), 6)
+	Kit.box(st, Vector3(8.2, 2.1, zf + 0.06), Vector3(0.22, 0.3, 0.1), _c("#b9bcc0"))
+	Kit.beam(st, Vector3(8.2, 2.25, zf + 0.06), Vector3(8.2, 3.3, zf + 0.06), 0.025, _c("#2e2c30"))
+	# a blue tarp patched over a leaky part of the awning
+	Kit.quad(st, Vector3(4.0, 2.53, zf + 0.75), Vector3(4.0, 2.66, zf + 0.15), Vector3(5.4, 2.66, zf + 0.15), Vector3(5.4, 2.53, zf + 0.75), _c("#3e7fd0"))
 	_shadow(Vector3(cx + 0.5, 0, zf - 0.2), Vector2(x1 - x0 + 0.8, 1.0), true)
 	_shadow(Vector3(x1 + 0.6, 0, (zf + zb) * 0.5), Vector2(1.2, zf - zb), true)
 
@@ -479,8 +612,9 @@ func _build_poles(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	Kit.rope(st, Vector3(9.3, 6.4, z), Vector3(7.8, 3.2, -18.6), 0.3, 0.022, wire, 5)           # to the store
 	Kit.rope(st, Vector3(9.3, 6.0, z), Vector3(4.0, 3.6, -22.0), 0.5, 0.022, wire, 6)
 	# banderitas between the poles, never over the court
-	var a := Vector3(-9.3, 4.7, z + 0.05)
-	var b := Vector3(9.3, 4.7, z + 0.05)
+	# high enough to hang above the rooflines on screen, not across the hall sign
+	var a := Vector3(-9.3, 6.3, z + 0.05)
+	var b := Vector3(9.3, 6.3, z + 0.05)
 	Kit.rope(cloth, a, b, 0.65, 0.015, _c("#efe8d8"), 12, 0.0)
 	var flags := [_c("#e0473b"), _c("#f2c84b"), _c("#3e7fd0"), _c("#f2f0ea"), _c("#7cc490"), _c("#f29ac0")]
 	var n := 46
@@ -779,6 +913,27 @@ func _build_figures() -> void:
 	kid.s = 0.72
 	kid.leader = mother
 	for k in 4: _walker("far")
+	# ball kids: one on the ground behind the far baseline, one squatting by the right
+	# net post, one behind the near baseline (off screen until needed)
+	for spec in [[Vector3(5.0, 0, -10.5), 0.3, "knee_up", 0.12], [Vector3(6.45, 0, 1.0), -PI * 0.5, "tucked", 0.25],
+			[Vector3(0.8, 0, 11.2), PI, "knee_up", 0.12]]:
+		var k := _person(spec[0], spec[1], true, false, 0.7)
+		k.role = "ballkid"
+		k.home = spec[0]
+		k.home_yaw = spec[1]
+		k.home_posture = spec[2]
+		k.home_seat = spec[3]
+		k.posture = spec[2]
+		k.seat_h = spec[3]
+		k.state = "home"
+		k.path = []
+		k.walk_phase = 0.0
+		k.has_ball = false
+		k.until = 0.0
+		k.recv = Vector3.ZERO
+		k.watch = true
+		_kids.append(k)
+	_game.set_meta("ball_kids", self)
 	# chickens and a dog on the dirt behind the far end
 	for k in 3:
 		var pos := Vector3(_rng.randf_range(1.2, 4.2), 0, _rng.randf_range(-13.2, -11.4))
@@ -890,6 +1045,7 @@ func _process(delta: float) -> void:
 		transform.basis = Basis(Vector3.UP, PI) if flipped else Basis.IDENTITY
 		_floor.set_shader_parameter("flip", -1.0 if flipped else 1.0)
 		_toon.set_shader_parameter("light_dir", transform.basis * LIGHT)
+		_grimy.set_shader_parameter("light_dir", transform.basis * LIGHT)
 		_react_all("clap", 1.8)      # applause for the change of ends
 	_tick_t += delta
 	if _tick_t >= TICK:
@@ -1060,6 +1216,7 @@ func _step() -> void:
 			for k in 3: _react(_crowd[_rng.randi() % _crowd.size()], "flinch", 0.5)
 	_update_score()
 	for w in _walkers: _step_walker(w)
+	for k in _kids: _step_kid(k, playing, have_ball, ball_local)
 	var cam := get_viewport().get_camera_3d()
 	var cam_local := to_local(cam.get_global_transform_interpolated().origin) if cam != null else Vector3(0, 10, 15)
 	# Cards face the camera, so a camera move redraws everyone; otherwise only people whose
@@ -1069,7 +1226,7 @@ func _step() -> void:
 	var changed := false
 	for i in _people.size():
 		var p: Dictionary = _people[i]
-		if p.role != "walker": _step_person(p, playing, have_ball, ball_local)
+		if p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
 		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
 		if not cam_moved and sig == p.get("sig", []): continue
 		p.sig = sig
@@ -1380,6 +1537,9 @@ func _step_walker(w: Dictionary) -> void:
 				else:
 					w.pos = Vector3(w.pos) + d.normalized() * step
 					w.yaw = atan2(d.x, d.z)
+				var wp: Vector3 = w.pos
+				wp.y = _ground_y(wp)
+				w.pos = wp
 				w.walk_phase = float(w.walk_phase) + step / 0.7 * PI
 				_walk_pose(w, true, 0.7)
 		"wait", "watch", "stop":
@@ -1543,6 +1703,9 @@ func _pose_props(p: Dictionary, j: Dictionary) -> void:
 			xf[1] = Transform3D(Fig._along(fore, Vector3(0.2, 0.24, 0.03)), wr + fore * 0.22)
 			col[0] = _c("#2a2a2e")
 			col[1] = _c(["#e0473b", "#3e7fd0", "#f2c84b"][int(p.profile) % 3])
+		"ball":
+			xf[0] = Transform3D(Basis.from_scale(Vector3(0.09, 0.09, 0.09)), wr + fore * 0.05)
+			col[0] = _c("#e8e04a")
 		"bottle":
 			xf[0] = Transform3D(Fig._along(fore, Vector3(0.06, 0.18, 0.06)), wr + fore * 0.06)
 			col[0] = _c("#7fc4e0")
@@ -1675,3 +1838,172 @@ func _step_dog() -> void:
 				_dog.mode = "sit"
 				_dog.until = _t + 3.0
 	Fig.pose_dog(_mm_fig, _dog)
+
+
+# ------------------------------------------------------------------ ball kids
+# The between-point controller (scripts/between_point_controller.gd) asks for a kid when
+# the ball is out of the players' reach or far from them, waits for `throw_origin` to give
+# the kid's hand position, and launches its usual pass to the server from there. Only that
+# handover touches the real ball; the kid carries a look-alike while it is hidden.
+
+const KID_RUN := 5.2
+const KID_JOG := 2.6
+const KID_MAX_FETCH := 26.0     # m: farther than this the off-screen toss is used
+const KID_THROW_RANGE := 14.0   # m: walk closer to the server than this before throwing
+
+
+func available() -> bool:
+	return is_inside_tree() and is_visible_in_tree() and not _kids.is_empty()
+
+
+func request_fetch(ball_world: Vector3, receiver_world: Vector3) -> bool:
+	var ball := to_local(ball_world)
+	ball.y = 0.0
+	var best: Dictionary = {}
+	var best_d := INF
+	for k in _kids:
+		if k.state != "home": continue
+		var d := absf(Vector3(k.pos).x - ball.x) + absf(Vector3(k.pos).z - ball.z)
+		if d < best_d:
+			best_d = d
+			best = k
+	if best.is_empty() or best_d > KID_MAX_FETCH: return false
+	_fetch_kid = best
+	best.recv = to_local(receiver_world)
+	best.path = _kid_route(best.pos, ball)
+	best.state = "run"
+	best.seated = false
+	best.has_ball = false
+	PerfMonitor.note("ball_kid", {"step": "fetch", "distance": best_d, "ball_x": ball.x, "ball_z": ball.z})
+	return true
+
+
+func throw_origin(receiver_world: Vector3) -> Vector3:
+	if _fetch_kid.is_empty(): return Vector3.INF
+	var k := _fetch_kid
+	k.recv = to_local(receiver_world)
+	match str(k.state):
+		"ready":
+			k.state = "windup"
+			k.until = _t + 0.28
+		"windup":
+			if _t >= float(k.until):
+				k.state = "release"
+				k.until = _t + 0.45
+				k.has_ball = false
+				k.arm_r = "release"
+				var j := People.solve(k, _cards.extents(int(k.profile)))
+				PerfMonitor.note("ball_kid", {"step": "throw"})
+				return to_global(Vector3(j.wr_r) + Vector3.UP * 0.05)
+	return Vector3.INF
+
+
+func cancel_fetch() -> void:
+	if _fetch_kid.is_empty(): return
+	var k := _fetch_kid
+	_fetch_kid = {}
+	if k.state in ["run", "pickup", "carry", "ready", "windup"]:
+		k.has_ball = false
+		_kid_go_home(k)
+
+
+## Around the court, not through it: kids along the ends move sideways first, the kid
+## beside the court moves along the sideline first.
+func _kid_route(from: Vector3, to: Vector3) -> Array:
+	if absf(from.x) > 5.8: return [Vector3(from.x, 0, to.z), to]
+	return [Vector3(to.x, 0, from.z), to]
+
+
+func _kid_go_home(k: Dictionary) -> void:
+	k.state = "return"
+	k.path = _kid_route(k.pos, k.home)
+
+
+func _step_kid(k: Dictionary, playing: bool, have_ball: bool, ball_local: Vector3) -> void:
+	var state: String = k.state
+	k.walk = -1.0
+	k.bounce = 0.0
+	k.lean = 0.0
+	k.sway = 0.0
+	k.head_pitch = 0.0
+	k.head_yaw = 0.0
+	k.prop = "ball" if k.has_ball else ""
+	match state:
+		"home":
+			k.seated = true
+			k.pos = k.home
+			k.yaw = k.home_yaw
+			k.posture = k.home_posture
+			k.seat_h = k.home_seat
+			k.arm_l = "knees"
+			k.arm_r = "knees"
+			k.lean = 0.2
+			if playing and have_ball:
+				var to_ball := ball_local - Vector3(k.pos)
+				var f := Vector3(sin(float(k.yaw)), 0, cos(float(k.yaw)))
+				var r := Vector3(f.z, 0, -f.x)
+				k.head_yaw = round(clampf(atan2(to_ball.dot(r), to_ball.dot(f)), -0.9, 0.9) / 0.3) * 0.3
+		"run", "carry", "return":
+			k.seated = false
+			k.posture = "stand"
+			var speed := KID_JOG if state == "return" else KID_RUN
+			var path: Array = k.path
+			if path.is_empty():
+				match state:
+					"run":
+						k.state = "pickup"
+						k.until = _t + 0.4
+					"carry":
+						k.state = "ready"
+					"return":
+						k.state = "home"
+				return
+			var to: Vector3 = path[0]
+			var d := to - Vector3(k.pos)
+			d.y = 0.0
+			var step := speed * TICK
+			if d.length() <= step:
+				k.pos = to
+				path.pop_front()
+			else:
+				k.pos = Vector3(k.pos) + d.normalized() * step
+				k.yaw = atan2(d.x, d.z)
+			k.walk_phase = float(k.walk_phase) + step / 0.9 * PI
+			k.walk = k.walk_phase
+			var swing := 0.6 * sin(float(k.walk_phase))
+			k.arm_l = [Vector3(-0.15, -0.7, swing), Vector3(-0.05, 0.1, swing + 0.6)]
+			k.arm_r = "hold_ball" if k.has_ball else [Vector3(0.15, -0.7, -swing), Vector3(0.05, 0.1, -swing + 0.6)]
+			k.bounce = 0.04 * absf(sin(float(k.walk_phase)))
+			k.lean = 0.18 if state != "return" else 0.08
+		"pickup":
+			k.seated = true
+			k.seat_h = 0.28
+			k.posture = "tucked"
+			k.lean = 0.55
+			k.arm_l = "reach_down"
+			k.arm_r = "reach_down"
+			if _t > float(k.until):
+				k.has_ball = true
+				# walk in closer if the server is far, then get ready to throw
+				var recv: Vector3 = k.recv
+				var here: Vector3 = k.pos
+				var gap := Vector3(recv.x - here.x, 0, recv.z - here.z)
+				if gap.length() > KID_THROW_RANGE:
+					var spot := here + gap.normalized() * (gap.length() - KID_THROW_RANGE)
+					k.path = [spot]
+					k.state = "carry"
+				else:
+					k.state = "ready"
+		"ready", "windup", "release":
+			k.seated = false
+			k.posture = "stand_wide" if state != "ready" else "stand"
+			var recv: Vector3 = k.recv
+			var to_r := recv - Vector3(k.pos)
+			k.yaw = atan2(to_r.x, to_r.z)
+			k.arm_l = "idle_stand"
+			k.arm_r = "hold_ball" if state == "ready" else ("windup" if state == "windup" else "release")
+			k.lean = -0.05 if state == "windup" else (0.15 if state == "release" else 0.0)
+			if state == "release" and _t > float(k.until):
+				_fetch_kid = {}
+				_kid_go_home(k)
+	if k.has("shadow"): _move_shadow(k.shadow, k.pos)
