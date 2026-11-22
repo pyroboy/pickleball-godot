@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Bake Barangay Pickleball branding (visual only).
 
-  assets/branding/app-icon.png         1024 px app icon: a pixelated neon-green pickleball
+  assets/branding/app-icon.png         1024 px app icon: a pixelated neon yellow-green pickleball
                                        (a real sphere with 40 drilled holes, ray-cast on a
-                                       64 px grid, three tones, no glow) on a dark ground
+                                       64 px grid, three tones, no glow) on court blue
   assets/branding/barangay-pickleball.png   court floor wordmark (alpha mask, 3:1) in the
                                        game's own pixel font (assets/fonts/arjo_pixel.*)
 
@@ -47,12 +47,12 @@ def bake_icon(grid=64, scale=16):
     holes = fib_sphere(40) @ rot(0.5, 0.35).T
     hole_r = 0.17                      # radians on the unit sphere
     light = np.array([-0.55, 0.65, 0.52]); light /= np.linalg.norm(light)
-    bg = hexc("#06110a")
-    tones = [hexc("#0f8f3c"), hexc("#2cf06b"), hexc("#a8ffb8")]
-    rim = hexc("#e6ffd9")
-    hole_dark = hexc("#063d1a")
-    hole_lip = hexc("#11a646")
-    outline = hexc("#021a0a")
+    bg = hexc("#2f73b5")                # pickleball-court blue (no black)
+    tones = [hexc("#a0bf1d"), hexc("#d2ee2c"), hexc("#e8fa66")]   # standard neon yellow-green
+    rim = hexc("#f6ffc4")
+    hole_dark = hexc("#46600a")
+    hole_lip = hexc("#b3d324")
+    outline = hexc("#1c3d5e")
     img = np.zeros((grid, grid, 3))
     img[:] = bg
     c = (grid - 1) / 2.0
