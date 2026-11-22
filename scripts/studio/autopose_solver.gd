@@ -292,9 +292,15 @@ func _build_params(main: String) -> Array:
 	elif h == main + "_elbow":
 		arm.call(out, main); paddle.call(out)
 		if full: chest.call(out); hips.call(out)
-	elif h == sup + "_hand" or h == sup + "_elbow":
+	elif h == sup + "_elbow":
+		# The support elbow is placed by its swivel alone: a turn of the drawn elbow around the
+		# shoulder-hand line (player_arm_ik.gd). The guide point cannot move the elbow of a hand
+		# gripping the paddle (the wrist aims it), and mixing the two stalled the solve.
+		_p(out, sup + "_elbow_swivel_deg", "arm", 15.0)
+		if full: chest.call(out); hips.call(out)
+	elif h == sup + "_hand":
 		arm.call(out, sup)
-		if h == sup + "_hand": _p(out, sup + "_hand_offset", "arm", 0.05, 3)
+		_p(out, sup + "_hand_offset", "arm", 0.05, 3)
 		if full: chest.call(out); hips.call(out)
 	elif h == "hips":
 		hips.call(out); legs.call(out); chest.call(out)

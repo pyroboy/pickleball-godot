@@ -42,6 +42,7 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 		pole_reference_axis = forehand_axis.rotated(Vector3.UP, -deg_to_rad(def.body_yaw_deg))
 
 	var swivel_record: Array = []   # [arm, wrist, swivel pole]: the drawn elbow, recorded after every arm step
+	var support_swivel_record: Array = []   # [arm, wrist, turn deg, is the left arm]
 	if _player.paddle_node:
 		var left_dominant: bool = def != null and def.paddle_hand == 1
 		var dominant_arm = _player.left_arm_node if left_dominant else _player.right_arm_node
@@ -132,6 +133,9 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 					support_pole_world = shoulder + raw_direction.slerp(grip_direction, orientation_grip_weight)
 			support_arm.visual_wrist_lag_deg = 0.0
 			support_arm.solve_ik(support_target, support_pole_world, null, wrist)
+			if elbow_swivel_enabled and def != null and "elbow_swivel_weight" in def:
+				var support_deg: float = def.right_elbow_swivel_deg if left_dominant else def.left_elbow_swivel_deg
+				support_swivel_record = [support_arm, wrist, support_deg * clampf(float(def.elbow_swivel_weight), 0.0, 1.0), not left_dominant]
 			_hands.apply_mount(support_arm, mount, true)
 
 
@@ -145,6 +149,21 @@ func _perf_update_arm_ik(delta: float, def_override = null) -> void:
 	if not swivel_record.is_empty():
 		var arm = swivel_record[0]
 		ElbowSwivel.record_visual_turn(arm, swivel_record[1], arm.forearm_pivot.global_position, swivel_record[2], ElbowSwivel.body_shapes(_player))
+	# The support arm's swivel field is a turn of its drawn elbow away from the solved one (+ out),
+	# not an absolute angle: 0 shows the solved elbow, so poses that never set it look the same.
+	# A hand gripping the paddle has its solved elbow aimed from the wrist whatever the pose's
+	# guide says; this is how a pose (and AutoPose) still places that elbow. Visual only.
+	if not support_swivel_record.is_empty():
+		var s_arm = support_swivel_record[0]
+		var s_wrist: Vector3 = support_swivel_record[1]
+		var s_pole := Vector3.INF
+		if absf(float(support_swivel_record[2])) > 1e-4:
+			var s_left: bool = support_swivel_record[3]
+			var s_chest: Array = ElbowSwivel.frame(def, forehand_axis, forward_axis, s_left)
+			var s_shoulder: Vector3 = s_arm.upper_pivot.global_position
+			var s_now: float = ElbowSwivel.angle(s_shoulder, s_wrist, s_arm.forearm_pivot.global_position, s_chest[0], s_chest[1], s_left)
+			if not is_nan(s_now): s_pole = ElbowSwivel.pole(s_shoulder, s_wrist, s_chest[0], s_chest[1], s_now + float(support_swivel_record[2]), s_left)
+		ElbowSwivel.record_visual_turn(s_arm, s_wrist, s_arm.forearm_pivot.global_position, s_pole)
 
 	if not _player.is_ai and b != null and _player.debug_visual and _player.posture.human_contact == null:
 		if _player.debug_visual.human_committed_contact_position != Vector3.ZERO:

@@ -7,6 +7,8 @@ extends RefCounted
 ## follows the arm by the smallest rotation from that rest direction, and the chest by the pose's
 ## yaw, so it is continuous everywhere except an arm pointing straight back-and-in (never used).
 ## Positive = elbow turns out from the body (mirrored for the left arm).
+## That is the paddle arm. The support arm's field (player_arm_ik.gd) is a turn of its drawn elbow
+## away from the solved one by that many degrees, + out, so 0 leaves it where the arm IK put it.
 
 const REST_OUT := 0.6       # rest arm direction: forward + 0.6 x out from the body
 const POLE_REACH := 0.5     # pole distance from the arm line (metres): keeps stabilized_pole out of play
