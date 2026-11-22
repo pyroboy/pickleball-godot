@@ -370,43 +370,78 @@ static func _rolling_cart(w) -> void:
 	var alu: Color = w._c("#dde1e3")
 	var tyre: Color = w._c("#26232a")
 	var st := Kit.begin()
-	# single small car wheel under the cabinet, yellow rim stripe
+	var black: Color = w._c("#2a2730")
+	# --- wheel: a deep tyre with tread, a grey rim with a yellow stripe, and a fender
 	var hub := Vector3(0.0, 0.28, 0.0)
-	Kit.box(st, hub, Vector3(0.56, 0.56, 0.2), tyre, Basis(Vector3.BACK, PI * 0.25))
-	Kit.box(st, hub, Vector3(0.56, 0.56, 0.2), tyre)
-	Kit.box(st, hub + Vector3(0, 0, 0.11), Vector3(0.32, 0.32, 0.02), w._c("#3a3640"))
-	Kit.box(st, hub + Vector3(0.1, -0.06, 0.12), Vector3(0.08, 0.2, 0.02), w._c("#f2d23a"), Basis(Vector3.BACK, 0.5))
-	# chassis: legs from the axle up to the cabinet floor
-	for sx: float in [-0.3, 0.3]:
-		Kit.beam(st, hub + Vector3(sx * 0.4, 0, 0.0), Vector3(sx, 0.46, 0.25), 0.05, green)
-		Kit.beam(st, hub + Vector3(sx * 0.4, 0, 0.0), Vector3(sx, 0.46, -0.25), 0.05, green)
-	Kit.box(st, Vector3(0, 0.47, 0), Vector3(1.24, 0.05, 0.94), green_dk)
-	# cabinet body
-	Kit.box(st, Vector3(0, 1.15, 0), Vector3(1.2, 1.36, 0.9), green)
-	# front centre: glass display above, stainless warmer drawers below, stickers
-	for gx: float in [-0.12, 0.12]:
-		Kit.box(st, Vector3(gx, 1.58, 0.455), Vector3(0.23, 0.3, 0.02), alu)
-		Kit.box(st, Vector3(gx, 1.58, 0.462), Vector3(0.19, 0.25, 0.01), frost)
-	Kit.box(st, Vector3(0, 1.08, 0.455), Vector3(0.46, 0.36, 0.02), steel)
-	Kit.box(st, Vector3(0, 1.17, 0.47), Vector3(0.28, 0.03, 0.02), green_dk)
-	Kit.box(st, Vector3(0, 0.75, 0.455), Vector3(0.46, 0.14, 0.02), steel)
-	Kit.box(st, Vector3(0, 0.77, 0.47), Vector3(0.28, 0.025, 0.02), green_dk)
-	Kit.box(st, Vector3(0.18, 1.35, 0.46), Vector3(0.06, 0.08, 0.01), w._c("#3e7fd0"))
-	Kit.box(st, Vector3(0.18, 1.24, 0.46), Vector3(0.06, 0.05, 0.01), w._c("#f2d23a"))
-	# flat canopy over the front and the signboard on top
-	Kit.box(st, Vector3(0, 2.05, 0.22), Vector3(1.9, 0.05, 1.45), green)
-	Kit.box(st, Vector3(0, 2.02, 0.94), Vector3(1.9, 0.06, 0.03), green_dk)
-	Kit.box(st, Vector3(0, 1.85, 0.452), Vector3(1.2, 0.35, 0.02), green_dk)   # shade under the canopy
-	Kit.box(st, Vector3(0, 2.27, 0.7), Vector3(1.75, 0.34, 0.04), w._c("#f4f1e8"))
-	for sx: float in [-0.78, 0.78]:   # malunggay leaves and a roll painted at each end
-		for k in 4: Kit.box(st, Vector3(sx + (k % 2) * 0.05 * signf(sx), 2.22 + k * 0.05, 0.725), Vector3(0.05, 0.035, 0.01), w._c("#4f9a3a"))
-		Kit.box(st, Vector3(sx - 0.07 * signf(sx), 2.2, 0.725), Vector3(0.08, 0.05, 0.01), w._c("#d39b55"))
-	# jingle speaker on the canopy corner
-	Kit.box(st, Vector3(-0.8, 2.16, 0.75), Vector3(0.14, 0.14, 0.12), w._c("#b9bcc0"))
-	# push handle on the +x side (the vendor walks behind, pushing)
+	for k in 2:
+		Kit.box(st, hub, Vector3(0.56, 0.56, 0.24), tyre, Basis(Vector3.BACK, PI * 0.25 * k))
+	Kit.box(st, hub, Vector3(0.4, 0.4, 0.26), black, Basis(Vector3.BACK, PI * 0.125))
+	for face: float in [1.0, -1.0]:
+		Kit.box(st, hub + Vector3(0, 0, 0.13 * face), Vector3(0.3, 0.3, 0.02), w._c("#8a8f94"), Basis(Vector3.BACK, PI * 0.25))
+		Kit.box(st, hub + Vector3(0, 0, 0.135 * face), Vector3(0.12, 0.12, 0.02), w._c("#3a3640"))
+		Kit.box(st, hub + Vector3(0.11, -0.05, 0.14 * face), Vector3(0.07, 0.2, 0.015), w._c("#f2d23a"), Basis(Vector3.BACK, 0.55))
+	Kit.box(st, Vector3(0, 0.62, 0), Vector3(0.68, 0.06, 0.34), green_dk)                    # fender
+	for fx: float in [-0.32, 0.32]:
+		Kit.box(st, Vector3(fx, 0.5, 0), Vector3(0.05, 0.22, 0.34), green_dk)
+	# --- chassis: a welded tube frame with a stand leg at each end
+	Kit.box(st, Vector3(0, 0.5, 0.39), Vector3(1.26, 0.08, 0.08), green_dk)
+	Kit.box(st, Vector3(0, 0.5, -0.39), Vector3(1.26, 0.08, 0.08), green_dk)
+	for fx: float in [-0.59, 0.59]:
+		Kit.box(st, Vector3(fx, 0.5, 0), Vector3(0.08, 0.08, 0.86), green_dk)
+		Kit.box(st, Vector3(fx, 0.24, 0.3), Vector3(0.06, 0.48, 0.06), green_dk)              # stand legs
+		Kit.box(st, Vector3(fx, 0.02, 0.3), Vector3(0.14, 0.04, 0.14), black)
+	# --- cabinet: corner posts, top and bottom rails, panels set in between
+	var y0 := 0.54
+	var y1 := 1.86
+	var cy := (y0 + y1) * 0.5
+	var h := y1 - y0
+	Kit.box(st, Vector3(0, cy, 0), Vector3(1.14, h, 0.8), green)                               # panels (set in)
+	for px: float in [-0.585, 0.585]:
+		for pz: float in [-0.415, 0.415]:
+			Kit.box(st, Vector3(px, cy, pz), Vector3(0.08, h, 0.08), green_dk)                 # corner posts
+	for ry: float in [y0 + 0.03, y1 - 0.03]:
+		for pz: float in [-0.415, 0.415]:
+			Kit.box(st, Vector3(0, ry, pz), Vector3(1.2, 0.06, 0.07), green_dk)
+		for px: float in [-0.585, 0.585]:
+			Kit.box(st, Vector3(px, ry, 0), Vector3(0.07, 0.06, 0.86), green_dk)
+	# left side: a small window; right side: a louvred vent (the oven breathes there)
+	Kit.box(st, Vector3(-0.575, 1.42, 0), Vector3(0.03, 0.42, 0.5), alu)
+	Kit.box(st, Vector3(-0.59, 1.42, 0), Vector3(0.02, 0.34, 0.42), frost)
+	for k in 6: Kit.box(st, Vector3(0.59, 0.85 + k * 0.08, 0.05), Vector3(0.04, 0.03, 0.46), green_dk)
+	# --- front centre: a framed glass display that sticks out, stainless warmer drawers
+	Kit.box(st, Vector3(0, 1.6, 0.44), Vector3(0.58, 0.4, 0.1), alu)
+	for gx: float in [-0.135, 0.135]:
+		Kit.box(st, Vector3(gx, 1.6, 0.495), Vector3(0.23, 0.32, 0.02), frost)
+	Kit.box(st, Vector3(0, 1.6, 0.5), Vector3(0.03, 0.36, 0.03), alu)
+	Kit.box(st, Vector3(0, 1.1, 0.43), Vector3(0.52, 0.42, 0.08), steel)
+	Kit.box(st, Vector3(0, 0.77, 0.43), Vector3(0.52, 0.18, 0.08), steel)
+	for hy: float in [1.22, 0.79]:   # stand-off handles
+		Kit.box(st, Vector3(0, hy, 0.5), Vector3(0.3, 0.035, 0.035), green_dk)
+		for hx: float in [-0.14, 0.14]: Kit.box(st, Vector3(hx, hy, 0.48), Vector3(0.03, 0.03, 0.05), green_dk)
+	Kit.box(st, Vector3(0.21, 1.38, 0.43), Vector3(0.07, 0.09, 0.03), w._c("#3e7fd0"))
+	Kit.box(st, Vector3(0.21, 1.27, 0.43), Vector3(0.07, 0.06, 0.03), w._c("#f2d23a"))
+	# --- canopy: a thick roof with a fascia, on struts from the cabinet's front corners
+	Kit.box(st, Vector3(0, 2.08, 0.2), Vector3(1.94, 0.08, 1.5), green)
+	Kit.box(st, Vector3(0, 2.02, 0.95), Vector3(1.96, 0.14, 0.05), green_dk)
+	for fx: float in [-0.97, 0.97]: Kit.box(st, Vector3(fx, 2.02, 0.2), Vector3(0.05, 0.14, 1.52), green_dk)
+	for fx: float in [-0.55, 0.55]:
+		Kit.beam(st, Vector3(fx, 1.86, 0.4), Vector3(fx * 1.5, 2.0, 0.9), 0.04, green_dk)
+	Kit.box(st, Vector3(0, 1.98, 0.2), Vector3(1.94, 0.02, 1.5), green.darkened(0.35))          # canopy underside in shade
+	# --- signboard: a framed box on two posts
+	for sx: float in [-0.7, 0.7]: Kit.box(st, Vector3(sx, 2.17, 0.72), Vector3(0.05, 0.12, 0.05), green_dk)
+	Kit.box(st, Vector3(0, 2.4, 0.72), Vector3(1.8, 0.4, 0.1), green_dk)
+	Kit.box(st, Vector3(0, 2.4, 0.74), Vector3(1.72, 0.32, 0.08), w._c("#f4f1e8"))
+	for sx: float in [-0.76, 0.76]:   # malunggay leaves and a roll painted at each end
+		for k in 4: Kit.box(st, Vector3(sx + (k % 2) * 0.05 * signf(sx), 2.33 + k * 0.05, 0.785), Vector3(0.05, 0.035, 0.01), w._c("#4f9a3a"))
+		Kit.box(st, Vector3(sx - 0.07 * signf(sx), 2.31, 0.785), Vector3(0.08, 0.05, 0.01), w._c("#d39b55"))
+	# --- jingle speaker: a horn on a bracket at the canopy corner
+	Kit.box(st, Vector3(-0.82, 2.16, 0.78), Vector3(0.1, 0.1, 0.1), w._c("#8a8f94"))
+	Kit.box(st, Vector3(-0.82, 2.2, 0.86), Vector3(0.2, 0.18, 0.06), w._c("#b9bcc0"))
+	Kit.box(st, Vector3(-0.82, 2.2, 0.9), Vector3(0.14, 0.12, 0.02), black)
+	# --- push handle on the +x side (the vendor walks behind, pushing)
 	for hz: float in [-0.3, 0.3]:
-		Kit.beam(st, Vector3(0.6, 0.75, hz), Vector3(1.15, 1.0, hz), 0.04, green)
-	Kit.beam(st, Vector3(1.15, 1.0, -0.32), Vector3(1.15, 1.0, 0.32), 0.05, w._c("#26232a"))
+		Kit.beam(st, Vector3(0.62, 0.8, hz), Vector3(1.15, 1.02, hz), 0.05, green_dk)
+	Kit.beam(st, Vector3(1.15, 1.02, -0.34), Vector3(1.15, 1.02, 0.34), 0.06, black)
 	var root := Node3D.new()
 	root.name = "RollingPandesal"
 	root.position = Vector3(40.0, 0.0, CART.z)
@@ -425,20 +460,23 @@ static func _rolling_cart(w) -> void:
 	sign.modulate = Color(0.2, 0.62, 0.22)
 	sign.shaded = false
 	sign.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	sign.position = Vector3(0, 2.3, 0.725)
+	sign.position = Vector3(0, 2.41, 0.79)
 	root.add_child(sign)
 	# wing doors on hinges at the cabinet's front corners (frosted panels, aluminium frames)
 	var doors := []
 	for side: float in [-1.0, 1.0]:
 		var dst := Kit.begin()
 		var dir := -side          # closed, the door runs from its hinge toward the middle
-		Kit.box(dst, Vector3(dir * 0.2, 1.15, 0.0), Vector3(0.4, 1.34, 0.03), green)
-		for py: float in [0.82, 1.48]:
+		Kit.box(dst, Vector3(dir * 0.2, 1.2, 0.0), Vector3(0.4, 1.3, 0.05), green)
+		for ry: float in [0.57, 1.2, 1.83]: Kit.box(dst, Vector3(dir * 0.2, ry, 0.0), Vector3(0.42, 0.05, 0.07), green_dk)
+		for rx: float in [0.01, 0.39]: Kit.box(dst, Vector3(dir * rx, 1.2, 0.0), Vector3(0.04, 1.3, 0.07), green_dk)
+		for py: float in [0.89, 1.52]:
 			for face: float in [1.0, -1.0]:   # glass shows from both sides (open, the back faces the street)
-				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.018), Vector3(0.31, 0.58, 0.01), alu)
-				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.025), Vector3(0.26, 0.52, 0.01), frost)
+				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.03), Vector3(0.3, 0.54, 0.012), alu)
+				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.037), Vector3(0.25, 0.48, 0.01), frost)
+		Kit.box(dst, Vector3(dir * 0.36, 1.2, 0.05), Vector3(0.025, 0.14, 0.03), steel)        # latch
 		var hinge := Node3D.new()
-		hinge.position = Vector3(side * 0.6, 0, 0.47)
+		hinge.position = Vector3(side * 0.6, 0, 0.5)
 		root.add_child(hinge)
 		var door := MeshInstance3D.new()
 		door.mesh = dst.commit()
@@ -453,7 +491,7 @@ static func _rolling_cart(w) -> void:
 	Kit.box(pst, Vector3(-0.26, 0, 0), Vector3(0.04, 0.2, 0.02), w._c("#f2efe6"))
 	pulse.mesh = pst.commit()
 	pulse.material_override = w._toon_n
-	pulse.position = Vector3(-0.8, 2.16, 0.8)
+	pulse.position = Vector3(-0.82, 2.2, 0.92)
 	pulse.visible = false
 	root.add_child(pulse)
 	var nst: Dictionary = w._near_state
@@ -465,6 +503,7 @@ static func _rolling_cart(w) -> void:
 	nst.cart_x = 40.0
 	nst.cart_speed = 0.0
 	nst.cart_open = 0.0
+	nst.cart_shadow = w._shadow(CART + Vector3(0.1, 0, 0), Vector2(2.1, 1.3), true)
 
 
 # ------------------------------------------------------------------ people
@@ -619,6 +658,7 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 				st.cart_state = "away"
 				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
 	cart.position = Vector3(round(float(st.cart_x) * 20.0) / 20.0, 0.0, CART.z)
+	w._move_shadow(int(st.cart_shadow), w._end_pos(Vector3(cart.position.x + 0.15, 0, CART.z - 0.05), 1), not cart.visible)
 	var doors: Array = st.cart_doors
 	var opened := smoothstep(0.0, 1.0, float(st.cart_open))
 	(doors[0] as Node3D).rotation.y = round(deg_to_rad(170.0) * opened * 8.0) / 8.0
