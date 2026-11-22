@@ -45,7 +45,10 @@ const VENDOR := Vector3(5.55, 0, -12.92)       # beside the cart's front, servin
 const QUEUE := [Vector3(6.16, 0, -12.18), Vector3(6.5, 0, -11.65), Vector3(6.85, 0, -11.15), Vector3(7.2, 0, -10.65), Vector3(7.55, 0, -10.15)]
 const BUYER_YAW := 2.74                        # end-local: buyers face the cart's front
 const VENDOR_YAW := 0.69                       # end-local: the vendor faces the buyers
-const LANE := -14.45         # this end's walking lane (between the curb sitters and the standing group)
+const LANE := -14.45         # just behind the audience (kept for reference)
+# Passers-by spread over the open ground between the audience and the buildings: each trip
+# takes one of these walking lines, plus a little personal drift.
+const WALK_LINES := [-15.8, -17.2, -18.6, -20.0]
 const JEEP_LANE := -22.4
 const JEEP_STOP := -2.9      # in front of the waiting shed
 const POST := Vector3(1.4, 0, -15.0)
@@ -649,8 +652,8 @@ static func build_people(w) -> void:
 		w._pick_posture(q)
 		q.prop = "paddle"
 		q.role = "queue"
-	# passers-by on this end's lane
-	for k in 6:
+	# passers-by crossing the open ground behind the audience
+	for k in 9:
 		var p: Dictionary = w._walker("near")
 		p.end = 1
 
@@ -1118,14 +1121,34 @@ static func _step_buyer(w, b: Dictionary) -> void:
 
 
 ## Passers-by trips at this end (end-local, converted with `w._end_pos`).
+static func _walk_line(w) -> float:
+	return float(WALK_LINES[w._rng.randi() % WALK_LINES.size()]) + w._rng.randf_range(-0.25, 0.25)
+
+
+## True when another passer-by at this end is walking near `at` on about the same line.
+static func _crowded(w, me: Dictionary, at: Vector3) -> bool:
+	for o in w._walkers:
+		if o == me or int(o.get("end", 0)) != 1 or not o.visible or str(o.state) != "walk": continue
+		var l: Vector3 = w._end_pos(Vector3(o.pos), 1)
+		if absf(l.z - at.z) < 0.9 and absf(l.x - at.x) < 5.0: return true
+	return false
+
+
 static func start_trip(w, p: Dictionary) -> void:
 	var side := -1.0 if w._rng.randf() < 0.5 else 1.0
+	var line := _walk_line(w)
+	var start := Vector3(side * 17.0, 0, line)
+	if _crowded(w, p, start):
+		# someone just came in on that line: wait a moment so people stay spread out
+		p.state = "gone"
+		p.visible = false
+		p.respawn = w._t + w._rng.randf_range(1.0, 3.0)
+		return
 	p.visible = true
 	p.state = "walk"
 	p.cells = {}
 	p.bread = false
-	p.speed = w._rng.randf_range(1.0, 1.4) if p.trait != "busy" else w._rng.randf_range(1.6, 1.8)
-	var start := Vector3(side * 17.0, 0, LANE)
+	p.speed = w._rng.randf_range(0.9, 1.4) if p.trait != "busy" else w._rng.randf_range(1.6, 1.8)
 	p.pos = w._end_pos(start, 1)
 	var slot := -1
 	if w._rng.randf() < 0.7 and p.trait != "busy" and cart_selling(w):
@@ -1138,10 +1161,13 @@ static func start_trip(w, p: Dictionary) -> void:
 		p.slot = slot
 		p.dest = "pandesal"
 		var spot: Vector3 = QUEUE[slot]
-		p.path = [w._end_pos(Vector3(spot.x, 0, LANE), 1), w._end_pos(spot, 1)]
+		p.path = [w._end_pos(Vector3(spot.x, 0, line), 1), w._end_pos(spot, 1)]
 	else:
+		# cross the open ground with a gentle drift toward another line on the way
+		var drift: float = clampf(line + w._rng.randf_range(-0.9, 0.9), -20.4, -15.4)
+		var mid_x: float = w._rng.randf_range(-6.0, 6.0)
 		p.dest = "exit"
-		p.path = [w._end_pos(Vector3(-side * 17.0, 0, LANE), 1)]
+		p.path = [w._end_pos(Vector3(mid_x, 0, (line + drift) * 0.5), 1), w._end_pos(Vector3(-side * 17.0, 0, drift), 1)]
 
 
 static func arrive(w, p: Dictionary) -> void:
@@ -1153,12 +1179,13 @@ static func arrive(w, p: Dictionary) -> void:
 		_:
 			p.state = "gone"
 			p.visible = false
-			p.respawn = w._t + w._rng.randf_range(2.0, 8.0)
+			p.respawn = w._t + w._rng.randf_range(3.0, 10.0)
 
 
 static func leave(w, p: Dictionary) -> void:
 	var side := -1.0 if w._rng.randf() < 0.5 else 1.0
 	var here := _local(w, p)
+	var line := _walk_line(w)
 	p.state = "walk"
 	p.dest = "exit"
-	p.path = [w._end_pos(Vector3(here.x, 0, LANE), 1), w._end_pos(Vector3(side * 17.0, 0, LANE), 1)]
+	p.path = [w._end_pos(Vector3(here.x, 0, line), 1), w._end_pos(Vector3(side * 17.0, 0, line), 1)]
