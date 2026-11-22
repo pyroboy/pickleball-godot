@@ -75,5 +75,38 @@
   "time": "2026-11-22T09:08:34",
   "notes": [],
   "comment": ""
+ },
+ {
+  "pose": "s10",
+  "version": 7,
+  "stars": 1,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T16:59:50",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s12",
+  "version": 4,
+  "stars": 1,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T16:59:50",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s19",
+  "version": 6,
+  "stars": 1,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T17:09:56",
+  "notes": [],
+  "comment": ""
  }
 ]

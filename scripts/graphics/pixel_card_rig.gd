@@ -384,6 +384,10 @@ func _accent_rank() -> int:
 # ------------------------------------------------------------------ per frame
 
 var _raw: bool = false
+## Bench only (PerfMonitor frame log): the joints as drawn this frame, keyed part + side
+## (interpolated read + card motion), so tools measure what the eye sees, not the 30 Hz rig.
+static var record_drawn: bool = false
+var drawn: Dictionary = {}
 var _motion = null   # CardMotionLayer: visual-only joint deltas for this frame
 var _elbow_arm: Dictionary = {}   # forearm pivot (elbow) -> arm: the elbow is drawn at the authored swivel
 
@@ -537,6 +541,7 @@ func _process(delta: float) -> void:
 	var i: int = 0
 	for c in _cards:
 		var a: Vector3 = _pos(c.a)
+		if record_drawn: drawn["%s%d" % [c.part, 1 if c.mirror else 0]] = a
 		var b: Vector3
 		if c.limb: b = _pos(c.b)
 		elif c.prev != null: b = a + (a - _pos(c.prev)).normalized() * 0.06

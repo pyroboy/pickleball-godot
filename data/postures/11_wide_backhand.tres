@@ -53,23 +53,23 @@ values = {
 script = ExtResource("1")
 values = {
 "back_foot_back": -0.2,
-"body_pitch_deg": 22.90009554,
-"body_roll_deg": 3.60205046,
+"body_pitch_deg": 22.82873443,
+"body_roll_deg": 3.694939504,
 "body_yaw_deg": -25,
 "crouch_amount": 0.338223696,
 "front_foot_forward": 0.18,
-"head_pitch_deg": -6.20539521,
+"head_pitch_deg": -5.15690649,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 85.0,
-"hip_yaw_deg": -47.1830619,
+"hip_yaw_deg": -47.2306469,
 "lead_foot": 0,
-"left_elbow_pole": Vector3(-1.0, -0.06075847, -0.43520546),
+"left_elbow_pole": Vector3(-0.9975219, -0.050931055, -0.43487328),
 "left_foot_offset": Vector3(0.02, 0, 0.1),
 "left_foot_yaw_deg": -78,
 "left_hand_mode": 1,
-"left_hand_offset": Vector3(0.5, 0.0664855, -0.009641375),
+"left_hand_offset": Vector3(0.5, 0.06353893, -0.021604998),
 "left_knee_pole": Vector3(-0.18022437, 0.5267387, 1.0),
-"left_shoulder_rotation_deg": Vector3(86.311035, 39.212994, 6.4402003),
+"left_shoulder_rotation_deg": Vector3(86.341934, 39.295994, 6.5182753),
 "paddle_pitch_sign_source": 1,
 "paddle_pitch_signed_deg": 77,
 "paddle_roll_sign_source": 1,
@@ -82,18 +82,18 @@ values = {
 "right_hand_offset": Vector3(0, 0, 0),
 "right_knee_pole": Vector3(-0.02777702, 0.46961194, 1.0),
 "right_shoulder_rotation_deg": Vector3(-20.82431, -40.947475, -25.581326),
-"spine_curve_deg": -22.58355385,
+"spine_curve_deg": -22.77085432,
 "stance_width": 0.68,
 "support_grip_style": 0.34,
-"torso_pitch_deg": 1.199016795,
-"torso_roll_deg": 5.17358076,
+"torso_pitch_deg": 1.41689408,
+"torso_roll_deg": 6.02758377,
 "torso_yaw_deg": -30.2549354,
-"weight_shift": 0.259707004,
-"body_position_offset": Vector3(0.06340115, 0.041739997, -0.15583956),
+"weight_shift": 0.257841581,
+"body_position_offset": Vector3(0.06319401, 0.041739997, -0.15583956),
 "elbow_swivel_weight": 1.0,
 "right_elbow_swivel_deg": -167.9149165,
-"shoulder_protraction_m": 0.04488864,
-"left_elbow_swivel_deg": -8.49212144,
+"shoulder_protraction_m": 0.044961353,
+"left_elbow_swivel_deg": -8.42303082,
 "paddle_in_hand_rotation_deg": -26.5978339
 }
 
@@ -188,6 +188,9 @@ notes = "Right-dominant groundstroke; contact shaft below wrist, broad face thro
 right_elbow_swivel_deg = -11.69306785
 elbow_swivel_weight = 1.0
 left_elbow_swivel_deg = -1.045230085
-paddle_path_times = PackedFloat32Array(0.25)
-paddle_path_offsets = PackedVector3Array(0, 0, 0)
-paddle_path_tangents = PackedVector3Array(0, 0, 0)
+paddle_path_times = PackedFloat32Array(0.02, 0.25)
+paddle_path_offsets = PackedVector3Array(-0.79796976, -0.043783166, 0.03643165, -0.27219945, -0.0396595, 0.030354977)
+paddle_path_tangents = PackedVector3Array(1.6922122, -2.0503924, -2.7029972, 0, 0, 0)
+ready_path_times = PackedFloat32Array(0.5)
+ready_path_offsets = PackedVector3Array(-0.0002245009, -0.009504914, -0.003124088)
+ready_path_tangents = PackedVector3Array(0, 0, 0)

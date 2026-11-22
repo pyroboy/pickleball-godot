@@ -1,6 +1,509 @@
 {
  "versions": [
   {
+   "pose": "s19",
+   "n": 7,
+   "time": "2026-11-22T17:09:56",
+   "author": "user",
+   "message": "phone: studio edit: paddle_path_times, paddle_path_offsets, paddle_path_tangents",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "paddle_path_times",
+     "a": null,
+     "b": "PackedFloat32Array(0.75)"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_path_offsets",
+     "a": null,
+     "b": "PackedVector3Array(-0.052437067, -0.077509165, 0.3104825)"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_path_tangents",
+     "a": null,
+     "b": "PackedVector3Array(0, 0, 0)"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 6,
+   "time": "2026-11-22T16:59:50",
+   "author": "user",
+   "message": "phone: studio edit: ft_paddle_offset, ft_paddle_rotation_deg, body_pitch_deg, body_roll_deg, head_pitch_deg, head_yaw_deg, hip_yaw_deg, left_elbow_pole, left_hand_offset, left_shoulder_rotation_deg, spine_curve_deg, torso_pitch_deg, torso_roll_deg, body_position_offset, body_pitch_deg, body_roll_deg, crouch_amount, head_pitch_deg, head_yaw_deg, hip_yaw_deg, left_elbow_pole, left_hand_offset, left_shoulder_rotation_deg, right_elbow_pole, spine_curve_deg, torso_pitch_deg, torso_roll_deg, torso_yaw_deg, weight_shift, body_position_offset",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_pitch_deg",
+     "a": "0.0",
+     "b": "0.050339356"
+    },
+    {
+     "stage": "windup",
+     "field": "body_roll_deg",
+     "a": "0.0",
+     "b": "-0.026989151"
+    },
+    {
+     "stage": "windup",
+     "field": "head_pitch_deg",
+     "a": "-38.0",
+     "b": "-40.921561"
+    },
+    {
+     "stage": "windup",
+     "field": "head_yaw_deg",
+     "a": "-2.0",
+     "b": "13.36323694"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-4",
+     "b": "-4.06698699"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_pole",
+     "a": "Vector3(-0.4, -0.35, 0.1)",
+     "b": "Vector3(-0.38911107, -0.3398516, 0.1002936)"
+    },
+    {
+     "stage": "windup",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.1, 0, -0.24)",
+     "b": "Vector3(-0.3859521, -0.5, -0.3138544)"
+    },
+    {
+     "stage": "windup",
+     "field": "left_shoulder_rotation_deg",
+     "a": "Vector3(0, 0, 0)",
+     "b": "Vector3(0.46155626, 0.041380133, 0.4182284)"
+    },
+    {
+     "stage": "windup",
+     "field": "spine_curve_deg",
+     "a": "0.0",
+     "b": "0.11032244"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "19.8907323"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_roll_deg",
+     "a": "0.0",
+     "b": "-0.022399661"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.00019063802, 0.0, 0.0)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_offset",
+     "a": "Vector3(0.1476, 0.13, 0.052)",
+     "b": "Vector3(0.53327847, 0.45083603, 0.55942416)"
+    },
+    {
+     "stage": "contact",
+     "field": "ft_paddle_rotation_deg",
+     "a": null,
+     "b": "Vector3(7.560217, -15.221414, 0.0)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_pitch_deg",
+     "a": "0.0",
+     "b": "-0.883675686"
+    },
+    {
+     "stage": "finish",
+     "field": "body_roll_deg",
+     "a": "0.0",
+     "b": "2.330086983"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.5",
+     "b": "0.49689511"
+    },
+    {
+     "stage": "finish",
+     "field": "head_pitch_deg",
+     "a": "-38.0",
+     "b": "-29.48236593"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "-2.0",
+     "b": "7.12673934"
+    },
+    {
+     "stage": "finish",
+     "field": "hip_yaw_deg",
+     "a": "-4.0",
+     "b": "-3.03194324"
+    },
+    {
+     "stage": "finish",
+     "field": "left_elbow_pole",
+     "a": "Vector3(-0.4, -0.35, 0.1)",
+     "b": "Vector3(-0.37620574, -0.33352858, 0.116531864)"
+    },
+    {
+     "stage": "finish",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.1, 0, -0.24)",
+     "b": "Vector3(-0.5, -0.5, -0.5)"
+    },
+    {
+     "stage": "finish",
+     "field": "left_shoulder_rotation_deg",
+     "a": "Vector3(0, 0, 0)",
+     "b": "Vector3(-0.5905503, 0.99277645, 0.71609265)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_pole",
+     "a": "Vector3(0.06, -0.6, 0.2)",
+     "b": "Vector3(0.059470627, -0.5999066, 0.19985689)"
+    },
+    {
+     "stage": "finish",
+     "field": "spine_curve_deg",
+     "a": "0.0",
+     "b": "-2.44259281"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "18.78977853"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_roll_deg",
+     "a": "0.0",
+     "b": "5.03181769"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-1.92383106"
+    },
+    {
+     "stage": "finish",
+     "field": "weight_shift",
+     "a": "0.18",
+     "b": "0.188298008"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0010945718, 0.0033327672, 0.0027484552)"
+    }
+   ]
+  },
+  {
+   "pose": "s19",
+   "n": 5,
+   "time": "2026-11-22T16:59:50",
+   "author": "user",
+   "message": "phone: studio edit: left_hand_offset, left_elbow_pole, left_shoulder_rotation_deg, weight_shift, hip_yaw_deg, torso_pitch_deg, torso_roll_deg, spine_curve_deg, shoulder_protraction_m, body_position_offset, body_pitch_deg, body_roll_deg, head_yaw_deg, head_pitch_deg",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.1, 0, -0.24)",
+     "b": "Vector3(-0.3005743, -0.5, -0.30534887)"
+    },
+    {
+     "stage": "contact",
+     "field": "left_elbow_pole",
+     "a": "Vector3(-0.4, -0.35, 0.1)",
+     "b": "Vector3(-0.37655675, -0.32663462, 0.123324126)"
+    },
+    {
+     "stage": "contact",
+     "field": "weight_shift",
+     "a": "0.2",
+     "b": "0.202777857"
+    },
+    {
+     "stage": "contact",
+     "field": "hip_yaw_deg",
+     "a": "-4.0",
+     "b": "-3.965680465"
+    },
+    {
+     "stage": "contact",
+     "field": "torso_pitch_deg",
+     "a": "20",
+     "b": "20.0851186"
+    },
+    {
+     "stage": "contact",
+     "field": "head_yaw_deg",
+     "a": "-2.0",
+     "b": "-37.75038724"
+    },
+    {
+     "stage": "contact",
+     "field": "head_pitch_deg",
+     "a": "-38.0",
+     "b": "-1.285280983"
+    },
+    {
+     "stage": "contact",
+     "field": "left_shoulder_rotation_deg",
+     "a": null,
+     "b": "Vector3(0.9382961, 0.93600005, 0.7123527)"
+    },
+    {
+     "stage": "contact",
+     "field": "torso_roll_deg",
+     "a": null,
+     "b": "0.05092924"
+    },
+    {
+     "stage": "contact",
+     "field": "spine_curve_deg",
+     "a": null,
+     "b": "-0.173138034"
+    },
+    {
+     "stage": "contact",
+     "field": "shoulder_protraction_m",
+     "a": null,
+     "b": "0.000247607"
+    },
+    {
+     "stage": "contact",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(0.00027982643, 0.0, 0.00057213684)"
+    },
+    {
+     "stage": "contact",
+     "field": "body_pitch_deg",
+     "a": null,
+     "b": "0.050346641"
+    },
+    {
+     "stage": "contact",
+     "field": "body_roll_deg",
+     "a": null,
+     "b": "-0.044082807"
+    }
+   ]
+  },
+  {
+   "pose": "s12",
+   "n": 4,
+   "time": "2026-11-22T16:59:50",
+   "author": "user",
+   "message": "phone: studio edit: left_hand_offset, head_yaw_deg, head_pitch_deg, head_pitch_deg, head_yaw_deg, left_hand_offset",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "contact",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.15, 0, -0.22)",
+     "b": "Vector3(-0.216923, -0.35518688, -0.26351997)"
+    },
+    {
+     "stage": "contact",
+     "field": "head_yaw_deg",
+     "a": "2.0",
+     "b": "2.25697945"
+    },
+    {
+     "stage": "contact",
+     "field": "head_pitch_deg",
+     "a": "-28.0",
+     "b": "23.9626072"
+    },
+    {
+     "stage": "finish",
+     "field": "head_pitch_deg",
+     "a": "-28.0",
+     "b": "-15.18709058"
+    },
+    {
+     "stage": "finish",
+     "field": "head_yaw_deg",
+     "a": "0.0",
+     "b": "23.59173806"
+    },
+    {
+     "stage": "finish",
+     "field": "left_hand_offset",
+     "a": "Vector3(-0.15, 0, -0.22)",
+     "b": "Vector3(-0.21149755, -0.39017487, -0.29300985)"
+    }
+   ]
+  },
+  {
+   "pose": "s11",
+   "n": 9,
+   "time": "2026-11-22T16:59:50",
+   "author": "user",
+   "message": "phone: studio edit: paddle_path_times, paddle_path_offsets, paddle_path_tangents, ready_path_times, ready_path_offsets, ready_path_tangents, body_pitch_deg, body_position_offset, body_roll_deg, head_pitch_deg, hip_yaw_deg, left_elbow_pole, left_elbow_swivel_deg, left_hand_offset, left_shoulder_rotation_deg, shoulder_protraction_m, spine_curve_deg, torso_pitch_deg, torso_roll_deg, weight_shift",
+   "approved": false,
+   "notes": [],
+   "score": null,
+   "flags": [],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_pitch_deg",
+     "a": "22.90009554",
+     "b": "22.82873443"
+    },
+    {
+     "stage": "windup",
+     "field": "body_roll_deg",
+     "a": "3.60205046",
+     "b": "3.694939504"
+    },
+    {
+     "stage": "windup",
+     "field": "head_pitch_deg",
+     "a": "-6.20539521",
+     "b": "-5.15690649"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-47.1830619",
+     "b": "-47.2306469"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_pole",
+     "a": "Vector3(-1.0, -0.06075847, -0.43520546)",
+     "b": "Vector3(-0.9975219, -0.050931055, -0.43487328)"
+    },
+    {
+     "stage": "windup",
+     "field": "left_hand_offset",
+     "a": "Vector3(0.5, 0.0664855, -0.009641375)",
+     "b": "Vector3(0.5, 0.06353893, -0.021604998)"
+    },
+    {
+     "stage": "windup",
+     "field": "left_shoulder_rotation_deg",
+     "a": "Vector3(86.311035, 39.212994, 6.4402003)",
+     "b": "Vector3(86.341934, 39.295994, 6.5182753)"
+    },
+    {
+     "stage": "windup",
+     "field": "spine_curve_deg",
+     "a": "-22.58355385",
+     "b": "-22.77085432"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_pitch_deg",
+     "a": "1.199016795",
+     "b": "1.41689408"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_roll_deg",
+     "a": "5.17358076",
+     "b": "6.02758377"
+    },
+    {
+     "stage": "windup",
+     "field": "weight_shift",
+     "a": "0.259707004",
+     "b": "0.257841581"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.06340115, 0.041739997, -0.15583956)",
+     "b": "Vector3(0.06319401, 0.041739997, -0.15583956)"
+    },
+    {
+     "stage": "windup",
+     "field": "shoulder_protraction_m",
+     "a": "0.04488864",
+     "b": "0.044961353"
+    },
+    {
+     "stage": "windup",
+     "field": "left_elbow_swivel_deg",
+     "a": "-8.49212144",
+     "b": "-8.42303082"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_path_times",
+     "a": "PackedFloat32Array(0.25)",
+     "b": "PackedFloat32Array(0.02, 0.25)"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_path_offsets",
+     "a": "PackedVector3Array(0, 0, 0)",
+     "b": "PackedVector3Array(-0.79796976, -0.043783166, 0.03643165, -0.27219945, -0.0396595, 0.030354977)"
+    },
+    {
+     "stage": "contact",
+     "field": "paddle_path_tangents",
+     "a": "PackedVector3Array(0, 0, 0)",
+     "b": "PackedVector3Array(1.6922122, -2.0503924, -2.7029972, 0, 0, 0)"
+    },
+    {
+     "stage": "contact",
+     "field": "ready_path_times",
+     "a": null,
+     "b": "PackedFloat32Array(0.5)"
+    },
+    {
+     "stage": "contact",
+     "field": "ready_path_offsets",
+     "a": null,
+     "b": "PackedVector3Array(-0.0002245009, -0.009504914, -0.003124088)"
+    },
+    {
+     "stage": "contact",
+     "field": "ready_path_tangents",
+     "a": null,
+     "b": "PackedVector3Array(0, 0, 0)"
+    }
+   ]
+  },
+  {
    "pose": "s16",
    "n": 7,
    "time": "2026-11-22T09:08:33",
@@ -10992,37 +11495,6 @@
    ]
   },
   {
-   "pose": "b20",
-   "n": 3,
-   "time": "2026-11-21T00:26:20",
-   "author": "claude",
-   "message": "Elbow swivel: the shown elbow stored as a swivel angle per key (weight 1)",
-   "approved": false,
-   "notes": [],
-   "score": null,
-   "flags": [],
-   "changes": [
-    {
-     "stage": "contact",
-     "field": "right_elbow_pole",
-     "a": "Vector3(0.24125542, -0.19453949, -0.01980728)",
-     "b": null
-    },
-    {
-     "stage": "contact",
-     "field": "right_elbow_swivel_deg",
-     "a": null,
-     "b": "-25.07016495"
-    },
-    {
-     "stage": "contact",
-     "field": "elbow_swivel_weight",
-     "a": null,
-     "b": "1.0"
-    }
-   ]
-  },
-  {
    "pose": "b19",
    "n": 3,
    "time": "2026-11-21T00:26:19",
@@ -13295,49 +13767,6 @@
   },
   {
    "pose": "b21",
-   "n": 0,
-   "time": "2026-11-21T00:15:51",
-   "author": "user",
-   "message": "HEAD",
-   "approved": false,
-   "notes": [],
-   "score": null,
-   "flags": [],
-   "changes": []
-  },
-  {
-   "pose": "b20",
-   "n": 2,
-   "time": "2026-11-21T00:15:51",
-   "author": "claude",
-   "message": "Elbow bake: shown elbow written into the authored pole (wrist correction off)",
-   "approved": false,
-   "notes": [],
-   "score": null,
-   "flags": [],
-   "changes": [
-    {
-     "stage": "contact",
-     "field": "right_elbow_pole",
-     "a": null,
-     "b": "Vector3(0.24125542, -0.19453949, -0.01980728)"
-    }
-   ]
-  },
-  {
-   "pose": "b20",
-   "n": 1,
-   "time": "2026-11-21T00:15:51",
-   "author": "user",
-   "message": "working copy at first studio start",
-   "approved": false,
-   "notes": [],
-   "score": null,
-   "flags": [],
-   "changes": []
-  },
-  {
-   "pose": "b20",
    "n": 0,
    "time": "2026-11-21T00:15:51",
    "author": "user",
@@ -15917,6 +16346,50 @@
    "by": "user",
    "source": "phone",
    "time": "2026-11-22T03:44:51",
+   "notes": [],
+   "comment": ""
+  },
+  {
+   "pose": "s00",
+   "version": 23,
+   "stars": 4,
+   "aspects": {},
+   "by": "user",
+   "source": "phone",
+   "time": "2026-11-22T09:08:34",
+   "notes": [],
+   "comment": ""
+  },
+  {
+   "pose": "s10",
+   "version": 7,
+   "stars": 1,
+   "aspects": {},
+   "by": "user",
+   "source": "phone",
+   "time": "2026-11-22T16:59:50",
+   "notes": [],
+   "comment": ""
+  },
+  {
+   "pose": "s12",
+   "version": 4,
+   "stars": 1,
+   "aspects": {},
+   "by": "user",
+   "source": "phone",
+   "time": "2026-11-22T16:59:50",
+   "notes": [],
+   "comment": ""
+  },
+  {
+   "pose": "s19",
+   "version": 6,
+   "stars": 1,
+   "aspects": {},
+   "by": "user",
+   "source": "phone",
+   "time": "2026-11-22T17:09:56",
    "notes": [],
    "comment": ""
   }

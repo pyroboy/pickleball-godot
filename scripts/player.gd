@@ -573,7 +573,9 @@ const LOD_NEAR_M := 2.5
 
 ## True on alternate ticks for an AI that cannot be the next hitter: the ball is
 ## flying to the other half, or far away and moving away.
+const RIG_LOD_ENABLED := false
 func _rig_lod_skip() -> bool:
+	if not RIG_LOD_ENABLED: return false
 	if not is_ai or (Engine.get_physics_frames() + actor_id) % 2 == 0: return false
 	if hitting != null and (hitting.is_in_follow_through or hitting.serving_visual_active): return false
 	var b: RigidBody3D = _get_ball_ref()

@@ -56,6 +56,7 @@ func _ready() -> void:
 		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
 		if arg.begins_with("--frame-log="): _frame_file = FileAccess.open(arg.trim_prefix("--frame-log="), FileAccess.WRITE)
+		if arg.begins_with("--frame-log="): PixelCardRig.record_drawn = true
 		# Headless benches: --resolution is ignored, so size the root window here
 		# (portrait 720x1280 = the phone's camera framing path).
 		if arg.begins_with("--viewport="):
@@ -169,6 +170,13 @@ func _write_frame(now: int, frame_ms: float, costs: Dictionary) -> void:
 			drawn["p%d" % p.actor_id] = _v(p.get_global_transform_interpolated().origin)
 			var want = p.get("current_velocity")
 			if want is Vector3: drawn["v%d" % p.actor_id] = snappedf(Vector2(want.x, want.z).length(), 0.001)
+			# The card joints as drawn last frame (tools/tremor_report.py).
+			var rig = p.get_parent().get_node_or_null("PixelCards_%d" % p.get_instance_id()) if p.get_parent() != null else null
+			if rig != null and not rig.drawn.is_empty():
+				var joints := {}
+				for k in rig.drawn: joints[k] = _v(rig.drawn[k])
+				if p.paddle_node != null: joints["paddle"] = _v(p.paddle_node.get_global_transform_interpolated().origin)
+				drawn["j%d" % p.actor_id] = joints
 		row["drawn"] = drawn
 	if not _events.is_empty():
 		row["ev"] = _events

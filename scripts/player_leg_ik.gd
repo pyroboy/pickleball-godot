@@ -1150,6 +1150,12 @@ func foot_pitch_report(right: bool) -> Dictionary:
 func get_feet_gap() -> float:
 	return Vector3(right_foot_smooth.x, 0, right_foot_smooth.z).distance_to(Vector3(left_foot_smooth.x, 0, left_foot_smooth.z))
 
+const FIT_DROP_HALFLIFE := 0.06   # s: torso settling down onto a far foot
+const FIT_RISE_HALFLIFE := 0.10   # s: torso coming back up
+var _fit_lower := 0.0
+var _fit_lower_prev := 0.0
+var _fit_lower_tick := -10
+
 func _fit_body_to_feet(def = null) -> void :
 	if not _player.body_pivot: return
 	# Keep the fixed paddle/grip reachable while ordinary live plants catch up.
@@ -1175,6 +1181,17 @@ func _fit_body_to_feet(def = null) -> void :
 		var horizontal: float = Vector2(hip.x - foot.x, hip.z - foot.z).length()
 		var maximum_height: float = sqrt(maxf(0.0, length * length - horizontal * horizontal))
 		lower = maxf(lower, hip.y - foot.y - maximum_height)
+	# The drop that lets the legs reach the feet is eased, not applied whole each tick: the raw
+	# value jumps with every step and wide plant (bench: the torso moved 2-7 cm tick to tick and
+	# shook the arms and paddle with it). A foot may sit a little short of its plant for a few
+	# ticks while the torso settles; the torso height itself is now continuous.
+	var tick: int = Engine.get_physics_frames()
+	if tick != _fit_lower_tick:
+		_fit_lower_prev = _fit_lower if tick - _fit_lower_tick <= 2 else lower
+		_fit_lower_tick = tick
+	var ease: float = 1.0 - pow(0.5, (1.0 / float(Engine.physics_ticks_per_second)) / (FIT_DROP_HALFLIFE if lower > _fit_lower_prev else FIT_RISE_HALFLIFE))
+	_fit_lower = lerpf(_fit_lower_prev, lower, ease) if not _player.posture.editor_preview_mode else lower
+	lower = _fit_lower
 	if lower <= 1e-05: return
 	var paddle: Node3D = _player.paddle_node if "paddle_node" in _player else null
 	var paddle_world: Transform3D = paddle.global_transform if paddle else Transform3D.IDENTITY

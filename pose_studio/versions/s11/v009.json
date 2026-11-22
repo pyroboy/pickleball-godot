@@ -1,0 +1,10 @@
+{
+ "n": 9,
+ "author": "user",
+ "message": "phone: studio edit: paddle_path_times, paddle_path_offsets, paddle_path_tangents, ready_path_times, ready_path_offsets, ready_path_tangents, body_pitch_deg, body_position_offset, body_roll_deg, head_pitch_deg, hip_yaw_deg, left_elbow_pole, left_elbow_swivel_deg, left_hand_offset, left_shoulder_rotation_deg, shoulder_protraction_m, spine_curve_deg, torso_pitch_deg, torso_roll_deg, weight_shift",
+ "time": "2026-11-22T16:59:50",
+ "notes": [],
+ "score": null,
+ "flags": [],
+ "approved": false
+}

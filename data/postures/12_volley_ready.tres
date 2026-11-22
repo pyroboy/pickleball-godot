@@ -12,16 +12,16 @@ values = {
 "body_yaw_deg": -8,
 "crouch_amount": 0.01999999999999999,
 "front_foot_forward": 0.16,
-"head_pitch_deg": -28.0,
+"head_pitch_deg": -15.18709058,
 "head_track_ball_weight": 0.8,
-"head_yaw_deg": 0.0,
+"head_yaw_deg": 23.59173806,
 "hip_yaw_deg": -5,
 "lead_foot": 1,
 "left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
 "left_foot_offset": Vector3(0, 0, 0),
 "left_foot_yaw_deg": 5.0,
 "left_hand_mode": 4,
-"left_hand_offset": Vector3(-0.15, 0, -0.22),
+"left_hand_offset": Vector3(-0.21149755, -0.39017487, -0.29300985),
 "left_knee_pole": Vector3(0, 0, 0),
 "left_shoulder_rotation_deg": Vector3(0, 8, 0),
 "paddle_pitch_sign_source": 1,
@@ -112,7 +112,7 @@ left_elbow_path = null
 right_elbow_pole = Vector3(0.48, -0.35, -0.22)
 right_shoulder_rotation_deg = Vector3(0, -8, 0)
 left_hand_mode = 4
-left_hand_offset = Vector3(-0.15, 0, -0.22)
+left_hand_offset = Vector3(-0.216923, -0.35518688, -0.26351997)
 left_elbow_pole = Vector3(-0.48, -0.35, -0.22)
 left_shoulder_rotation_deg = Vector3(0, 8, 0)
 stance_width = 0.48
@@ -124,8 +124,8 @@ lead_foot = 1
 crouch_amount = 0.06
 weight_shift = 0.2
 hip_yaw_deg = -2.0
-head_yaw_deg = 2.0
-head_pitch_deg = -28.0
+head_yaw_deg = 2.25697945
+head_pitch_deg = 23.9626072
 head_track_ball_weight = 0.8
 charge_paddle_offset = Vector3(0, 0.02, -0.1)
 charge_hip_coil_deg = 2.0
