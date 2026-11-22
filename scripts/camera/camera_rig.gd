@@ -32,8 +32,15 @@ var portrait_adaptive_framing: = false
 # The between-point close-up flew across the net to the ball pickup. Off: the
 # camera stays in its overview on the near side of the court.
 var between_point_cinematic_enabled: = false
-# Slow motion (aim hold): ease in toward the ball with a slightly wider lens.
-const SLOWMO_PUSH: = 0.26          # share of the way to the ball at full effect
+# Rally view is pushed in from the whole-court fit so play reads on a phone:
+# the camera sits PLAY_PUSH of the way toward a slow, damped play point (the
+# ball while in play, else the player), which stays put on screen while the
+# court grows around it. Clamped so both baselines' players stay in frame.
+const PLAY_PUSH: = 0.26
+const PLAY_FOLLOW_RATE: = 1.6      # 1/s: slow, so it never reads as a restless camera
+var _play_point: = Vector3.INF
+# Slow motion (aim hold): an extra push toward the ball with a slightly wider lens.
+const SLOWMO_PUSH: = 0.24          # extra share of the remaining way to the ball at full effect
 const SLOWMO_FOV_ADD: = 5.0        # degrees wider while pushed in (perspective stretch)
 const SLOWMO_FULL_SCALE: = 0.55    # time scale at which the effect is complete
 var _slowmo_focus: = 0.0
@@ -439,6 +446,7 @@ func _apply_slowmo_focus(delta: float) -> void:
 	var real_delta: float = clampf(delta / maxf(Engine.time_scale, 0.001), 0.0, 0.1)
 	var subject: Node3D = _ball if is_instance_valid(_ball) and _ball.is_in_play else _player_left
 	if not is_instance_valid(subject): return
+	_apply_play_push(subject, real_delta)
 	var point: Vector3 = _drawn(subject)
 	point = Vector3(clampf(point.x, -3.5, 3.5), clampf(point.y, 0.4, 2.2), clampf(point.z, -7.0, 7.0))
 	if _slowmo_focus <= 0.001: _slowmo_point = point
@@ -606,6 +614,17 @@ func _update_third_person(delta: float) -> void :
 	camera.look_at(look_target, Vector3.UP)
 	camera.v_offset = EDITOR_CAMERA_V_OFFSET if orbit_mode == 3 else 0.0
 
+
+func _apply_play_push(subject: Node3D, real_delta: float) -> void:
+	if not MobileLayout.is_portrait(get_viewport().get_visible_rect().size): return
+	var p: Vector3 = _drawn(subject)
+	# Pivot near the near baseline, so the zoom grows the court upward into the
+	# open space under the scoreboard and the near player stays above the
+	# controls; leans a little toward the action.
+	var aim: Vector3 = Vector3(clampf(p.x * 0.4, -1.5, 1.5), 0.6, clampf(4.6 + p.z * 0.15, 3.4, 5.6))
+	if _play_point == Vector3.INF: _play_point = aim
+	else: _play_point = _play_point.lerp(aim, 1.0 - exp(-PLAY_FOLLOW_RATE * real_delta))
+	camera.global_position += (_play_point - camera.global_position) * PLAY_PUSH
 
 func _update_portrait_camera(viewport_size: Vector2) -> void :
 
