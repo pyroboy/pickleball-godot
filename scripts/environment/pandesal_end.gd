@@ -4,9 +4,12 @@ extends RefCounted
 ## placed by barangay_world.gd in a child node turned half a turn; people and shadows go
 ## through `w._end_pos`.
 ##
-## Highlight: a malunggay pandesal cart with its vendor (calls out with a bulb horn, opens
-## the box in a puff of steam, bags rolls, hands them over) and a queue of passers-by who
-## walk off eating. Around it: a two-storey panaderya, a waiting shed with commuters and a
+## Highlight: a "rolling" malunggay pandesal cart, a bright green steel cabinet sidecar on
+## one small wheel towed by a motorcycle (wing doors with frosted panels, a glass display,
+## stainless warmer drawers, a flat canopy with the signboard and a jingle speaker). It
+## drives in along the back lane, stops, the vendor gets off and opens the doors, a queue
+## forms, rolls come out of the warmer in a puff of steam, buyers walk off eating; then it
+## closes up and drives away, and comes back later (taking turns with the jeepney). Around it: a two-storey panaderya, a waiting shed with commuters and a
 ## jeepney that stops there, a capilla with a belfry, a vulcanizing shop with a mechanic,
 ## a gray concrete electric post plastered with blue and red septic-tank stickers, a poso
 ## with a kid pumping water, lolos playing dama, cats on a hollow-block wall, a rooster in a
@@ -16,9 +19,10 @@ const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 const Fig := preload("res://scripts/environment/env_figures.gd")
 const People := preload("res://scripts/environment/env_people.gd")
 
-const CART := Vector3(3.6, 0, -12.0)
-const VENDOR := Vector3(3.6, 0, -12.75)
-const QUEUE := [Vector3(2.55, 0, -11.7), Vector3(1.95, 0, -11.75), Vector3(1.35, 0, -11.8)]
+const STOP_X := 4.2              # where the rolling cart parks on the back lane
+const CART := Vector3(4.2, 0, -16.4)
+const VENDOR := Vector3(2.7, 0, -15.75)
+const QUEUE := [Vector3(4.2, 0, -15.45), Vector3(3.55, 0, -15.5), Vector3(2.9, 0, -15.55)]
 const LANE := -14.3          # this end's walking lane
 const JEEP_LANE := -16.4
 const JEEP_STOP := -2.9      # in front of the waiting shed
@@ -36,11 +40,11 @@ static func build_geometry(w, bld: SurfaceTool, props: SurfaceTool, cloth: Surfa
 	_sticker_post(w, props, cloth)
 	_poso(w, props)
 	_dama_table(w, props)
-	_cart(w, props, cloth)
 	_audience_seats(w, props)
 	_side_pieces(w, props)
 	w._build_background(bld)
 	_jeepney(w)
+	_rolling_cart(w)
 
 
 static func _panaderya(w, st: SurfaceTool) -> void:
@@ -266,60 +270,6 @@ static func _dama_table(w, props: SurfaceTool) -> void:
 	w._shadow(t, Vector2(1.6, 0.8))
 
 
-static func _cart(w, props: SurfaceTool, cloth: SurfaceTool) -> void:
-	# Malunggay pandesal pushcart: wooden body on bicycle wheels, a glass display box of
-	# golden rolls flecked green, the painted sign, a striped umbrella, paper bags on a
-	# string, a thermos and coffee sachet strips.
-	var c := CART
-	var wood: Color = w._c("#9a6a40")
-	for wz: float in [-0.38, 0.38]:
-		var hub := c + Vector3(-0.15, 0.26, wz)
-		Kit.box(props, hub, Vector3(0.5, 0.5, 0.04), w._c("#2a2730"), Basis(Vector3.FORWARD, PI * 0.25))
-		Kit.box(props, hub, Vector3(0.5, 0.5, 0.04), w._c("#2a2730"))
-		Kit.box(props, hub + Vector3(0, 0, 0.01 * signf(wz)), Vector3(0.38, 0.38, 0.03), w._c("#8a8f94"), Basis(Vector3.FORWARD, PI * 0.25))
-		Kit.box(props, hub + Vector3(0, 0, 0.012 * signf(wz)), Vector3(0.32, 0.32, 0.03), w._c("#2a2730"))
-		Kit.box(props, hub + Vector3(0, 0, 0.02 * signf(wz)), Vector3(0.32, 0.025, 0.02), w._c("#b9bcc0"))
-		Kit.box(props, hub + Vector3(0, 0, 0.02 * signf(wz)), Vector3(0.025, 0.32, 0.02), w._c("#b9bcc0"))
-	Kit.beam(props, c + Vector3(0.55, 0.62, 0.0), c + Vector3(0.6, 0.0, 0.0), 0.05, wood)          # stand leg
-	Kit.box(props, c + Vector3(0, 0.78, 0), Vector3(1.4, 0.42, 0.66), wood)
-	Kit.box(props, c + Vector3(0, 1.0, 0), Vector3(1.46, 0.04, 0.72), w._c("#7d5638"))
-	Kit.box(props, c + Vector3(0, 0.75, 0.335), Vector3(1.2, 0.3, 0.01), w._c("#f4f1e8"))
-	w._label("MALUNGGAY\nPANDESAL", c + Vector3(0, 0.76, 0.345), 0.12, Color(0.85, 0.15, 0.12))
-	# open tray of rolls (golden, flecked green) under a framed glass lid
-	Kit.box(props, c + Vector3(0, 1.06, 0), Vector3(1.22, 0.08, 0.58), w._c("#7d5638"))
-	for gx in 6:
-		for gz in 3:
-			var p := c + Vector3(-0.5 + gx * 0.2, 1.15, -0.18 + gz * 0.18)
-			Kit.box(props, p, Vector3(0.15, 0.1, 0.14), w._c(["#d39b55", "#c98a45", "#e0b06a"][(gx + gz) % 3]))
-			Kit.box(props, p + Vector3(0.02, 0.055, 0.01), Vector3(0.03, 0.01, 0.03), w._c("#5f9a45"))
-	for fx: float in [-0.6, 0.6]:
-		Kit.box(props, c + Vector3(fx, 1.3, 0), Vector3(0.03, 0.42, 0.58), w._c("#c9ccd0"))
-	Kit.box(props, c + Vector3(0, 1.3, -0.28), Vector3(1.2, 0.42, 0.02), w._c("#b9dbe6"))       # back glass
-	Kit.quad(props, c + Vector3(-0.6, 1.52, -0.28), c + Vector3(-0.6, 1.62, 0.1), c + Vector3(0.6, 1.62, 0.1), c + Vector3(0.6, 1.52, -0.28), w._c("#c9e3ec"))   # lid, propped open
-	Kit.box(props, c + Vector3(0, 1.51, -0.28), Vector3(1.24, 0.03, 0.04), w._c("#7d5638"))
-	for hz: float in [-0.25, 0.25]:   # push handles at the back
-		Kit.beam(props, c + Vector3(-0.7, 0.8, hz), c + Vector3(-1.25, 1.0, hz), 0.04, wood)
-	# thermos and sachet strips
-	Kit.cylinder(props, c + Vector3(0.55, 1.51, -0.15), 0.08, 0.08, 0.3, w._c("#c9332c"), 8)
-	Kit.cylinder(props, c + Vector3(0.55, 1.81, -0.15), 0.05, 0.05, 0.05, w._c("#e8e6e0"), 6)
-	# umbrella: pole, striped canopy, paper bags and sachets hanging from its edge
-	Kit.beam(props, c + Vector3(-0.45, 1.0, -0.2), c + Vector3(-0.45, 2.3, -0.2), 0.035, w._c("#d8d6cf"))
-	var top := c + Vector3(-0.45, 2.35, -0.2)
-	for i in 8:
-		var a0 := TAU * i / 8.0
-		var a1 := TAU * (i + 1) / 8.0
-		var p0 := top + Vector3(cos(a0) * 0.95, -0.3, sin(a0) * 0.95)
-		var p1 := top + Vector3(cos(a1) * 0.95, -0.3, sin(a1) * 0.95)
-		Kit.tri(props, top + Vector3(0, 0.05, 0), p0, p1, w._c("#3e7fd0") if i % 2 == 0 else w._c("#f2efe6"), 0.0, true)
-	for i in 5:
-		var hp := top + Vector3(-0.6 + i * 0.3, -0.33, 0.72)
-		Kit.beam(cloth, hp, hp + Vector3(0, -0.12, 0), 0.01, w._c("#efe8d8"), 0.3)
-		if i % 2 == 0: Kit.box(cloth, hp + Vector3(0, -0.24, 0), Vector3(0.12, 0.17, 0.05), w._c("#b9895a"), Basis.IDENTITY, false, 0.5)
-		else:
-			for k in 3: Kit.box(cloth, hp + Vector3(0, -0.18 - k * 0.07, 0), Vector3(0.06, 0.06, 0.01), w._c(["#e0473b", "#3a2a20", "#f2c84b"][k]), Basis.IDENTITY, false, 0.5)
-	w._shadow(c + Vector3(0.1, 0, 0), Vector2(1.6, 0.9), true)
-
-
 static func _audience_seats(w, props: SurfaceTool) -> void:
 	var white: Color = w._c("#e8e7e0")
 	w._monobloc(props, Vector3(-4.6, 0, -12.0), 0.15, white)
@@ -389,6 +339,126 @@ static func _jeepney(w) -> void:
 	w._near_state.jeep_next = 12.0
 	w._near_state.jeep_x = 40.0
 	w._near_state.jeep_speed = 0.0
+
+
+static func _rolling_cart(w) -> void:
+	# Cart-local: cabinet centred on x = 0, its front (doors, display) facing +z, the
+	# motorcycle on its +x side; the whole rig drives toward -x.
+	var green: Color = w._c("#46c83a")
+	var green_dk: Color = w._c("#34a32c")
+	var steel: Color = w._c("#c4c9cc")
+	var frost: Color = w._c("#cfdade")
+	var alu: Color = w._c("#dde1e3")
+	var tyre: Color = w._c("#26232a")
+	var st := Kit.begin()
+	# single small car wheel under the cabinet, yellow rim stripe
+	var hub := Vector3(0.0, 0.28, 0.0)
+	Kit.box(st, hub, Vector3(0.56, 0.56, 0.2), tyre, Basis(Vector3.BACK, PI * 0.25))
+	Kit.box(st, hub, Vector3(0.56, 0.56, 0.2), tyre)
+	Kit.box(st, hub + Vector3(0, 0, 0.11), Vector3(0.32, 0.32, 0.02), w._c("#3a3640"))
+	Kit.box(st, hub + Vector3(0.1, -0.06, 0.12), Vector3(0.08, 0.2, 0.02), w._c("#f2d23a"), Basis(Vector3.BACK, 0.5))
+	# chassis: legs from the axle up to the cabinet floor
+	for sx: float in [-0.3, 0.3]:
+		Kit.beam(st, hub + Vector3(sx * 0.4, 0, 0.0), Vector3(sx, 0.46, 0.25), 0.05, green)
+		Kit.beam(st, hub + Vector3(sx * 0.4, 0, 0.0), Vector3(sx, 0.46, -0.25), 0.05, green)
+	Kit.box(st, Vector3(0, 0.47, 0), Vector3(1.24, 0.05, 0.94), green_dk)
+	# cabinet body
+	Kit.box(st, Vector3(0, 1.15, 0), Vector3(1.2, 1.36, 0.9), green)
+	# front centre: glass display above, stainless warmer drawers below, stickers
+	for gx: float in [-0.12, 0.12]:
+		Kit.box(st, Vector3(gx, 1.58, 0.455), Vector3(0.23, 0.3, 0.02), alu)
+		Kit.box(st, Vector3(gx, 1.58, 0.462), Vector3(0.19, 0.25, 0.01), frost)
+	Kit.box(st, Vector3(0, 1.08, 0.455), Vector3(0.46, 0.36, 0.02), steel)
+	Kit.box(st, Vector3(0, 1.17, 0.47), Vector3(0.28, 0.03, 0.02), green_dk)
+	Kit.box(st, Vector3(0, 0.75, 0.455), Vector3(0.46, 0.14, 0.02), steel)
+	Kit.box(st, Vector3(0, 0.77, 0.47), Vector3(0.28, 0.025, 0.02), green_dk)
+	Kit.box(st, Vector3(0.18, 1.35, 0.46), Vector3(0.06, 0.08, 0.01), w._c("#3e7fd0"))
+	Kit.box(st, Vector3(0.18, 1.24, 0.46), Vector3(0.06, 0.05, 0.01), w._c("#f2d23a"))
+	# flat canopy over the front and the signboard on top
+	Kit.box(st, Vector3(0, 2.05, 0.22), Vector3(1.9, 0.05, 1.45), green)
+	Kit.box(st, Vector3(0, 2.02, 0.94), Vector3(1.9, 0.06, 0.03), green_dk)
+	Kit.box(st, Vector3(0, 1.85, 0.452), Vector3(1.2, 0.35, 0.02), green_dk)   # shade under the canopy
+	Kit.box(st, Vector3(0, 2.27, 0.7), Vector3(1.75, 0.34, 0.04), w._c("#f4f1e8"))
+	for sx: float in [-0.78, 0.78]:   # malunggay leaves and a roll painted at each end
+		for k in 4: Kit.box(st, Vector3(sx + (k % 2) * 0.05 * signf(sx), 2.22 + k * 0.05, 0.725), Vector3(0.05, 0.035, 0.01), w._c("#4f9a3a"))
+		Kit.box(st, Vector3(sx - 0.07 * signf(sx), 2.2, 0.725), Vector3(0.08, 0.05, 0.01), w._c("#d39b55"))
+	# jingle speaker on the canopy corner
+	Kit.box(st, Vector3(-0.8, 2.16, 0.75), Vector3(0.14, 0.14, 0.12), w._c("#b9bcc0"))
+	# rails out to the motorcycle (green, like the photo's side rack)
+	for ry: float in [0.55, 0.85]:
+		Kit.beam(st, Vector3(0.6, ry, 0.3), Vector3(1.05, ry, 0.3), 0.04, green)
+		Kit.beam(st, Vector3(0.6, ry, -0.3), Vector3(1.05, ry, -0.3), 0.04, green)
+	for rx: float in [0.7, 0.85, 1.0]:
+		Kit.beam(st, Vector3(rx, 0.5, 0.3), Vector3(rx, 0.9, 0.3), 0.03, green)
+	# the motorcycle: an underbone bike on the +x side, nose toward -x
+	for bx: float in [1.15, 2.05]:
+		Kit.box(st, Vector3(bx, 0.3, -0.05), Vector3(0.58, 0.58, 0.09), tyre, Basis(Vector3.BACK, PI * 0.25))
+		Kit.box(st, Vector3(bx, 0.3, -0.05), Vector3(0.58, 0.58, 0.09), tyre)
+		Kit.box(st, Vector3(bx, 0.3, -0.0), Vector3(0.18, 0.18, 0.1), steel)
+	Kit.box(st, Vector3(1.6, 0.55, -0.05), Vector3(0.7, 0.22, 0.22), w._c("#c9332c"))
+	Kit.box(st, Vector3(1.85, 0.78, -0.05), Vector3(0.5, 0.1, 0.24), w._c("#26232a"))   # seat
+	Kit.box(st, Vector3(1.22, 0.75, -0.05), Vector3(0.2, 0.45, 0.26), w._c("#c9332c"))
+	Kit.beam(st, Vector3(1.15, 0.3, -0.05), Vector3(1.2, 1.05, -0.05), 0.05, steel)
+	Kit.box(st, Vector3(1.2, 1.07, -0.05), Vector3(0.05, 0.04, 0.6), w._c("#26232a"))      # handlebar
+	Kit.box(st, Vector3(1.08, 0.95, -0.05), Vector3(0.06, 0.1, 0.12), w._c("#f2efe6"))      # headlight
+	var root := Node3D.new()
+	root.name = "RollingPandesal"
+	root.position = Vector3(40.0, 0.0, CART.z)
+	root.visible = false
+	w._near.add_child(root)
+	var body := MeshInstance3D.new()
+	body.mesh = st.commit()
+	body.material_override = w._toon_n
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(body)
+	var sign := Label3D.new()
+	sign.text = "ROLLING MALUNGGAY PANDESAL"
+	sign.font = w.PixelFont
+	sign.font_size = 9
+	sign.pixel_size = 0.095 / 9.0
+	sign.modulate = Color(0.2, 0.62, 0.22)
+	sign.shaded = false
+	sign.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	sign.position = Vector3(0, 2.3, 0.725)
+	root.add_child(sign)
+	# wing doors on hinges at the cabinet's front corners (frosted panels, aluminium frames)
+	var doors := []
+	for side: float in [-1.0, 1.0]:
+		var dst := Kit.begin()
+		var dir := -side          # closed, the door runs from its hinge toward the middle
+		Kit.box(dst, Vector3(dir * 0.2, 1.15, 0.0), Vector3(0.4, 1.34, 0.03), green)
+		for py: float in [0.82, 1.48]:
+			for face: float in [1.0, -1.0]:   # glass shows from both sides (open, the back faces the street)
+				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.018), Vector3(0.31, 0.58, 0.01), alu)
+				Kit.box(dst, Vector3(dir * 0.2, py, face * 0.025), Vector3(0.26, 0.52, 0.01), frost)
+		var hinge := Node3D.new()
+		hinge.position = Vector3(side * 0.6, 0, 0.47)
+		root.add_child(hinge)
+		var door := MeshInstance3D.new()
+		door.mesh = dst.commit()
+		door.material_override = w._toon_n
+		door.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		hinge.add_child(door)
+		doors.append(hinge)
+	# jingle pulse: two little "sound" blocks beside the speaker
+	var pulse := MeshInstance3D.new()
+	var pst := Kit.begin()
+	Kit.box(pst, Vector3(-0.16, 0, 0), Vector3(0.04, 0.12, 0.02), w._c("#f2efe6"))
+	Kit.box(pst, Vector3(-0.26, 0, 0), Vector3(0.04, 0.2, 0.02), w._c("#f2efe6"))
+	pulse.mesh = pst.commit()
+	pulse.material_override = w._toon_n
+	pulse.position = Vector3(-0.8, 2.16, 0.8)
+	pulse.visible = false
+	root.add_child(pulse)
+	var nst: Dictionary = w._near_state
+	nst.cart = root
+	nst.cart_doors = doors
+	nst.cart_pulse = pulse
+	nst.cart_state = "away"
+	nst.cart_next = 3.0
+	nst.cart_x = 40.0
+	nst.cart_speed = 0.0
+	nst.cart_open = 0.0
 
 
 # ------------------------------------------------------------------ people
@@ -473,6 +543,72 @@ static func step(w, dt: float) -> void:
 	var st: Dictionary = w._near_state
 	_step_queue(w, st)
 	_step_jeep(w, st, dt)
+	_step_cart(w, st, dt)
+
+
+static func cart_selling(w) -> bool:
+	return str(w._near_state.get("cart_state", "")) == "selling"
+
+
+## Steam rises from the open warmer drawer (world-node space).
+static func steam_origin(w) -> Vector3:
+	return w._end_pos(CART + Vector3(0, 1.15, 0.6), 1)
+
+
+static func _step_cart(w, st: Dictionary, dt: float) -> void:
+	var cart: Node3D = st.cart
+	var t: float = w._t
+	var v: Dictionary = st.vendor
+	match str(st.cart_state):
+		"away":
+			cart.visible = false
+			v.visible = false
+			if t > float(st.cart_next) and str(st.jeep_state) == "away":
+				st.cart_state = "in"
+				st.cart_x = 18.0
+		"in":
+			cart.visible = true
+			v.visible = true
+			var to_stop: float = float(st.cart_x) - STOP_X
+			st.cart_speed = clampf(to_stop * 0.8, 0.6, 5.0)
+			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
+			if to_stop < 0.05:
+				st.cart_x = STOP_X
+				st.cart_state = "opening"
+		"opening":
+			st.cart_open = minf(float(st.cart_open) + dt / 0.8, 1.0)
+			if float(st.cart_open) >= 1.0:
+				st.cart_state = "selling"
+				st.cart_until = t + w._rng.randf_range(22.0, 32.0)
+				v.vstate = "call"
+				v.until = t + 2.5
+		"selling":
+			if t > float(st.cart_until) and str(v.vstate) == "idle":
+				st.cart_state = "closing"
+				for i in st.queue.size():   # anyone still waiting gives up
+					var q = st.queue[i]
+					if q != null:
+						st.queue[i] = null
+						leave(w, q)
+		"closing":
+			st.cart_open = maxf(float(st.cart_open) - dt / 0.8, 0.0)
+			if float(st.cart_open) <= 0.0:
+				st.cart_state = "out"
+				st.cart_speed = 0.6
+		"out":
+			st.cart_speed = minf(float(st.cart_speed) + 2.5 * dt, 5.0)
+			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
+			if float(st.cart_x) < -18.0:
+				st.cart_state = "away"
+				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
+	cart.position = Vector3(round(float(st.cart_x) * 20.0) / 20.0, 0.0, CART.z)
+	var doors: Array = st.cart_doors
+	var opened := smoothstep(0.0, 1.0, float(st.cart_open))
+	(doors[0] as Node3D).rotation.y = round(deg_to_rad(170.0) * opened * 8.0) / 8.0
+	(doors[1] as Node3D).rotation.y = -round(deg_to_rad(170.0) * opened * 8.0) / 8.0
+	var playing_jingle: bool = str(st.cart_state) in ["in", "out"] or str(v.vstate) == "call"
+	var pulse: MeshInstance3D = st.cart_pulse
+	pulse.visible = playing_jingle and int(t * 4.0) % 2 == 0
 
 
 static func _local(w, p: Dictionary) -> Vector3:
@@ -524,6 +660,28 @@ static func step_person(w, p: Dictionary) -> void:
 static func _step_vendor(w, v: Dictionary) -> void:
 	var t: float = w._t
 	var st: Dictionary = w._near_state
+	var cs := str(st.get("cart_state", "away"))
+	if cs in ["in", "out"]:
+		# riding the motorcycle, facing the way the rig drives (-x at this end)
+		v.pos = w._end_pos(Vector3(float(st.cart_x) + 1.85, 0, CART.z - 0.05), 1)
+		v.yaw = PI * 0.5
+		v.seated = true
+		v.seat_h = 0.72
+		v.posture = "wide"
+		v.arm_l = "counter"
+		v.arm_r = "counter"
+		v.lean = 0.25
+		v.vstate = "idle"
+		return
+	v.pos = w._end_pos(VENDOR, 1)
+	v.seated = false
+	v.posture = "stand"
+	if cs != "selling":
+		# swinging the wing doors open or shut
+		v.yaw = PI
+		v.arm_l = "reach_up"
+		v.arm_r = "counter"
+		return
 	v.arm_l = "counter"
 	v.arm_r = "counter"
 	v.lean = 0.15
@@ -532,7 +690,7 @@ static func _step_vendor(w, v: Dictionary) -> void:
 			if st.queue[0] != null and str(st.queue[0].state) == "queue" and t > float(st.queue[0].get("queued_at", 0.0)) + 1.2:
 				v.vstate = "open"
 				v.until = t + 1.1
-			elif not w._playing and t > float(v.next_call):
+			elif t > float(v.next_call):
 				v.vstate = "call"
 				v.until = t + 2.2
 		"call":
@@ -560,7 +718,7 @@ static func _step_vendor(w, v: Dictionary) -> void:
 				v.until = t + 0.8
 		"hand":
 			v.arm_r = "point"
-			v.yaw = PI - 0.9          # turn toward the queue (the end is turned half a turn)
+			v.yaw = PI + 0.9          # turn toward the buyer at the cabinet (world yaw; the end is turned)
 			if t > float(v.until):
 				var buyer = st.queue[0]
 				if buyer != null:
@@ -601,7 +759,7 @@ static func _step_jeep(w, st: Dictionary, dt: float) -> void:
 	match str(st.jeep_state):
 		"away":
 			jeep.visible = false
-			if t > float(st.jeep_next):
+			if t > float(st.jeep_next) and str(st.get("cart_state", "away")) == "away":
 				st.jeep_state = "in"
 				st.jeep_x = 38.0
 				st.jeep_speed = 8.0
@@ -638,7 +796,7 @@ static func start_trip(w, p: Dictionary) -> void:
 	var start := Vector3(side * 17.0, 0, LANE)
 	p.pos = w._end_pos(start, 1)
 	var slot := -1
-	if w._rng.randf() < 0.6 and p.trait != "busy":
+	if w._rng.randf() < 0.7 and p.trait != "busy" and cart_selling(w):
 		for i in QUEUE.size():
 			if w._near_state.queue[i] == null:
 				slot = i
@@ -659,7 +817,7 @@ static func arrive(w, p: Dictionary) -> void:
 		"pandesal":
 			p.state = "queue"
 			p.queued_at = w._t
-			p.yaw = PI + PI * 0.5      # face the cart (+x at this end)
+			p.yaw = PI + PI            # face the cart's front (toward -z at this end)
 		_:
 			p.state = "gone"
 			p.visible = false

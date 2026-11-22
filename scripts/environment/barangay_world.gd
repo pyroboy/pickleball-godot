@@ -1791,11 +1791,11 @@ func _pose_props(p: Dictionary, j: Dictionary) -> void:
 			col[0] = _c("#b9895a")
 		"steam":
 			# puffs rising out of the opened pandesal box
-			var top := _end_pos(PandesalEnd.CART, 1) + Vector3.UP * 1.55
+			var top := PandesalEnd.steam_origin(self)
 			for k in 3:
 				var f := fmod(_t * 0.8 + k / 3.0, 1.0)
 				var sz := 0.16 * (1.0 - f) + 0.04
-				xf[k] = Transform3D(Basis.from_scale(Vector3(sz, sz, sz)), top + Vector3(0.25 * (k - 1) + 0.08 * sin(_t * 3.0 + k), 0.75 * f, 0.05 * k))
+				xf[k] = Transform3D(Basis.from_scale(Vector3(sz, sz, sz)), top + Vector3(0.12 * (k - 1) + 0.06 * sin(_t * 3.0 + k), 0.6 * f, 0.04 * k))
 				col[k] = _c("#f2f0ea")
 		"ball":
 			xf[0] = Transform3D(Basis.from_scale(Vector3(0.09, 0.09, 0.09)), wr + fore * 0.05)
