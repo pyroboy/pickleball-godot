@@ -417,7 +417,7 @@ func _update_centered(delta: float) -> void:
 
 
 	var player_x: float = to_local(_drawn(_player_left)).x
-	var camera_x: float = previous_x if gameplay_camera.active_kind == "center" and gameplay_camera._transition_elapsed >= GameplayCamera.TRANSITION_SECONDS else 0.0
+	var camera_x: float = previous_x if gameplay_camera.active_kind == "center" and gameplay_camera.transition_done() else 0.0
 	var target_x: float = 0.0
 	var player_offset: float = player_x - camera_x
 	if player_offset > EDGE_THRESHOLD:

@@ -338,8 +338,7 @@ func _update_presentation(now_usec: int) -> void :
 	_material.set_shader_parameter("radius", 70.0 * Layout.scale_for(size))
 	_material.set_shader_parameter("strength", dim_amount * visual_mix)
 	if blur_amount > 0.0:
-		_material.set_shader_parameter("blur_radius", blur_amount * 2.0 * Layout.scale_for(size))
-		_material.set_shader_parameter("effect_mix", visual_mix)
+		_set_lens(camera, size, blur_amount, visual_mix)
 	var display_path: PackedVector3Array = _preview_stabilizer.present(_world_path, _preview_revision, Estimate.risk_label(_last_estimate), now_usec)
 	# Advance present() above even while hidden, so reveal uses the current
 	# trajectory/blend state. Only unused screen geometry is skipped.
@@ -348,6 +347,37 @@ func _update_presentation(now_usec: int) -> void :
 	_dim.visible = dim_amount > 0.0 or blur_amount > 0.0
 	_drawing.visible = show_preview
 	if show_preview: _drawing.queue_redraw()
+
+## Lens depth of field for the slow-mo (PDF p.19-21): focus at the hitter's
+## depth, court-plane depth from the four corner rays, per-player masks.
+func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: float) -> void:
+	var scale: float = Layout.scale_for(size)
+	var hitter: Node3D = game.player_left
+	_material.set_shader_parameter("effect_mix", visual_mix)
+	_material.set_shader_parameter("max_blur_px", blur_amount * 9.0 * scale)
+	_material.set_shader_parameter("focus_depth", camera.global_position.distance_to(hitter.global_position))
+	_material.set_shader_parameter("cam_origin", camera.project_ray_origin(Vector2.ZERO) if camera.projection == Camera3D.PROJECTION_PERSPECTIVE else camera.global_position)
+	_material.set_shader_parameter("ray_tl", camera.project_ray_normal(Vector2.ZERO))
+	_material.set_shader_parameter("ray_tr", camera.project_ray_normal(Vector2(size.x, 0.0)))
+	_material.set_shader_parameter("ray_bl", camera.project_ray_normal(Vector2(0.0, size.y)))
+	_material.set_shader_parameter("ray_br", camera.project_ray_normal(size))
+	var feet: PackedVector2Array = PackedVector2Array()
+	var heads: PackedVector2Array = PackedVector2Array()
+	var caps: PackedFloat32Array = PackedFloat32Array()
+	var players: Array = game.get_players() if game.has_method("get_players") else [game.player_left, game.player_right]
+	for i in 4:
+		var actor: Node3D = players[i] if i < players.size() else null
+		if actor == null or not is_instance_valid(actor) or not actor.visible:
+			feet.append(Vector2(-2, -2)); heads.append(Vector2(-2, -2)); caps.append(-1.0)
+			continue
+		# Actor origins sit about 1 m up; the mask runs from the shoes to above the head.
+		var ground: Vector3 = Vector3(actor.global_position.x, 0.05, actor.global_position.z)
+		feet.append(_protected_uv(camera, ground, size))
+		heads.append(_protected_uv(camera, ground + Vector3.UP * 1.85, size))
+		caps.append(0.0 if actor == hitter else 1.6 * scale)
+	_material.set_shader_parameter("foot_uv", feet)
+	_material.set_shader_parameter("head_uv", heads)
+	_material.set_shader_parameter("player_cap", caps)
 
 func _protected_uv(camera: Camera3D, point: Vector3, size: Vector2) -> Vector2:
 	# Behind-camera objects cannot leave a stale bright hole on the screen.
