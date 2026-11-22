@@ -29,6 +29,7 @@ uniform float gain = 2.2;
 uniform float flip = 1.0;
 uniform float grid = 20.0;
 uniform vec2 slab_half = vec2(7.5, 14.0);
+uniform vec2 pattern_offset = vec2(0.0);   // the menu slides the floor under its ball
 uniform vec2 kitchen_half = vec2(3.05, 2.134);
 uniform vec2 gutter_x = vec2(7.78, 8.14);
 
@@ -96,7 +97,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 p0 = world_pos.xz * flip;
+	vec2 p0 = (world_pos.xz - pattern_offset) * flip;
 	vec2 cell = floor(p0 * grid);
 	vec2 p = (cell + 0.5) / grid;
 	float n = hash(cell);

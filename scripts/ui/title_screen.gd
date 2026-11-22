@@ -176,7 +176,6 @@ func _button(caption: String, action: Callable) -> Button:
  button.set_meta("caption", caption)
  button.focus_entered.connect(_mark_button.bind(button, true))
  button.focus_exited.connect(_mark_button.bind(button, false))
- button.mouse_entered.connect(func(): button.grab_focus())
  button.custom_minimum_size.y = 58
  button.pressed.connect(_dispatch_title_action.bind(button, action))
  _content.add_child(button)

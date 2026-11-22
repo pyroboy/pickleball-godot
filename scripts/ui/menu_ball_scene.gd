@@ -1,4 +1,8 @@
 extends SubViewportContainer
+## Easter egg: flick the ball and it rolls that way. The ball stays put on screen while
+## the cement, curb and street slide past under it (the camera tracks it), and it spins
+## to match the roll, slowing to a stop. It never turns on its own.
+##
 ## Main-menu backdrop (visual only): a big neon pickleball resting on barangay cement in
 ## the lower-right corner, a faded court line and the red curb beside it, and a blurred
 ## hint of the barangay behind (houses, bunting, a pole). Rendered at half resolution in
@@ -96,6 +100,7 @@ func _build_floor() -> void:
 	plane.size = Vector2(200.0, 200.0)
 	g.mesh = plane
 	g.material_override = f
+	_floor_mat = f
 	g.name = "Floor"
 	_ground.add_child(g)
 	# the red curb running away from the ball toward the houses
@@ -113,16 +118,28 @@ func _build_floor() -> void:
 	_ground.add_child(mi)
 
 
-## Barangay backdrop in three looping parallax layers that drift sideways (nearer ones
-## faster), so the street seems to slide past behind the ball. Each layer is one strip
-## mesh drawn three times side by side and wrapped, so it loops without a seam.
+## Barangay backdrop in three rows at different depths. Each row is one strip mesh drawn
+## three times side by side and wrapped around the view, so the street never runs out
+## when the flicked ball rolls sideways; perspective gives the parallax.
 const LAYERS := [
-	# depth z, strip length, speed m/s, kind
-	{"z": -14.0, "len": 30.0, "speed": 0.8, "kind": "near"},
-	{"z": -24.0, "len": 42.0, "speed": 0.45, "kind": "mid"},
-	{"z": -38.0, "len": 60.0, "speed": 0.2, "kind": "far"},
+	# depth z, strip length, kind
+	{"z": -14.0, "len": 30.0, "kind": "near"},
+	{"z": -24.0, "len": 42.0, "kind": "mid"},
+	{"z": -38.0, "len": 60.0, "kind": "far"},
 ]
-var _layers: Array = []      # [{nodes: [Node3D x3], len, speed}]
+var _layers: Array = []      # [{nodes: [Node3D x3], len}]
+var _floor_mat: ShaderMaterial
+var _base := Vector3.ZERO     # ground placement for the ball's corner
+var _travel := Vector2.ZERO   # how far the ball has rolled (x, z), metres
+var _vel := Vector2.ZERO      # roll speed (x, z), m/s
+var _spin := Basis.from_euler(Vector3(0.35, 0.6, 0.12))   # the ball's orientation (rolling only)
+var _drag: Array = []         # recent [usec, Vector2] pointer samples during a flick
+var _dragging := false
+const FLICK_GAIN := 0.0032    # screen px/s -> m/s
+const MAX_SPEED := 9.0
+const FRICTION := 1.1         # 1/s
+const TRAVEL_Z := Vector2(-6.0, 9.0)   # keep the street rows in front of the camera
+const TRAVEL_X := 70.0
 var _rng := RandomNumberGenerator.new()
 
 const WALLS := ["#d9c9a3", "#9fc3c9", "#e3b4a0", "#c9d6a3", "#f0e6cf", "#b9b0d6", "#e6cf8a", "#a9cfb4", "#e8b8c6"]
@@ -149,7 +166,7 @@ func _build_backdrop() -> void:
 			mi.extra_cull_margin = length
 			_ground.add_child(mi)
 			nodes.append(mi)
-		_layers.append({"nodes": nodes, "len": length, "speed": float(spec.speed)})
+		_layers.append({"nodes": nodes, "len": length})
 
 
 func _c(code: String) -> Color:
@@ -309,6 +326,7 @@ func _build_ball() -> void:
 	s.radial_segments = 48
 	s.rings = 24
 	_ball.mesh = s
+	_ball.basis = _spin
 	var m := ShaderMaterial.new()
 	m.shader = BallShader
 	# display colours, compensated for the Filmic tonemap like the rest of the art
@@ -367,7 +385,8 @@ func _place() -> void:
 	_rest = centre
 	var floor_y := centre.y - BALL_R
 	# the slab edge and red curb run just right of the ball
-	_ground.position = Vector3(centre.x + 0.95 - 6.11, floor_y, 0.0)
+	_base = Vector3(centre.x + 0.95 - 6.11, floor_y, 0.0)
+	_apply_travel()
 	for child in _world.get_children():
 		if child is MeshInstance3D and child.name == "BallShadow":
 			child.position = Vector3(centre.x, floor_y + 0.003, centre.z)
@@ -375,15 +394,76 @@ func _place() -> void:
 	_ball.position = centre
 
 
+func _apply_travel() -> void:
+	_ground.position = _base + Vector3(_travel.x, 0.0, _travel.y)
+	if _floor_mat: _floor_mat.set_shader_parameter("pattern_offset", Vector2(_ground.position.x, _ground.position.z))
+	# keep each street row's three copies around the view
+	for layer in _layers:
+		var length: float = layer.len
+		var off := fposmod(_ground.position.x, length)
+		var nodes: Array = layer.nodes
+		for i in 3:
+			(nodes[i] as Node3D).position.x = float(i - 1) * length + off - _ground.position.x
+
+
+## Flick input: a press on (or near) the ball starts a flick; the release speed rolls it.
+func _input(event: InputEvent) -> void:
+	if _ball == null or _cam == null: return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			if _near_ball(event.position):
+				_dragging = true
+				_drag = [[Time.get_ticks_usec(), event.position]]
+				_vel *= 0.3          # catching it slows it
+				get_viewport().set_input_as_handled()
+		elif _dragging:
+			_dragging = false
+			_drag.append([Time.get_ticks_usec(), event.position])
+			_flick()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and _dragging:
+		_drag.append([Time.get_ticks_usec(), event.position])
+		while _drag.size() > 2 and int(_drag[-1][0]) - int(_drag[0][0]) > 120000: _drag.pop_front()
+		get_viewport().set_input_as_handled()   # a flick across the menu does not hover buttons
+
+
+func _near_ball(at: Vector2) -> bool:
+	var vs := Vector2(_view.size) * float(stretch_shrink)
+	var c := vs * BALL_SCREEN
+	var edge := _cam.unproject_position(_ball.position + Vector3(BALL_R, 0, 0)) * float(stretch_shrink)
+	var r := absf(edge.x - _cam.unproject_position(_ball.position).x * float(stretch_shrink))
+	return at.distance_to(c) < r * 1.25 + 20.0
+
+
+func _flick() -> void:
+	if _drag.size() < 2: return
+	var a: Array = _drag[0]
+	var b: Array = _drag[-1]
+	var dt := maxf(float(int(b[0]) - int(a[0])) / 1000000.0, 0.016)
+	var sv: Vector2 = (Vector2(b[1]) - Vector2(a[1])) / dt
+	if sv.length() < 60.0: return
+	# screen right -> +x, screen down -> toward the camera (+z)
+	_vel = (sv * FLICK_GAIN).limit_length(MAX_SPEED)
+
+
 func _process(delta: float) -> void:
 	if _ball == null: return
 	_t += delta
-	for layer in _layers:
-		var length: float = layer.len
-		var off := fmod(_t * float(layer.speed), length)
-		var nodes: Array = layer.nodes
-		for i in 3:
-			(nodes[i] as Node3D).position.x = float(i - 1) * length - off
-	# a slow turn and a gentle settle, stepped at 12 Hz like the rest of the art
-	var tick := floorf(_t * 12.0) / 12.0
-	_ball.rotation = Vector3(0.35, tick * 0.35, 0.12 * sin(tick * 0.5))
+	if _vel.length_squared() > 0.0001:
+		var step := _vel * delta
+		# the world slides the other way under the ball; stop at the street ends
+		var nt := _travel - step
+		if nt.x < -TRAVEL_X or nt.x > TRAVEL_X: _vel.x *= -0.35     # bump off the end, softly
+		if nt.y < TRAVEL_Z.x or nt.y > TRAVEL_Z.y: _vel.y *= -0.35
+		nt.x = clampf(nt.x, -TRAVEL_X, TRAVEL_X)
+		nt.y = clampf(nt.y, TRAVEL_Z.x, TRAVEL_Z.y)
+		_travel = nt
+		_apply_travel()
+		# roll: turn about the axis across the motion by distance / radius
+		var move := Vector3(_vel.x, 0.0, _vel.y)
+		var axis := Vector3.UP.cross(move.normalized())
+		if axis.length_squared() > 0.0001:
+			_spin = Basis(axis.normalized(), step.length() / BALL_R) * _spin
+			_ball.basis = _spin.orthonormalized()
+		_vel *= exp(-FRICTION * delta)
+		_vel = _vel.move_toward(Vector2.ZERO, 0.4 * delta)
