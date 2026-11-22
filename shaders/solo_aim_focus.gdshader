@@ -9,9 +9,10 @@ render_mode unshaded;
 // ray is met with y = 0 (anything at or above the horizon counts as far).
 // The blur reads the screen texture's mip pyramid (a cheap Kawase-style
 // filter: a few taps at the right level). A light cool dim and desaturation
-// follow the blur. Opponents and partner keep a feathered mask that caps
-// their blur at ~1.6 px and halves the dim; the hitter, ball and aim target
-// stay crisp. The aim arc and UI draw after this layer, never softened.
+// follow the blur. Players blur by the depth of where they stand, like the
+// court under them, so the hitter (at the focus plane) is sharp and everyone
+// else softens with distance. The ball stays crisp; the aim arc, target and
+// UI draw after this layer, never softened.
 uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear_mipmap;
 uniform vec2 viewport_size = vec2(720.0, 1280.0);
 uniform float effect_mix = 1.0;
@@ -26,11 +27,10 @@ uniform vec3 ray_tl = vec3(0.0, 0.0, -1.0);
 uniform vec3 ray_tr = vec3(0.0, 0.0, -1.0);
 uniform vec3 ray_bl = vec3(0.0, 0.0, -1.0);
 uniform vec3 ray_br = vec3(0.0, 0.0, -1.0);
-uniform vec2 target_uv = vec2(-2.0);
 uniform vec2 ball_uv = vec2(-2.0);
 uniform vec2 foot_uv[4];
 uniform vec2 head_uv[4];
-uniform float player_cap[4];            // max blur px inside the mask; 0 = crisp, < 0 = unused
+uniform float player_depth[4];          // metres from the camera to each player's feet; <= 0 = unused
 uniform float radius = 70.0;
 
 const float FAR_DEPTH = 60.0;
@@ -67,22 +67,25 @@ void fragment() {
 	vec2 uv = SCREEN_UV;
 	vec2 pixel = uv * viewport_size;
 	float depth = ground_depth(uv);
+	// One field plane for everyone: a standing person takes the depth of the
+	// spot they stand on, so they blur exactly like the court around their
+	// feet (the ray behind their head would otherwise read as farther away).
+	for (int i = 0; i < 4; i++) {
+		if (player_depth[i] <= 0.0) continue;
+		vec2 foot = foot_uv[i] * viewport_size;
+		vec2 head = head_uv[i] * viewport_size;
+		float half_width = max(length(head - foot) * 0.32, 4.0);
+		float inside = 1.0 - smoothstep(half_width, half_width * 1.5, segment_distance(pixel, foot, head));
+		depth = mix(depth, player_depth[i], inside);
+	}
 	float off = max(abs(depth - focus_depth) - focus_band * 0.5, 0.0) / max(depth, 0.5);
 	float defocus = clamp(off * defocus_gain, 0.0, 1.0);
 	defocus = defocus * defocus * (3.0 - 2.0 * defocus);
+	// The ball is the one thing kept sharp wherever it flies.
+	float ball = 1.0 - smoothstep(radius * 0.16, radius * 0.34, length(pixel - ball_uv * viewport_size));
+	defocus *= 1.0 - ball;
 	float blur_px = max_blur_px * defocus;
 	float dim_scale = 1.0;
-	for (int i = 0; i < 4; i++) {
-		if (player_cap[i] < 0.0) continue;
-		float inside = 1.0 - smoothstep(radius * 0.36, radius * 0.70, segment_distance(pixel, foot_uv[i] * viewport_size, head_uv[i] * viewport_size));
-		blur_px = mix(blur_px, min(blur_px, player_cap[i]), inside);
-		dim_scale = min(dim_scale, mix(1.0, player_cap[i] <= 0.0 ? 0.0 : 0.5, inside));
-	}
-	float ball = 1.0 - smoothstep(radius * 0.16, radius * 0.34, length(pixel - ball_uv * viewport_size));
-	float target = 1.0 - smoothstep(radius * 0.40, radius, length(pixel - target_uv * viewport_size));
-	float crisp = max(ball, target);
-	blur_px *= 1.0 - crisp;
-	dim_scale *= 1.0 - crisp;
 	vec3 original = textureLod(screen_texture, uv, 0.0).rgb;
 	float amount = clamp(blur_px / 1.0, 0.0, 1.0) * effect_mix;
 	vec3 col = blur_px > 0.25 ? mix(original, sample_blur(uv, blur_px), amount) : original;

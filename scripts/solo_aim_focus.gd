@@ -355,7 +355,8 @@ func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: 
 	var hitter: Node3D = game.player_left
 	_material.set_shader_parameter("effect_mix", visual_mix)
 	_material.set_shader_parameter("max_blur_px", blur_amount * 9.0 * scale)
-	_material.set_shader_parameter("focus_depth", camera.global_position.distance_to(hitter.global_position))
+	var hitter_ground: Vector3 = Vector3(hitter.global_position.x, 0.0, hitter.global_position.z)
+	_material.set_shader_parameter("focus_depth", _ground_range(camera, hitter_ground))
 	_material.set_shader_parameter("cam_origin", camera.project_ray_origin(Vector2.ZERO) if camera.projection == Camera3D.PROJECTION_PERSPECTIVE else camera.global_position)
 	_material.set_shader_parameter("ray_tl", camera.project_ray_normal(Vector2.ZERO))
 	_material.set_shader_parameter("ray_tr", camera.project_ray_normal(Vector2(size.x, 0.0)))
@@ -363,21 +364,26 @@ func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: 
 	_material.set_shader_parameter("ray_br", camera.project_ray_normal(size))
 	var feet: PackedVector2Array = PackedVector2Array()
 	var heads: PackedVector2Array = PackedVector2Array()
-	var caps: PackedFloat32Array = PackedFloat32Array()
+	var depths: PackedFloat32Array = PackedFloat32Array()
 	var players: Array = game.get_players() if game.has_method("get_players") else [game.player_left, game.player_right]
 	for i in 4:
 		var actor: Node3D = players[i] if i < players.size() else null
 		if actor == null or not is_instance_valid(actor) or not actor.visible:
-			feet.append(Vector2(-2, -2)); heads.append(Vector2(-2, -2)); caps.append(-1.0)
+			feet.append(Vector2(-2, -2)); heads.append(Vector2(-2, -2)); depths.append(-1.0)
 			continue
 		# Actor origins sit about 1 m up; the mask runs from the shoes to above the head.
 		var ground: Vector3 = Vector3(actor.global_position.x, 0.05, actor.global_position.z)
 		feet.append(_protected_uv(camera, ground, size))
 		heads.append(_protected_uv(camera, ground + Vector3.UP * 1.85, size))
-		caps.append(0.0 if actor == hitter else 1.6 * scale)
+		depths.append(-1.0 if camera.is_position_behind(ground) else _ground_range(camera, ground))
 	_material.set_shader_parameter("foot_uv", feet)
 	_material.set_shader_parameter("head_uv", heads)
-	_material.set_shader_parameter("player_cap", caps)
+	_material.set_shader_parameter("player_depth", depths)
+
+## Same measure the shader uses for the court: distance along the camera ray
+## to the point on the ground.
+static func _ground_range(camera: Camera3D, point: Vector3) -> float:
+	return camera.global_position.distance_to(Vector3(point.x, 0.0, point.z))
 
 func _protected_uv(camera: Camera3D, point: Vector3, size: Vector2) -> Vector2:
 	# Behind-camera objects cannot leave a stale bright hole on the screen.
