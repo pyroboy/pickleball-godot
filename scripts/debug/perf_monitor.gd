@@ -322,6 +322,7 @@ func _physics_process(_delta: float) -> void:
 			_pose_nodes[p.get_instance_id()] = nodes
 		var joints := {}
 		for n in nodes: joints[n.name if not joints.has(n.name) else "%s#%d" % [n.name, joints.size()]] = _v(n.global_position)
+		joints["root"] = _v(p.global_position)
 		if p.paddle_node:
 			var t: Transform3D = p.paddle_node.global_transform
 			joints["paddle"] = _v(t.origin)
