@@ -21,6 +21,7 @@ extends Node3D
 
 const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 const Fig := preload("res://scripts/environment/env_figures.gd")
+const People := preload("res://scripts/environment/env_people.gd")
 const Pal := preload("res://scripts/environment/env_palette.gd")
 const ToonShader := preload("res://shaders/env_toon.gdshader")
 const FloorShader := preload("res://shaders/env_floor.gdshader")
@@ -46,7 +47,14 @@ var _floor: ShaderMaterial
 
 var _mm_fig: MultiMesh
 var _mm_shadow: MultiMesh
-var _people: Array = []          # all people (crowd, watchers, tindera, neighbour, queue, scorer)
+var _people: Array = []          # all people (crowd, watchers, tindera, neighbour, queue, scorer, walkers)
+var _walkers: Array = []         # passers-by on the street lanes behind the far end
+var _cards                       # People.CardBatch: every person's pixel cards, one mesh
+const PROP_SLOTS := 3            # cube props per person (paddle, bottle, fan, phone, umbrella, bag, taho)
+const LANE_A := -14.6            # street lanes behind the crowd (local z)
+const LANE_B := -15.9            # only west of the tricycles (x < 5)
+const LANE_FAR := -27.6
+var _last_cam := Vector3.INF          # behind the hall, seen between the buildings
 var _crowd: Array = []           # the ones who react as a crowd
 var _chickens: Array = []
 var _chicks: Array = []          # follow the first chicken (the hen)
@@ -690,27 +698,31 @@ func _bg_house(st: SurfaceTool, x0: float, x1: float, zc: float, h: float, d: fl
 
 # ------------------------------------------------------------------ figures
 
-func _colors(i: int) -> Dictionary:
-	var skins := ["#e8b98f", "#d19e74", "#b98058", "#9a6644", "#7d5236"]
-	var shirts := ["#e0473b", "#3e7fd0", "#f2c84b", "#7cc490", "#f29ac0", "#ff9a4a", "#a98ae6", "#43c2b5", "#f2f0ea", "#2f4f86", "#d8d0b0"]
-	var shorts := ["#2f4f86", "#3a3a48", "#c9a46a", "#5a5a66", "#7a4f3a", "#2e5e4e"]
-	var hair := ["#221a17", "#3a2a20", "#4a3424", "#2a2422", "#8a8580"]
-	var feet := ["#3e7fd0", "#e0473b", "#2a2a2a", "#f2f0ea", "#f2c84b"]
-	var r := RandomNumberGenerator.new()
-	r.seed = SEED + i * 31
-	return {"skin": _c(skins[r.randi() % skins.size()]), "shirt": _c(shirts[(i * 7 + 3) % shirts.size()]),
-		"shorts": _c(shorts[r.randi() % shorts.size()]), "hair": _c(hair[r.randi() % hair.size()]),
-		"feet": _c(feet[r.randi() % feet.size()]), "cap": _c(shirts[(i * 5 + 1) % shirts.size()]),
-		"prop": _c(["#e0473b", "#3e7fd0", "#2a2a2a"][i % 3])}
-
-
-func _person(pos: Vector3, yaw: float, seated: bool, style := -1, crowd := true) -> Dictionary:
+func _person(pos: Vector3, yaw: float, seated: bool, crowd := true, scale_f := -1.0) -> Dictionary:
 	var i := _people.size()
-	var p := Fig.new_person(pos, yaw, seated, _colors(i), style if style >= 0 else [0, 1, 2, 0, 1, 3][i % 6], _rng.randf_range(0.94, 1.04))
-	p.next_idle = _rng.randf_range(2.0, 8.0)
+	var p := People.new_person(pos, yaw, seated, (i * 7 + 3) % 16, scale_f if scale_f > 0.0 else _rng.randf_range(0.95, 1.04))
+	p.next_idle = _rng.randf_range(1.0, 6.0)
 	p.rate = _rng.randf_range(5.0, 7.0)
+	p.base_seated = seated
+	p.role = "crowd"
 	_people.append(p)
 	if crowd: _crowd.append(p)
+	return p
+
+
+func _walker(kind := "") -> Dictionary:
+	var p := _person(Vector3(0, 0, LANE_A), 0.0, false, false)
+	p.role = "walker"
+	p.kind = kind
+	p.visible = false
+	p.state = "gone"
+	p.respawn = _rng.randf_range(0.0, 8.0)
+	p.path = []
+	p.dest = ""
+	p.speed = 1.2
+	p.walk_phase = _rng.randf() * TAU
+	p.watch = false
+	_walkers.append(p)
 	return p
 
 
@@ -725,19 +737,28 @@ func _build_figures() -> void:
 		_person(Vector3(sx, 0, -13.4 + _rng.randf_range(-0.2, 0.2)), _rng.randf_range(-0.2, 0.2), false)
 	# at the sari-sari store: two watchers and the tindera behind the counter
 	_person(Vector3(3.9, 0, -17.6), 0.25, false)
-	_person(Vector3(4.8, 0, -17.7), -0.1, false, 1)
-	var tindera := _person(Vector3(5.2, 0, -19.1), 0.0, false, 1, false)
-	tindera.watch = true
-	_crowd.append(tindera)
+	_person(Vector3(4.8, 0, -17.7), -0.1, false)
+	_person(Vector3(5.2, 0, -19.1), 0.0, false)
 	# neighbour on the balcony
-	_neighbour = _person(Vector3(-9.6, 2.98, -17.55), 0.2, false, 1, false)
+	_neighbour = _person(Vector3(-9.6, 2.98, -17.55), 0.2, false, false)
 	# next-game queue: two seated players with paddles (the middle chair holds their bag)
 	for qz: float in [-7.0, -5.4]:
-		var q := _person(Vector3(-6.55, 0, qz), PI * 0.5, true, -1, true)
+		var q := _person(Vector3(-6.55, 0, qz), PI * 0.5, true)
 		q.prop = "paddle"
-		q.arm_r = "hold_paddle"
+		q.role = "queue"
 	# scorer at the table
-	_scorer = _person(Vector3(6.75, 0, -3.2), -PI * 0.5, true, 2, false)
+	_scorer = _person(Vector3(6.75, 0, -3.2), -PI * 0.5, true, false)
+	_scorer.role = "scorer"
+	# passers-by: errands on the street lanes, a taho vendor, a mother and her kid,
+	# someone under a payong, and a few far off behind the hall
+	for k in 4: _walker()
+	_walker("taho")
+	_walker("umbrella")
+	var mother := _walker("mother")
+	var kid := _walker("kid")
+	kid.s = 0.72
+	kid.leader = mother
+	for k in 4: _walker("far")
 	# chickens and a dog on the dirt behind the far end
 	for k in 3:
 		var pos := Vector3(_rng.randf_range(1.2, 4.2), 0, _rng.randf_range(-13.2, -11.4))
@@ -757,8 +778,9 @@ func _build_figures() -> void:
 		_chicks.append(chick)
 	_dog = Fig.new_dog(Vector3(3.9, 0, -13.5), {"body": _c("#b98a52"), "snout": _c("#d9b07a"), "ear": _c("#8a6236"), "leg": _c("#a87a46")})
 	_dog.yaw = -1.2
-	# one MultiMesh of unit cubes for every part
-	var count := _people.size() * Fig.PERSON_PARTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS
+	# people: pixel cards (one mesh); props and animals: one MultiMesh of unit cubes
+	_cards = People.CardBatch.new(self, _people.size())
+	var count := _people.size() * PROP_SLOTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS
 	var cube := Kit.begin()
 	Kit.box(cube, Vector3.ZERO, Vector3.ONE, Color.WHITE, Basis.IDENTITY, false)
 	_mm_fig = MultiMesh.new()
@@ -768,11 +790,12 @@ func _build_figures() -> void:
 	_mm_fig.instance_count = count
 	var base := 0
 	for p in _people:
-		p.base = base
-		base += Fig.PERSON_PARTS
-		Fig.color_person(_mm_fig, p)
-		Fig.pose_person(_mm_fig, p)
-		if Vector3(p.pos).y < 0.5 and Vector3(p.pos).z > -18.6: _shadow(p.pos, Vector2(0.7, 0.5))
+		p.base_prop = base
+		base += PROP_SLOTS
+		var pos: Vector3 = p.pos
+		var moving: bool = p.role == "walker"
+		if pos.y < 0.5 and (pos.z > -18.6 or moving):
+			p.shadow = _shadow(pos, Vector2(0.7, 0.5))
 	for ch in _chickens:
 		ch.base = base
 		base += Fig.CHICKEN_PARTS
@@ -794,7 +817,7 @@ func _build_figures() -> void:
 	mmi.multimesh = _mm_fig
 	mmi.material_override = _toon
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.custom_aabb = AABB(Vector3(-40, -2, -60), Vector3(80, 30, 80))
+	mmi.custom_aabb = AABB(Vector3(-60, -2, -60), Vector3(120, 30, 80))
 	add_child(mmi)
 
 
@@ -829,8 +852,8 @@ func _write_shadow(i: int) -> void:
 	_mm_shadow.set_instance_custom_data(i, Color(float(spec[2]), 0, 0, 0))
 
 
-func _move_shadow(i: int, pos: Vector3) -> void:
-	_shadow_specs[i][0] = Vector2(pos.x, pos.z)
+func _move_shadow(i: int, pos: Vector3, hidden := false) -> void:
+	_shadow_specs[i][0] = Vector2(pos.x, pos.z) if not hidden else Vector2(0, 400)
 	_write_shadow(i)
 
 
@@ -911,19 +934,36 @@ func _on_rally_ended(_winner: int, reason: String, _detail: String) -> void:
 	var big := _rally_hits >= 8
 	for p in _crowd:
 		var r := _rng.randf()
+		var seated: bool = p.base_seated
 		if big:
-			_react(p, "cheer", _rng.randf_range(1.8, 2.6), "clap", 1.0)
-		elif reason in NET_REASONS and r < 0.55:
-			_react(p, "hands_head", 1.0, "clap", 0.9)
-		elif reason == "OUT_OF_BOUNDS" and r < 0.4:
-			_react(p, "point", 1.1, "clap", 0.8)
-		elif reason == "BODY_HIT" and r < 0.5:
-			_react(p, "wince", 0.8, "clap", 0.9)
-		elif r < 0.45:
+			if seated and r < 0.5: _react(p, "stand_cheer", _rng.randf_range(1.8, 2.6), "clap", 1.0)
+			elif not seated and r < 0.5: _react(p, "jump", _rng.randf_range(1.4, 2.0), "clap", 1.0)
+			elif r < 0.75: _react(p, "fist_pump", _rng.randf_range(1.4, 2.0), "clap", 0.8)
+			else: _react(p, "cheer", _rng.randf_range(1.8, 2.6), "clap", 1.0)
+		elif reason in NET_REASONS:
+			if r < 0.3: _react(p, "hands_head", 1.0, "clap", 0.9)
+			elif r < 0.5: _react(p, "facepalm", 1.2)
+			elif r < 0.65: _react(p, "ooh", 0.9, "clap", 0.8)
+			else: _react(p, "clap", _rng.randf_range(1.0, 1.6))
+		elif reason == "OUT_OF_BOUNDS":
+			if r < 0.4: _react(p, "point", 1.1, "clap", 0.8)
+			elif r < 0.55: _react(p, "facepalm", 1.0)
+			else: _react(p, "clap", _rng.randf_range(1.0, 1.6))
+		elif reason == "BODY_HIT":
+			if r < 0.5: _react(p, "wince", 0.8, "ooh", 0.6)
+			else: _react(p, "clap", 1.2)
+		elif r < 0.3:
 			_react(p, "cheer", _rng.randf_range(1.2, 1.8), "clap", 0.8)
+		elif r < 0.45:
+			_react(p, "fist_pump", 1.2, "clap", 0.6)
 		else:
 			_react(p, "clap", _rng.randf_range(1.2, 2.0))
 	_react(_neighbour, "wave" if big else "lean", 2.0)
+	# passers-by on the near lane stop, turn and clap on a big point
+	for w in _walkers:
+		if big and w.state == "walk" and Vector3(w.pos).z > LANE_B - 0.2 and w.kind != "far":
+			w.state = "stop"
+			w.wait_until = _t + _rng.randf_range(1.4, 2.4)
 	_score_pending = _t + 0.5
 	if big:
 		_dog_bark(1.6)
@@ -971,7 +1011,25 @@ func _step() -> void:
 		if (_ball as RigidBody3D).linear_velocity.length() > 14.0:
 			for k in 3: _react(_crowd[_rng.randi() % _crowd.size()], "ooh", 0.6)
 	_update_score()
-	for p in _people: _step_person(p, playing, have_ball, ball_local)
+	for w in _walkers: _step_walker(w)
+	var cam := get_viewport().get_camera_3d()
+	var cam_local := to_local(cam.get_global_transform_interpolated().origin) if cam != null else Vector3(0, 10, 15)
+	# Cards face the camera, so a camera move redraws everyone; otherwise only people whose
+	# pose changed since the last tick are solved and rewritten (most sit still).
+	var cam_moved := cam_local.distance_to(_last_cam) > 0.01
+	_last_cam = cam_local
+	var changed := false
+	for i in _people.size():
+		var p: Dictionary = _people[i]
+		if p.role != "walker": _step_person(p, playing, have_ball, ball_local)
+		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
+		if not cam_moved and sig == p.get("sig", []): continue
+		p.sig = sig
+		changed = true
+		var j := People.solve(p, _cards.extents(int(p.profile)))
+		_cards.write(i, p, j, cam_local)
+		_pose_props(p, j)
+	if changed: _cards.commit()
 	for ch in _chickens: _step_chicken(ch)
 	_step_chicks()
 	_step_dog()
@@ -998,9 +1056,12 @@ func _set_score_labels() -> void:
 	_score_labels[1].text = str(right)
 
 
+const IDLE_SEATED := ["", "knees", "lean_back", "fan", "drink", "phone", "chat", "scratch", "nod", "shade", "arms_crossed", "stretch", "knees", "chat"]
+const IDLE_STANDING := ["", "arms_crossed", "hands_hips", "shift", "phone", "drink", "chat", "scratch", "shade", "stretch", "fan", "hands_hips", "shift"]
+
+
 func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vector3) -> void:
 	var mode: String = p.mode
-	var active := mode != "idle" and _t >= float(p.delay)
 	if mode != "idle" and _t > float(p.until):
 		if str(p.get("then", "")) != "":
 			p.mode = p.then
@@ -1010,22 +1071,34 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 		else:
 			p.mode = "idle"
 		mode = p.mode
-		active = mode != "idle"
+	var active := mode != "idle" and _t >= float(p.delay)
 	var beat := int(_t * float(p.rate)) % 2
+	p.seated = p.base_seated and not (active and mode == "stand_cheer")
 	var seated: bool = p.seated
 	var rest := "idle_sit" if seated else "idle_stand"
-	var arm_l := rest
-	var arm_r := "hold_paddle" if p.prop == "paddle" else rest
+	var arm_l: Variant = rest
+	var arm_r: Variant = rest
 	var lean := 0.0
 	var bounce := 0.0
+	var sway := 0.0
 	var head_yaw := 0.0
+	var head_pitch := 0.0
+	var prop: String = "paddle" if p.role == "queue" else ""
+	if p.role == "queue": arm_r = "hold_paddle"
 	if active:
 		match mode:
-			"cheer":
+			"cheer", "stand_cheer":
 				arm_l = "cheer_a" if beat == 0 else "cheer_b"
 				arm_r = "cheer_b" if beat == 0 else "cheer_a"
 				bounce = (0.02 if seated else 0.07) * beat
 				lean = -0.05
+			"jump":
+				arm_l = "cheer_a"
+				arm_r = "cheer_a"
+				bounce = 0.14 * beat
+			"fist_pump":
+				arm_r = "fist_up" if beat == 0 else "fist_mid"
+				bounce = (0.0 if seated else 0.05) * beat
 			"clap":
 				arm_l = "clap_open" if beat == 0 else "clap_shut"
 				arm_r = arm_l
@@ -1033,64 +1106,324 @@ func _step_person(p: Dictionary, playing: bool, have_ball: bool, ball_local: Vec
 				arm_l = "hands_head"
 				arm_r = "hands_head"
 				lean = -0.12
+			"facepalm":
+				arm_r = "facepalm"
+				head_pitch = 0.35
+				lean = 0.1
+			"ooh":
+				arm_l = "mouth"
+				arm_r = "mouth"
+				bounce = 0.03 * beat
+				lean = -0.08
 			"wince":
 				arm_l = "wince"
 				arm_r = "wince"
 				lean = -0.18
 			"point":
 				arm_r = "point"
-			"ooh":
-				arm_l = "hands_head"
-				arm_r = "hands_head"
-				bounce = 0.03 * beat
 			"flip":
 				arm_r = "reach_up"
 			"wave":
-				arm_r = "wave" if beat == 0 else "cheer_a"
+				arm_r = "wave_a" if beat == 0 else "wave_b"
 				lean = 0.2
 			"lean":
 				lean = 0.3
 				arm_l = "counter"
 				arm_r = "counter"
 	else:
-		# idle life between and during points
+		# mannerisms: a few seconds of one idle habit, then a few seconds of nothing
 		if _t > float(p.next_idle):
-			var kinds := ["look", "chat", "phone", "", "lean_in"]
+			var kinds: Array = IDLE_SEATED if seated else IDLE_STANDING
 			p.idle_kind = kinds[_rng.randi() % kinds.size()]
-			p.idle_until = _t + _rng.randf_range(1.5, 4.0)
-			p.next_idle = float(p.idle_until) + _rng.randf_range(2.0, 7.0)
-		var kind: String = p.idle_kind if _t < float(p.get("idle_until", 0.0)) else ""
-		if playing:
-			kind = "lean_in" if _rally_hits >= 6 and seated else ""
-			if _rally_hits >= 10 and not seated:
-				arm_l = "cheer_b"
-				arm_r = "cheer_b"
+			p.idle_until = _t + _rng.randf_range(2.0, 5.0)
+			p.next_idle = float(p.idle_until) + _rng.randf_range(1.5, 6.0)
+		var kind: String = p.idle_kind if _t < float(p.idle_until) else ""
+		if playing and kind in ["phone", "stretch", "fan", "lean_back"]: kind = ""   # eyes on the rally
+		var slow := int(_t * 2.5 + float(p.rate)) % 2
 		match kind:
-			"look": head_yaw = 0.6 if beat == 0 and int(_t) % 2 == 0 else -0.5
-			"chat": head_yaw = 0.8 if p.pos.x < 0.0 else -0.8
+			"knees":
+				arm_l = "knees"
+				arm_r = "knees"
+				lean = 0.25
+			"lean_back":
+				arm_l = "behind_head"
+				arm_r = "behind_head"
+				lean = -0.18
+			"fan":
+				arm_r = "fan_a" if int(_t * 8.0) % 2 == 0 else "fan_b"
+				prop = "fan"
+			"drink":
+				arm_r = "drink"
+				prop = "bottle"
+				head_pitch = -0.25 * slow
 			"phone":
 				arm_l = "phone"
 				arm_r = "phone"
-				p.head_pitch = 0.35
-			"lean_in":
+				prop = "phone"
+				head_pitch = 0.4
+			"chat":
+				head_yaw = 0.8 if Vector3(p.pos).x < -3.0 else -0.8
+				arm_r = "gesture_a" if slow == 0 else "gesture_b"
+			"scratch":
+				arm_r = "scratch"
+				head_pitch = 0.15
+			"nod":
+				head_pitch = 0.18 * (int(_t * 4.0) % 2)
+			"shade":
+				arm_r = "shade"
+				head_pitch = -0.1
+			"arms_crossed":
+				arm_l = "arms_crossed"
+				arm_r = "arms_crossed"
+			"hands_hips":
+				arm_l = "hands_hips"
+				arm_r = "hands_hips"
+			"shift":
+				sway = 0.04 if slow == 0 else -0.04
+			"stretch":
+				arm_l = "stretch"
+				arm_r = "stretch"
+				lean = -0.1
+		if p.role == "queue" and kind in ["fan", "drink", "phone"]: arm_r = "hold_paddle"
+		if playing:
+			if _rally_hits >= 6 and seated and kind == "":
 				lean = 0.28
-				if p.prop != "paddle":
-					arm_l = "lean_in"
-					arm_r = "lean_in"
-		if kind != "phone": p.head_pitch = 0.0
+				arm_l = "lean_in"
+				if p.role != "queue": arm_r = "lean_in"
+			if _rally_hits >= 10 and not seated:
+				arm_l = "fist_mid"
+				arm_r = "mouth"
 		# eyes on the ball while it is in play
 		if playing and have_ball and p.watch:
 			var to_ball := ball_local - Vector3(p.pos)
 			var facing := Vector3(sin(float(p.yaw)), 0, cos(float(p.yaw)))
 			var right := Vector3(facing.z, 0, -facing.x)
 			head_yaw = clampf(atan2(to_ball.dot(right), to_ball.dot(facing)), -0.8, 0.8)
-			head_yaw = round(head_yaw / 0.2) * 0.2   # turn in steps, like a sprite with a few head frames
+			head_yaw = round(head_yaw / 0.2) * 0.2
+	if p.role == "queue": prop = "paddle"
 	p.arm_l = arm_l
 	p.arm_r = arm_r
 	p.lean = lean
 	p.bounce = bounce
+	p.sway = sway
 	p.head_yaw = head_yaw
-	Fig.pose_person(_mm_fig, p)
+	p.head_pitch = head_pitch
+	p.prop = prop
+
+
+## Passers-by: walk a lane, run an errand (pass through, buy at the store, go into the
+## hall or the house, stop behind the crowd to watch), then leave; some come out of a door.
+func _step_walker(w: Dictionary) -> void:
+	var lead = w.get("leader")
+	if lead is Dictionary:
+		# the kid trots beside the mother, a step behind
+		w.visible = lead.visible
+		w.state = "follow"
+		if not lead.visible: return
+		var lf := Vector3(sin(float(lead.yaw)), 0, cos(float(lead.yaw)))
+		var target: Vector3 = Vector3(lead.pos) - lf * 0.5 + Vector3(lf.z, 0, -lf.x) * 0.45
+		var d := target - Vector3(w.pos)
+		var moving := d.length() > 0.08
+		if moving:
+			w.pos = Vector3(w.pos) + d.normalized() * minf(d.length(), 2.2 * TICK)
+			w.yaw = atan2(d.x, d.z)
+			w.walk_phase = float(w.walk_phase) + 2.2 * TICK / 0.45 * PI
+		else:
+			w.yaw = lead.yaw
+		_walk_pose(w, moving, 0.45)
+		return
+	match str(w.state):
+		"gone":
+			w.visible = false
+			if _t > float(w.respawn): _start_trip(w)
+		"walk":
+			var path: Array = w.path
+			if path.is_empty():
+				_arrive(w)
+			else:
+				var to: Vector3 = path[0]
+				var d := to - Vector3(w.pos)
+				d.y = 0.0
+				var step := float(w.speed) * TICK
+				if d.length() <= step:
+					w.pos = to
+					path.pop_front()
+				else:
+					w.pos = Vector3(w.pos) + d.normalized() * step
+					w.yaw = atan2(d.x, d.z)
+				w.walk_phase = float(w.walk_phase) + step / 0.7 * PI
+				_walk_pose(w, true, 0.7)
+		"wait", "watch", "stop":
+			if str(w.state) == "stop": w.yaw = 0.0
+			_walk_pose(w, false, 0.7)
+			if w.state == "watch":
+				w.arm_l = "arms_crossed" if int(_t / 4.0) % 2 == 0 else "idle_stand"
+				w.arm_r = w.arm_l
+			elif w.state == "wait" and w.dest == "store":
+				w.arm_l = "counter"
+				w.arm_r = "counter"
+			elif w.state == "stop":
+				var beat := int(_t * 6.0) % 2
+				w.arm_l = "clap_open" if beat == 0 else "clap_shut"
+				w.arm_r = w.arm_l
+			if _t > float(w.wait_until):
+				if w.state == "stop":
+					w.state = "walk"
+				else:
+					_leave(w)
+	if w.has("shadow"): _move_shadow(w.shadow, w.pos, not w.visible)
+
+
+func _walk_pose(w: Dictionary, moving: bool, stride: float) -> void:
+	var ph: float = w.walk_phase
+	w.walk = ph if moving else -1.0
+	w.bounce = 0.025 * absf(sin(ph)) if moving else 0.0
+	var swing := 0.4 * sin(ph) if moving else 0.0
+	w.arm_l = [Vector3(-0.1, -1.0, swing), Vector3(-0.05, -1.0, swing + 0.25)]
+	w.arm_r = [Vector3(0.1, -1.0, -swing), Vector3(0.05, -1.0, -swing + 0.25)]
+	w.lean = 0.06 if moving else 0.0
+	w.head_yaw = 0.0
+	w.head_pitch = 0.0
+	match str(w.kind):
+		"taho":
+			w.arm_l = "carry_pole"
+			w.arm_r = "carry_pole"
+			w.prop = "taho"
+		"umbrella":
+			w.arm_r = "umbrella"
+			w.prop = "umbrella"
+		"mother":
+			w.prop = "bag"
+			w.arm_l = "carry_bag"
+		_:
+			w.prop = ""
+
+
+func _start_trip(w: Dictionary) -> void:
+	var side := -1.0 if _rng.randf() < 0.5 else 1.0
+	w.visible = true
+	w.state = "walk"
+	w.cells = {}
+	if w.kind == "far":
+		w.speed = _rng.randf_range(0.9, 1.4)
+		w.pos = Vector3(side * 42.0, 0, LANE_FAR + _rng.randf_range(-0.4, 0.4))
+		w.path = [Vector3(-side * 42.0, 0, Vector3(w.pos).z)]
+		w.dest = "exit"
+		return
+	w.speed = 0.65 if w.kind == "taho" else _rng.randf_range(1.0, 1.4)
+	var lane := LANE_A if _rng.randf() < 0.6 or side > 0.0 else LANE_B
+	var start_x := side * 17.0
+	var r := _rng.randf()
+	if w.kind == "taho" or w.kind == "umbrella" or w.kind == "mother": r = minf(r, 0.39)   # they pass along
+	if r < 0.4:
+		w.dest = "exit"
+		w.pos = Vector3(start_x, 0, lane)
+		w.path = [Vector3(-start_x, 0, lane)]
+	elif r < 0.58:
+		w.dest = "store"
+		w.pos = Vector3(start_x, 0, LANE_A)
+		w.path = [Vector3(5.7, 0, LANE_A), Vector3(5.7, 0, -17.75)]
+	elif r < 0.68:
+		w.dest = "enter"
+		w.pos = Vector3(start_x, 0, lane)
+		w.path = [Vector3(-3.4, 0, lane), Vector3(-3.4, 0, -19.6), Vector3(-3.4, 0, -20.8)]
+	elif r < 0.76:
+		w.dest = "enter"
+		w.pos = Vector3(start_x, 0, lane)
+		w.path = [Vector3(-7.6, 0, lane), Vector3(-7.6, 0, -17.8)]
+	elif r < 0.88:
+		w.dest = "watch"
+		var wx := _rng.randf_range(-6.6, -0.4)
+		w.pos = Vector3(start_x, 0, LANE_A)
+		w.path = [Vector3(wx, 0, LANE_A), Vector3(wx, 0, -14.0)]
+	else:
+		# comes out of the hall or the house and heads off
+		var door := Vector3(-3.4, 0, -20.6) if _rng.randf() < 0.5 else Vector3(-7.6, 0, -17.9)
+		w.dest = "exit"
+		w.pos = door
+		w.path = [Vector3(door.x, 0, lane), Vector3(side * 17.0, 0, lane)]
+
+
+func _arrive(w: Dictionary) -> void:
+	match str(w.dest):
+		"store":
+			w.state = "wait"
+			w.yaw = PI
+			w.wait_until = _t + _rng.randf_range(3.0, 7.0)
+		"watch":
+			w.state = "watch"
+			w.yaw = 0.0
+			w.watch = true
+			w.wait_until = _t + _rng.randf_range(8.0, 18.0)
+		"enter", "exit":
+			w.state = "gone"
+			w.visible = false
+			w.respawn = _t + _rng.randf_range(2.0, 9.0)
+
+
+func _leave(w: Dictionary) -> void:
+	var side := -1.0 if _rng.randf() < 0.5 else 1.0
+	var here: Vector3 = w.pos
+	w.watch = false
+	w.state = "walk"
+	w.dest = "exit"
+	w.path = [Vector3(here.x, 0, LANE_A), Vector3(side * 17.0, 0, LANE_A)]
+
+
+## Hand-held and carried props as cube instances, from the solved joints.
+func _pose_props(p: Dictionary, j: Dictionary) -> void:
+	var b: int = p.base_prop
+	var hidden := Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -50, 0))
+	var xf: Array = [hidden, hidden, hidden]
+	var col: Array = [_c("#e0473b"), _c("#e0473b"), _c("#e0473b")]
+	var prop: String = p.prop if p.visible else ""
+	var wr: Vector3 = j.get("wr_r", Vector3.ZERO)
+	var el: Vector3 = j.get("el_r", Vector3.ZERO)
+	var fore := (wr - el).normalized() if wr != el else Vector3.UP
+	match prop:
+		"paddle":
+			xf[0] = Transform3D(Fig._along(fore, Vector3(0.05, 0.14, 0.03)), wr + fore * 0.05)
+			xf[1] = Transform3D(Fig._along(fore, Vector3(0.2, 0.24, 0.03)), wr + fore * 0.22)
+			col[0] = _c("#2a2a2e")
+			col[1] = _c(["#e0473b", "#3e7fd0", "#f2c84b"][int(p.profile) % 3])
+		"bottle":
+			xf[0] = Transform3D(Fig._along(fore, Vector3(0.06, 0.18, 0.06)), wr + fore * 0.06)
+			col[0] = _c("#7fc4e0")
+		"fan":
+			xf[0] = Transform3D(Fig._along(fore, Vector3(0.22, 0.22, 0.02)), wr + fore * 0.12)
+			col[0] = _c("#e6c27a")
+		"phone":
+			var lw: Vector3 = j.get("wr_l", wr)
+			xf[0] = Transform3D(Fig._along(Vector3(j.up), Vector3(0.08, 0.14, 0.02)), (wr + lw) * 0.5 + Vector3.UP * 0.04)
+			col[0] = _c("#2a2a2e")
+		"umbrella":
+			var top := wr + Vector3.UP * 0.95
+			xf[0] = Transform3D(Fig._along(Vector3.UP, Vector3(0.03, 1.0, 0.03)), wr + Vector3.UP * 0.45)
+			xf[1] = Transform3D(Basis.from_scale(Vector3(1.0, 0.1, 1.0)), top)
+			xf[2] = Transform3D(Basis.from_scale(Vector3(0.55, 0.12, 0.55)), top + Vector3.UP * 0.1)
+			col[0] = _c("#3a3a3a")
+			col[1] = _c("#e0473b")
+			col[2] = _c("#f2f0ea")
+		"bag":
+			var hip: Vector3 = j.get("hip_l", wr)
+			var fwd: Vector3 = j.fwd
+			var side := Vector3(fwd.z, 0, -fwd.x)
+			xf[0] = Transform3D(Basis(Vector3.UP, float(p.yaw)) * Basis.from_scale(Vector3(0.12, 0.28, 0.3)), hip - side * 0.16 + Vector3.UP * 0.02)
+			col[0] = _c("#c9a46a")
+		"taho":
+			var sl: Vector3 = j.get("sh_l", wr)
+			var sr: Vector3 = j.get("sh_r", wr)
+			var mid := (sl + sr) * 0.5 + Vector3.UP * 0.06
+			var across := (sr - sl).normalized()
+			xf[0] = Transform3D(Fig._along(across, Vector3(0.04, 1.7, 0.04)), mid)
+			xf[1] = Transform3D(Basis.from_scale(Vector3(0.3, 0.34, 0.3)), mid - across * 0.8 - Vector3.UP * 0.55)
+			xf[2] = Transform3D(Basis.from_scale(Vector3(0.3, 0.34, 0.3)), mid + across * 0.8 - Vector3.UP * 0.55)
+			col[0] = _c("#a88a56")
+			col[1] = _c("#b9bcc0")
+			col[2] = _c("#b9bcc0")
+	for k in PROP_SLOTS:
+		_mm_fig.set_instance_transform(b + k, xf[k])
+		_mm_fig.set_instance_color(b + k, col[k])
 
 
 func _step_chicken(ch: Dictionary) -> void:
