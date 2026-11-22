@@ -49,6 +49,8 @@ var _mm_shadow: MultiMesh
 var _people: Array = []          # all people (crowd, watchers, tindera, neighbour, queue, scorer)
 var _crowd: Array = []           # the ones who react as a crowd
 var _chickens: Array = []
+var _chicks: Array = []          # follow the first chicken (the hen)
+var _hen_trail: Array = []       # the hen's recent positions, newest first
 var _dog: Dictionary = {}
 var _scorer: Dictionary = {}
 var _neighbour: Dictionary = {}
@@ -327,10 +329,13 @@ func _build_house(st: SurfaceTool, cloth: SurfaceTool) -> void:
 		var hgt := _rng.randf_range(0.35, 0.55)
 		Kit.quad(cloth, top + Vector3(-wdt * 0.5, 0, 0), top + Vector3(-wdt * 0.5, -hgt, 0.02), top + Vector3(wdt * 0.5, -hgt, 0.02), top + Vector3(wdt * 0.5, 0, 0), clothes[ci], 0.0, false)
 		Kit.box(cloth, top + Vector3(0, -hgt * 0.5, 0.012), Vector3(wdt * 0.9, hgt * 0.85, 0.01), clothes[ci], Basis.IDENTITY, false, 0.6)
+	_shade_strip(st, x0, x1, zf - 0.08, 5.5, 0.45, wood[0])
+	_shade_strip(st, x0, x1, zf + 0.015, 2.86, 0.4, block)
 	_gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 0.5, zb - 0.3, 5.75, 5.15, true)
 	for tx: float in [-10.6, -7.8]:   # tyres on the roof
 		Kit.cylinder(st, Vector3(tx, 5.5, -19.6), 0.32, 0.32, 0.12, _c("#2f2c2e"), 8)
 	_shadow(Vector3(cx + 0.6, 0, zf - 0.6), Vector2(x1 - x0 + 1.0, 1.6), true)
+	_shadow(Vector3(x1 + 1.1, 0, (zf + zb) * 0.5), Vector2(2.2, zf - zb), true)
 
 
 func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
@@ -359,8 +364,10 @@ func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	Kit.box(st, Vector3(cx, 3.65, pz + 0.05), Vector3(4.5, 0.72, 0.06), _c("#2f5fa8"))            # sign board
 	Kit.box(st, Vector3(cx, 3.65, pz + 0.02), Vector3(4.66, 0.86, 0.04), _c("#f4f1e8"))
 	_label("BARANGAY HALL", Vector3(cx, 3.65, pz + 0.1), 0.44, Color(1.0, 0.97, 0.88))
+	_shade_strip(st, x0, x1, zf + 0.02, 2.9, 0.55, wall)
 	_gi_roof(st, x0 - 0.4, x1 + 0.4, zf + 0.2, zb - 0.3, 4.2, 3.6, false)
 	_shadow(Vector3(cx + 0.6, 0, zf - 0.4), Vector2(x1 - x0 + 1.0, 1.4), true)
+	_shadow(Vector3(x1 + 0.8, 0, (zf + zb) * 0.5), Vector2(1.6, zf - zb), true)
 	# flagpole with a Philippine flag that waves (cloth mesh: sway grows along the flag)
 	var fx := 0.4
 	var fz := -19.0
@@ -428,6 +435,7 @@ func _build_store(st: SurfaceTool) -> void:
 	Kit.box(st, Vector3(7.5, 1.05, zf + 0.02), Vector3(0.85, 2.1, 0.05), _c("#5e4a3a"))         # door
 	# awning (GI sloping toward the court) and the sign above it
 	_gi_roof(st, x0 - 0.2, x1 + 0.2, zf + 1.1, zf - 0.05, 2.45, 2.75, true)
+	_shade_strip(st, x0, x1, zf + 0.012, 2.45, 0.3, wall)
 	Kit.box(st, Vector3(cx, 3.0, zf + 0.04), Vector3(4.6, 0.56, 0.06), _c("#d23b34"))
 	_label("SARI-SARI STORE", Vector3(cx, 3.0, zf + 0.09), 0.34, Color(1.0, 0.95, 0.85))
 	Kit.box(st, Vector3(cx, 3.4, (zf + zb) * 0.5), Vector3(x1 - x0 + 0.2, 0.15, zf - zb + 0.2), _c("#9aa1a4"))
@@ -436,6 +444,7 @@ func _build_store(st: SurfaceTool) -> void:
 		Kit.box(st, cp, Vector3(0.45, 0.3, 0.32), _c("#e6b93c"))
 		Kit.box(st, cp + Vector3(0, 0.16, 0), Vector3(0.4, 0.04, 0.28), _c("#4a3a2a"))
 	_shadow(Vector3(cx + 0.5, 0, zf - 0.2), Vector2(x1 - x0 + 0.8, 1.0), true)
+	_shadow(Vector3(x1 + 0.6, 0, (zf + zb) * 0.5), Vector2(1.2, zf - zb), true)
 
 
 func _build_poles(st: SurfaceTool, cloth: SurfaceTool) -> void:
@@ -585,6 +594,7 @@ func _build_background(st: SurfaceTool) -> void:
 				var greens := [_c("#5f9a55"), _c("#6fab5e"), _c("#558c4d")]
 				for k in 3:
 					Kit.box(st, Vector3(x + _rng.randf_range(-0.5, 0.5) * scale_f, hgt * (0.55 + k * 0.17), z + _rng.randf_range(-0.4, 0.4)), Vector3(2.6 - k * 0.6, 1.3, 2.4 - k * 0.5) * scale_f, greens[k], Basis(Vector3.UP, _rng.randf() * PI))
+				if z > -70.0: _shadow(Vector3(x + hgt * 0.15, 0, z), Vector2(2.6, 2.0) * scale_f)
 				x += _rng.randf_range(2.5, 4.0) * scale_f
 				continue
 			var w := _rng.randf_range(4.0, 7.0) * scale_f
@@ -592,10 +602,90 @@ func _build_background(st: SurfaceTool) -> void:
 			var d := 5.0 * scale_f
 			var wall := _c(walls[_rng.randi() % walls.size()])
 			var zz := z + _rng.randf_range(-1.5, 1.5)
-			Kit.box(st, Vector3(x + w * 0.5, h * 0.5, zz), Vector3(w - 0.3, h, d), wall)
-			Kit.box(st, Vector3(x + w * 0.5, h * 0.55, zz + d * 0.5 + 0.01), Vector3(minf(1.2 * scale_f, w * 0.3), 0.9 * scale_f, 0.02), _c("#3a3640"))
-			_gi_roof(st, x - 0.1, x + w - 0.2, zz + d * 0.5 + 0.3, zz - d * 0.5, h + 0.15, h + 0.55 * scale_f, _rng.randf() < 0.5)
-			x += w + _rng.randf_range(0.2, 1.5)
+			var annex := _bg_house(st, x, x + w - 0.3, zz, h, d, wall, scale_f, z > -70.0)
+			x += w + annex + _rng.randf_range(0.2, 1.5)
+
+
+## Shade strip on a wall just under an overhang (eave, balcony, awning, canopy).
+func _shade_strip(st: SurfaceTool, x0: float, x1: float, z_face: float, y_top: float, height: float, wall: Color) -> void:
+	Kit.box(st, Vector3((x0 + x1) * 0.5, y_top - height * 0.5, z_face), Vector3(x1 - x0, height, 0.02), wall.darkened(0.3))
+
+
+## One background house with real depth: plinth, overhanging GI eave with a fascia and
+## its shadow on the wall, recessed windows with sills and lintels, a door with a step and
+## canopy, and sometimes a balcony, a lower side annex or a water tank on the roof.
+## Returns the extra width the annex takes. `shadows`: also a ground shadow on the right.
+func _bg_house(st: SurfaceTool, x0: float, x1: float, zc: float, h: float, d: float, wall: Color, s: float, shadows: bool) -> float:
+	var zf := zc + d * 0.5
+	var w := x1 - x0
+	var cx := (x0 + x1) * 0.5
+	Kit.box(st, Vector3(cx, h * 0.5, zc), Vector3(w, h, d), wall)
+	Kit.box(st, Vector3(cx, 0.15 * s, zf + 0.03), Vector3(w + 0.06, 0.3 * s, 0.08), wall.darkened(0.18))       # plinth
+	var over := 0.6 * s
+	_gi_roof(st, x0 - 0.3 * s, x1 + 0.3 * s, zf + over, zc - d * 0.5 - 0.1, h + 0.05, h + 0.5 * s, _rng.randf() < 0.5)
+	var trims := [_c("#f2efe6"), _c("#7a5233"), _c("#3e6fb2"), _c("#5f8f62")]
+	var trim: Color = trims[_rng.randi() % trims.size()]
+	Kit.box(st, Vector3(cx, h - 0.02, zf + over), Vector3(w + 0.6 * s, 0.14 * s, 0.06), trim)                    # fascia
+	_shade_strip(st, x0, x1, zf + 0.012, h, 0.5 * s, wall)
+	var two_storey := h > 3.8 * s
+	var floors := 2 if two_storey else 1
+	var n := maxi(1, int(w / (2.1 * s)))
+	var door_slot := _rng.randi() % (n + 1)
+	for f in floors:
+		var wy := (h * (0.3 if floors == 2 else 0.5)) + f * h * 0.45
+		for i in n + (1 if f == 0 else 0):
+			var wx := x0 + (i + 0.5) * w / float(n + (1 if f == 0 else 0))
+			if f == 0 and i == door_slot:
+				# door: recessed, framed, a step and a small canopy with its shadow
+				Kit.box(st, Vector3(wx, 1.0 * s, zf + 0.01), Vector3(0.9 * s, 2.0 * s, 0.03), _c("#5e4232"))
+				Kit.box(st, Vector3(wx, 2.05 * s, zf + 0.04), Vector3(1.1 * s, 0.1 * s, 0.08), trim)
+				Kit.box(st, Vector3(wx, 0.06, zf + 0.25 * s), Vector3(1.2 * s, 0.12, 0.5 * s), _c("#a9a59c"))
+				Kit.box(st, Vector3(wx, 2.3 * s, zf + 0.3 * s), Vector3(1.3 * s, 0.06 * s, 0.6 * s), _c("#a6adb0"))
+				_shade_strip(st, wx - 0.6 * s, wx + 0.6 * s, zf + 0.02, 2.27 * s, 0.25 * s, wall)
+				continue
+			var ww := 0.95 * s
+			var wh := 0.85 * s
+			Kit.box(st, Vector3(wx, wy, zf - 0.04), Vector3(ww, wh, 0.12), _c("#34303a"))                         # recess
+			Kit.box(st, Vector3(wx, wy + wh * 0.5 + 0.05 * s, zf + 0.03), Vector3(ww + 0.2 * s, 0.1 * s, 0.1), trim)  # lintel
+			Kit.box(st, Vector3(wx, wy - wh * 0.5 - 0.05 * s, zf + 0.07), Vector3(ww + 0.25 * s, 0.08 * s, 0.18 * s), _c("#e6e2d6"))  # sill
+			_shade_strip(st, wx - ww * 0.5, wx + ww * 0.5, zf - 0.02, wy + wh * 0.5, 0.18 * s, _c("#34303a"))
+			if _rng.randf() < 0.35:   # a grille or a jalousie
+				for k in 3: Kit.box(st, Vector3(wx - ww * 0.33 + k * ww * 0.33, wy, zf + 0.02), Vector3(0.03 * s, wh, 0.02), _c("#d8d6cf"))
+	if two_storey and _rng.randf() < 0.5:
+		# balcony slab and railing across part of the front, and its shadow below
+		var by := h * 0.5
+		var bw := w * 0.6
+		Kit.box(st, Vector3(cx, by, zf + 0.45 * s), Vector3(bw, 0.12 * s, 0.9 * s), _c("#a9a59c"))
+		Kit.box(st, Vector3(cx, by + 0.5 * s, zf + 0.88 * s), Vector3(bw, 0.06 * s, 0.05), trim)
+		var px := cx - bw * 0.5
+		while px <= cx + bw * 0.5:
+			Kit.box(st, Vector3(px, by + 0.25 * s, zf + 0.88 * s), Vector3(0.04, 0.5 * s, 0.04), trim)
+			px += 0.35 * s
+		_shade_strip(st, cx - bw * 0.5, cx + bw * 0.5, zf + 0.015, by - 0.06 * s, 0.45 * s, wall)
+	if _rng.randf() < 0.25:
+		# water tank on a little stand on the roof
+		var tx := x0 + w * _rng.randf_range(0.25, 0.75)
+		var ty := h + 0.4 * s
+		for lx: float in [-0.35, 0.35]:
+			Kit.box(st, Vector3(tx + lx * s, ty + 0.3 * s, zc - d * 0.2), Vector3(0.06, 0.6 * s, 0.06), _c("#6a6e72"))
+		Kit.cylinder(st, Vector3(tx, ty + 0.6 * s, zc - d * 0.2), 0.5 * s, 0.5 * s, 0.9 * s, _c("#3e7fd0"), 8)
+	var annex := 0.0
+	if _rng.randf() < 0.35:
+		# lower lean-to annex on the right, set back a little
+		annex = 1.9 * s
+		var ah := h * 0.55
+		var ad := d * 0.7
+		var az := zc - d * 0.15
+		var awall := wall.darkened(0.06)
+		Kit.box(st, Vector3(x1 + annex * 0.5, ah * 0.5, az), Vector3(annex, ah, ad), awall)
+		_gi_roof(st, x1, x1 + annex + 0.2 * s, az + ad * 0.5 + 0.4 * s, az - ad * 0.5, ah, ah + 0.4 * s, true)
+		_shade_strip(st, x1, x1 + annex, az + ad * 0.5 + 0.012, ah, 0.35 * s, awall)
+		Kit.box(st, Vector3(x1 + annex * 0.5, ah * 0.5, az + ad * 0.5 + 0.01), Vector3(0.7 * s, 0.6 * s, 0.03), _c("#34303a"))
+	if shadows:
+		# the sun is up and to the left: each house throws a shadow on the ground to its right
+		var right := x1 + annex
+		_shadow(Vector3(right + h * 0.2, 0, zc), Vector2(h * 0.45, d), true)
+	return annex
 
 
 # ------------------------------------------------------------------ figures
@@ -656,10 +746,19 @@ func _build_figures() -> void:
 		ch.yaw = _rng.randf() * TAU
 		ch.next = _rng.randf_range(0.5, 3.0)
 		_chickens.append(ch)
+	# the hen (first chicken) leads four chicks
+	_chickens[0].c.body = _c("#c98a4a")
+	_chickens[0].c.wing = _c("#a86c38")
+	for k in 4:
+		var cp := Vector3(_chickens[0].pos) + Vector3(_rng.randf_range(-0.5, 0.5), 0, _rng.randf_range(-0.5, 0.5))
+		var chick := Fig.new_chick(cp)
+		chick.yaw = _rng.randf() * TAU
+		chick.next = _rng.randf_range(0.5, 2.0)
+		_chicks.append(chick)
 	_dog = Fig.new_dog(Vector3(3.9, 0, -13.5), {"body": _c("#b98a52"), "snout": _c("#d9b07a"), "ear": _c("#8a6236"), "leg": _c("#a87a46")})
 	_dog.yaw = -1.2
 	# one MultiMesh of unit cubes for every part
-	var count := _people.size() * Fig.PERSON_PARTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS
+	var count := _people.size() * Fig.PERSON_PARTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS
 	var cube := Kit.begin()
 	Kit.box(cube, Vector3.ZERO, Vector3.ONE, Color.WHITE, Basis.IDENTITY, false)
 	_mm_fig = MultiMesh.new()
@@ -680,6 +779,12 @@ func _build_figures() -> void:
 		Fig.color_chicken(_mm_fig, ch)
 		Fig.pose_chicken(_mm_fig, ch)
 		ch.shadow = _shadow(ch.pos, Vector2(0.35, 0.3))
+	for chick in _chicks:
+		chick.base = base
+		base += Fig.CHICK_PARTS
+		Fig.color_chick(_mm_fig, chick, _c("#f7dc4a"), _c("#f0a030"))
+		Fig.pose_chick(_mm_fig, chick)
+		chick.shadow = _shadow(chick.pos, Vector2(0.18, 0.15))
 	_dog.base = base
 	Fig.color_dog(_mm_fig, _dog)
 	Fig.pose_dog(_mm_fig, _dog)
@@ -710,7 +815,7 @@ func _build_shadows() -> void:
 	mmi.multimesh = _mm_shadow
 	mmi.material_override = mat
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.custom_aabb = AABB(Vector3(-40, -1, -60), Vector3(80, 4, 80))
+	mmi.custom_aabb = AABB(Vector3(-120, -1, -80), Vector3(240, 4, 100))
 	add_child(mmi)
 
 
@@ -793,6 +898,10 @@ func _on_bounce(pos: Vector3) -> void:
 	var local := to_local(pos)
 	for ch in _chickens:
 		if Vector3(ch.pos).distance_to(local) < 4.0: _scatter(ch, local)
+	for chick in _chicks:
+		if Vector3(chick.pos).distance_to(local) < 3.0:
+			chick.mode = "run"
+			chick.next = _t + 1.2
 	for p in _crowd:
 		if Vector3(p.pos).distance_to(local) < 2.6: _react(p, "wince", 0.7)
 	if Vector3(_dog.pos).distance_to(local) < 4.0: _dog_bark(1.2)
@@ -864,6 +973,7 @@ func _step() -> void:
 	_update_score()
 	for p in _people: _step_person(p, playing, have_ball, ball_local)
 	for ch in _chickens: _step_chicken(ch)
+	_step_chicks()
 	_step_dog()
 
 
@@ -1010,6 +1120,53 @@ func _step_chicken(ch: Dictionary) -> void:
 				ch.pos = pos
 	Fig.pose_chicken(_mm_fig, ch)
 	_move_shadow(ch.shadow, pos)
+
+
+## Chicks: when the hen walks or runs they trail behind her in a line, each a few steps
+## further back along her path; when she pecks they potter about near her and peck too.
+func _step_chicks() -> void:
+	if _chickens.is_empty(): return
+	var hen: Dictionary = _chickens[0]
+	var hen_pos: Vector3 = hen.pos
+	if _hen_trail.is_empty() or Vector3(_hen_trail[0]).distance_to(hen_pos) > 0.08:
+		_hen_trail.push_front(hen_pos)
+		if _hen_trail.size() > 40: _hen_trail.pop_back()
+	var hen_moving: bool = hen.mode != "peck"
+	for i in _chicks.size():
+		var k: Dictionary = _chicks[i]
+		k.step = int(k.step) + 1
+		var pos: Vector3 = k.pos
+		var speed := 0.05
+		if str(k.mode) == "run" and _t < float(k.next):
+			speed = 0.2
+		elif hen_moving:
+			k.mode = "follow"
+			var idx := mini((i + 1) * 4, _hen_trail.size() - 1)
+			k.target = _hen_trail[idx] if idx >= 0 else hen_pos
+			speed = 0.1 if str(hen.mode) == "walk" else 0.24
+		else:
+			# potter near the hen: pick a spot, walk to it, peck a while
+			if str(k.mode) != "peck" and str(k.mode) != "wander":
+				k.mode = "wander"
+				k.target = hen_pos + Vector3(_rng.randf_range(-0.7, 0.7), 0, _rng.randf_range(-0.6, 0.6))
+			if str(k.mode) == "peck" and _t > float(k.next):
+				k.mode = "wander"
+				k.target = hen_pos + Vector3(_rng.randf_range(-0.7, 0.7), 0, _rng.randf_range(-0.6, 0.6))
+		var to: Vector3 = k.target
+		var d := to - pos
+		d.y = 0.0
+		if d.length() > 0.04 and str(k.mode) != "peck":
+			pos += d.normalized() * minf(d.length(), speed)
+			k.yaw = atan2(d.x, d.z)
+			k.pos = pos
+			k.head_down = false
+		elif str(k.mode) == "wander":
+			k.mode = "peck"
+			k.next = _t + _rng.randf_range(1.0, 3.0)
+		if str(k.mode) == "peck": k.head_down = (int(k.step) + i * 2) % 5 < 2
+		elif str(k.mode) == "run" and _t >= float(k.next): k.mode = "follow"
+		Fig.pose_chick(_mm_fig, k)
+		_move_shadow(k.shadow, pos)
 
 
 func _step_dog() -> void:

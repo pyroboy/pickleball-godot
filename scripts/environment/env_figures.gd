@@ -204,3 +204,34 @@ static func color_dog(mm: MultiMesh, d: Dictionary) -> void:
 	var b: int = d.base
 	var cols := [c.body, c.body, c.snout, c.ear, c.ear, c.body, c.leg, c.leg, c.leg, c.leg]
 	for i in DOG_PARTS: mm.set_instance_color(b + i, cols[i])
+
+
+# ---------------------------------------------------------------- chicks (follow a hen)
+
+const CHICK_PARTS := 5
+
+static func new_chick(pos: Vector3) -> Dictionary:
+	return {"pos": pos, "yaw": 0.0, "base": 0, "step": 0, "head_down": false, "mode": "follow", "target": pos, "next": 0.0}
+
+
+## Chicks are drawn a little larger than life (about 0.16 m tall) so they still read
+## as yellow fluff at the far end of the court.
+static func pose_chick(mm: MultiMesh, k: Dictionary) -> void:
+	var root := Transform3D(Basis(Vector3.UP, float(k.yaw)), Vector3(k.pos))
+	var b: int = k.base
+	var down: bool = k.head_down
+	var step: int = k.step
+	var hop := 0.015 if k.mode == "run" and step % 2 == 0 else 0.0
+	mm.set_instance_transform(b + 0, root * Transform3D(Basis.from_scale(Vector3(0.12, 0.1, 0.14)), Vector3(0, 0.09 + hop, 0)))
+	var head := Vector3(0, 0.1, 0.08) if down else Vector3(0, 0.17 + hop, 0.06)
+	mm.set_instance_transform(b + 1, root * Transform3D(Basis.from_scale(Vector3(0.08, 0.08, 0.08)), head))
+	mm.set_instance_transform(b + 2, root * Transform3D(Basis.from_scale(Vector3(0.03, 0.02, 0.04)), head + Vector3(0, -0.005, 0.05)))
+	for side: float in [-1.0, 1.0]:
+		var lift := 0.015 if (step % 2 == 0) == (side > 0.0) and k.mode != "peck" else 0.0
+		mm.set_instance_transform(b + (3 if side < 0.0 else 4), root * Transform3D(Basis.from_scale(Vector3(0.018, 0.06, 0.018)), Vector3(side * 0.03, 0.03 + lift, 0)))
+
+
+static func color_chick(mm: MultiMesh, k: Dictionary, yellow: Color, beak: Color) -> void:
+	var b: int = k.base
+	var cols := [yellow, yellow, beak, beak, beak]
+	for i in CHICK_PARTS: mm.set_instance_color(b + i, cols[i])
