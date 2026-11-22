@@ -757,12 +757,12 @@ func _build_scorer(st: SurfaceTool) -> void:
 
 # ------------------------------------------------------------------ background
 
-func _build_background(st: SurfaceTool) -> void:
+func _build_background(st: SurfaceTool, z_shift := 0.0) -> void:
 	# Rows of houses and trees out to the horizon (the phone's top edge sees ~170 m out).
 	var walls := ["#d9c7a3", "#b9cbb2", "#cfb3ae", "#a9bfd2", "#e0d19f", "#c8c0d8", "#e6e2d6"]
 	var rows := [[-32.0, 20.0, 3.0], [-46.0, 28.0, 3.4], [-64.0, 38.0, 4.0], [-88.0, 52.0, 5.0], [-118.0, 70.0, 6.5], [-150.0, 90.0, 8.0]]
 	for row in rows:
-		var z: float = row[0]
+		var z: float = float(row[0]) + z_shift
 		var half: float = row[1]
 		var scale_f: float = row[2] / 3.0
 		var x := -half
@@ -988,7 +988,7 @@ func _build_figures() -> void:
 		ch.yaw = _rng.randf() * TAU
 		ch.next = _rng.randf_range(0.5, 3.0)
 		_chickens.append(ch)
-	var rooster := Fig.new_chicken(_end_pos(Vector3(4.3, 0.1, -18.85), 1), {"body": _c("#b9733f"), "tail": _c("#1f3a2e"),
+	var rooster := Fig.new_chicken(_end_pos(Vector3(4.3, 0.1, -21.85), 1), {"body": _c("#b9733f"), "tail": _c("#1f3a2e"),
 		"comb": _c("#d8382f"), "beak": _c("#e8b33c"), "wing": _c("#7a3f22")})
 	rooster.caged = true
 	rooster.next = 1e9

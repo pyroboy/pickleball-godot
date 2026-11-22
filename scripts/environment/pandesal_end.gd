@@ -5,7 +5,7 @@ extends RefCounted
 ## through `w._end_pos`.
 ##
 ## Highlight: a "rolling" malunggay pandesal cart, a bright green steel cabinet sidecar on
-## one small wheel towed by a motorcycle (wing doors with frosted panels, a glass display,
+## one small wheel, pushed by the vendor (wing doors with frosted panels, a glass display,
 ## stainless warmer drawers, a flat canopy with the signboard and a jingle speaker). It
 ## drives in along the back lane, stops, the vendor gets off and opens the doors, a queue
 ## forms, rolls come out of the warmer in a puff of steam, buyers walk off eating; then it
@@ -20,11 +20,11 @@ const Fig := preload("res://scripts/environment/env_figures.gd")
 const People := preload("res://scripts/environment/env_people.gd")
 
 const STOP_X := 4.2              # where the rolling cart parks on the back lane
-const CART := Vector3(4.2, 0, -16.4)
-const VENDOR := Vector3(2.7, 0, -15.75)
-const QUEUE := [Vector3(4.2, 0, -15.45), Vector3(3.55, 0, -15.5), Vector3(2.9, 0, -15.55)]
+const CART := Vector3(4.2, 0, -19.4)
+const VENDOR := Vector3(2.7, 0, -18.75)
+const QUEUE := [Vector3(4.2, 0, -18.45), Vector3(3.55, 0, -18.5), Vector3(2.9, 0, -18.55)]
 const LANE := -14.45         # this end's walking lane (between the curb sitters and the standing group)
-const JEEP_LANE := -16.4
+const JEEP_LANE := -19.4
 const JEEP_STOP := -2.9      # in front of the waiting shed
 const POST := Vector3(1.4, 0, -15.0)
 
@@ -42,7 +42,7 @@ static func build_geometry(w, bld: SurfaceTool, props: SurfaceTool, cloth: Surfa
 	_dama_table(w, props)
 	_audience_seats(w, props)
 	_side_pieces(w, props)
-	w._build_background(bld)
+	w._build_background(bld, -5.0)
 	_jeepney(w)
 	_rolling_cart(w)
 
@@ -52,8 +52,8 @@ static func _panaderya(w, st: SurfaceTool) -> void:
 	# bread, striped awning, the sign; peach upper floor with windows and a balcony.
 	var x0 := -12.6
 	var x1 := -6.8
-	var zf := -18.0
-	var zb := -23.0
+	var zf := -21.0
+	var zb := -26.0
 	var cx := (x0 + x1) * 0.5
 	var peach: Color = w._c("#e8b98f")
 	Kit.box(st, Vector3(cx, 1.5, (zf + zb) * 0.5), Vector3(x1 - x0, 3.0, zf - zb), w._c("#d9d2c2"))
@@ -95,8 +95,8 @@ static func _panaderya(w, st: SurfaceTool) -> void:
 static func _waiting_shed(w, st: SurfaceTool) -> void:
 	var x0 := -4.6
 	var x1 := -1.2
-	var zf := -17.4
-	var zb := -18.6
+	var zf := -20.4
+	var zb := -21.6
 	var cx := (x0 + x1) * 0.5
 	for px: float in [x0 + 0.1, x1 - 0.1]:
 		for pz: float in [zf, zb]:
@@ -114,8 +114,8 @@ static func _capilla(w, st: SurfaceTool) -> void:
 	# Small whitewashed chapel: gable front with a belfry and a cross, arched door, steps.
 	var x0 := 0.8
 	var x1 := 4.0
-	var zf := -24.0
-	var zb := -29.0
+	var zf := -27.0
+	var zb := -32.0
 	var cx := (x0 + x1) * 0.5
 	var white: Color = w._c("#efe9da")
 	Kit.box(st, Vector3(cx, 2.0, (zf + zb) * 0.5), Vector3(x1 - x0, 4.0, zf - zb), white)
@@ -144,8 +144,8 @@ static func _capilla(w, st: SurfaceTool) -> void:
 static func _vulcanizing(w, st: SurfaceTool) -> void:
 	var x0 := 5.0
 	var x1 := 9.2
-	var zf := -18.5
-	var zb := -22.0
+	var zf := -21.5
+	var zb := -25.0
 	var cx := (x0 + x1) * 0.5
 	Kit.box(st, Vector3(cx, 1.5, (zf + zb) * 0.5), Vector3(x1 - x0, 3.0, zf - zb), w._c("#9fb8a0"))
 	Kit.box(st, Vector3(cx - 0.3, 1.15, zf + 0.01), Vector3(2.8, 2.3, 0.04), w._c("#2f2b30"))     # open bay
@@ -153,15 +153,15 @@ static func _vulcanizing(w, st: SurfaceTool) -> void:
 	w._label("VULCANIZING", Vector3(cx, 2.75, zf + 0.1), 0.3, Color(0.82, 0.16, 0.14))
 	w._gi_roof(st, x0 - 0.25, x1 + 0.25, zf + 0.8, zb - 0.3, 3.05, 3.4, true)
 	# tyre stacks, an air compressor, a hanging tyre sign
-	for t in [[x0 + 0.1, -17.8, 5], [x1 - 0.2, -17.9, 4], [x1 - 0.75, -17.7, 3]]:
+	for t in [[x0 + 0.1, -20.8, 5], [x1 - 0.2, -20.9, 4], [x1 - 0.75, -20.7, 3]]:
 		for k in int(t[2]):
 			Kit.cylinder(st, Vector3(t[0], k * 0.2, t[1]), 0.32, 0.32, 0.19, w._c("#26232a"), 8)
 			Kit.cylinder(st, Vector3(t[0], k * 0.2 + 0.19, t[1]), 0.14, 0.14, 0.01, w._c("#4a4650"), 6)
-	Kit.box(st, Vector3(6.3, 0.35, -17.9), Vector3(0.9, 0.42, 0.42), w._c("#c9332c"))
-	Kit.box(st, Vector3(6.3, 0.7, -17.9), Vector3(0.3, 0.28, 0.3), w._c("#3a3a40"))
-	for wx: float in [5.95, 6.65]: Kit.box(st, Vector3(wx, 0.07, -17.9), Vector3(0.12, 0.14, 0.12), w._c("#26232a"))
+	Kit.box(st, Vector3(6.3, 0.35, -20.9), Vector3(0.9, 0.42, 0.42), w._c("#c9332c"))
+	Kit.box(st, Vector3(6.3, 0.7, -20.9), Vector3(0.3, 0.28, 0.3), w._c("#3a3a40"))
+	for wx: float in [5.95, 6.65]: Kit.box(st, Vector3(wx, 0.07, -20.9), Vector3(0.12, 0.14, 0.12), w._c("#26232a"))
 	# a bicycle being fixed, the mechanic squats beside it (a person, see build_people)
-	var bike := Vector3(7.95, 0, -17.55)
+	var bike := Vector3(7.95, 0, -20.55)
 	for bz: float in [-0.45, 0.45]:
 		Kit.box(st, bike + Vector3(bz, 0.33, 0), Vector3(0.6, 0.6, 0.06), w._c("#26232a"), Basis(Vector3.FORWARD, PI * 0.25))
 		Kit.box(st, bike + Vector3(bz, 0.33, 0), Vector3(0.6, 0.6, 0.06), w._c("#26232a"))
@@ -179,11 +179,11 @@ static func _wall_and_cage(w, st: SurfaceTool, props: SurfaceTool) -> void:
 		var off := 0.0 if int(y * 5.0) % 2 == 0 else 0.2
 		var x := 0.2 + off
 		while x < 4.55:
-			Kit.box(st, Vector3(x + 0.19, y, -19.4), Vector3(0.38, 0.19, 0.2), w._c("#9c988f"))
+			Kit.box(st, Vector3(x + 0.19, y, -22.4), Vector3(0.38, 0.19, 0.2), w._c("#9c988f"))
 			x += 0.4
 		y += 0.2
-	Kit.box(st, Vector3(2.4, 1.33, -19.4), Vector3(4.4, 0.06, 0.24), w._c("#8f8b84"))
-	var cage := Vector3(4.3, 0, -18.85)
+	Kit.box(st, Vector3(2.4, 1.33, -22.4), Vector3(4.4, 0.06, 0.24), w._c("#8f8b84"))
+	var cage := Vector3(4.3, 0, -21.85)
 	Kit.box(props, cage + Vector3(0, 0.05, 0), Vector3(0.7, 0.1, 0.6), w._c("#8a6a46"))
 	for cx: float in [-0.33, 0.33]:
 		for cz: float in [-0.28, 0.28]:
@@ -247,7 +247,7 @@ static func _sticker_post(w, props: SurfaceTool, cloth: SurfaceTool) -> void:
 
 
 static func _poso(w, props: SurfaceTool) -> void:
-	var at := Vector3(-0.45, 0, -18.1)
+	var at := Vector3(-0.45, 0, -21.1)
 	Kit.box(props, at + Vector3(0, 0.08, 0), Vector3(0.8, 0.16, 0.8), w._c("#a29d93"))
 	Kit.cylinder(props, at + Vector3(0, 0.16, 0), 0.09, 0.09, 0.95, w._c("#3f6f5a"), 8)
 	Kit.cylinder(props, at + Vector3(0, 1.1, 0), 0.12, 0.12, 0.15, w._c("#3f6f5a"), 8)
@@ -362,7 +362,7 @@ static func _jeepney(w) -> void:
 
 static func _rolling_cart(w) -> void:
 	# Cart-local: cabinet centred on x = 0, its front (doors, display) facing +z, the
-	# motorcycle on its +x side; the whole rig drives toward -x.
+	# push handle on its +x side; it is pushed toward -x.
 	var green: Color = w._c("#46c83a")
 	var green_dk: Color = w._c("#34a32c")
 	var steel: Color = w._c("#c4c9cc")
@@ -403,23 +403,10 @@ static func _rolling_cart(w) -> void:
 		Kit.box(st, Vector3(sx - 0.07 * signf(sx), 2.2, 0.725), Vector3(0.08, 0.05, 0.01), w._c("#d39b55"))
 	# jingle speaker on the canopy corner
 	Kit.box(st, Vector3(-0.8, 2.16, 0.75), Vector3(0.14, 0.14, 0.12), w._c("#b9bcc0"))
-	# rails out to the motorcycle (green, like the photo's side rack)
-	for ry: float in [0.55, 0.85]:
-		Kit.beam(st, Vector3(0.6, ry, 0.3), Vector3(1.05, ry, 0.3), 0.04, green)
-		Kit.beam(st, Vector3(0.6, ry, -0.3), Vector3(1.05, ry, -0.3), 0.04, green)
-	for rx: float in [0.7, 0.85, 1.0]:
-		Kit.beam(st, Vector3(rx, 0.5, 0.3), Vector3(rx, 0.9, 0.3), 0.03, green)
-	# the motorcycle: an underbone bike on the +x side, nose toward -x
-	for bx: float in [1.15, 2.05]:
-		Kit.box(st, Vector3(bx, 0.3, -0.05), Vector3(0.58, 0.58, 0.09), tyre, Basis(Vector3.BACK, PI * 0.25))
-		Kit.box(st, Vector3(bx, 0.3, -0.05), Vector3(0.58, 0.58, 0.09), tyre)
-		Kit.box(st, Vector3(bx, 0.3, -0.0), Vector3(0.18, 0.18, 0.1), steel)
-	Kit.box(st, Vector3(1.6, 0.55, -0.05), Vector3(0.7, 0.22, 0.22), w._c("#c9332c"))
-	Kit.box(st, Vector3(1.85, 0.78, -0.05), Vector3(0.5, 0.1, 0.24), w._c("#26232a"))   # seat
-	Kit.box(st, Vector3(1.22, 0.75, -0.05), Vector3(0.2, 0.45, 0.26), w._c("#c9332c"))
-	Kit.beam(st, Vector3(1.15, 0.3, -0.05), Vector3(1.2, 1.05, -0.05), 0.05, steel)
-	Kit.box(st, Vector3(1.2, 1.07, -0.05), Vector3(0.05, 0.04, 0.6), w._c("#26232a"))      # handlebar
-	Kit.box(st, Vector3(1.08, 0.95, -0.05), Vector3(0.06, 0.1, 0.12), w._c("#f2efe6"))      # headlight
+	# push handle on the +x side (the vendor walks behind, pushing)
+	for hz: float in [-0.3, 0.3]:
+		Kit.beam(st, Vector3(0.6, 0.75, hz), Vector3(1.15, 1.0, hz), 0.04, green)
+	Kit.beam(st, Vector3(1.15, 1.0, -0.32), Vector3(1.15, 1.0, 0.32), 0.05, w._c("#26232a"))
 	var root := Node3D.new()
 	root.name = "RollingPandesal"
 	root.position = Vector3(40.0, 0.0, CART.z)
@@ -527,21 +514,21 @@ static func build_people(w) -> void:
 	kib.posture = "contrapposto"
 	# commuters at the waiting shed: on their phones, not watching
 	for cx: float in [-3.9, -2.6]:
-		var c: Dictionary = w._person(Vector3(cx, 0, -18.25), 0.0, true, false)
+		var c: Dictionary = w._person(Vector3(cx, 0, -21.25), 0.0, true, false)
 		c.seat_h = 0.46
 		c.trait = "nonchalant"
 		c.posture = "figure_four" if cx < -3.0 else "crossed"
 		c.role = "crowd"
 		c.base_seated = true
 		w._crowd.append(c)
-	var stand: Dictionary = w._person(Vector3(-1.6, 0, -17.7), 0.3, false, false)
+	var stand: Dictionary = w._person(Vector3(-1.6, 0, -20.7), 0.3, false, false)
 	stand.trait = "nonchalant"
 	stand.posture = "cross_ankles"
 	w._crowd.append(stand)
 	# kid at the poso, mechanic at the bike
-	var kid: Dictionary = w._person(Vector3(-0.95, 0, -18.1), PI * 0.5, false, false, 0.72)
+	var kid: Dictionary = w._person(Vector3(-0.95, 0, -21.1), PI * 0.5, false, false, 0.72)
 	kid.role = "pump"
-	var mech: Dictionary = w._person(Vector3(7.95, 0, -17.0), PI, true, false)
+	var mech: Dictionary = w._person(Vector3(7.95, 0, -20.0), PI, true, false)
 	mech.role = "mechanic"
 	mech.seat_h = 0.2
 	mech.posture = "tucked"
@@ -561,7 +548,7 @@ static func build_people(w) -> void:
 static func build_animals(w) -> Array:
 	# two cats on the wall (one curled, one sitting) and the rooster in its cage
 	var out := []
-	for cat in [[Vector3(1.3, 1.36, -19.4), "#d98a3e"], [Vector3(3.8, 1.36, -19.4), "#3a3238"]]:
+	for cat in [[Vector3(1.3, 1.36, -22.4), "#d98a3e"], [Vector3(3.8, 1.36, -22.4), "#3a3238"]]:
 		out.append({"kind": "cat", "pos": w._end_pos(cat[0], 1), "c": w._c(cat[1]), "yaw": PI + 0.3, "base": 0, "step": 0})
 	return out
 
@@ -600,7 +587,7 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 			cart.visible = true
 			v.visible = true
 			var to_stop: float = float(st.cart_x) - STOP_X
-			st.cart_speed = clampf(to_stop * 0.8, 0.6, 5.0)
+			st.cart_speed = clampf(to_stop * 0.8, 0.5, 1.3)
 			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
 			if to_stop < 0.05:
 				st.cart_x = STOP_X
@@ -626,7 +613,7 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 				st.cart_state = "out"
 				st.cart_speed = 0.6
 		"out":
-			st.cart_speed = minf(float(st.cart_speed) + 2.5 * dt, 5.0)
+			st.cart_speed = minf(float(st.cart_speed) + 1.0 * dt, 1.3)
 			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
 			if float(st.cart_x) < -18.0:
 				st.cart_state = "away"
@@ -692,15 +679,15 @@ static func _step_vendor(w, v: Dictionary) -> void:
 	var st: Dictionary = w._near_state
 	var cs := str(st.get("cart_state", "away"))
 	if cs in ["in", "out"]:
-		# riding the motorcycle, facing the way the rig drives (-x at this end)
-		v.pos = w._end_pos(Vector3(float(st.cart_x) + 1.85, 0, CART.z - 0.05), 1)
+		# walking behind the cart, pushing the handle, toward -x at this end
+		v.pos = w._end_pos(Vector3(float(st.cart_x) + 1.5, 0, CART.z), 1)
 		v.yaw = PI * 0.5
-		v.seated = true
-		v.seat_h = 0.72
-		v.posture = "wide"
+		v.seated = false
+		v.posture = "stand"
+		v.walk = -float(st.cart_x) * PI / 0.65
 		v.arm_l = "counter"
 		v.arm_r = "counter"
-		v.lean = 0.25
+		v.lean = 0.3
 		v.vstate = "idle"
 		return
 	v.pos = w._end_pos(VENDOR, 1)
