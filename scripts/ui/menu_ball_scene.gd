@@ -74,7 +74,7 @@ func _toon() -> ShaderMaterial:
 	m.set_shader_parameter("gain", SCENE_GAIN)
 	m.set_shader_parameter("light_dir", Vector3(-0.4, 0.7, 0.6))
 	m.set_shader_parameter("haze", Pal.hex("#3a4656"))
-	m.set_shader_parameter("haze_range", Vector2(10.0, 40.0))
+	m.set_shader_parameter("haze_range", Vector2(18.0, 60.0))
 	m.set_shader_parameter("haze_max", 0.55)
 	return m
 
@@ -113,37 +113,192 @@ func _build_floor() -> void:
 	_ground.add_child(mi)
 
 
+## Barangay backdrop in three looping parallax layers that drift sideways (nearer ones
+## faster), so the street seems to slide past behind the ball. Each layer is one strip
+## mesh drawn three times side by side and wrapped, so it loops without a seam.
+const LAYERS := [
+	# depth z, strip length, speed m/s, kind
+	{"z": -14.0, "len": 30.0, "speed": 0.8, "kind": "near"},
+	{"z": -24.0, "len": 42.0, "speed": 0.45, "kind": "mid"},
+	{"z": -38.0, "len": 60.0, "speed": 0.2, "kind": "far"},
+]
+var _layers: Array = []      # [{nodes: [Node3D x3], len, speed}]
+var _rng := RandomNumberGenerator.new()
+
+const WALLS := ["#d9c9a3", "#9fc3c9", "#e3b4a0", "#c9d6a3", "#f0e6cf", "#b9b0d6", "#e6cf8a", "#a9cfb4", "#e8b8c6"]
+const ROOFS := ["#8a5a44", "#5f6b73", "#7b4a3a", "#6f7f86", "#9a6b3e", "#4f7a8a"]
+const FLAGS := ["#e0473b", "#f2c84b", "#3e7fd0", "#f2f0ea", "#7cc490", "#f29ac0"]
+
+
 func _build_backdrop() -> void:
-	# a row of barangay houses, a pole and bunting far behind (lens-blurred to shapes)
-	var st := Kit.begin()
-	var walls := ["#d9c9a3", "#9fc3c9", "#e3b4a0", "#c9d6a3", "#f0e6cf", "#b9b0d6", "#e6cf8a"]
-	var roofs := ["#8a5a44", "#5f6b73", "#7b4a3a", "#6f7f86"]
-	var x := -14.0
-	var k := 0
-	while x < 16.0:
-		var w := 3.2 + float((k * 7) % 5) * 0.5
-		var h := 3.0 + float((k * 3) % 4) * 0.9
-		var z := -16.0 - float((k * 5) % 3) * 1.4
-		var c := Pal.hex(walls[k % walls.size()])
-		Kit.box(st, Vector3(x + w * 0.5, h * 0.5, z), Vector3(w - 0.2, h, 3.0), c)
-		Kit.box(st, Vector3(x + w * 0.5, h + 0.2, z + 0.1), Vector3(w + 0.2, 0.4, 3.4), Pal.hex(roofs[k % roofs.size()]))
-		for wx: float in [0.28, 0.68]:
-			Kit.box(st, Vector3(x + w * wx, h * 0.55, z + 1.52), Vector3(0.7, 0.8, 0.05), Pal.hex("#2a3440"))
+	_rng.seed = 4321
+	for spec in LAYERS:
+		var st := Kit.begin()
+		var length: float = spec.len
+		match str(spec.kind):
+			"far": _far_strip(st, float(spec.z), length)
+			"mid": _mid_strip(st, float(spec.z), length)
+			"near": _near_strip(st, float(spec.z), length)
+		var mesh := st.commit()
+		var mat := _toon()
+		var nodes: Array = []
+		for i in 3:
+			var mi := MeshInstance3D.new()
+			mi.mesh = mesh
+			mi.material_override = mat
+			mi.extra_cull_margin = length
+			_ground.add_child(mi)
+			nodes.append(mi)
+		_layers.append({"nodes": nodes, "len": length, "speed": float(spec.speed)})
+
+
+func _c(code: String) -> Color:
+	return Pal.hex(code)
+
+
+## A barangay house: walls, a pitched or flat roof, windows with frames, a door, sometimes
+## an upper storey, a balcony rail or a laundry line.
+func _house(st: SurfaceTool, x: float, z: float, w: float, storeys: int) -> void:
+	var wall := _c(WALLS[_rng.randi() % WALLS.size()])
+	var roof := _c(ROOFS[_rng.randi() % ROOFS.size()])
+	var h := 2.8 * storeys
+	var d := 4.0
+	Kit.box(st, Vector3(x, h * 0.5, z), Vector3(w, h, d), wall)
+	if _rng.randf() < 0.6:
+		# pitched roof: two slopes and gable triangles
+		var ridge := h + 1.2
+		var hw := w * 0.5 + 0.25
+		var hd := d * 0.5 + 0.3
+		Kit.quad(st, Vector3(x - hw, h, z + hd), Vector3(x + hw, h, z + hd), Vector3(x + hw, ridge, z), Vector3(x - hw, ridge, z), roof, 0.0, true)
+		Kit.quad(st, Vector3(x + hw, h, z - hd), Vector3(x - hw, h, z - hd), Vector3(x - hw, ridge, z), Vector3(x + hw, ridge, z), roof.darkened(0.15), 0.0, true)
+		Kit.tri(st, Vector3(x - w * 0.5, h, z + d * 0.5), Vector3(x - w * 0.5, ridge - 0.1, z), Vector3(x - w * 0.5, h, z - d * 0.5), wall.darkened(0.1), 0.0, true)
+		Kit.tri(st, Vector3(x + w * 0.5, h, z - d * 0.5), Vector3(x + w * 0.5, ridge - 0.1, z), Vector3(x + w * 0.5, h, z + d * 0.5), wall.darkened(0.1), 0.0, true)
+	else:
+		Kit.box(st, Vector3(x, h + 0.12, z), Vector3(w + 0.3, 0.24, d + 0.3), roof)
+		if _rng.randf() < 0.5:   # water tank on the flat roof
+			Kit.cylinder(st, Vector3(x + w * 0.25, h + 0.24, z - 0.5), 0.45, 0.45, 0.9, _c("#3e7fd0"), 8)
+	var front := z + d * 0.5 + 0.03
+	for f in storeys:
+		var y := 2.8 * f + 1.6
+		var n := maxi(1, int(w / 1.6))
+		for i in n:
+			var wx := x - w * 0.5 + (i + 0.5) * w / n
+			if f == 0 and i == n / 2:
+				Kit.box(st, Vector3(wx, 1.0, front), Vector3(0.8, 2.0, 0.06), _c("#6b4a33"))
+				continue
+			Kit.box(st, Vector3(wx, y, front), Vector3(0.8, 0.75, 0.06), _c("#d8d2c0"))
+			Kit.box(st, Vector3(wx, y, front + 0.02), Vector3(0.62, 0.58, 0.06), _c("#2a3440"))
+		if f > 0 and _rng.randf() < 0.6:   # balcony rail
+			Kit.box(st, Vector3(x, 2.8 * f + 0.5, front + 0.45), Vector3(w * 0.8, 0.08, 0.08), _c("#5b5f66"))
+			for i in 7:
+				Kit.box(st, Vector3(x - w * 0.4 + i * w * 0.8 / 6.0, 2.8 * f + 0.25, front + 0.45), Vector3(0.05, 0.5, 0.05), _c("#5b5f66"))
+	if _rng.randf() < 0.4:   # laundry line across the front
+		var a := Vector3(x - w * 0.45, 2.2, front + 0.6)
+		var b := Vector3(x + w * 0.45, 2.2, front + 0.6)
+		Kit.rope(st, a, b, 0.15, 0.02, _c("#d8d2c0"), 6)
+		for i in 5:
+			var p := Kit.rope_point(a, b, 0.15, (i + 0.5) / 5.0)
+			Kit.box(st, p + Vector3(0, -0.3, 0), Vector3(0.4, 0.55, 0.03), _c(FLAGS[_rng.randi() % FLAGS.size()]))
+
+
+func _store(st: SurfaceTool, x: float, z: float) -> void:
+	var w := 4.2
+	Kit.box(st, Vector3(x, 1.4, z), Vector3(w, 2.8, 3.6), _c("#9fc3c9"))
+	Kit.box(st, Vector3(x, 2.5, z + 1.83), Vector3(w * 0.95, 0.5, 0.06), _c("#e0473b"))       # sign board
+	Kit.box(st, Vector3(x, 1.3, z + 1.84), Vector3(w * 0.8, 1.2, 0.04), _c("#2a3440"))         # grille window
+	for i in 9:
+		Kit.box(st, Vector3(x - w * 0.38 + i * w * 0.095, 1.3, z + 1.88), Vector3(0.04, 1.2, 0.04), _c("#c9c4b8"))
+	Kit.quad(st, Vector3(x - w * 0.55, 2.3, z + 1.8), Vector3(x + w * 0.55, 2.3, z + 1.8), Vector3(x + w * 0.55, 2.0, z + 2.8), Vector3(x - w * 0.55, 2.0, z + 2.8), _c("#5f6b73"), 0.0, true)
+	Kit.box(st, Vector3(x, 3.0, z), Vector3(w + 0.3, 0.3, 3.9), _c("#7b4a3a"))
+
+
+func _pole(st: SurfaceTool, x: float, z: float) -> Vector3:
+	Kit.cylinder(st, Vector3(x, 0, z), 0.14, 0.1, 7.5, _c("#9e9b94"), 6)
+	Kit.box(st, Vector3(x, 7.0, z), Vector3(1.4, 0.1, 0.1), _c("#7d5c3e"))
+	return Vector3(x, 7.0, z)
+
+
+func _tree(st: SurfaceTool, x: float, z: float, s: float) -> void:
+	Kit.cylinder(st, Vector3(x, 0, z), 0.22 * s, 0.16 * s, 2.6 * s, _c("#6b4a33"), 6)
+	var leaf := [_c("#5f8f3e"), _c("#6fa04a"), _c("#4f7f34")]
+	for i in 5:
+		var o := Vector3(_rng.randf_range(-0.9, 0.9), _rng.randf_range(0.0, 1.0), _rng.randf_range(-0.6, 0.6)) * s
+		Kit.box(st, Vector3(x, 3.1 * s, z) + o, Vector3(1.5, 1.2, 1.4) * s, leaf[i % 3], Basis(Vector3.UP, _rng.randf() * TAU))
+
+
+func _tricycle(st: SurfaceTool, x: float, z: float) -> void:
+	var body := _c(["#3a6fc4", "#d64a3a", "#f2c84b", "#3e9e6a"][_rng.randi() % 4])
+	Kit.box(st, Vector3(x, 0.9, z), Vector3(1.6, 1.1, 1.1), body)                    # sidecar
+	Kit.box(st, Vector3(x, 1.55, z), Vector3(1.7, 0.12, 1.2), _c("#2a2a2a"))         # roof
+	Kit.box(st, Vector3(x + 1.2, 0.8, z - 0.2), Vector3(1.2, 0.5, 0.3), body.darkened(0.2))   # motorbike
+	for wx: float in [-0.5, 0.5, 1.6]:
+		Kit.cylinder(st, Vector3(x + wx, 0, z + (0.55 if wx < 1.0 else -0.2)), 0.3, 0.3, 0.12, _c("#1e1e1e"), 8)
+
+
+func _bunting(st: SurfaceTool, a: Vector3, b: Vector3) -> void:
+	Kit.rope(st, a, b, 0.6, 0.02, _c("#efe8d8"), 10)
+	var n := int(a.distance_to(b) / 0.45)
+	for i in n:
+		var p := Kit.rope_point(a, b, 0.6, (i + 0.5) / n)
+		Kit.tri(st, p + Vector3(-0.14, 0, 0), p + Vector3(0, -0.32, 0.01), p + Vector3(0.14, 0, 0), _c(FLAGS[i % FLAGS.size()]), 0.0, true)
+
+
+func _far_strip(st: SurfaceTool, z: float, length: float) -> void:
+	var x := -length * 0.5
+	while x < length * 0.5 - 4.0:
+		var w := _rng.randf_range(4.0, 6.5)
+		if _rng.randf() < 0.25:
+			_tree(st, x + w * 0.5, z + 2.5, 1.6)
+		_house(st, x + w * 0.5, z - _rng.randf_range(0.0, 3.0), w - 0.3, 2 + int(_rng.randf() < 0.4))
 		x += w
-		k += 1
-	Kit.cylinder(st, Vector3(-2.5, 0, -12.5), 0.14, 0.1, 7.5, Pal.hex("#9e9b94"), 6)
-	var flags := ["#e0473b", "#f2c84b", "#3e7fd0", "#f2f0ea", "#7cc490", "#f29ac0"]
-	var a := Vector3(-2.5, 6.2, -12.5)
-	var b := Vector3(9.0, 5.4, -14.5)
-	Kit.rope(st, a, b, 0.6, 0.02, Pal.hex("#efe8d8"), 10)
-	for i in 26:
-		var t := (i + 0.5) / 26.0
-		var p := Kit.rope_point(a, b, 0.6, t)
-		Kit.tri(st, p + Vector3(-0.14, 0, 0), p + Vector3(0, -0.32, 0.01), p + Vector3(0.14, 0, 0), Pal.hex(flags[i % flags.size()]), 0.0, true)
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = _toon()
-	_ground.add_child(mi)
+
+
+func _mid_strip(st: SurfaceTool, z: float, length: float) -> void:
+	var x := -length * 0.5
+	var poles: Array = []
+	var i := 0
+	while x < length * 0.5 - 4.0:
+		if i % 4 == 2:
+			_store(st, x + 2.2, z)
+			x += 4.6
+		else:
+			var w := _rng.randf_range(3.6, 5.2)
+			_house(st, x + w * 0.5, z - _rng.randf_range(0.0, 1.0), w - 0.25, 1 + int(_rng.randf() < 0.5))
+			x += w
+		if i % 3 == 0:
+			poles.append(_pole(st, x - 0.3, z + 3.2))
+		i += 1
+	for j in range(poles.size() - 1):
+		var a: Vector3 = poles[j]
+		var b: Vector3 = poles[j + 1]
+		Kit.rope(st, a + Vector3(0, 0.1, 0), b + Vector3(0, 0.1, 0), 0.5, 0.025, _c("#2e2c30"), 8)
+		_bunting(st, a + Vector3(0, -0.8, 0.1), b + Vector3(0, -0.8, 0.1))
+
+
+func _near_strip(st: SurfaceTool, z: float, length: float) -> void:
+	var x := -length * 0.5 + 2.0
+	while x < length * 0.5 - 2.0:
+		var r := _rng.randf()
+		if r < 0.3:
+			_tricycle(st, x, z)
+			x += _rng.randf_range(5.0, 7.0)
+		elif r < 0.6:
+			# potted plants by a wall
+			for k in 3:
+				Kit.cylinder(st, Vector3(x + k * 0.6, 0, z), 0.22, 0.28, 0.45, _c("#b5643f"), 6)
+				Kit.box(st, Vector3(x + k * 0.6, 0.75, z), Vector3(0.5, 0.6, 0.5), _c("#6fa04a"), Basis(Vector3.UP, _rng.randf()))
+			x += _rng.randf_range(4.0, 6.0)
+		elif r < 0.8:
+			# a bench and crates
+			Kit.box(st, Vector3(x + 0.8, 0.45, z), Vector3(1.8, 0.08, 0.45), _c("#8a5a44"))
+			for lx: float in [0.05, 1.55]:
+				Kit.box(st, Vector3(x + lx, 0.22, z), Vector3(0.08, 0.44, 0.4), _c("#6b4a33"))
+			Kit.box(st, Vector3(x + 2.4, 0.25, z + 0.2), Vector3(0.5, 0.5, 0.4), _c("#d64a3a"))
+			Kit.box(st, Vector3(x + 2.4, 0.75, z + 0.2), Vector3(0.5, 0.5, 0.4), _c("#f2c84b"))
+			x += _rng.randf_range(5.0, 7.0)
+		else:
+			_tree(st, x, z - 1.0, 1.0)
+			x += _rng.randf_range(4.0, 6.0)
 
 
 func _build_ball() -> void:
@@ -223,6 +378,12 @@ func _place() -> void:
 func _process(delta: float) -> void:
 	if _ball == null: return
 	_t += delta
+	for layer in _layers:
+		var length: float = layer.len
+		var off := fmod(_t * float(layer.speed), length)
+		var nodes: Array = layer.nodes
+		for i in 3:
+			(nodes[i] as Node3D).position.x = float(i - 1) * length - off
 	# a slow turn and a gentle settle, stepped at 12 Hz like the rest of the art
 	var tick := floorf(_t * 12.0) / 12.0
 	_ball.rotation = Vector3(0.35, tick * 0.35, 0.12 * sin(tick * 0.5))

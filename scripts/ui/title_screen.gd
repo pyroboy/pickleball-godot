@@ -127,7 +127,8 @@ func _ready() -> void :
  _logo.custom_minimum_size.y = 140
  logo_panel.add_child(_logo)
  _hint = Label.new()
- _hint.text = "A clean court. Your next point."
+ _hint.text = ""
+ _hint.visible = false          # no tagline; only shows the Controls help
  _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
  _hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
  _hint.add_theme_color_override("font_color", UiTheme.MUTED)
@@ -187,10 +188,8 @@ func _button(caption: String, action: Callable) -> Button:
 func _logo_height(width: float) -> float:
  var tex: Texture2D = _logo.texture
  if tex == null: return 0.0
- # whole screen pixels per art pixel, so the pixel art stays crisp (baked at 8x)
- var art := Vector2(tex.get_width(), tex.get_height()) / 8.0
- var k := maxf(1.0, floorf(width / art.x))
- return k * art.y
+ # the art spans the full menu column width
+ return floorf(width * float(tex.get_height()) / float(tex.get_width()))
 
 func _mark_button(button: Button, on: bool) -> void:
  button.text = ("> " if on else "  ") + str(button.get_meta("caption"))
@@ -204,12 +203,12 @@ func _fit() -> void :
  # back to canvas units so labels and touch targets do not shrink with it.
  var s: = Layout.scale_for(viewport_size) if portrait else viewport_size.y / maxf(1.0, get_window().size.y)
  _fit_content(portrait, s, safe)
- var width: = minf(safe.size.x * (0.88 if portrait else 0.5), 640.0 * s)
+ var width: = minf(safe.size.x - 36.0 * s if portrait else safe.size.x * 0.5, 680.0 * s)
  var height: = minf(safe.size.y - 40.0 * s, 600.0 * s)
  _panel.size = Vector2(width, height)
  _panel.position = _panel_origin(safe, _panel.size)
  if portrait:
-  _logo.custom_minimum_size.y = _logo_height(width)
+  _logo.custom_minimum_size.y = _logo_height(width - 12.0 * s)
   _queue_portrait_fit()
  call_deferred("_center_panel")
  queue_redraw()
@@ -227,12 +226,13 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  _content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
  theme.default_font_size = roundi(32 * s) if portrait else ceili(20 * s)
  var panel_style: StyleBoxFlat = _panel.get_theme_stylebox("panel")
- panel_style.content_margin_left = 20.0 * s if portrait else 0.0
- panel_style.content_margin_right = 20.0 * s if portrait else 0.0
+ panel_style.content_margin_left = 0.0
+ panel_style.content_margin_right = 0.0
  panel_style.content_margin_top = 18.0 * s if portrait else 0.0
  panel_style.content_margin_bottom = 18.0 * s if portrait else 0.0
  for side in ["left", "right", "top", "bottom"]:
-  _margin.add_theme_constant_override("margin_" + side, roundi(26 * s) if portrait else roundi(20 * s))
+  var narrow: bool = side in ["left", "right"]
+  _margin.add_theme_constant_override("margin_" + side, roundi((6 if narrow else 26) * s) if portrait else roundi(20 * s))
  _content.add_theme_constant_override("separation", roundi(16 * s) if portrait else roundi(6 * s))
  _word.add_theme_font_size_override("font_size", UiTheme.pixel_size(36 * s) if portrait else UiTheme.pixel_size(18 * s))
  _word2.add_theme_font_size_override("font_size", UiTheme.pixel_size(72 * s) if portrait else UiTheme.pixel_size(36 * s))
@@ -498,8 +498,10 @@ func _fail(message: String) -> void :
 func _toggle_controls() -> void :
  if _loading: return
  if _hint.text.begins_with("MOVE"):
-  _hint.text = "A clean court. Your next point."
+  _hint.text = ""
+  _hint.visible = false
  else:
+  _hint.visible = true
   _hint.text = "MOVE with the left stick. Hold and drag HIT to aim with your right thumb. Hold and drag the outer buttons for Topspin, Slice or Drop. Release HIT to commit your swing.\nKeyboard: WASD/arrows + Space · Q Spin · E Drop"
  _fit()
 
