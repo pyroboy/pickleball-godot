@@ -1016,7 +1016,9 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	var skip_text_width: float = _skip_button.get_theme_font("font").get_string_size(
 		_skip_button.tr(_skip_button.text), HORIZONTAL_ALIGNMENT_LEFT, -1,
 		_skip_button.get_theme_font_size("font_size")).x
-	var skip_width: float = ceilf(clampf(skip_text_width + 32 * s, 100 * s, maxf(100 * s, w - 370 * s - 2 * gap)))
+	# The row shares the top edge with the score pill, so Skip may only grow into the gap.
+	var skip_room: float = w - pill_w - 2 * ceilf(100 * s) - 3 * gap - 8 * s
+	var skip_width: float = ceilf(clampf(skip_text_width + 32 * s, 100 * s, maxf(100 * s, skip_room)))
 	_skip_button.clip_text = true
 	_skip_button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_skip_button.custom_minimum_size.x = skip_width
@@ -1026,7 +1028,8 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	var caption_width: float = guidance_width - 78 * s
 	# BoxContainer rounds child offsets. Snap its origin too so fractional
 	# mobile scales cannot move the same button by a subpixel when Skip hides.
-	_place(_toolbar, Rect2(Vector2(x + w - toolbar_width, y + 112 * s).round(), Vector2(toolbar_width, ceilf(92 * s))))
+	# Top-right corner, level with the score pill in the top-left corner.
+	_place(_toolbar, Rect2(Vector2(x + w - toolbar_width, y).round(), Vector2(toolbar_width, ceilf(pill_h))))
 	for icon in _toolbar_icons:
 		_place(icon, Rect2(23 * s, 19 * s, 54 * s, 54 * s))
 		icon.show()
@@ -1048,7 +1051,7 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_place(_charge_label, Rect2(x + 64 * s, y + 164 * s, caption_width, 38 * s))
 	_place(_charge_bar, Rect2(x + 64 * s, y + 205 * s, caption_width, 3 * s))
 	_place(_controls_hint, Rect2(x + 64 * s, y + 215 * s, caption_width, 38 * s))
-	_place(_locked_spin_label, Rect2(x + w - toolbar_width, y + 214 * s, toolbar_width, 38 * s))
+	_place(_locked_spin_label, Rect2(x + w - toolbar_width, y + pill_h + 36 * s, toolbar_width, 38 * s))
 	state.add_theme_font_size_override("font_size", roundi(21 * s))
 	state.max_lines_visible = 1   # one-line state text
 	state.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
