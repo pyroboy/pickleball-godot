@@ -11,6 +11,9 @@ Usage: tools/pose_timeline.py <bench name> [player 0-3] [--from S] [--to S] [--s
   --flights   AI pose prediction per incoming ball: how often the predicted contact pose and the
               shown pose flipped, how late the last change came before contact, the charge at
               contact, and whether the pose shown at contact is the one predicted 0.3 s earlier
+  --swings    paddle motion quality per hit: contact snap-back (paddle reverses on the hit), wind-up
+              reversals, paddle flutter by activity, and paddle-head-to-ball distance at contact
+Note: the trace row for tick N is the state after tick N-1 (PerfMonitor runs before the game).
 """
 import gzip, json, sys, collections
 
@@ -35,6 +38,7 @@ def opt(flag, default):
 t_from, t_to = opt("--from", 0.0), opt("--to", 1e9)
 summary = "--summary" in opts
 flights = "--flights" in opts
+swings = "--swings" in opts
 
 hits = collections.defaultdict(set)
 for line in open(f"logs/bench_{bench}.perf.jsonl"):
@@ -90,6 +94,60 @@ if flights:
     print("  charge at contact by pose (min / median / max):")
     for k, v in sorted(by_charge.items(), key=lambda kv: -len(kv[1])):
         v = sorted(v); print(f"    {k:24s} {len(v):3d} hits  {v[0]:.2f} / {v[len(v) // 2]:.2f} / {v[-1]:.2f}")
+    sys.exit(0)
+
+if swings:
+    import math
+    HEAD = 0.2794  # PaddleDimensions.HEAD_CENTER_Y (handle + half head), along the paddle's y axis
+    def sub(a, b): return [a[i] - b[i] for i in range(3)]
+    def dot(a, b): return sum(a[i] * b[i] for i in range(3))
+    def nrm(a): return math.sqrt(dot(a, a))
+    def rel(r, p): d = r[f"p{p}"]; return sub(d["paddle"], d["BodyPivot"])
+    def head(r, p):
+        d = r[f"p{p}"]; return [d["paddle"][i] + (d["paddle_y"][i] - d["paddle"][i]) * HEAD / 0.1 for i in range(3)]
+    def closest(a0, a1, b0, b1):
+        # closest distance of two points moving linearly over one tick
+        d0 = sub(a0, b0); dv = sub(sub(a1, a0), sub(b1, b0)); vv = dot(dv, dv)
+        t = 0.0 if vv < 1e-12 else max(0.0, min(1.0, -dot(d0, dv) / vv))
+        return nrm([d0[i] + dv[i] * t for i in range(3)])
+    idx = {r["tick"]: k for k, r in enumerate(rows)}
+    c = collections.Counter(); gaps = []; snaps = []; ctx = collections.Counter()
+    for p in players:
+        key = f"i{p}"
+        for h in hits[p]:
+            k = idx.get(h)
+            if k is None or k < 20 or k + 2 >= len(rows) or not rows[k].get(key): continue
+            c["hits"] += 1
+            # the hit happens during tick h: rows h (before) and h+1 (after)
+            gaps.append(closest(head(rows[k], p), head(rows[k + 1], p), rows[k]["ball"], rows[k + 1]["ball"]))
+            v1 = sub(rel(rows[k], p), rel(rows[k - 1], p)); v0 = sub(rel(rows[k + 1], p), rel(rows[k], p))
+            if nrm(v1) > 0.05 and nrm(v0) > 0.02 and dot(v0, v1) < 0: c["snap"] += 1; snaps.append(nrm(v0))
+            start = next((j for j in range(k - 20, k) if rows[j][key][6] and rows[j][key][6][2]), None)
+            if start is not None:
+                path = [rel(rows[j], p) for j in range(start, k - 2)]
+                vs = [sub(path[i], path[i - 1]) for i in range(1, len(path))]
+                rv = sum(1 for i in range(1, len(vs)) if nrm(vs[i]) > 0.01 and nrm(vs[i - 1]) > 0.01 and dot(vs[i], vs[i - 1]) < 0)
+                c["windups"] += 1; c["windup_rev1"] += rv >= 1; c["windup_rev2"] += rv >= 2
+        # flutter episodes: body-relative paddle reverses, >= 1 cm moves, 2+ reversals in 6 ticks
+        rl = [rel(r, p) for r in rows]; vel = [sub(rl[i], rl[i - 1]) for i in range(1, len(rl))]
+        last = -99; run = 0
+        for i in range(1, len(vel)):
+            if nrm(vel[i]) > 0.01 and nrm(vel[i - 1]) > 0.01 and dot(vel[i], vel[i - 1]) < 0:
+                run = run + 1 if i - last <= 6 else 1; last = i
+                if run == 2:
+                    info = rows[i].get(key) or [20, 0, 0, -1, "", [], []]
+                    fl, ai = info[4], info[6]
+                    k2 = "serve" if "v" in fl else "finish" if "f" in fl else "contact" if "s" in fl else \
+                        "wind-up" if ai and ai[2] else "ready" if info[0] == 20 else "preparing"
+                    ctx[k2] += 1
+    n = max(1, c["hits"])
+    print(f"hits {c['hits']}")
+    print(f"  contact snap-back (paddle reverses on the hit): {c['snap']} ({100 * c['snap'] / n:.0f}%)" + (f", worst {max(snaps) * 100:.1f} cm" if snaps else ""))
+    print(f"  wind-ups that reverse: {c['windup_rev1']} of {c['windups']} (twice or more: {c['windup_rev2']}; once is the normal backswing)")
+    g = sorted(gaps)
+    if g: print(f"  paddle head to ball at contact: median {g[len(g) // 2] * 100:.1f} cm, worst {g[-1] * 100:.1f} cm, over 15 cm: {sum(1 for x in g if x > 0.15)}")
+    secs = len(rows) / 30.0
+    print(f"  paddle flutter episodes: {sum(ctx.values())} ({sum(ctx.values()) / secs * 60:.0f} per min): " + ", ".join(f"{k} {v}" for k, v in ctx.most_common()))
     sys.exit(0)
 for p in players:
     key = f"i{p}"

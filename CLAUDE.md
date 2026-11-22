@@ -29,9 +29,13 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   reads), or the user asks. Then compare runs with `python3 tools/pose_diff.py` (expect
   `IDENTICAL` for visual-only work). Never add nodes or meshes under a player's
   `BodyPivot`; gameplay scans every mesh there.
+- Gameplay or animation calls need several seeds: `tools/bench_seeds.sh <name> [secs=120] ["1 2 3"]` runs the
+  bench per seed (low priority, about 1.5 min for three), sums points, hits and the pose checks below, and
+  prints the animation rules as PASS / FAIL (no late pose switch, paddle meets ball, no snap-back, wind-up wobble, flutter).
 - Which poses played: `python3 tools/pose_timeline.py <bench name> [player] [--from S --to S]` lists each
   player's stroke pose + base pose (with blend) over time and marks hits; `--summary` gives poses at contact;
-  `--flights` checks AI pose prediction per ball (pose changes, late switches, charge at contact).
+  `--flights` checks AI pose prediction per ball (pose changes, late switches, charge at contact);
+  `--swings` checks paddle motion per hit (contact snap-back, wind-up reversals, flutter, head-to-ball gap).
 - Animation-only work (card motion, movement, reactions): `tools/motion_bench.sh <name> [base]`
   (about 5 s): one player walks a fixed course on a frozen court; per-segment arm swing, twist,
   steps, foot slide, hand pops, and gameplay joints vs base (`IDENTICAL` = visual only). Use it

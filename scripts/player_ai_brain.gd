@@ -793,6 +793,10 @@ const ALIGN_LEAD_SECONDS := 0.6
 const AI_WINDUP_FULL_MARGIN := 0.15   # preparation reaches the full Wind-up this long before alignment starts
 ## The contact plan stops re-solving this long before contact (unless it turns unreachable).
 const PLAN_LOCK_SECONDS := 0.45
+## Swing playback takes over from the tracking smoothing over this long (see _playback_weight).
+const PLAYBACK_BLEND_SECONDS := 0.1
+var _playback_weight := 0.0
+var _playback_flight := -1
 const AI_PRESENTATION_CHARGE := 0.5   # Wind-up scale before the shot plan (and its charge) exists
 const WINDUP_OFFSET_MAX_SPEED := 2.5  # m/s the held Wind-up head may move when a replan changes its key
 var _windup_offset_smoothed := Vector3.ZERO
@@ -918,6 +922,13 @@ func align_paddle_to_contact(delta: float) -> void :
 	var _al_stroke := Time.get_ticks_usec()
 	var contact_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5, ball)
 	var strike: float = _strike_progress(base, ai_selected_contact_time, delta)
+	# Swing playback (like the human swing, human_swing_playback.gd): once charging with the
+	# contact plan locked, the strike plays straight onto the fixed contact target instead of a
+	# lagging chase, so the paddle meets the ball (bench, 3 seeds: contacts over 15 cm off the ball
+	# 30 -> few). Eased in over PLAYBACK_BLEND_SECONDS so nothing pops when it takes over.
+	var playback_on: bool = ai_is_charging and ai_selected_contact_time < PLAN_LOCK_SECONDS
+	_playback_weight = move_toward(_playback_weight if _playback_flight == ball.flight_id else 0.0, 1.0 if playback_on else 0.0, maxf(delta, 0.0) / PLAYBACK_BLEND_SECONDS)
+	_playback_flight = ball.flight_id
 	var windup_offset := Vector3.ZERO
 	if strike < 1.0:
 		var swing_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5 * strike, ball)
@@ -940,8 +951,12 @@ func align_paddle_to_contact(delta: float) -> void :
 		base = contact_pose
 		_windup_offset_flight = -1
 	PerfMonitor.record("al.stroke", Time.get_ticks_usec() - _al_stroke)
-	if ai_selected_contact_time <= maxf(delta, 0.0) and ball.global_position.distance_to(contact) < 0.55 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, ball.global_position):
-		contact = ball.global_position
+	# Last tick: aim at where the ball will be at contact (its current position moved on by the
+	# remaining time), not where it is now. Aiming at the current position pulled the paddle back
+	# toward the incoming ball on the tick before the hit (bench: snap-back on 58% of AI hits).
+	var meet: Vector3 = ball.global_position + ball.linear_velocity * clampf(ai_selected_contact_time, 0.0, maxf(delta, 0.0))
+	if ai_selected_contact_time <= maxf(delta, 0.0) and meet.distance_to(contact) < 0.55 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, meet):
+		contact = meet
 	var shoulder: Vector3 = PaddleReach.shoulder_world(_player)
 	if shoulder.distance_to(contact) > PaddleReach.MAX_HEAD_DISTANCE + 0.05:
 		# Still running to the ball: set the paddle where the contact will be
@@ -962,7 +977,9 @@ func align_paddle_to_contact(delta: float) -> void :
 	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact - _hitting_face_offset(contact_pose), shoulder,
 		_player.COURT_FLOOR_Y + 0.06)
 	var rate: float = 42.0 if ball.global_position.distance_to(contact) < 0.55 else 22.0
-	var blend: float = 1.0 - exp( - maxf(delta, 0.0) * rate)
+	# The strike plays straight onto the contact target (exact at Contact); the Wind-up hold
+	# keeps the tracking smoothing, which hides small per-tick target noise.
+	var blend: float = lerpf(1.0 - exp( - maxf(delta, 0.0) * rate), 1.0, _playback_weight * strike)
 	var aligned: Vector3 = head.lerp(target_head, blend)
 	# A low reception passes the handle around the planted front thigh.
 	# The small approach arc is zero before the physical Contact deadline.
