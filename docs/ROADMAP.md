@@ -65,6 +65,13 @@ Status: done, in progress, next, later.
 - [ ] Team palette-swap shader for skins and cosmetics
 - [ ] Six player sprite profiles (3 female, 3 male): `docs/CHARACTER_VARIANTS_PLAN.md`
 - [ ] Court / arena textures in pixel style, baked lighting
+- [x] Beach world (2026-11-22, branch `court-environment`): sand, ocean and shoreline in one
+      ground shader; bamboo rope fence, bunting and the wordmark banner; palms, a cheering
+      crowd, lifeguard tower, umbrellas, tiki hut, ice-cream cart, pier; gulls, pelican, crab,
+      turtle, dog, dolphins, swimmers, a sailboat. Sprites are drawn in code by
+      `tools/bake_beach_sprites.py` (one atlas, three MultiMeshes); scene in
+      `scripts/environment/beach_world.gd`. Turns with the camera after a change of ends.
+      Bench pose diff IDENTICAL; 0.06 ms/frame on the Mac. Not yet seen on the iPhone
 
 ### Phase 4: Effects and feel (later)
 - [ ] Effects sprite sheet: impact burst, spark ring, bounce, dust, swing arc, speed lines,
