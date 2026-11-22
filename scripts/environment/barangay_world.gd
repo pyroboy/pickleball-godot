@@ -72,6 +72,7 @@ func setup(game: Node, parent: Node3D) -> void:
 	_toon.shader = ToonShader
 	_toon.set_shader_parameter("gain", Pal.GAIN)
 	_toon.set_shader_parameter("light_dir", LIGHT)
+	_toon.set_shader_parameter("haze", Pal.hex("#c9d9e2"))
 	var apron := game.find_child("CourtApron", true, false)
 	if apron is Node3D: apron.visible = false       # the floor shader draws slab and dirt
 	_build_floor(game)
@@ -355,8 +356,9 @@ func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	for col_x: float in [x0 + 0.2, cx, x1 - 0.2]:
 		Kit.box(st, Vector3(col_x, 1.45, pz), Vector3(0.22, 2.9, 0.22), _c("#efe6c8"))
 	Kit.box(st, Vector3(cx, 2.95, (zf + pz) * 0.5), Vector3(x1 - x0 + 0.4, 0.1, 1.5), _c("#d4c49b"))
-	Kit.box(st, Vector3(cx, 3.6, pz + 0.05), Vector3(3.4, 0.55, 0.06), _c("#f4f1e8"))            # sign board
-	_label("BARANGAY HALL", Vector3(cx, 3.6, pz + 0.1), 0.32, Color(0.24, 0.4, 0.72))
+	Kit.box(st, Vector3(cx, 3.65, pz + 0.05), Vector3(4.5, 0.72, 0.06), _c("#2f5fa8"))            # sign board
+	Kit.box(st, Vector3(cx, 3.65, pz + 0.02), Vector3(4.66, 0.86, 0.04), _c("#f4f1e8"))
+	_label("BARANGAY HALL", Vector3(cx, 3.65, pz + 0.1), 0.44, Color(1.0, 0.97, 0.88))
 	_gi_roof(st, x0 - 0.4, x1 + 0.4, zf + 0.2, zb - 0.3, 4.2, 3.6, false)
 	_shadow(Vector3(cx + 0.6, 0, zf - 0.4), Vector2(x1 - x0 + 1.0, 1.4), true)
 	# flagpole with a Philippine flag that waves (cloth mesh: sway grows along the flag)
@@ -426,8 +428,8 @@ func _build_store(st: SurfaceTool) -> void:
 	Kit.box(st, Vector3(7.5, 1.05, zf + 0.02), Vector3(0.85, 2.1, 0.05), _c("#5e4a3a"))         # door
 	# awning (GI sloping toward the court) and the sign above it
 	_gi_roof(st, x0 - 0.2, x1 + 0.2, zf + 1.1, zf - 0.05, 2.45, 2.75, true)
-	Kit.box(st, Vector3(cx, 2.95, zf + 0.04), Vector3(4.4, 0.42, 0.06), _c("#d23b34"))
-	_label("SARI-SARI STORE", Vector3(cx, 2.95, zf + 0.09), 0.26, Color(1.0, 0.95, 0.85))
+	Kit.box(st, Vector3(cx, 3.0, zf + 0.04), Vector3(4.6, 0.56, 0.06), _c("#d23b34"))
+	_label("SARI-SARI STORE", Vector3(cx, 3.0, zf + 0.09), 0.34, Color(1.0, 0.95, 0.85))
 	Kit.box(st, Vector3(cx, 3.4, (zf + zb) * 0.5), Vector3(x1 - x0 + 0.2, 0.15, zf - zb + 0.2), _c("#9aa1a4"))
 	for k in 2:   # bottle crates
 		var cp := Vector3(8.05, 0.16 + k * 0.3, zf + 0.5)
@@ -553,14 +555,14 @@ func _build_scorer(st: SurfaceTool) -> void:
 	_shadow(at, Vector2(0.8, 1.3), true)
 	_monobloc(st, Vector3(6.75, 0, -3.2), -PI * 0.5, _c("#e8e7e0"))
 	# flip scoreboard: an easel facing the court and the camera
-	var yaw := -0.75
+	var yaw := -0.45
 	var b := Basis(Vector3.UP, yaw)
 	var c := at + Vector3(0.0, 0.77, 0.15)
 	Kit.box(st, c + b * Vector3(0, 0.25, 0), Vector3(0.62, 0.5, 0.04), _c("#3d3a38"), b)
 	for side: float in [-1.0, 1.0]:
 		var card := c + b * Vector3(side * 0.15, 0.25, 0.03)
-		Kit.box(st, card, Vector3(0.24, 0.36, 0.02), _c("#f4f2ea"), b)
-		var l := _label("0", card + b * Vector3(0, 0, 0.02), 0.26, Color(0.12, 0.12, 0.14), yaw)
+		Kit.box(st, card, Vector3(0.26, 0.4, 0.02), _c("#f4f2ea"), b)
+		var l := _label("0", card + b * Vector3(0, 0, 0.02), 0.32, Color(0.12, 0.12, 0.14), yaw)
 		_score_labels.append(l)
 
 

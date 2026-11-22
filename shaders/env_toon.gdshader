@@ -10,16 +10,19 @@ render_mode unshaded, fog_disabled, shadows_disabled, cull_disabled;
 
 uniform float gain = 2.2;
 uniform vec3 light_dir = vec3(-0.45, 0.8, 0.4);   // toward the sun, world space
-uniform vec3 shade_tint : source_color = vec3(0.62, 0.55, 0.82);
+// multipliers in linear light: the side away from the sun cools toward violet, not black
+uniform vec3 mid_band = vec3(0.82, 0.8, 0.88);
+uniform vec3 dark_band = vec3(0.6, 0.56, 0.74);
 uniform float sway_amount = 0.12;
+// distance haze: far houses and trees fade toward a pale sky tone so the court reads first
+uniform vec3 haze : source_color = vec3(0.8, 0.85, 0.88);
+uniform vec2 haze_range = vec2(26.0, 150.0);
+uniform float haze_max = 0.6;
 uniform float sway_hz = 8.0;
 
 varying vec3 world_normal;
+varying vec3 world_pos;
 varying vec3 tint;
-
-vec3 to_linear(vec3 s) {
-	return mix(s / 12.92, pow((s + 0.055) / 1.055, vec3(2.4)), step(0.04045, s));
-}
 
 void vertex() {
 	float sway = 1.0 - COLOR.a;
@@ -31,15 +34,22 @@ void vertex() {
 		VERTEX.z += w * sway * sway_amount * 0.5;
 	}
 	world_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	tint = COLOR.rgb;
 }
 
 void fragment() {
-	vec3 base = to_linear(tint);
-	float d = dot(normalize(world_normal), normalize(light_dir));
+	// The renderer hands vertex and instance colours over already in linear light
+	// (measured 2026-11-22: converting again crushed every dark colour to black).
+	vec3 base = tint;
+	// faces are drawn from both sides: light the side the camera sees
+	vec3 n = normalize(world_normal);
+	if (dot(n, CAMERA_POSITION_WORLD - world_pos) < 0.0) n = -n;
+	float d = dot(n, normalize(light_dir));
 	vec3 c;
-	if (d > 0.55) c = base;
-	else if (d > 0.05) c = base * mix(vec3(1.0), shade_tint, 0.35) * 0.86;
-	else c = base * shade_tint * 0.72;
+	if (d > 0.5) c = base;
+	else if (d > 0.0) c = base * mid_band;
+	else c = base * dark_band;
+	c = mix(c, haze, haze_max * smoothstep(haze_range.x, haze_range.y, length(world_pos.xz)));
 	ALBEDO = c * gain;
 }

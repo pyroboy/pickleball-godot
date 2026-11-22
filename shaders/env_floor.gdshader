@@ -131,8 +131,11 @@ void fragment() {
 		}
 		// faded basketball lines with worn gaps
 		if (bball_lines(p) > 0.5 && vnoise(p * 3.1) > 0.28 && n > 0.12) c = mix(c, bball, 0.7);
-		// hairline cracks, only where a low-frequency mask allows
-		if (crack_edge(p) < 0.03 && vnoise(p * 0.45 + 2.0) > 0.52) c = crack;
+		// hairline cracks: a few long runs where a low-frequency mask allows, thinned so
+		// they read as hairlines, kept faint inside the pickleball court
+		float in_court = step(a.x, 3.4) * step(a.y, 7.0);
+		if (crack_edge(p) < 0.022 && vnoise(p * 0.3 + 2.0) > 0.7 + 0.08 * in_court && n > 0.15)
+			c = mix(c, crack, 0.75 - 0.3 * in_court);
 	} else if (p.x > gutter_x.x && p.x < gutter_x.y && a.y < slab_half.y + 0.3) {
 		c = fract(p.y / 0.2) < 0.25 ? grate : gutter;
 	} else {
