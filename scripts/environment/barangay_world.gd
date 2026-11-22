@@ -988,7 +988,7 @@ func _build_figures() -> void:
 		ch.yaw = _rng.randf() * TAU
 		ch.next = _rng.randf_range(0.5, 3.0)
 		_chickens.append(ch)
-	var rooster := Fig.new_chicken(_end_pos(Vector3(4.3, 0.1, -24.85), 1), {"body": _c("#b9733f"), "tail": _c("#1f3a2e"),
+	var rooster := Fig.new_chicken(_end_pos(Vector3(0.55, 0.1, -25.0), 1), {"body": _c("#b9733f"), "tail": _c("#1f3a2e"),
 		"comb": _c("#d8382f"), "beak": _c("#e8b33c"), "wing": _c("#7a3f22")})
 	rooster.caged = true
 	rooster.next = 1e9
@@ -1297,7 +1297,7 @@ func _step() -> void:
 	for i in _people.size():
 		var p: Dictionary = _people[i]
 		if int(p.get("end", -1)) >= 0 and int(p.end) != _live_end and p.has("sig"): continue   # the end behind the camera
-		if p.role in ["vendor", "dama", "pump", "mechanic"]: PandesalEnd.step_person(self, p)
+		if p.role in ["vendor", "dama", "pump", "mechanic", "cook", "diner"]: PandesalEnd.step_person(self, p)
 		elif p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
 		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
 		if not cam_moved and sig == p.get("sig", []): continue

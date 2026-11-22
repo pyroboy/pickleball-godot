@@ -10,7 +10,8 @@ extends RefCounted
 ## drives in along the back lane, stops, the vendor gets off and opens the doors, a queue
 ## forms, rolls come out of the warmer in a puff of steam, buyers walk off eating; then it
 ## closes up and drives away, and comes back later (taking turns with the jeepney). Around it: a two-storey panaderya, a waiting shed with commuters and a
-## jeepney that stops there, a capilla with a belfry, a vulcanizing shop with a mechanic,
+## jeepney that stops there, a carinderia with a cook and diners at a long table, a
+## vulcanizing shop with a mechanic,
 ## a gray concrete electric post plastered with blue and red septic-tank stickers, a poso
 ## with a kid pumping water, lolos playing dama, cats on a hollow-block wall, a rooster in a
 ## cage, and an audience with the same personalities as the hall end.
@@ -34,7 +35,7 @@ const POST := Vector3(1.4, 0, -15.0)
 static func build_geometry(w, bld: SurfaceTool, props: SurfaceTool, cloth: SurfaceTool) -> void:
 	_panaderya(w, bld)
 	_waiting_shed(w, bld)
-	_capilla(w, bld)
+	_carinderia(w, bld, props)
 	_vulcanizing(w, bld)
 	_wall_and_cage(w, bld, props)
 	_sticker_post(w, props, cloth)
@@ -110,35 +111,55 @@ static func _waiting_shed(w, st: SurfaceTool) -> void:
 	w._shadow(Vector3(cx + 0.3, 0, (zf + zb) * 0.5), Vector2(x1 - x0 + 0.6, 1.6), true)
 
 
-static func _capilla(w, st: SurfaceTool) -> void:
-	# Small whitewashed chapel: gable front with a belfry and a cross, arched door, steps.
-	var x0 := 0.8
-	var x1 := 4.0
-	var zf := -30.0
-	var zb := -35.0
+static func _carinderia(w, st: SurfaceTool, props: SurfaceTool) -> void:
+	# A wide, low neighbourhood eatery: open front with a counter of big pots and a glass
+	# food display under a GI awning, the sign, a menu board, a water dispenser; a long
+	# table with benches out front where diners eat.
+	var x0 := -0.6
+	var x1 := 5.0
+	var zf := -27.0
+	var zb := -31.0
 	var cx := (x0 + x1) * 0.5
-	var white: Color = w._c("#efe9da")
-	Kit.box(st, Vector3(cx, 2.0, (zf + zb) * 0.5), Vector3(x1 - x0, 4.0, zf - zb), white)
-	Kit.tri(st, Vector3(x0, 4.0, zf), Vector3(x1, 4.0, zf), Vector3(cx, 5.6, zf), white, 0.0, true)
-	Kit.beam(st, Vector3(x0 - 0.1, 3.95, zf + 0.04), Vector3(cx, 5.7, zf + 0.04), 0.12, w._c("#3e6fb2"))
-	Kit.beam(st, Vector3(x1 + 0.1, 3.95, zf + 0.04), Vector3(cx, 5.7, zf + 0.04), 0.12, w._c("#3e6fb2"))
-	w._gi_roof(st, x0 - 0.2, cx, zf, zb, 4.0, 5.6, false)
-	w._gi_roof(st, cx, x1 + 0.2, zb, zf, 5.6, 4.0, false)
-	# belfry on the gable: four posts, a little roof, the bell, a cross above
-	for bx: float in [-0.35, 0.35]:
-		Kit.box(st, Vector3(cx + bx, 6.05, zf - 0.1), Vector3(0.1, 0.9, 0.1), white)
-	Kit.box(st, Vector3(cx, 6.55, zf - 0.1), Vector3(0.95, 0.12, 0.5), w._c("#3e6fb2"))
-	Kit.cylinder(st, Vector3(cx, 5.75, zf - 0.1), 0.2, 0.12, 0.45, w._c("#a8843c"), 8)
-	Kit.box(st, Vector3(cx, 7.05, zf - 0.1), Vector3(0.08, 0.9, 0.08), w._c("#e8e6e0"))
-	Kit.box(st, Vector3(cx, 7.2, zf - 0.1), Vector3(0.45, 0.08, 0.08), w._c("#e8e6e0"))
-	# arched door, small windows, steps
-	Kit.box(st, Vector3(cx, 1.2, zf + 0.02), Vector3(1.1, 2.4, 0.04), w._c("#6a4532"))
-	Kit.box(st, Vector3(cx, 2.48, zf + 0.02), Vector3(0.7, 0.2, 0.04), w._c("#6a4532"))
-	for wx: float in [x0 + 0.55, x1 - 0.55]:
-		Kit.box(st, Vector3(wx, 2.2, zf + 0.02), Vector3(0.4, 1.0, 0.04), w._c("#34303a"))
-		Kit.box(st, Vector3(wx, 2.75, zf + 0.03), Vector3(0.5, 0.1, 0.05), w._c("#3e6fb2"))
-	for i in 2: Kit.box(st, Vector3(cx, 0.08 + i * 0.08, zf + 0.5 - i * 0.25), Vector3(1.8, 0.16 + i * 0.16, 0.5), w._c("#a29d93"))
+	var wall: Color = w._c("#e8d9a8")
+	Kit.box(st, Vector3(cx, 1.5, (zf + zb) * 0.5), Vector3(x1 - x0, 3.0, zf - zb), wall)
+	Kit.box(st, Vector3(cx, 0.35, zf + 0.012), Vector3(x1 - x0, 0.7, 0.02), w._c("#c9a46a"))
+	Kit.box(st, Vector3(cx - 0.2, 1.45, zf + 0.01), Vector3(4.4, 2.1, 0.04), w._c("#3a3238"))      # open front
+	Kit.box(st, Vector3(cx - 0.2, 0.5, zf + 0.3), Vector3(4.2, 1.0, 0.55), w._c("#b98a5a"))        # counter
+	Kit.box(st, Vector3(cx - 0.2, 1.02, zf + 0.3), Vector3(4.3, 0.05, 0.62), w._c("#e6e2d6"))
+	for k in 4:   # big pots with lids
+		var pp := Vector3(cx - 1.8 + k * 0.6, 1.05, zf + 0.3)
+		Kit.cylinder(st, pp, 0.2, 0.2, 0.3, w._c("#c4c9cc"), 8)
+		Kit.cylinder(st, pp + Vector3(0, 0.3, 0), 0.21, 0.08, 0.06, w._c("#a9aeb2"), 8)
+		Kit.box(st, pp + Vector3(0, 0.38, 0), Vector3(0.06, 0.04, 0.06), w._c("#26232a"))
+	Kit.box(st, Vector3(cx + 1.15, 1.25, zf + 0.3), Vector3(1.1, 0.42, 0.5), w._c("#b9dbe6"))      # glass display
+	for k in 4: Kit.box(st, Vector3(cx + 0.75 + k * 0.27, 1.12, zf + 0.3), Vector3(0.2, 0.08, 0.3), w._c(["#b5603e", "#e0b06a", "#7a4f3a", "#5f9a45"][k]))
+	Kit.box(st, Vector3(x1 - 0.35, 1.0, zf + 0.25), Vector3(0.35, 0.9, 0.35), w._c("#e8e6e0"))     # water dispenser
+	Kit.cylinder(st, Vector3(x1 - 0.35, 1.45, zf + 0.25), 0.14, 0.14, 0.4, w._c("#5fa8d8"), 8)
+	Kit.box(st, Vector3(x0 + 0.35, 1.6, zf + 0.03), Vector3(0.5, 0.7, 0.04), w._c("#2f4a3a"))      # menu board
+	for k in 5: Kit.box(st, Vector3(x0 + 0.33, 1.84 - k * 0.11, zf + 0.06), Vector3(0.36, 0.025, 0.01), w._c("#e6e2d6"))
+	# awning out over the front, the sign on its fascia
+	w._gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 1.3, zf, 2.55, 2.95, true)
+	Kit.box(st, Vector3(cx, 2.62, zf + 1.32), Vector3(x1 - x0 + 0.6, 0.18, 0.05), w._c("#d23b34"))
+	Kit.box(st, Vector3(cx, 3.25, zf + 0.06), Vector3(3.4, 0.5, 0.06), w._c("#f2efe6"))
+	w._label("CARINDERIA", Vector3(cx, 3.25, zf + 0.1), 0.36, Color(0.82, 0.18, 0.14))
+	w._gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 0.3, zb - 0.3, 3.55, 3.0, true)
+	w._shade_strip(st, x0, x1, zf + 0.02, 2.55, 0.35, wall)
+	w._shadow(Vector3(cx + 0.6, 0, zf - 0.4), Vector2(x1 - x0 + 1.0, 1.4), true)
 	w._shadow(Vector3(x1 + 0.9, 0, (zf + zb) * 0.5), Vector2(1.8, zf - zb), true)
+	# long table with benches, left of where the pandesal cart parks
+	var t := Vector3(1.9, 0, -25.9)
+	Kit.box(props, t + Vector3(0, 0.74, 0), Vector3(1.9, 0.05, 0.7), w._c("#9a7048"))
+	Kit.box(props, t + Vector3(0, 0.765, 0), Vector3(1.8, 0.01, 0.6), w._c("#e86f6f"))            # oilcloth
+	for lx: float in [-0.85, 0.85]:
+		for lz: float in [-0.28, 0.28]:
+			Kit.box(props, t + Vector3(lx, 0.37, lz), Vector3(0.05, 0.74, 0.05), w._c("#7d5638"))
+	for bz: float in [-0.55, 0.55]:
+		Kit.box(props, t + Vector3(0, 0.42, bz), Vector3(1.9, 0.05, 0.28), w._c("#9a7048"))
+		for lx: float in [-0.85, 0.85]: Kit.box(props, t + Vector3(lx, 0.2, bz), Vector3(0.05, 0.4, 0.24), w._c("#7d5638"))
+	for k in 3:   # plates and cups
+		Kit.cylinder(props, t + Vector3(-0.6 + k * 0.6, 0.77, -0.15), 0.12, 0.12, 0.02, w._c("#f2efe6"), 8)
+		Kit.cylinder(props, t + Vector3(-0.45 + k * 0.6, 0.77, 0.12), 0.04, 0.04, 0.1, w._c("#5fa8d8"), 6)
+	w._shadow(t, Vector2(2.1, 1.5), true)
 
 
 static func _vulcanizing(w, st: SurfaceTool) -> void:
@@ -173,17 +194,17 @@ static func _vulcanizing(w, st: SurfaceTool) -> void:
 
 
 static func _wall_and_cage(w, st: SurfaceTool, props: SurfaceTool) -> void:
-	# low hollow-block wall in front of the capilla (cats sit on it), a rooster cage
+	# a short, low hollow-block wall (cats sit on it) and a rooster cage at its end
 	var y := 0.1
-	while y < 1.3:
+	while y < 0.8:
 		var off := 0.0 if int(y * 5.0) % 2 == 0 else 0.2
-		var x := 0.2 + off
-		while x < 4.55:
+		var x := -1.7 + off
+		while x < 0.2:
 			Kit.box(st, Vector3(x + 0.19, y, -25.4), Vector3(0.38, 0.19, 0.2), w._c("#9c988f"))
 			x += 0.4
 		y += 0.2
-	Kit.box(st, Vector3(2.4, 1.33, -25.4), Vector3(4.4, 0.06, 0.24), w._c("#8f8b84"))
-	var cage := Vector3(4.3, 0, -24.85)
+	Kit.box(st, Vector3(-0.75, 0.83, -25.4), Vector3(2.0, 0.06, 0.24), w._c("#8f8b84"))
+	var cage := Vector3(0.55, 0, -25.0)
 	Kit.box(props, cage + Vector3(0, 0.05, 0), Vector3(0.7, 0.1, 0.6), w._c("#8a6a46"))
 	for cx: float in [-0.33, 0.33]:
 		for cz: float in [-0.28, 0.28]:
@@ -564,6 +585,15 @@ static func build_people(w) -> void:
 	stand.trait = "nonchalant"
 	stand.posture = "cross_ankles"
 	w._crowd.append(stand)
+	# the carinderia: a cook at the pots, diners at the long table
+	var cook: Dictionary = w._person(Vector3(1.6, 0, -27.75), 0.0, false, false)
+	cook.role = "cook"
+	for d in [[Vector3(1.3, 0, -26.45), 0.0, false], [Vector3(2.4, 0, -26.45), 0.0, false], [Vector3(1.9, 0, -25.35), PI, true]]:
+		var diner: Dictionary = w._person(d[0], d[1], true, false)
+		diner.role = "diner"
+		diner.seat_h = 0.44
+		diner.posture = "normal"
+		diner.eat_phase = w._rng.randf() * 3.0
 	# kid at the poso, mechanic at the bike
 	var kid: Dictionary = w._person(Vector3(-0.95, 0, -24.1), PI * 0.5, false, false, 0.72)
 	kid.role = "pump"
@@ -587,7 +617,7 @@ static func build_people(w) -> void:
 static func build_animals(w) -> Array:
 	# two cats on the wall (one curled, one sitting) and the rooster in its cage
 	var out := []
-	for cat in [[Vector3(1.3, 1.36, -25.4), "#d98a3e"], [Vector3(3.8, 1.36, -25.4), "#3a3238"]]:
+	for cat in [[Vector3(-1.3, 0.86, -25.4), "#d98a3e"], [Vector3(-0.2, 0.86, -25.4), "#3a3238"]]:
 		out.append({"kind": "cat", "pos": w._end_pos(cat[0], 1), "c": w._c(cat[1]), "yaw": PI + 0.3, "base": 0, "step": 0})
 	return out
 
@@ -706,6 +736,23 @@ static func step_person(w, p: Dictionary) -> void:
 			p.arm_l = "reach_up" if up else "hold_ball"
 			p.arm_r = p.arm_l
 			p.lean = 0.1 if up else 0.25
+		"cook":
+			# stirring the pots, now and then a taste from the ladle
+			p.arm_r = "reach_down" if int(t * 2.0) % 2 == 0 else "counter"
+			p.arm_l = "counter"
+			p.lean = 0.3
+			p.head_pitch = 0.35
+			if int(t / 6.0) % 4 == 0:
+				p.arm_r = "drink"
+				p.head_pitch = 0.0
+		"diner":
+			# eating: spoon to mouth, chatting in between
+			var e := fmod(t + float(p.eat_phase), 3.0)
+			p.arm_l = "counter"
+			p.arm_r = "drink" if e < 0.5 else "counter"
+			p.lean = 0.25
+			p.head_pitch = 0.3 if e > 0.5 else 0.0
+			if e > 2.0: p.head_yaw = 0.6
 		"mechanic":
 			var beat := int(t * 3.0) % 2
 			p.arm_l = "reach_down"
