@@ -55,7 +55,7 @@ func _ready() -> void :
  # darken the left side so the borderless menu reads over the scene
  _shade = TextureRect.new()
  var grad := Gradient.new()
- grad.set_color(0, Color(0.03, 0.05, 0.07, 0.82))
+ grad.set_color(0, Color(0.03, 0.05, 0.07, 0.72))
  grad.set_color(1, Color(0.03, 0.05, 0.07, 0.0))
  grad.set_offset(1, 1.0)
  var gt := GradientTexture2D.new()

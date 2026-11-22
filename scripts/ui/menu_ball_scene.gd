@@ -15,7 +15,7 @@ const LensShader := preload("res://shaders/slowmo_lens.gdshader")
 const BALL_R := 0.4                  # a big ball: it is the menu's hero
 const BALL_SCREEN := Vector2(0.72, 0.8)
 const BALL_DEPTH := 3.8
-const SCENE_GAIN := 1.0              # scenery under the linear tonemap
+const SCENE_GAIN := 1.7              # scenery under the linear tonemap
 
 var _view: SubViewport
 var _cam: Camera3D
@@ -43,7 +43,7 @@ func _ready() -> void:
 	_view.add_child(_world)
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color("17202a")
+	env.background_color = Color("9fb4c4")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.5, 0.5, 0.55)
 	# Linear: the Filmic chain in the match caps colours near 218/255 and dulled the
@@ -88,7 +88,7 @@ func _build_floor() -> void:
 		"grate": "#5c5a56", "dirt": "#8f7558", "dirt_dk": "#7e6449", "dirt_lt": "#9d8364", "grass": "#6c8c48",
 		"grass_dk": "#577539"}
 	for k in cols: f.set_shader_parameter(k, Pal.hex(cols[k]))
-	f.set_shader_parameter("gain", SCENE_GAIN)
+	f.set_shader_parameter("gain", SCENE_GAIN * 1.35)   # the cement around the ball reads light
 	f.set_shader_parameter("slab_half", Vector2(6.0, 11.2))
 	f.set_shader_parameter("gutter_x", Vector2(6.28, 6.64))
 	var g := MeshInstance3D.new()
@@ -185,8 +185,8 @@ func _build_lens() -> void:
 	_lens.shader = LensShader
 	_lens.render_priority = Material.RENDER_PRIORITY_MIN
 	_lens.set_shader_parameter("effect_mix", 1.0)
-	_lens.set_shader_parameter("strength", 0.3)
-	_lens.set_shader_parameter("desaturate", 0.35)
+	_lens.set_shader_parameter("strength", 0.06)
+	_lens.set_shader_parameter("desaturate", 0.15)
 	_lens.set_shader_parameter("max_blur", 0.028)
 	_lens.set_shader_parameter("focus_band", 1.3)   # the whole ball, front to back
 	_lens.set_shader_parameter("defocus_gain", 3.2)

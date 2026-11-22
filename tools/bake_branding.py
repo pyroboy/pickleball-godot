@@ -3,7 +3,7 @@
 
   assets/branding/app-icon.png         1024 px app icon: a pixelated neon-green pickleball
                                        (a real sphere with 40 drilled holes, ray-cast on a
-                                       64 px grid, three tones + rim, stepped neon glow)
+                                       64 px grid, three tones, no glow) on a dark ground
   assets/branding/barangay-pickleball.png   court floor wordmark (alpha mask, 3:1) in the
                                        game's own pixel font (assets/fonts/arjo_pixel.*)
 
@@ -57,13 +57,6 @@ def bake_icon(grid=64, scale=16):
     img[:] = bg
     c = (grid - 1) / 2.0
     R = grid * 0.36
-    # stepped neon glow: three hard rings fading into the background
-    for y in range(grid):
-        for x in range(grid):
-            d = math.hypot(x - c, y - c) / R
-            if 1.0 < d < 1.55:
-                k = 3 - int((d - 1.0) / 0.55 * 3)
-                img[y, x] = bg + (hexc("#2cf06b") - bg) * (0.11 * k)
     mask = np.zeros((grid, grid), bool)
     for y in range(grid):
         for x in range(grid):
@@ -85,7 +78,6 @@ def bake_icon(grid=64, scale=16):
                 t = 0 if lam < 0.3 else (1 if lam < 0.72 else 2)
                 col = tones[t]
                 if lam > 0.93: col = rim
-                if r2 > 0.86 and t == 0: col = tones[1] * 0.75   # neon rim light on the dark side
             img[y, x] = col
     # one-texel outline
     for y in range(grid):
