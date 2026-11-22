@@ -4,6 +4,7 @@
   assets/branding/app-icon.png         1024 px app icon: a pixelated neon yellow-green pickleball
                                        (a real sphere with 40 drilled holes, ray-cast on a
                                        64 px grid, three tones, no glow) on court blue
+  assets/branding/title-logo.png       main-menu title art (bunting, ribbon, chunky letters)
   assets/branding/barangay-pickleball.png   court floor wordmark (alpha mask, 3:1) in the
                                        game's own pixel font (assets/fonts/arjo_pixel.*)
 
@@ -141,11 +142,91 @@ def bake_wordmark():
     Image.fromarray(rgba).resize((W * s, H * s), Image.NEAREST).save(os.path.join(OUT, "barangay-pickleball.png"))
 
 
+def bake_title_logo(scale=8):
+    """Main-menu title art: a string of banderitas, BARANGAY in cream on a red ribbon
+    (the colour of the court curb) with a tiny ball, and PICKLEBALL in big chunky
+    yellow-green letters with a pixel highlight, a blocky 3D extrusion and a dark
+    outline. Flat colours only (no glow). Transparent background."""
+    chars = load_font()
+    big = text_mask(chars, "PICKLEBALL", 1).repeat(2, 0).repeat(2, 1)
+    small = text_mask(chars, "BARANGAY", 2)
+    bw = big.shape[1]
+    H = 6 + small.shape[0] + 6 + 3 + big.shape[0] + 4
+    W = bw + 6
+    img = np.zeros((H, W, 4))
+    def put(y, x, rgb, a=255):
+        if 0 <= y < H and 0 <= x < W: img[y, x] = list(rgb) + [a]
+    # bunting: a sagging line with alternating flags
+    flags = ["#e0473b", "#f2c84b", "#3e7fd0", "#f2f0ea", "#7cc490", "#f29ac0"]
+    for x in range(W):
+        y = 1 + int(round(1.5 * math.sin(math.pi * x / max(W - 1, 1))))
+        put(y, x, hexc("#e9e2cf"))
+        if x % 6 == 1:
+            c = hexc(flags[(x // 6) % len(flags)])
+            for dy in range(3):
+                for dx in range(-(2 - dy), 3 - dy):
+                    put(y + 1 + dy, x + 1 + dx, c)
+    # red ribbon with notched ends and BARANGAY in cream
+    ry = 6
+    rh = small.shape[0] + 4
+    rw = small.shape[1] + 8
+    red, red_dk, cream = hexc("#c0473b"), hexc("#8f3029"), hexc("#f3ead2")
+    for y in range(rh):
+        for x in range(rw + 4):
+            notch = (x < 2 or x >= rw + 2) and abs(y - rh // 2) <= (rh // 2 - 1) - min(x, rw + 3 - x)
+            if notch: continue
+            put(ry + y, x, red_dk if y >= rh - 1 else red)
+    for y in range(small.shape[0]):
+        for x in range(small.shape[1]):
+            if small[y, x]: put(ry + 2 + y, 6 + x, cream)
+    # a tiny pickleball at the ribbon's end
+    bx, byc = rw + 9, ry + rh // 2
+    ball = [hexc("#a0bf1d"), hexc("#d2ee2c"), hexc("#e8fa66")]
+    for y in range(-3, 4):
+        for x in range(-3, 4):
+            if x * x + y * y <= 10:
+                t = 2 if (x + y) < -2 else (1 if (x + y) < 2 else 0)
+                put(byc + y, bx + x, ball[t])
+    for (hx, hy) in ((-1, -1), (1, 0), (-1, 2), (2, -2)):
+        put(byc + hy, bx + hx, hexc("#46600a"))
+    # PICKLEBALL: extrusion, outline, fill with a highlight row
+    top = ry + rh + 3
+    left = 2
+    fill, fill_hi, fill_lo = hexc("#d2ee2c"), hexc("#effc8c"), hexc("#b3d324")
+    side, outline = hexc("#6f8a12"), hexc("#1c2b3a")
+    m = big
+    mh, mw = m.shape
+    def inside(y, x): return 0 <= y < mh and 0 <= x < mw and m[y, x]
+    ext = np.zeros((mh + 2, mw + 2), bool)
+    for d in (1, 2):
+        ext[d:d + mh, d:d + mw] |= m
+    for y in range(mh + 2):
+        for x in range(mw + 2):
+            if ext[y, x] and not inside(y, x): put(top + y, left + x, side)
+    solid = ext.copy()
+    solid[:mh, :mw] |= m
+    for y in range(-1, mh + 3):
+        for x in range(-1, mw + 3):
+            if 0 <= y < mh + 2 and 0 <= x < mw + 2 and solid[y, x]: continue
+            if any(0 <= y + dy < mh + 2 and 0 <= x + dx < mw + 2 and solid[y + dy, x + dx] for dy, dx in ((0, 1), (1, 0), (0, -1), (-1, 0))):
+                put(top + y, left + x, outline)
+    for y in range(mh):
+        for x in range(mw):
+            if not m[y, x]: continue
+            c = fill_hi if not inside(y - 1, x) else (fill_lo if not inside(y + 1, x) else fill)
+            put(top + y, left + x, c)
+    out = Image.fromarray(img.astype(np.uint8)).resize((W * scale, H * scale), Image.NEAREST)
+    out.save(os.path.join(OUT, "title-logo.png"))
+    return out
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     icon = bake_icon()
     bake_wordmark()
+    logo = bake_title_logo()
     if "--preview" in sys.argv:
         os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
         icon.resize((256, 256), Image.NEAREST).save(os.path.join(ROOT, "logs/app_icon_preview.png"))
+        bg = Image.new("RGBA", logo.size, (40, 60, 80, 255)); bg.alpha_composite(logo); bg.save(os.path.join(ROOT, "logs/title_logo_preview.png"))
     print("baked app-icon.png and barangay-pickleball.png")

@@ -14,7 +14,7 @@ const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const MenuBallScene = preload("res://scripts/ui/menu_ball_scene.gd")
-const NEON := Color("2cf06b")          # Barangay Pickleball neon green
+const NEON := Color("d2ee2c")          # Barangay Pickleball neon yellow-green (the ball)
 const CREAM := Color("f3ead2")
 var _word2: Label
 var _shade: TextureRect
@@ -94,6 +94,7 @@ func _ready() -> void :
  word.add_theme_color_override("font_color", CREAM)
  UiTheme.use_pixel(word, 18)
  _content.add_child(word)
+ word.visible = false          # the title art below carries the name
  _word2 = Label.new()
  _word2.text = "PICKLEBALL"
  _word2.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -103,25 +104,26 @@ func _ready() -> void :
  _word2.add_theme_constant_override("shadow_offset_y", 3)
  UiTheme.use_pixel(_word2, 36)
  _content.add_child(_word2)
+ _word2.visible = false
  var logo_panel: = PanelContainer.new()
  _logo_panel = logo_panel
  var paper: = StyleBoxFlat.new()
- paper.bg_color = Color("f6f3ec")
+ paper.bg_color = Color(0, 0, 0, 0)
  paper.anti_aliasing = false
  paper.set_corner_radius_all(4)
- paper.border_color = Color("cfc8b6")   # paper bevel
- paper.border_width_bottom = 5
+ paper.border_width_bottom = 0
  paper.content_margin_left = 14
  paper.content_margin_right = 14
  paper.content_margin_top = 16
  paper.content_margin_bottom = 16
  logo_panel.add_theme_stylebox_override("panel", paper)
  _content.add_child(logo_panel)
- logo_panel.visible = false   # the wordmark is the two labels above now
+
  _logo = TextureRect.new()
- _logo.texture = null
+ _logo.texture = load("res://assets/branding/title-logo.png")   # tools/bake_branding.py
  _logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
- _logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+ _logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+ UiTheme.crisp(_logo)
  _logo.custom_minimum_size.y = 140
  logo_panel.add_child(_logo)
  _hint = Label.new()
@@ -181,6 +183,15 @@ func _button(caption: String, action: Callable) -> Button:
  button.gui_input.connect(_guard_controls_reflow.bind(button))
  return button
 
+## Title art height for the menu column's width (keeps its pixel aspect).
+func _logo_height(width: float) -> float:
+ var tex: Texture2D = _logo.texture
+ if tex == null: return 0.0
+ # whole screen pixels per art pixel, so the pixel art stays crisp (baked at 8x)
+ var art := Vector2(tex.get_width(), tex.get_height()) / 8.0
+ var k := maxf(1.0, floorf(width / art.x))
+ return k * art.y
+
 func _mark_button(button: Button, on: bool) -> void:
  button.text = ("> " if on else "  ") + str(button.get_meta("caption"))
 
@@ -193,12 +204,12 @@ func _fit() -> void :
  # back to canvas units so labels and touch targets do not shrink with it.
  var s: = Layout.scale_for(viewport_size) if portrait else viewport_size.y / maxf(1.0, get_window().size.y)
  _fit_content(portrait, s, safe)
- var width: = minf(safe.size.x * (0.7 if portrait else 0.5), 610.0 * s)
+ var width: = minf(safe.size.x * (0.88 if portrait else 0.5), 640.0 * s)
  var height: = minf(safe.size.y - 40.0 * s, 600.0 * s)
  _panel.size = Vector2(width, height)
  _panel.position = _panel_origin(safe, _panel.size)
  if portrait:
-  _logo.custom_minimum_size.y = clampf(width * 0.27, 76.0 * s, 140.0 * s)
+  _logo.custom_minimum_size.y = _logo_height(width)
   _queue_portrait_fit()
  call_deferred("_center_panel")
  queue_redraw()
@@ -234,13 +245,13 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  else:
   _hint.add_theme_font_size_override("font_size", ceili(16 * s))
   _progress.add_theme_font_size_override("font_size", ceili(16 * s))
-  _logo.custom_minimum_size.y = clampf(safe.size.y * 0.1, 40 * s, 100 * s)
+  _logo.custom_minimum_size.y = _logo_height(minf(safe.size.x * 0.5, 610.0 * s))
  _progress.custom_minimum_size.y = 20 * s
  var paper: StyleBoxFlat = _logo_panel.get_theme_stylebox("panel")
- paper.content_margin_left = 14.0 * s if portrait else 8 * s
- paper.content_margin_right = 14.0 * s if portrait else 8 * s
- paper.content_margin_top = 16.0 * s if portrait else 8 * s
- paper.content_margin_bottom = 16.0 * s if portrait else 8 * s
+ paper.content_margin_left = 0.0
+ paper.content_margin_right = 0.0
+ paper.content_margin_top = 0.0
+ paper.content_margin_bottom = 8.0 * s
  for button in _buttons:
   button.custom_minimum_size.y = ceili(84 * s) if portrait else ceili(40 * s)
   button.remove_theme_font_size_override("font_size")
