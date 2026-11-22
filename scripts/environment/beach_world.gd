@@ -63,7 +63,7 @@ func setup(game: Node, parent: Node3D) -> void:
 	_meta = JSON.parse_string(f.get_as_text())
 	for k in _meta.palette: _palette[k] = Color(str(_meta.palette[k]))
 	var apron := game.find_child("CourtApron", true, false)
-	if apron is Node3D: apron.visible = false        # the ground shader draws the pad instead
+	if apron is Node3D: apron.visible = false        # the ground shader draws sand there instead
 	_build_ground()
 	_build_fence_and_banner()
 	_build_pier()
@@ -82,7 +82,7 @@ func _build_ground() -> void:
 	ground.position = Vector3(0.0, GROUND_Y, 0.0)
 	var m := ShaderMaterial.new()
 	m.shader = GroundShader
-	for k in ["sand", "sand_dk", "sand_lt", "wet", "wet_dk", "foam", "shallow", "water", "deep", "deeper", "haze", "pad", "pad_dk", "curb"]:
+	for k in ["sand", "sand_dk", "sand_lt", "wet", "wet_dk", "foam", "shallow", "water", "deep", "deeper", "haze"]:
 		m.set_shader_parameter(k, _palette[k])
 	m.set_shader_parameter("gain", float(_meta.gain))
 	m.set_shader_parameter("shore_z", SHORE_Z)

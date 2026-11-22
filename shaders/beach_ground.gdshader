@@ -1,5 +1,5 @@
 shader_type spatial;
-// Beach ground (visual only): packed sand inside the fence, dry sand with grain and
+// Beach ground (visual only): trodden sand around the court, dry sand with grain and
 // wind ripples, wet sand, a foam line that washes up and back, shallow-to-deep water
 // with wave lines and sparkles, hazing out toward the horizon. Everything is worked
 // out on a 5 cm world grid so it matches the sprites' pixels. Colours are uniforms
@@ -17,13 +17,10 @@ uniform vec3 water : source_color;
 uniform vec3 deep : source_color;
 uniform vec3 deeper : source_color;
 uniform vec3 haze : source_color;
-uniform vec3 pad : source_color;
-uniform vec3 pad_dk : source_color;
-uniform vec3 curb : source_color;
 uniform float gain = 2.2;
 uniform float grid = 20.0;          // cells per metre
 uniform float shore_z = -18.6;      // mean waterline (local z; ocean toward -z)
-uniform vec2 pad_half = vec2(5.9, 9.8);        // packed area inside the fence
+uniform vec2 pad_half = vec2(5.9, 9.8);        // trodden sand around the court (no ripples)
 uniform vec2 court_half = vec2(3.35, 7.0);     // court surface half size (CourtSurface)
 
 varying vec2 local;
@@ -73,18 +70,19 @@ void fragment() {
 			c = sand;
 			if (n > 0.93) c = sand_dk;
 			else if (n < 0.05) c = sand_lt;
-			float ripple = sin(p.y * 2.4 + sin(p.x * 0.45) * 1.6 + p.x * 0.15);
-			if (ripple > 0.93) c = mix(c, sand_dk, 0.6);
+			// Around the court the sand is trodden flat: grain but no wind ripples, and a
+			// little more dark grain (scuffs) close to the court edge.
+			vec2 a = abs(p);
+			bool trodden = a.x < pad_half.x && a.y < pad_half.y;
+			if (trodden) {
+				vec2 ring = a - court_half;
+				float from_court = max(ring.x, ring.y);
+				if (from_court > 0.0 && from_court < 1.2 && n > 0.86) c = sand_dk;
+			} else {
+				float ripple = sin(p.y * 2.4 + sin(p.x * 0.45) * 1.6 + p.x * 0.15);
+				if (ripple > 0.93) c = mix(c, sand_dk, 0.6);
+			}
 		}
-		vec2 a = abs(p);
-		if (a.x < pad_half.x && a.y < pad_half.y) {
-			c = n > 0.96 ? pad_dk : pad;
-			vec2 ring = a - court_half;
-			if (max(ring.x, ring.y) > 0.0 && max(ring.x, ring.y) < 0.22) c = curb;
-		}
-		// soft sand drift against the pad edge
-		vec2 outside = a - pad_half;
-		if (max(outside.x, outside.y) > 0.0 && max(outside.x, outside.y) < 0.12 + 0.2 * n) c = sand_lt;
 	}
 	ALBEDO = c * gain;
 }
