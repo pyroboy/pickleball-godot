@@ -9,7 +9,7 @@ const TRANSITION_SECONDS: = 0.65
 # damped follow so the server's small shuffles don't jolt the frame, and a
 # slow push-in while the serve charges.
 const DOUBLES_SERVE_TRANSITION: = 1.05
-const DOUBLES_FOLLOW_RATE: = 6.0
+const DOUBLES_FOLLOW_RATE: = 4.0
 var _transition_seconds: float = TRANSITION_SECONDS
 var _serve_cam_pos: = Vector3.INF
 var _serve_cam_look: = Vector3.INF
@@ -88,8 +88,8 @@ func update(rig, delta: float) -> bool:
 	restore_avatar()
 	if kind == "center":
 		rig._update_centered(delta)
-	elif kind == "serve2":
-		_update_doubles_serve(camera, player, game, delta, _previous_kind != kind)
+	elif kind == "serve2" or kind == "serve0":
+		_update_doubles_serve(camera, player, game, delta, _previous_kind != kind, kind == "serve2")
 	else:
 		_update_third(camera, player, rig._ball, -1.0 if player.court_side == 1 else 1.0)
 	var desired: Transform3D = camera.global_transform
@@ -101,12 +101,12 @@ func update(rig, delta: float) -> bool:
 		_transition_offset = previous_offset
 		# Into and out of the doubles serve view the move is longer and eased
 		# at both ends; every other switch keeps the original timing.
-		_transition_seconds = DOUBLES_SERVE_TRANSITION if kind == "serve2" or _previous_kind == "serve2" else TRANSITION_SECONDS
+		_transition_seconds = DOUBLES_SERVE_TRANSITION if kind in ["serve0", "serve2"] or _previous_kind in ["serve0", "serve2"] else TRANSITION_SECONDS
 		_transition_elapsed = 0.0 if not _previous_kind.is_empty() else _transition_seconds
 		_previous_kind = kind
 	active_kind = kind
 	_transition_elapsed = minf(_transition_seconds, _transition_elapsed + maxf(delta, 0.0))
-	var blend: float = _ease_transition(_transition_elapsed / _transition_seconds, kind == "serve2" or _transition_seconds > TRANSITION_SECONDS)
+	var blend: float = _ease_transition(_transition_elapsed / _transition_seconds, kind in ["serve0", "serve2"] or _transition_seconds > TRANSITION_SECONDS)
 	camera.global_transform = _transition_from.interpolate_with(desired, blend) if blend < 1.0 else desired
 	camera.fov = lerpf(_transition_fov, desired_fov, blend)
 	camera.v_offset = lerpf(_transition_offset, desired_offset, blend)
@@ -150,7 +150,10 @@ static func _ease_transition(t: float, soft: bool) -> float:
 ## diagonal at the receiver's box, so the crosscourt serve reads up the screen
 ## with the receiver and both partners in frame. Same height/fov family as the
 ## singles serve view so the two feel like one camera.
-func _update_doubles_serve(camera: Camera3D, player: Node3D, game: Node, delta: float, entering: bool) -> void:
+## Serve view (singles and doubles): behind the server, turned to follow where the serve
+## is aimed (the aim target), so the camera tracks the trajectory's direction while it
+## stays behind the player. Damped, with a push-in while the serve charges.
+func _update_doubles_serve(camera: Camera3D, player: Node3D, game: Node, delta: float, entering: bool, doubles := true) -> void:
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera.keep_aspect = Camera3D.KEEP_WIDTH
 	camera.near = 0.04
@@ -160,22 +163,26 @@ func _update_doubles_serve(camera: Camera3D, player: Node3D, game: Node, delta: 
 	var me: Vector3 = _d(player)
 	var forward: float = 1.0 if me.z > 0.0 else -1.0   # toward the net from my side
 	forward = -forward
-	var receiver: Node3D = game.get_receiver_actor()
-	var aim: Vector3 = _d(receiver) if receiver != null else Vector3(-me.x, 0.0, -me.z * 0.8)
+	var aim: Vector3 = _aim_point(game)
+	if not aim.is_finite():
+		var receiver: Node3D = game.get_receiver_actor()
+		aim = _d(receiver) if receiver != null else Vector3(-me.x, 0.0, -me.z * 0.8)
 	var diag: Vector3 = Vector3(aim.x - me.x, 0.0, aim.z - me.z)
 	if diag.length_squared() < 1.0: diag = Vector3(0, 0, forward)
 	diag = diag.normalized()
 	# Lean the view only part-way onto the diagonal: fully diagonal hides the
 	# near sideline; straight down the court loses the receiver.
-	var view_dir: Vector3 = Vector3(0, 0, forward).lerp(diag, 0.7).normalized()
+	var view_dir: Vector3 = Vector3(0, 0, forward).lerp(diag, 0.8).normalized()
 	var outside: Vector3 = Vector3(signf(me.x) if absf(me.x) > 0.05 else 1.0, 0, 0)
 	var charging: bool = bool(game.get("serve_is_charging")) and game.game_serve != null
 	var charge: float = game.game_serve.get_charge_ratio() if charging else 0.0
 	var dt: float = maxf(delta, 0.0)
 	_serve_push = move_toward(_serve_push, smoothstep(0.0, 1.0, charge), dt * (1.6 if charging else 2.5))
-	var back: float = 3.55 - 0.55 * _serve_push
-	var height: float = (3.0 if portrait else 2.1) - 0.25 * _serve_push
-	var desired_pos: Vector3 = me - view_dir * back + Vector3.UP * height + outside * (0.95 if portrait else 1.1)
+	var back: float = (3.55 if doubles else 3.5) - 0.55 * _serve_push
+	var height: float = ((3.0 if doubles else 2.8) if portrait else 2.1) - 0.25 * _serve_push
+	var side: Vector3 = Vector3.UP.cross(view_dir).normalized()      # over the outside shoulder
+	if side.dot(outside) < 0.0: side = -side
+	var desired_pos: Vector3 = me - view_dir * back + Vector3.UP * height + side * ((0.95 if doubles else 0.5) if portrait else 1.0)
 	desired_pos.z = clampf(desired_pos.z, -9.12, 9.12)
 	desired_pos.x = clampf(desired_pos.x, -5.05, 5.05)
 	# Look a little ahead of the server along the diagonal, lifted like the
@@ -188,9 +195,16 @@ func _update_doubles_serve(camera: Camera3D, player: Node3D, game: Node, delta: 
 		var k: float = 1.0 - exp(-DOUBLES_FOLLOW_RATE * dt)
 		_serve_cam_pos = _serve_cam_pos.lerp(desired_pos, k)
 		_serve_cam_look = _serve_cam_look.lerp(desired_look, k)
-	camera.fov = (50.0 if portrait else 62.0) - 3.0 * _serve_push
+	camera.fov = ((50.0 if doubles else 52.0) if portrait else 62.0) - 3.0 * _serve_push
 	camera.global_position = _serve_cam_pos
 	_look_at(camera, _serve_cam_look)
+
+## Where the human is aiming (the landing target), or INF when there is none.
+static func _aim_point(game: Node) -> Vector3:
+	var aim_controller = game.get("aim_controller")
+	if aim_controller == null or not aim_controller.has_method("get_target"): return Vector3.INF
+	var t: Vector3 = aim_controller.get_target()
+	return t if t.is_finite() else Vector3.INF
 
 func _update_pov(camera: Camera3D, player: Node3D, ball: Node3D, _delta: float) -> void:
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE

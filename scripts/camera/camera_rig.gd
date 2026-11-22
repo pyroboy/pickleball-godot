@@ -447,6 +447,10 @@ func _apply_slowmo_focus(delta: float) -> void:
 	var subject: Node3D = _ball if is_instance_valid(_ball) and _ball.is_in_play else _player_left
 	if not is_instance_valid(subject): return
 	_apply_play_push(subject, real_delta)
+	# While aiming in slow motion, push in toward the player (the camera stays behind
+	# them) rather than the incoming ball, and turn to follow the aimed trajectory.
+	var aiming: bool = _aim_focus_active()
+	if aiming and is_instance_valid(_player_left): subject = _player_left
 	var point: Vector3 = _drawn(subject)
 	point = Vector3(clampf(point.x, -3.5, 3.5), clampf(point.y, 0.4, 2.2), clampf(point.z, -7.0, 7.0))
 	if _slowmo_focus <= 0.001: _slowmo_point = point
@@ -458,6 +462,21 @@ func _apply_slowmo_focus(delta: float) -> void:
 	var amount: float = smoothstep(0.0, 1.0, _slowmo_focus)
 	camera.global_position += (_slowmo_point - camera.global_position) * SLOWMO_PUSH * amount
 	camera.fov += SLOWMO_FOV_ADD * amount
+	# Track the trajectory: turn the view's heading (yaw only) part-way toward the aim
+	# target, so the shot's direction leads the frame; eased in real time.
+	var target: Vector3 = _aim_target() if aiming else Vector3.INF
+	if target.is_finite():
+		if not _slowmo_aim.is_finite(): _slowmo_aim = target
+		else: _slowmo_aim = _slowmo_aim.lerp(target, 1.0 - exp(-6.0 * real_delta))
+		var to: Vector3 = _slowmo_aim - camera.global_position
+		var fwd: Vector3 = -camera.global_basis.z
+		var to_flat := Vector3(to.x, 0.0, to.z)
+		var fwd_flat := Vector3(fwd.x, 0.0, fwd.z)
+		if to_flat.length_squared() > 1.0 and fwd_flat.length_squared() > 0.0001:
+			var yaw: float = fwd_flat.signed_angle_to(to_flat, Vector3.UP)
+			camera.global_basis = (Basis(Vector3.UP, yaw * SLOWMO_TRACK * amount) * camera.global_basis).orthonormalized()
+	else:
+		_slowmo_aim = Vector3.INF
 
 func _input(event: InputEvent) -> void:
 	# Any press skips the current push-in (and the banner, in the banner itself).
@@ -614,6 +633,19 @@ func _update_third_person(delta: float) -> void :
 	camera.look_at(look_target, Vector3.UP)
 	camera.v_offset = EDITOR_CAMERA_V_OFFSET if orbit_mode == 3 else 0.0
 
+
+const SLOWMO_TRACK: = 0.4          # share of the turn toward the aim target at full effect
+var _slowmo_aim: = Vector3.INF
+
+func _aim_focus_active() -> bool:
+	if _game_root == null: return false
+	var focus = _game_root.get("aim_focus")
+	return focus != null and bool(focus.get("active"))
+
+func _aim_target() -> Vector3:
+	var aim_controller = _game_root.get("aim_controller") if _game_root != null else null
+	if aim_controller == null or not aim_controller.has_method("get_target"): return Vector3.INF
+	return aim_controller.get_target()
 
 func _apply_play_push(subject: Node3D, real_delta: float) -> void:
 	if not MobileLayout.is_portrait(get_viewport().get_visible_rect().size): return
