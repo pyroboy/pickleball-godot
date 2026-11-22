@@ -6,11 +6,23 @@ class_name CardPartnerTap
 ## about hand height like a handshake, the paddle tips touch at the meeting point, and they come
 ## back. CardMotionLayer applies it.
 
-const TURN: = 0.45            # s: both turn to face each other first
-const REACH: = 0.85           # s: paddle tips at the meeting point
-const TAP_AT: = 0.98          # s: the tap nudge
-const HOLD: = 1.15            # s: start back (paddle first, then the turn)
-const DONE: = 1.75            # s
+# The drawing's own clock, in seconds at an even pace. It is brief; between_point_controller.gd
+# runs it (advance) and it slows through the touch, so the tap itself is the part the eye gets.
+const TURN: = 0.26            # both turn to face each other first
+const REACH: = 0.50           # paddle tips at the meeting point
+const TAP_AT: = 0.50          # the touch
+const HOLD: = 0.54            # start back (paddle first, then the turn)
+const DONE: = 0.98
+const SLOW_HALF: = 0.13       # the clock slows within this much of the touch, either side
+const SLOW_RATE: = 0.35       # its slowest, at the touch
+const EFFECT_LEAD: = 0.03     # the word and the flash start this much before the touch
+const NUDGE_HALF: = 0.08      # the push into the partner's paddle lasts this long either side
+
+## The drawing clock `t` after `delta` seconds at this tap's pace, slowed around the touch.
+static func advance(t: float, delta: float, pace: float) -> float:
+	var near: float = 1.0 - smoothstep(0.0, SLOW_HALF, absf(t - TAP_AT))
+	return t + delta * lerpf(1.0, SLOW_RATE, near) / maxf(pace, 0.1)
+
 const BUSY_PHASES: = ["BEND", "LIFT", "PICKUP", "CARRY", "PASS_PREP", "PASS", "PASS_RELEASE", "CATCH", "CATCH_OPEN"]
 
 var _player
@@ -50,5 +62,5 @@ func update(_delta: float, stop_reaction: Callable) -> Dictionary:
 	var back_mid: float = lerpf(HOLD, DONE, 0.55)
 	var turn: float = smoothstep(0.0, TURN, _t) * (1.0 - smoothstep(back_mid - 0.1, DONE, _t))
 	var w: float = smoothstep(TURN * 0.6, REACH, _t) * (1.0 - smoothstep(HOLD, back_mid, _t))
-	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / 0.07)
+	var nudge: float = maxf(0.0, 1.0 - absf(_t - TAP_AT) / NUDGE_HALF)
 	return {"turn": turn, "w": w, "nudge": nudge, "target": tap.target, "partner": tap.partner, "turn_deg": tap.turn_deg, "hip_share": tap.hip_share, "busy": tap.busy}

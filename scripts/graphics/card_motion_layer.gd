@@ -32,7 +32,7 @@ const SPEED_HALF_LIFE: = 0.08
 const TAP_TURN_DEG: = 70.0    # chest turn toward the partner for a paddle tap (face each other)
 const TAP_HIP_SHARE: = 0.35   # part of that turn the hips take, so the waist doesn't over-twist
 const TAP_LEAN_DEG: = 5.0     # lean toward a partner who is farther away (up to 1.7 m)
-const TAP_PUSH: = 0.004       # m: the tap's push along the reach
+const TAP_PUSH: = 0.008       # m: the tap's push along the reach (a visible knock)
 const HOLD_EASE: = 0.1        # s to switch an arm between free and on the paddle
 const HOLD_DIST: = 0.14       # m: a hand this close to the paddle shaft / throat holds it
 const STAND_EASE: = 0.35      # s to rise / sink
@@ -415,7 +415,7 @@ func _partner_tap(delta: float, paddle_arm) -> void:
 	var push: = Transform3D(Basis.IDENTITY, want.normalized() * TAP_PUSH * float(tap.nudge))
 	_paddle_aim = push * Transform3D(qp, grip - qp * grip) * carry * hang * carry.affine_inverse()
 	# Once per tap, at the touch: where the drawn paddle tip is (the partner's note gives the other).
-	if float(tap.nudge) > 0.5 and not _tap_noted:
+	if _tap._t >= CardPartnerTap.TAP_AT and not _tap_noted:
 		_tap_noted = true
 		var tip: Vector3 = paddle_delta(paddle_arm) * (pxf * Vector3(0, reach, 0))
 		PerfMonitor.note("partner_tap", {"step": "reach", "tip": tip, "tip_gap": tip.distance_to(meet), "tip_height": tip.y - PickleballConstants.FLOOR_Y,

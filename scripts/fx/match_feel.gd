@@ -19,6 +19,8 @@ const ARC_FADE := 0.28
 const ARC_SAMPLES := 16
 const ARC_WIDTH := 0.05
 const LABEL_SECONDS := 0.55
+const TAP_SPARKS := 6              # short lines that fly out from a paddle tap
+const TAP_SPARK_SECONDS := 0.26
 const DUST_SECONDS := 0.4
 const DUST_COUNT := 8
 const LINE_SPEED := 5.0            # m/s lateral shuffle that earns speed lines
@@ -49,6 +51,10 @@ var _rally_hits := 1   # the serve is hit 1 (served before PLAYING, so not seen 
 var _labels: Array[Label3D] = []
 var _label_age: Array[float] = []
 var _next_label := 0
+var _tap_sparks: Array[MeshInstance3D] = []
+var _tap_spark_material: StandardMaterial3D
+var _tap_spark_age := TAP_SPARK_SECONDS
+var _tap_spark_at := Vector3.ZERO
 var _dust: Array[MeshInstance3D] = []
 var _dust_age: Array[float] = []
 var _dust_size: Array[float] = []
@@ -204,6 +210,7 @@ func _process(delta: float) -> void:
 		if _kitchen_left <= 0.0: _kitchen.visible = false
 		else: _kitchen_material.albedo_color.a = 0.42 * (_kitchen_left / KITCHEN_FLASH_SECONDS) * (0.65 + 0.35 * sin(_kitchen_left * 18.0))
 	_update_extras(real)
+	_update_tap_sparks(real)
 	_update_landing()
 
 func _update_landing() -> void:
@@ -301,6 +308,11 @@ func _build_extras() -> void:
 		add_child(label)
 		_labels.append(label)
 		_label_age.append(LABEL_SECONDS)
+	_tap_spark_material = _additive(Color(1.0, 0.93, 0.6, 0.0))
+	var spark_box := BoxMesh.new()
+	spark_box.size = Vector3.ONE
+	for index in TAP_SPARKS:
+		_tap_sparks.append(_add_mesh(spark_box, _tap_spark_material))
 	var puff := SphereMesh.new()
 	puff.radius = 0.5
 	puff.height = 1.0
@@ -377,7 +389,8 @@ func _spawn_label(hitter, kind: String) -> void:
 	label.global_position = hitter.global_position + Vector3(0.0, 2.15, 0.0)
 	label.visible = true
 
-## Partners tapped paddles between points: the word pops where the paddles met.
+## Partners tapped paddles between points: the word pops where the paddles met, with a small
+## flash and a ring of sparks (fixed directions, no particles: those share the AI's random numbers).
 func _on_partner_tap(at: Vector3) -> void:
 	var label := _labels[_next_label]
 	_label_age[_next_label] = 0.0
@@ -385,7 +398,42 @@ func _on_partner_tap(at: Vector3) -> void:
 	label.text = "TAP"
 	label.modulate = Color(1.0, 0.92, 0.55)
 	label.global_position = at + Vector3(0.0, 0.35, 0.0)
+	label.scale = Vector3.ONE * 1.45
 	label.visible = true
+	var flash: MeshInstance3D = _flashes[_next_flash]
+	_flash_age[_next_flash] = 0.0
+	_flash_size[_next_flash] = 0.34
+	_next_flash = (_next_flash + 1) % _flashes.size()
+	flash.global_position = at
+	flash.scale = Vector3.ONE * 0.12
+	(flash.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.9, 0.5, 0.55)
+	flash.visible = true
+	_tap_spark_at = at
+	_tap_spark_age = 0.0
+	_update_tap_sparks(0.0)
+
+## Sparks fly out in the camera's plane, stretch, then shrink and fade.
+func _update_tap_sparks(real: float) -> void:
+	if _tap_spark_age >= TAP_SPARK_SECONDS: return
+	_tap_spark_age += real
+	var share: float = _tap_spark_age / TAP_SPARK_SECONDS
+	var camera: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if share >= 1.0 or camera == null:
+		for spark in _tap_sparks: spark.visible = false
+		_tap_spark_age = TAP_SPARK_SECONDS
+		return
+	var right: Vector3 = camera.global_basis.x
+	var up: Vector3 = camera.global_basis.y
+	var out: float = 1.0 - (1.0 - share) * (1.0 - share)   # fast out, slowing
+	_tap_spark_material.albedo_color = Color(1.0, 0.93, 0.6, 0.9 * (1.0 - smoothstep(0.45, 1.0, share)))
+	for index in _tap_sparks.size():
+		var angle: float = TAU * (float(index) + 0.25) / float(_tap_sparks.size())
+		var dir: Vector3 = (right * cos(angle) + up * sin(angle)).normalized()
+		var length: float = lerpf(0.05, 0.16, sin(PI * minf(share * 1.4, 1.0)))
+		var spark := _tap_sparks[index]
+		spark.global_transform = Transform3D(Basis(dir.cross(camera.global_basis.z).normalized() * 0.018, dir * length, camera.global_basis.z * 0.018),
+			_tap_spark_at + dir * lerpf(0.07, 0.34, out))
+		spark.visible = true
 
 func _spawn_dust(at: Vector3, size: float) -> void:
 	for offset in [-0.14, 0.14]:

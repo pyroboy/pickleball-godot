@@ -14,6 +14,13 @@ const WALL_TURN_DISTANCE := 1.25
 const LOB_DROP_STEP_TIME := 0.20
 const LOB_FACE_TIME := 0.95
 const LOB_ENTER_SPEED := 1.15
+# Dead-ball walks: the body turns to where the player is going, and back to the net over the
+# last steps. How far round it turns grows with the length of the walk: a short move is a few
+# steps facing the net, a middling one goes part-way round (side-on), a long one all the way.
+const PICKUP_TURN_SHORT_WALK := 0.6     # m: a walk this short keeps facing the net
+const PICKUP_TURN_LONG_WALK := 2.6      # m: a walk this long turns all the way to where it goes
+const PICKUP_ARRIVE_DISTANCE := 0.9     # m from the spot: the body starts back to the net
+const PICKUP_FACE_NET_DISTANCE := 0.25  # m from the spot: facing the net again
 
 var state := "ready"
 var previous_state := "ready"
@@ -31,6 +38,15 @@ var lob_elapsed := 0.0
 var lob_heading := 0.0
 var lob_replant := false
 var _lob_flight := -1
+## Metres left to where this player is walking between points (between_point_controller.gd
+## writes it every tick it moves the player); INF: not known.
+var walk_remaining := INF
+## 0..1 while a dead-ball walk asks for a turn to its travel direction (1 mid-walk, 0 arriving
+## or no turn). The controller keeps the first steps slow by it, so the player pivots, then walks.
+var walk_turning := 0.0
+var _walk_turn_side := 0.0
+var _walk_total := 0.0
+var _walk_last := INF
 
 func reset() -> void:
 	state = "ready"
@@ -45,6 +61,7 @@ func reset() -> void:
 	route_time = 0.0
 	route_direction = Vector3.ZERO
 	lob_active = false; lob_elapsed = 0.0; lob_heading = 0.0; lob_replant = false; _lob_flight = -1
+	walk_remaining = INF; walk_turning = 0.0; _walk_turn_side = 0.0; _walk_total = 0.0; _walk_last = INF
 
 func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 		context: String, charged_phase: String, ball_behind: bool, unsettled: bool, shot_context: Dictionary = {}) -> void:
@@ -55,7 +72,9 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 	gait = "stance"
 	phase = "ready"
 	reason = "stationary"
+	walk_turning = 0.0
 	if speed <= IDLE_SPEED:
+		_walk_turn_side = 0.0; _walk_total = 0.0; _walk_last = INF
 		route_distance = 0.0
 		route_time = 0.0
 		route_direction = Vector3.ZERO
@@ -81,16 +100,32 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 		phase = "adjust" if charged_phase == "adjust" else "travel"
 		var turn_distance := WALL_TURN_DISTANCE if context == "wall" else LATERAL_TURN_DISTANCE
 		var sustained := route_time >= TURN_ROUTE_TIME
-		if context == "pickup" and backward > backward_limit:
-			# Walking back behind the baseline between points: backpedal facing
-			# the net instead of turning the back to it.
-			next = "backward_strafe" if lateral > 0.35 else "backpedal"
-			reason = "dead-ball retreat while facing the net"
-			gait = "shuffle" if speed < 1.65 else "run"
-		elif context == "pickup":
-			next = "pickup_travel"; reason = "dead-ball approach or carry"
-			desired_heading = court.signed_angle_to(travel, Vector3.UP)
-			gait = "walk" if speed < 1.65 else "run"
+		if context == "pickup":
+			# With no known destination: the old rule (retreats face the net, the rest face travel).
+			var angle := court.signed_angle_to(travel, Vector3.UP)
+			var limit := 0.0 if backward > backward_limit else PI
+			var arrive := 1.0
+			if is_finite(walk_remaining):
+				# A new walk: standing start, or the spot moved away (a rolling ball, a new target).
+				if _walk_total <= 0.0 or not is_finite(_walk_last) or walk_remaining > _walk_last + 0.4: _walk_total = walk_remaining
+				limit = PI * smoothstep(PICKUP_TURN_SHORT_WALK, PICKUP_TURN_LONG_WALK, _walk_total)
+				arrive = smoothstep(PICKUP_FACE_NET_DISTANCE, PICKUP_ARRIVE_DISTANCE, walk_remaining)
+			_walk_last = walk_remaining
+			# Walking almost straight back: keep turning the way already chosen, so a small
+			# sideways drift does not swing the body round the other shoulder.
+			if absf(angle) > deg_to_rad(150.0) and _walk_turn_side != 0.0: angle = absf(angle) * _walk_turn_side
+			desired_heading = clampf(angle, -limit, limit) * arrive
+			if absf(desired_heading) > deg_to_rad(10.0): _walk_turn_side = signf(desired_heading)
+			if minf(absf(angle), limit) > deg_to_rad(20.0): walk_turning = arrive
+			# Feet: named by the travel direction in the body's own frame.
+			var body_travel := travel.rotated(Vector3.UP, -desired_heading)
+			if -body_travel.dot(court) > backward_limit:
+				next = "backward_strafe" if absf(body_travel.dot(Vector3(-court.z, 0, court.x))) > 0.35 else "backpedal"
+				reason = "dead-ball steps back, body not turned round"
+				gait = "shuffle" if speed < 1.65 else "run"
+			else:
+				next = "pickup_travel"; reason = "dead-ball walk, body turned to where it is going"
+				gait = "walk" if speed < 1.65 else "run"
 		elif backward > backward_limit:
 			next = "backward_strafe" if lateral > 0.35 else "backpedal"
 			reason = "retreat while facing play"

@@ -81,6 +81,16 @@ var _run_approach: Array[bool] = [false, false]
 var _prev_ball_pos: = Vector3.INF
 # Which throw the pass uses (Actions.THROW lob / THROW_STRONG), chosen as PASS_PREP starts.
 var _throw_id: int = 1
+# The throw plays as one motion: the thrower turns to the receiver holding the ball, winds back
+# when the receiver is about to be in place, and swings straight through the release.
+const THROW_TURN_LIMIT_DEG: = 120.0   # feet turn this far toward the receiver; the arm does the rest
+const THROW_FACED_DEG: = 15.0         # turned this close to it: start the wind-back
+const THROW_TURN_WAIT: = 2.0          # s: wind back anyway after this long turning
+var _throw_facing: = 0.0              # deg, ready_facing_for_actor: where the thrower's feet turn
+var _throw_windup_at: = -1.0          # PASS_PREP time the wind-back started (-1: still holding the ball)
+var _throw_swing_at: = -1.0           # PASS_PREP time the swing to the release started (-1: not yet)
+var _throw_prev_wrist: = Vector3.INF
+var _throw_hand_speed: = 0.0          # m/s of the ball hand's target this tick
 
 # ---- Partner paddle tap: after a point each doubles team walks to a meeting point, stands an arm
 # and a paddle apart, taps paddles (card_partner_tap.gd draws the reach) and walks on.
@@ -130,8 +140,10 @@ func _plan_partner_taps() -> void:
 		apart = apart.normalized() if apart.length() > 0.2 else _players[lead]._get_forehand_axis()
 		var spots: Array = [meet + apart * TAP_STAND, meet - apart * TAP_STAND]
 		# Each tap its own length: quick or unhurried, with a short or a longer hold on the touch.
-		_taps.append({"pair": [lead, busy], "spots": spots, "meet": meet, "state": "WALK", "clock": 0.0, "touched": false,
-			"pace": _tap_rng.randf_range(0.8, 1.25), "linger": _tap_rng.randf_range(0.0, 0.5)})
+		# "t" is the drawing's clock (card_partner_tap.gd): it runs at this tap's pace and slows
+		# through the touch; "clock" is plain seconds.
+		_taps.append({"pair": [lead, busy], "spots": spots, "meet": meet, "state": "WALK", "clock": 0.0, "t": 0.0, "held": 0.0, "touched": false,
+			"pace": _tap_rng.randf_range(0.85, 1.15), "linger": _tap_rng.randf_range(0.0, 0.5) * 0.24})
 		PerfMonitor.note("partner_tap", {"step": "plan", "team": _players[a].get_team_id(), "walk_lead": pl.distance_to(spots[0]), "walk_busy": pb.distance_to(spots[1]), "server_in_pair": server == a or server == b})
 	if not _taps.is_empty(): _elapsed_limit = maxf(_elapsed_limit, TIMEOUT + TAP_WALK_LIMIT + 3.0)
 
@@ -162,11 +174,15 @@ func _tick_partner_taps(delta: float) -> void:
 				PerfMonitor.note("partner_tap", {"step": "dropped", "phase": phase})
 				_taps.erase(tap)
 		else:
-			if not tap.touched and tap.clock >= TapDraw.TAP_AT * float(tap.pace):
+			# Just after the touch the drawing waits for the linger, then goes on.
+			if float(tap.t) >= TapDraw.HOLD and float(tap.held) < float(tap.linger): tap.held += delta
+			else: tap.t = TapDraw.advance(float(tap.t), delta, float(tap.pace))
+			# The word and the flash start a moment before the paddles meet, so they are up at the touch.
+			if not tap.touched and float(tap.t) >= TapDraw.TAP_AT - TapDraw.EFFECT_LEAD:
 				tap.touched = true
 				partner_tapped.emit(Vector3(tap.meet) + Vector3.UP * TAP_HEIGHT)
-				PerfMonitor.note("partner_tap", {"step": "touch", "phase": phase})
-			if tap.clock >= (TapDraw.DONE + float(tap.linger)) * float(tap.pace):
+				PerfMonitor.note("partner_tap", {"step": "touch", "phase": phase, "seconds": tap.clock})
+			if float(tap.t) >= TapDraw.DONE:
 				PerfMonitor.note("partner_tap", {"step": "done", "seconds": tap.clock})
 				_taps.erase(tap)
 				if _players[tap.pair[0]].leg_ik != null: _players[tap.pair[0]].leg_ik.face_ready_now(null)   # feet back to the net
@@ -179,30 +195,49 @@ func tap_for(player) -> Dictionary:
 	var tap: Dictionary = _tap_of(index)
 	if tap.is_empty() or tap.state != "TAP": return {}
 	var slot: int = tap.pair.find(index)
-	# The drawing's clock: at this tap's pace, and held at the touch for the linger.
-	var t: float = float(tap.clock) / float(tap.pace)
-	if t > TapDraw.HOLD: t = maxf(TapDraw.HOLD, t - float(tap.linger))
-	return {"t": t, "target": Vector3(tap.meet) + Vector3.UP * TAP_HEIGHT, "partner": _players[tap.pair[1 - slot]],
+	return {"t": float(tap.t), "target": Vector3(tap.meet) + Vector3.UP * TAP_HEIGHT, "partner": _players[tap.pair[1 - slot]],
 		"turn_deg": TAP_BUSY_TURN_DEG if slot == 1 else TAP_FULL_TURN_DEG, "hip_share": TAP_FULL_HIP_SHARE if slot == 0 else -1.0, "busy": slot == 1}
 
 func _tap_velocity(team: int, tap: Dictionary) -> Vector3:
 	if tap.state == "TAP":
+		_note_walk(team, 0.0)
 		_motion_velocity[team] = Vector3.ZERO
 		return Vector3.ZERO
 	var slot: int = tap.pair.find(team)
 	var goal: Vector3 = tap.spots[slot]
 	var offset: Vector3 = goal - _players[team].global_position
 	offset.y = 0.0
+	_note_walk(team, offset.length())
+	return _walk_velocity(team, offset, WALK_SPEED)
+
+## Top speed while the body is still turning to where it is going: the player pivots with a
+## couple of slow steps, then walks off (footwork_motion_state.gd asks for the turn).
+const TURN_STEP_SPEED: = 1.0
+func _turning_speed(team: int, top_speed: float) -> float:
+	var feet = _players[team].leg_ik
+	if feet == null or feet.motion_state == null or feet.motion_state.walk_turning <= 0.0: return top_speed
+	var off: float = absf(angle_difference(feet._heading_angle, feet.motion_state.desired_heading - deg_to_rad(feet._ready_facing_deg)))
+	return lerpf(top_speed, minf(top_speed, TURN_STEP_SPEED), smoothstep(deg_to_rad(30.0), deg_to_rad(90.0), off) * feet.motion_state.walk_turning)
+
+## A walk to a spot `offset` away: speeds up, and slows into the spot (no instant start or stop).
+func _walk_velocity(team: int, offset: Vector3, top_speed: float, stop_within: float = 0.0) -> Vector3:
+	top_speed = _turning_speed(team, top_speed)
 	var distance: float = offset.length()
 	var dt: float = maxf(get_physics_process_delta_time(), 1e-05)
-	var speed: float = minf(WALK_SPEED, minf(sqrt(2.0 * MOVE_BRAKE * distance), distance * 8.0))
-	var desired: Vector3 = offset.normalized() * speed if distance > 0.0001 else Vector3.ZERO
+	var speed: float = minf(top_speed, minf(sqrt(2.0 * MOVE_BRAKE * distance), distance * 8.0))
+	var desired: Vector3 = offset.normalized() * speed if distance > maxf(stop_within, 0.0001) else Vector3.ZERO
 	var previous: Vector3 = _motion_velocity[team]
 	var motion: Vector3 = previous.move_toward(desired, (MOVE_ACCEL if desired.length() > previous.length() else MOVE_BRAKE) * dt)
 	if motion.length() * dt > distance: motion = offset / dt
 	if distance < 0.01 and motion.length() < 0.025: motion = Vector3.ZERO
 	_motion_velocity[team] = motion
 	return motion
+
+## Tells the foot planner how far this player still has to walk (footwork_motion_state.gd turns
+## the body to the travel direction on a walk and back to the net on the last steps). INF: not known.
+func _note_walk(team: int, remaining: float) -> void:
+	var feet = _players[team].leg_ik
+	if feet != null and feet.motion_state != null: feet.motion_state.walk_remaining = remaining
 
 func setup(game: Node) -> void :
 	_game = game
@@ -315,6 +350,8 @@ func cancel() -> void :
 	_taps = []
 	_end_route.cancel()
 	_motion_velocity.fill(Vector3.ZERO)
+	for team in _players.size():
+		if is_instance_valid(_players[team]): _note_walk(team, INF)
 	_run_id += 1
 	_carry_team = -1
 	_poses.fill(null)
@@ -349,21 +386,27 @@ func velocity_for(actor_id: int) -> Vector3:
 
 
 	if phase in ["END_WALK", "END_TURN"] and team < _end_faced.size() and int(_end_faced[team]) > 0:
+		_note_walk(team, INF)
 		_motion_velocity[team] = Vector3.ZERO   # arrived and facing the net: stand still
 		return _motion_velocity[team]
 	if phase == "END_WALK" and _end_route.active:
+		_note_walk(team, INF)   # the route's own turns; the old facing rule
 		_motion_velocity[team] = _end_route.velocity_for(team, maxf(get_physics_process_delta_time(), 1e-05))
 		return _motion_velocity[team]
+	_note_walk(team, distance)
 	var chasing: bool = team == retriever and (phase == "APPROACH" or (phase == "PASS" and _air_catch))
 	if not chasing:
-		_motion_velocity[team] = offset.normalized() * minf(CARRY_SPEED, distance * 8.0) if distance > 0.025 else Vector3.ZERO
-		return _motion_velocity[team]
+		# The receiver stepping under a pass moves at once: the ball does not wait.
+		if phase == "PASS" and team == catcher:
+			_motion_velocity[team] = offset.normalized() * minf(CARRY_SPEED, distance * 8.0) if distance > 0.025 else Vector3.ZERO
+			return _motion_velocity[team]
+		return _walk_velocity(team, offset, CARRY_SPEED, 0.025)
 	var dt: float = maxf(get_physics_process_delta_time(), 1e-05)
 
 
 
 	var approach_cap: float = sqrt(WALK_SPEED * WALK_SPEED + 2.0 * MOVE_BRAKE * maxf(0.0, distance - WALK_APPROACH_DISTANCE))
-	var top_speed: float = RUN_SPEED if _run_approach[team] else WALK_SPEED
+	var top_speed: float = _turning_speed(team, RUN_SPEED if _run_approach[team] else WALK_SPEED)
 	var speed: float = minf(top_speed, minf(approach_cap, distance * 8.0))
 	var desired: Vector3 = offset.normalized() * speed if distance > 0.0001 else Vector3.ZERO
 	var previous: Vector3 = _motion_velocity[team]
@@ -504,19 +547,41 @@ func _perf_physics_process(delta: float) -> void:
 			if not throw_keys.is_empty():
 				windup += _hand_world(retriever, Actions.hand(throw_keys[0]))
 				finish += _hand_world(retriever, Actions.hand(throw_keys[1]))
-			if phase_elapsed < windup_time:
-				var w: float = load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / windup_time)
-				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(windup, w)
+			# Holding the ball, the thrower turns to the receiver; the wind-back starts when it can
+			# run straight into the swing (receiver in place, or about to be). The swing waits, hand
+			# back, only if the receiver is still not set; the ball leaves as the swing ends.
+			var receiver_gap: float = _players[server].global_position.distance_to(_targets[server])
+			var receiver_set: bool = _at_target(server) and (_settled_for_catch(server) or phase_elapsed > 3.5)
+			# In place and standing, the receiver is set once the body has settled out of the walk.
+			var receiver_feet = _players[server].leg_ik
+			var settling: float = maxf(0.0, receiver_feet.locomotion_body_weight - 0.2) if receiver_feet != null else 0.0
+			var receiver_soon: bool = receiver_set or (receiver_gap < 0.06 and _planted_for_catch(server) and receiver_feet._active_side < 0 and settling <= windup_time + 0.05)
+			var faced: bool = absf(wrapf(_facing_yaw(retriever) - _throw_facing, -180.0, 180.0)) <= THROW_FACED_DEG or phase_elapsed > THROW_TURN_WAIT
+			if _throw_windup_at < 0.0 and faced and (receiver_soon or phase_elapsed > 3.0): _throw_windup_at = phase_elapsed
+			if _throw_windup_at >= 0.0 and _throw_swing_at < 0.0 and phase_elapsed - _throw_windup_at >= windup_time and receiver_set: _throw_swing_at = phase_elapsed
+			var held: Vector3 = Vector3(_phase_entry_wrists[retriever]).lerp(_carry_wrist(retriever), smoothstep(0.0, 0.2, phase_elapsed))
+			if _throw_windup_at < 0.0:
+				_wrists[retriever] = held
+			elif _throw_swing_at < 0.0:
+				var w: float = smoothstep(0.0, 1.0, clampf((phase_elapsed - _throw_windup_at) / windup_time, 0.0, 1.0))
+				_wrists[retriever] = held.lerp(windup, w)
 				if not throw_keys.is_empty():
-					_wrists[retriever] = Actions.arc(shoulder, Vector3(_phase_entry_wrists[retriever]), windup, w)
+					_wrists[retriever] = Actions.arc(shoulder, held, windup, w)
 					_poses[retriever] = _make_pose(retriever, 0.0, Actions.mix({}, throw_keys[0], w))
 			else:
-				var w: float = load("res://scripts/between_point_arm_path.gd").clock_weight((phase_elapsed - windup_time) / swing_time)
+				# The hand speeds up all the way to the release (no slowing into it): the ball
+				# leaves a moving hand and the follow-through carries on from there.
+				var u: float = clampf((phase_elapsed - _throw_swing_at) / swing_time, 0.0, 1.0)
+				var w: float = u * u * (1.5 - 0.5 * u)
 				_wrists[retriever] = windup.lerp(finish, w)
 				if not throw_keys.is_empty():
 					_wrists[retriever] = Actions.arc(shoulder, windup, finish, w)   # pendulum / over the top
 					_poses[retriever] = _make_pose(retriever, 0.0, Actions.mix(throw_keys[0], throw_keys[1], w))
-			if phase_elapsed > release_time and _at_target(server) and (_settled_for_catch(server) or phase_elapsed > 3.5):
+			if _throw_prev_wrist.is_finite(): _throw_hand_speed = _throw_prev_wrist.distance_to(_wrists[retriever]) / maxf(delta, 1e-05)
+			_throw_prev_wrist = _wrists[retriever]
+			if _throw_swing_at >= 0.0 and phase_elapsed - _throw_swing_at >= swing_time - 0.5 * delta:
+				PerfMonitor.note("ball_throw", {"throw": _throw_id, "turn_deg": _throw_facing, "turned_deg": _facing_yaw(retriever), "held_s": _throw_windup_at,
+					"hand_back_wait_s": _throw_swing_at - _throw_windup_at - windup_time, "release_s": phase_elapsed, "hand_speed": _throw_hand_speed})
 				_launch_pass(_game.ball.global_position)
 		"PASS":
 			var ball = _game.ball
@@ -539,11 +604,12 @@ func _perf_physics_process(delta: float) -> void:
 				var back: Vector3 = _carry_wrist(retriever)
 				if not _air_catch and Actions.has_edits(_throw_id):
 					var tk: Array = Actions.deltas(_throw_id)
-					var follow: Dictionary = Actions.mix(tk[1], tk[2], load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / follow_time)) if phase_elapsed < follow_time \
-						else Actions.mix(tk[2], {}, clampf((phase_elapsed - follow_time) / Actions.RETURN_TIME, 0.0, 1.0))
+					var follow: Dictionary = Actions.mix(tk[1], tk[2], _ease_out(phase_elapsed / follow_time)) if phase_elapsed < follow_time \
+						else Actions.mix(tk[2], {}, smoothstep(0.0, 1.0, clampf((phase_elapsed - follow_time) / Actions.RETURN_TIME, 0.0, 1.0)))
 					_poses[retriever] = _make_pose(retriever, 0.0, follow)
 					back += _hand_world(retriever, Actions.hand(tk[2]) if phase_elapsed < follow_time else Actions.hand(follow))
-				var follow_w: float = load("res://scripts/between_point_arm_path.gd").clock_weight(phase_elapsed / follow_time)
+				# Carries on from the release at the hand's speed and slows to the Follow key.
+				var follow_w: float = _ease_out(phase_elapsed / follow_time)
 				_wrists[retriever] = Vector3(_phase_entry_wrists[retriever]).lerp(back, follow_w)
 				if not _air_catch and Actions.has_edits(_throw_id):
 					_wrists[retriever] = Actions.arc(_players[retriever].left_arm_node.get_node("UpperArmPivot").global_position, Vector3(_phase_entry_wrists[retriever]), back, follow_w)
@@ -664,6 +730,17 @@ func _perf_physics_process(delta: float) -> void:
 		if phase == "SET_SERVE": _game.game_serve.accept_handover(_game.ball.global_position)
 		if phase == "END_TURN" and phase_elapsed > .25: _try_commit_end_change()
 
+## 0..1 that starts fast and slows to a stop (a follow-through).
+static func _ease_out(progress: float) -> float:
+	var u: float = 1.0 - clampf(progress, 0.0, 1.0)
+	return 1.0 - u * u
+
+## Seconds along the throw's own timeline (wind-back until windup_time, release at release_time).
+func _throw_clock(windup_time: float) -> float:
+	if _throw_windup_at < 0.0: return 0.0
+	if _throw_swing_at < 0.0: return minf(phase_elapsed - _throw_windup_at, windup_time)
+	return windup_time + phase_elapsed - _throw_swing_at
+
 func _process(_delta: float) -> void:
 	var _pt := Time.get_ticks_usec()
 	_perf_process(_delta)
@@ -695,7 +772,7 @@ func hand_presentation_for(actor_id: int) -> Dictionary:
 		if phase == "CATCH": closure = lerpf(0.15, 1.0, smoothstep(0.0, 0.1, phase_elapsed))
 		elif phase == "PASS_PREP":
 			var release_time: float = Actions.timing(_throw_id, "release_time", 0.55)
-			closure = 1.0 - smoothstep(0.4 if release_time == 0.55 else release_time - 0.15, release_time, phase_elapsed)
+			closure = 1.0 - smoothstep(release_time - 0.15, release_time, _throw_clock(Actions.timing(_throw_id, "windup_time", .15)))
 		return {"mode": "CARRY", "normal": _carry_direction, "closure": closure, "elapsed": phase_elapsed}
 	return {}
 
@@ -873,7 +950,8 @@ func _facing_yaw(team: int) -> float:
 	if not _active or _players[team].leg_ik == null: return 0.0
 	if int(_carry_heading_tick[team]) != Engine.get_physics_frames():
 		var difference: float = wrapf(_players[team].leg_ik.locomotion_hip_yaw_deg - float(_carry_heading[team]), -180.0, 180.0)
-		var turn_rate: float = 330.0 if phase == "END_TURN" else 160.0   # change of ends: brisk turn-around
+		# Change of ends: brisk turn-around, and its walk as before. Other walks: keep up with the feet.
+		var turn_rate: float = 330.0 if phase == "END_TURN" else (160.0 if phase.begins_with("END") else 240.0)
 		_carry_heading[team] += clampf(difference, -turn_rate * _players[team].get_physics_process_delta_time(), turn_rate * _players[team].get_physics_process_delta_time())
 		_carry_heading_tick[team] = Engine.get_physics_frames()
 	return float(_carry_heading[team])
@@ -1044,6 +1122,14 @@ func _perf_set_phase(value: String) -> void:
 	phase_elapsed = 0.0
 	if value == "PASS_PREP" and retriever >= 0:
 		_throw_id = Actions.throw_for(_players[retriever].global_position.distance_to(_players[server].global_position))
+		_throw_windup_at = -1.0; _throw_swing_at = -1.0; _throw_prev_wrist = Vector3.INF; _throw_hand_speed = 0.0
+		# Feet turn toward where the receiver will stand (same sign as the tap's facing).
+		var thrower = _players[retriever]
+		var to_receiver: Vector3 = _targets[server] - thrower.global_position
+		to_receiver.y = 0.0
+		_throw_facing = 0.0
+		if to_receiver.length() > 0.3:
+			_throw_facing = clampf(-rad_to_deg(thrower._get_forward_axis().signed_angle_to(to_receiver.normalized(), Vector3.UP)), -THROW_TURN_LIMIT_DEG, THROW_TURN_LIMIT_DEG)
 	phase_changed.emit(value)
 	PerfMonitor.note("between_phase", {"phase": value, "throw": _throw_id} if value == "PASS_PREP" else {"phase": value})
 	var text: = "Ball pickup · Skip to serve"
@@ -1125,6 +1211,9 @@ func _nearest_retriever(point: Vector3) -> int:
 func ready_facing_for_actor(actor) -> float:
 	var tap: Dictionary = _tap_of(index_for_actor(actor))
 	if not tap.is_empty() and tap.state == "TAP" and tap.pair[0] == index_for_actor(actor): return float(tap.get("facing", 0.0))
+	# The thrower stays turned to the receiver until the ball has left and the hand has followed through.
+	if retriever >= 0 and index_for_actor(actor) == retriever and (phase == "PASS_PREP" or (phase == "PASS" and not _air_catch and catcher != retriever and phase_elapsed < 0.4)):
+		return _throw_facing
 	if phase == "END_TURN": return 180.0
 	# Change of ends: whoever reaches their new spot turns around right away instead
 	# of standing until the last player arrives.
