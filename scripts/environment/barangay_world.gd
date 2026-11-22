@@ -1620,8 +1620,7 @@ func _step_walker(w: Dictionary) -> void:
 				_walk_pose(w, true, 0.7)
 		"queue", "served":
 			_walk_pose(w, false, 0.7)
-			w.arm_l = "idle_stand"
-			w.arm_r = "pocket" if w.state == "queue" else "point"
+			PandesalEnd.queue_idle(self, w)
 		"wait", "watch", "stop":
 			if str(w.state) == "stop": w.yaw = PI if int(w.get("end", 0)) == 1 else 0.0
 			_walk_pose(w, false, 0.7)

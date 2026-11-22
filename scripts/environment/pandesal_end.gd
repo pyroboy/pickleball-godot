@@ -677,6 +677,55 @@ static func step(w, dt: float) -> void:
 	_maybe_send_buyer(w, st)
 
 
+## How keen people are on pandesal right now: mostly a slow trickle, sometimes a little
+## busier, now and then a proper busy spell. Drifts every 25-60 s while the cart is open.
+static func demand(w) -> float:
+	var st: Dictionary = w._near_state
+	var t: float = w._t
+	if t > float(st.get("demand_next", 0.0)):
+		var r: float = w._rng.randf()
+		st.demand = 0.15 if r < 0.6 else (0.45 if r < 0.9 else 1.0)
+		st.demand_next = t + w._rng.randf_range(25.0, 60.0)
+	return float(st.get("demand", 0.15))
+
+
+## A queue spot with this person's own small offset: the line stays loose, not a rail.
+static func queue_spot(w, p: Dictionary, i: int) -> Vector3:
+	if not p.has("qoff"):
+		p.qoff = Vector3(w._rng.randf_range(-0.35, 0.35), 0, w._rng.randf_range(-0.25, 0.3))
+		p.qturn = w._rng.randf_range(-0.35, 0.35)
+		p.qphase = w._rng.randf() * 10.0
+	var off: Vector3 = p.qoff
+	return w._end_pos(QUEUE[i] + off * (0.4 if i == 0 else 1.0), 1)
+
+
+## Waiting in line: weight shifts, glances around, hands in pockets or arms crossed, the
+## nonchalant ones on their phones; the one being served points at what they want.
+static func queue_idle(w, p: Dictionary) -> void:
+	var t: float = w._t + float(p.get("qphase", 0.0))
+	p.sway = 0.035 if int(t / 2.3) % 2 == 0 else -0.035
+	var look := int(t / 1.7) % 5
+	p.head_yaw = [0.0, 0.5, 0.0, -0.6, 0.2][look]
+	if str(p.state) == "served":
+		p.arm_l = "idle_stand"
+		p.arm_r = "point"
+		p.head_yaw = 0.0
+		return
+	match str(p.get("trait", "")):
+		"nonchalant":
+			p.arm_l = "phone"
+			p.arm_r = "phone"
+			p.prop = "phone"
+			p.head_yaw = 0.0
+			p.head_pitch = 0.35
+		"busy", "grumpy":
+			p.arm_l = "arms_crossed"
+			p.arm_r = "arms_crossed"
+		_:
+			p.arm_l = "hands_hips" if int(t / 4.0) % 3 == 0 else "idle_stand"
+			p.arm_r = "pocket" if p.arm_l == "idle_stand" else "hands_hips"
+
+
 static func cart_selling(w) -> bool:
 	return str(w._near_state.get("cart_state", "")) == "selling"
 
@@ -795,7 +844,9 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 				st.cart_until = t + SELL_SECONDS
 				v.vstate = "call"
 				v.until = t + 2.5
-				st.rush = w._rng.randi_range(2, 3)   # a little rush of buyers when it opens
+				st.rush = w._rng.randi_range(1, 2) if w._rng.randf() < 0.3 else 0   # sometimes a couple come over at once
+				st.demand = 0.15
+				st.demand_next = t + w._rng.randf_range(25.0, 50.0)
 		"selling":
 			if t > float(st.cart_until) and str(v.vstate) == "idle":
 				st.cart_state = "closing"
@@ -992,7 +1043,7 @@ static func _step_queue(w, st: Dictionary) -> void:
 			p.slot = i - 1
 			p.state = "walk"
 			p.dest = "pandesal"
-			p.path = [w._end_pos(QUEUE[i - 1], 1)]
+			p.path = [queue_spot(w, p, i - 1)]
 
 
 static func _step_jeep(w, st: Dictionary, dt: float) -> void:
@@ -1033,7 +1084,7 @@ static func _maybe_send_buyer(w, st: Dictionary) -> void:
 	if not cart_selling(w): return
 	var rush := int(st.get("rush", 0))
 	if rush > 0: st.rush = rush - 1
-	elif w._rng.randf() > 0.03: return
+	elif w._rng.randf() > 0.03 * demand(w): return
 	var slot := -1
 	for i in QUEUE.size():
 		if st.queue[i] == null:
@@ -1053,7 +1104,8 @@ static func _maybe_send_buyer(w, st: Dictionary) -> void:
 	b.state = "walk"
 	b.dest = "pandesal"
 	b.slot = slot
-	b.path = [w._end_pos(QUEUE[slot], 1)]
+	b.erase("qoff")
+	b.path = [queue_spot(w, b, slot)]
 	b.walk_phase = 0.0
 	st.queue[slot] = b
 
@@ -1092,7 +1144,7 @@ static func _step_buyer(w, b: Dictionary) -> void:
 				if b.dest == "pandesal":
 					b.state = "queue"
 					b.queued_at = t
-					b.yaw = BUYER_YAW + PI
+					b.yaw = BUYER_YAW + PI + float(b.get("qturn", 0.0))
 				else:
 					# back at their spot, eating
 					b.state = "eat"
@@ -1103,8 +1155,7 @@ static func _step_buyer(w, b: Dictionary) -> void:
 			w._walk_pose(b, moving, 0.7)
 		"queue", "served":
 			w._walk_pose(b, false, 0.7)
-			b.arm_l = "idle_stand"
-			b.arm_r = "pocket" if b.state == "queue" else "point"
+			queue_idle(w, b)
 		"eat":
 			b.walk = -1.0
 			b.bounce = 0.0
@@ -1151,7 +1202,7 @@ static func start_trip(w, p: Dictionary) -> void:
 	p.speed = w._rng.randf_range(0.9, 1.4) if p.trait != "busy" else w._rng.randf_range(1.6, 1.8)
 	p.pos = w._end_pos(start, 1)
 	var slot := -1
-	if w._rng.randf() < 0.7 and p.trait != "busy" and cart_selling(w):
+	if w._rng.randf() < 0.7 * demand(w) and p.trait != "busy" and cart_selling(w):
 		for i in QUEUE.size():
 			if w._near_state.queue[i] == null:
 				slot = i
@@ -1160,8 +1211,9 @@ static func start_trip(w, p: Dictionary) -> void:
 		w._near_state.queue[slot] = p
 		p.slot = slot
 		p.dest = "pandesal"
+		p.erase("qoff")
 		var spot: Vector3 = QUEUE[slot]
-		p.path = [w._end_pos(Vector3(spot.x, 0, line), 1), w._end_pos(spot, 1)]
+		p.path = [w._end_pos(Vector3(spot.x, 0, line), 1), queue_spot(w, p, slot)]
 	else:
 		# cross the open ground with a gentle drift toward another line on the way
 		var drift: float = clampf(line + w._rng.randf_range(-0.9, 0.9), -20.4, -15.4)
@@ -1175,7 +1227,7 @@ static func arrive(w, p: Dictionary) -> void:
 		"pandesal":
 			p.state = "queue"
 			p.queued_at = w._t
-			p.yaw = BUYER_YAW + PI     # face the cart's front
+			p.yaw = BUYER_YAW + PI + float(p.get("qturn", 0.0))   # face the cart, each a little differently
 		_:
 			p.state = "gone"
 			p.visible = false
