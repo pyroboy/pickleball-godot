@@ -1297,7 +1297,7 @@ func _step() -> void:
 	for i in _people.size():
 		var p: Dictionary = _people[i]
 		if int(p.get("end", -1)) >= 0 and int(p.end) != _live_end and p.has("sig"): continue   # the end behind the camera
-		if p.role in ["vendor", "dama", "pump", "mechanic", "cook", "diner"]: PandesalEnd.step_person(self, p)
+		if p.role in ["vendor", "dama", "pump", "mechanic", "cook", "diner", "buyer"]: PandesalEnd.step_person(self, p)
 		elif p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
 		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
 		if not cam_moved and sig == p.get("sig", []): continue

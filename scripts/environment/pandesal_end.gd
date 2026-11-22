@@ -20,10 +20,17 @@ const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 const Fig := preload("res://scripts/environment/env_figures.gd")
 const People := preload("res://scripts/environment/env_people.gd")
 
-const STOP_X := 4.2              # where the rolling cart parks on the back lane
-const CART := Vector3(4.2, 0, -22.4)
-const VENDOR := Vector3(2.7, 0, -21.75)
-const QUEUE := [Vector3(4.2, 0, -21.45), Vector3(3.55, 0, -21.5), Vector3(2.9, 0, -21.55)]
+# The rolling cart parks on the corner of the cement slab, angled a little in toward the
+# court (its front faces mostly at the court, turned toward the middle).
+const CART := Vector3(6.55, 0, -13.1)          # parking spot
+const PARK_YAW := -0.4
+const CART_LANE := -22.4                       # it arrives and leaves along the back lane
+const PATH_IN := [Vector3(18.0, 0, -22.4), Vector3(10.0, 0, -22.4), Vector3(8.6, 0, -16.0), Vector3(6.55, 0, -13.1)]
+const PATH_OUT := [Vector3(8.8, 0, -16.5), Vector3(10.5, 0, -22.4), Vector3(18.0, 0, -22.4)]
+const VENDOR := Vector3(5.55, 0, -12.92)       # beside the cart's front, serving
+const QUEUE := [Vector3(6.16, 0, -12.18), Vector3(6.26, 0, -11.58), Vector3(6.41, 0, -10.98)]
+const BUYER_YAW := 2.74                        # end-local: buyers face the cart's front
+const VENDOR_YAW := 0.69                       # end-local: the vendor faces the buyers
 const LANE := -14.45         # this end's walking lane (between the curb sitters and the standing group)
 const JEEP_LANE := -22.4
 const JEEP_STOP := -2.9      # in front of the waiting shed
@@ -477,7 +484,7 @@ static func _rolling_cart(w) -> void:
 	Kit.box(st, Vector3(-0.58, 0.95, mz), Vector3(0.06, 0.1, 0.12), w._c("#f2efe6"))           # headlight
 	var root := Node3D.new()
 	root.name = "RollingPandesal"
-	root.position = Vector3(40.0, 0.0, CART.z)
+	root.position = Vector3(40.0, 0.0, CART_LANE)
 	root.visible = false
 	w._near.add_child(root)
 	var body := MeshInstance3D.new()
@@ -533,10 +540,12 @@ static func _rolling_cart(w) -> void:
 	nst.cart_pulse = pulse
 	nst.cart_state = "away"
 	nst.cart_next = 3.0
-	nst.cart_x = 40.0
+	nst.cart_pos = Vector3(40.0, 0, CART_LANE)
+	nst.cart_yaw = 0.0
+	nst.cart_path = []
 	nst.cart_speed = 0.0
 	nst.cart_open = 0.0
-	nst.cart_shadow = w._shadow(CART + Vector3(0.1, 0, -0.45), Vector2(2.1, 2.2), true)
+	nst.cart_shadow = w._shadow(CART, Vector2(2.1, 2.2), true)
 
 
 # ------------------------------------------------------------------ people
@@ -567,11 +576,12 @@ static func build_people(w) -> void:
 		b.seat_h = 0.72
 		b.posture = "wide" if bx < -2.5 else "crossed"
 	w._person(Vector3(0.3, 0, -12.65), -0.2, true)
+	st.buyers = [w._people[w._people.size() - 1]]   # the one on the chair under the umbrella
 	var leaner: Dictionary = w._person(Vector3(1.15, 0, -14.85), 0.5, false)
 	leaner.posture = "cross_ankles"
 	leaner.trait = "nonchalant"
-	w._person(Vector3(1.95, 0, -14.95), -0.35, false)
-	w._person(Vector3(-1.7, 0, -14.9), 0.15, false)
+	st.buyers.append(w._person(Vector3(1.95, 0, -14.95), -0.35, false))
+	st.buyers.append(w._person(Vector3(-1.7, 0, -14.9), 0.15, false))
 	# lolos at dama and a kibitzer
 	for side: float in [-1.0, 1.0]:
 		var l: Dictionary = w._person(Vector3(-6.6 + side * 0.55, 0, -12.6), -side * PI * 0.5, true, false)
@@ -642,6 +652,7 @@ static func step(w, dt: float) -> void:
 	_step_queue(w, st)
 	_step_jeep(w, st, dt)
 	_step_cart(w, st, dt)
+	_maybe_send_buyer(w, st)
 
 
 static func cart_selling(w) -> bool:
@@ -650,7 +661,29 @@ static func cart_selling(w) -> bool:
 
 ## Steam rises from the open warmer drawer (world-node space).
 static func steam_origin(w) -> Vector3:
-	return w._end_pos(CART + Vector3(0, 1.15, 0.6), 1)
+	return w._end_pos(CART + Basis(Vector3.UP, PARK_YAW) * Vector3(0, 1.15, 0.6), 1)
+
+
+## Move the cart along its path; it faces where it is going (its -x is forward).
+static func _drive(st: Dictionary, dt: float, top: float) -> bool:
+	var path: Array = st.cart_path
+	if path.is_empty(): return true
+	var pos: Vector3 = st.cart_pos
+	var to: Vector3 = path[0]
+	var d := to - pos
+	d.y = 0.0
+	var left := d.length()
+	for i in range(1, path.size()): left += (path[i] as Vector3).distance_to(path[i - 1])
+	st.cart_speed = clampf(left * 0.8, 0.6, top)
+	var step := float(st.cart_speed) * dt
+	if d.length() <= step:
+		st.cart_pos = to
+		path.pop_front()
+	else:
+		st.cart_pos = pos + d.normalized() * step
+		var want := atan2(d.z, -d.x)
+		st.cart_yaw = lerp_angle(float(st.cart_yaw), want, 0.3)
+	return path.is_empty()
 
 
 static func _step_cart(w, st: Dictionary, dt: float) -> void:
@@ -663,21 +696,25 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 			v.visible = false
 			if t > float(st.cart_next) and str(st.jeep_state) == "away":
 				st.cart_state = "in"
-				st.cart_x = 18.0
+				st.cart_pos = PATH_IN[0]
+				st.cart_yaw = 0.0
+				st.cart_path = PATH_IN.slice(1)
 		"in":
 			cart.visible = true
 			v.visible = true
-			var to_stop: float = float(st.cart_x) - STOP_X
-			st.cart_speed = clampf(to_stop * 0.8, 0.6, 4.0)
-			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
-			if to_stop < 0.05:
-				st.cart_x = STOP_X
+			if _drive(st, dt, 4.0):
+				st.cart_state = "parking"
+		"parking":
+			# settle into the angled spot
+			st.cart_yaw = lerp_angle(float(st.cart_yaw), PARK_YAW, 0.35)
+			if absf(angle_difference(float(st.cart_yaw), PARK_YAW)) < 0.02:
+				st.cart_yaw = PARK_YAW
 				st.cart_state = "opening"
 		"opening":
 			st.cart_open = minf(float(st.cart_open) + dt / 0.8, 1.0)
 			if float(st.cart_open) >= 1.0:
 				st.cart_state = "selling"
-				st.cart_until = t + w._rng.randf_range(22.0, 32.0)
+				st.cart_until = t + w._rng.randf_range(26.0, 38.0)
 				v.vstate = "call"
 				v.until = t + 2.5
 		"selling":
@@ -687,20 +724,22 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 					var q = st.queue[i]
 					if q != null:
 						st.queue[i] = null
-						leave(w, q)
+						_give_up(w, q)
 		"closing":
 			st.cart_open = maxf(float(st.cart_open) - dt / 0.8, 0.0)
-			if float(st.cart_open) <= 0.0:
+			if float(st.cart_open) <= 0.0 and str(st.jeep_state) == "away":
 				st.cart_state = "out"
-				st.cart_speed = 0.6
+				st.cart_path = PATH_OUT.duplicate()
 		"out":
-			st.cart_speed = minf(float(st.cart_speed) + 2.0 * dt, 4.0)
-			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
-			if float(st.cart_x) < -18.0:
+			if _drive(st, dt, 4.0):
 				st.cart_state = "away"
 				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
-	cart.position = Vector3(round(float(st.cart_x) * 20.0) / 20.0, 0.0, CART.z)
-	w._move_shadow(int(st.cart_shadow), w._end_pos(Vector3(cart.position.x + 0.15, 0, CART.z - 0.5), 1), not cart.visible)
+	var pos: Vector3 = st.cart_pos
+	# whole 5 cm moves and 1/16-rad turns so the pixels jump cleanly
+	cart.position = Vector3(round(pos.x * 20.0) / 20.0, 0.0, round(pos.z * 20.0) / 20.0)
+	cart.rotation.y = round(float(st.cart_yaw) * 16.0) / 16.0
+	var shadow_at: Vector3 = cart.position + Basis(Vector3.UP, cart.rotation.y) * Vector3(0.15, 0, -0.5)
+	w._move_shadow(int(st.cart_shadow), w._end_pos(shadow_at, 1), not cart.visible)
 	var doors: Array = st.cart_doors
 	var opened := smoothstep(0.0, 1.0, float(st.cart_open))
 	(doors[0] as Node3D).rotation.y = round(deg_to_rad(170.0) * opened * 8.0) / 8.0
@@ -724,6 +763,9 @@ static func step_person(w, p: Dictionary) -> void:
 	p.head_pitch = 0.0
 	p.prop = ""
 	match str(p.role):
+		"buyer":
+			p.prop = ""
+			_step_buyer(w, p)
 		"vendor": _step_vendor(w, p)
 		"dama":
 			if p.get("kibitzer", false):
@@ -777,10 +819,12 @@ static func _step_vendor(w, v: Dictionary) -> void:
 	var t: float = w._t
 	var st: Dictionary = w._near_state
 	var cs := str(st.get("cart_state", "away"))
-	if cs in ["in", "out"]:
+	if cs in ["in", "out", "parking"]:
 		# riding the motorcycle on the cabinet's far side (mostly hidden behind it)
-		v.pos = w._end_pos(Vector3(float(st.cart_x) + 0.2, 0, CART.z - 0.95), 1)
-		v.yaw = PI * 0.5
+		var b := Basis(Vector3.UP, float(st.cart_yaw))
+		v.pos = w._end_pos(Vector3(st.cart_pos) + b * Vector3(0.2, 0, -0.95), 1)
+		var fwd: Vector3 = b * Vector3(-1, 0, 0)
+		v.yaw = atan2(fwd.x, fwd.z) + PI
 		v.seated = true
 		v.seat_h = 0.76
 		v.posture = "wide"
@@ -794,13 +838,14 @@ static func _step_vendor(w, v: Dictionary) -> void:
 	v.posture = "stand"
 	if cs != "selling":
 		# swinging the wing doors open or shut
-		v.yaw = PI
+		v.yaw = PARK_YAW + PI
 		v.arm_l = "reach_up"
 		v.arm_r = "counter"
 		return
 	v.arm_l = "counter"
 	v.arm_r = "counter"
 	v.lean = 0.15
+	v.yaw = VENDOR_YAW + PI
 	match str(v.vstate):
 		"idle":
 			if st.queue[0] != null and str(st.queue[0].state) == "queue" and t > float(st.queue[0].get("queued_at", 0.0)) + 1.2:
@@ -834,7 +879,7 @@ static func _step_vendor(w, v: Dictionary) -> void:
 				v.until = t + 0.8
 		"hand":
 			v.arm_r = "point"
-			v.yaw = PI + 0.9          # turn toward the buyer at the cabinet (world yaw; the end is turned)
+			v.yaw = VENDOR_YAW + PI   # toward the buyer (world yaw; the end is turned)
 			if t > float(v.until):
 				var buyer = st.queue[0]
 				if buyer != null:
@@ -848,7 +893,6 @@ static func _step_vendor(w, v: Dictionary) -> void:
 			v.head_pitch = 0.35
 			if t > float(v.until):
 				v.vstate = "idle"
-				v.yaw = PI
 
 
 static func _step_queue(w, st: Dictionary) -> void:
@@ -857,7 +901,8 @@ static func _step_queue(w, st: Dictionary) -> void:
 	if q[0] != null and str(q[0].state) == "served":
 		var done: Dictionary = q[0]
 		q[0] = null
-		leave(w, done)
+		if done.role == "buyer": _go_home(w, done)
+		else: leave(w, done)
 	for i in range(1, q.size()):
 		if q[i - 1] == null and q[i] != null and str(q[i].state) == "queue":
 			var p: Dictionary = q[i]
@@ -875,12 +920,13 @@ static func _step_jeep(w, st: Dictionary, dt: float) -> void:
 	match str(st.jeep_state):
 		"away":
 			jeep.visible = false
-			if t > float(st.jeep_next) and str(st.get("cart_state", "away")) == "away":
+			if t > float(st.jeep_next) and str(st.get("cart_state", "away")) in ["away", "selling", "opening"]:
 				st.jeep_state = "in"
 				st.jeep_x = 38.0
 				st.jeep_speed = 8.0
 		"in":
 			jeep.visible = true
+			if str(st.get("cart_state", "away")) in ["in", "out"]: return   # let the cart cross the lane first
 			var to_stop: float = float(st.jeep_x) - JEEP_STOP
 			st.jeep_speed = clampf(to_stop * 0.9, 1.0, 8.0)
 			st.jeep_x = float(st.jeep_x) - float(st.jeep_speed) * dt
@@ -899,6 +945,95 @@ static func _step_jeep(w, st: Dictionary, dt: float) -> void:
 				st.jeep_next = t + w._rng.randf_range(25.0, 45.0)
 	# step the position in whole 5 cm moves so the pixels jump cleanly
 	jeep.position = Vector3(round(float(st.jeep_x) * 20.0) / 20.0, 0.0, JEEP_LANE)
+
+
+## Audience members now and then walk over to buy while the cart is open.
+static func _maybe_send_buyer(w, st: Dictionary) -> void:
+	if not cart_selling(w) or w._rng.randf() > 0.012: return
+	var slot := -1
+	for i in QUEUE.size():
+		if st.queue[i] == null:
+			slot = i
+			break
+	if slot < 0: return
+	var options: Array = []
+	for p in st.get("buyers", []):
+		if p.role == "crowd" and p.mode == "idle": options.append(p)
+	if options.is_empty(): return
+	var b: Dictionary = options[w._rng.randi() % options.size()]
+	b.role = "buyer"
+	b.kind = ""
+	b.home = b.pos
+	b.home_yaw = b.yaw
+	b.seated = false
+	b.state = "walk"
+	b.dest = "pandesal"
+	b.slot = slot
+	b.path = [w._end_pos(QUEUE[slot], 1)]
+	b.walk_phase = 0.0
+	st.queue[slot] = b
+
+
+static func _go_home(w, b: Dictionary) -> void:
+	b.state = "walk"
+	b.dest = "home"
+	b.bread = true
+	b.path = [b.home]
+
+
+static func _give_up(w, p: Dictionary) -> void:
+	if p.role == "buyer": _go_home(w, p)
+	else: leave(w, p)
+
+
+static func _step_buyer(w, b: Dictionary) -> void:
+	var t: float = w._t
+	match str(b.state):
+		"walk":
+			var path: Array = b.path
+			var moving := not path.is_empty()
+			if moving:
+				var to: Vector3 = path[0]
+				var d := to - Vector3(b.pos)
+				d.y = 0.0
+				var step: float = 1.2 * w.TICK
+				if d.length() <= step:
+					b.pos = to
+					path.pop_front()
+				else:
+					b.pos = Vector3(b.pos) + d.normalized() * step
+					b.yaw = atan2(d.x, d.z)
+				b.walk_phase = float(b.walk_phase) + step / 0.7 * PI
+			else:
+				if b.dest == "pandesal":
+					b.state = "queue"
+					b.queued_at = t
+					b.yaw = BUYER_YAW + PI
+				else:
+					# back at their spot, eating
+					b.state = "eat"
+					b.until = t + 20.0
+					b.pos = b.home
+					b.yaw = b.home_yaw
+					b.seated = b.base_seated
+			w._walk_pose(b, moving, 0.7)
+		"queue", "served":
+			w._walk_pose(b, false, 0.7)
+			b.arm_l = "idle_stand"
+			b.arm_r = "pocket" if b.state == "queue" else "point"
+		"eat":
+			b.walk = -1.0
+			b.bounce = 0.0
+			b.lean = 0.1
+			b.head_pitch = 0.0
+			b.head_yaw = 0.0
+			b.prop = "paper_bag"
+			b.arm_l = "idle_sit" if b.seated else "idle_stand"
+			b.arm_r = "drink" if fmod(t, 3.0) < 0.6 else ("hold_ball" if not b.seated else "idle_sit")
+			if t > float(b.until):
+				b.role = "crowd"
+				b.bread = false
+				b.state = ""
 
 
 ## Passers-by trips at this end (end-local, converted with `w._end_pos`).
@@ -933,7 +1068,7 @@ static func arrive(w, p: Dictionary) -> void:
 		"pandesal":
 			p.state = "queue"
 			p.queued_at = w._t
-			p.yaw = PI + PI            # face the cart's front (toward -z at this end)
+			p.yaw = BUYER_YAW + PI     # face the cart's front
 		_:
 			p.state = "gone"
 			p.visible = false
