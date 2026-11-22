@@ -1,6 +1,6 @@
 shader_type spatial;
-// Main-menu pickleball (visual only): a neon-green ball with 40 drilled holes, drawn
-// with the same three flat bands as the environment, a bright neon rim and a dark hole
+// Main-menu pickleball (visual only): a neon yellow-green ball with 40 drilled holes,
+// drawn with the same three flat bands as the environment (no glow) and a dark hole
 // interior with a lit lip. Holes are worked out in the ball's own space, so they turn
 // with it. Rendered at half resolution, so the edges read as pixels.
 render_mode unshaded, fog_disabled, shadows_disabled;
@@ -52,9 +52,7 @@ void fragment() {
 	} else {
 		col = lam < 0.3 ? dark : (lam < 0.72 ? mid : light);
 		if (lam > 0.985) col = rim_col;
-		vec3 v = normalize(VIEW);
-		float fres = 1.0 - max(dot(normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz), v), 0.0);
-		if (fres > 0.78 && lam < 0.3) col = mid * 0.8;       // neon rim light on the dark side
+
 	}
 	ALBEDO = col * gain;
 }

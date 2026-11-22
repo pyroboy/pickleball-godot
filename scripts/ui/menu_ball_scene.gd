@@ -15,12 +15,11 @@ const LensShader := preload("res://shaders/slowmo_lens.gdshader")
 const BALL_R := 0.4                  # a big ball: it is the menu's hero
 const BALL_SCREEN := Vector2(0.72, 0.8)
 const BALL_DEPTH := 3.8
-const SCENE_GAIN := 1.0              # scenery under the linear tonemap: dim, so the ball glows
+const SCENE_GAIN := 1.0              # scenery under the linear tonemap
 
 var _view: SubViewport
 var _cam: Camera3D
 var _ball: MeshInstance3D
-var _halo: MeshInstance3D
 var _world: Node3D
 var _ground: Node3D             # floor, curb and backdrop: moved to meet the ball
 var _lens: ShaderMaterial
@@ -47,8 +46,8 @@ func _ready() -> void:
 	env.background_color = Color("17202a")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.5, 0.5, 0.55)
-	# Linear: the Filmic chain in the match caps colours near 218/255, which kept the
-	# ball from glowing. Here the ball shows its real neon and the scenery is dimmed.
+	# Linear: the Filmic chain in the match caps colours near 218/255 and dulled the
+	# ball; here it shows its true neon yellow-green.
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -158,9 +157,9 @@ func _build_ball() -> void:
 	var m := ShaderMaterial.new()
 	m.shader = BallShader
 	# display colours, compensated for the Filmic tonemap like the rest of the art
-	# the standard neon yellow-green of a real pickleball, pushed bright so it glows
-	var cols := {"dark": "#9ccc1c", "mid": "#d2f52e", "light": "#f0ff7a", "rim_col": "#fdffe0",
-		"hole_col": "#3f5a06", "lip_col": "#b5dc22"}
+	# the standard neon yellow-green of a real pickleball (no glow)
+	var cols := {"dark": "#a0bf1d", "mid": "#d2ee2c", "light": "#e4f854", "rim_col": "#eefc8a",
+		"hole_col": "#46600a", "lip_col": "#b3d324"}
 	for k in cols: m.set_shader_parameter(k, Color(cols[k]))
 	m.set_shader_parameter("gain", 1.0)
 	_ball.material_override = m
@@ -179,45 +178,6 @@ func _build_ball() -> void:
 	sh.material_override = sm
 	sh.name = "BallShadow"
 	_world.add_child(sh)
-	# neon halo: stepped rings on a camera-facing quad behind the ball
-	_halo = MeshInstance3D.new()
-	var q := QuadMesh.new()
-	q.size = Vector2(BALL_R * 4.4, BALL_R * 4.4)
-	_halo.mesh = q
-	_halo.name = "Halo"
-	var hs := Shader.new()
-	hs.code = """shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
-uniform vec3 glow : source_color = vec3(0.62, 0.86, 0.1);
-void vertex() { MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]); }
-void fragment() {
-	float d = length(UV - 0.5) * 4.4;
-	float k = d < 0.96 ? 0.0 : (d < 1.12 ? 0.55 : (d < 1.35 ? 0.3 : (d < 1.65 ? 0.16 : (d < 2.0 ? 0.07 : 0.0))));
-	ALBEDO = glow * k;
-}"""
-	var hm := ShaderMaterial.new()
-	hm.shader = hs
-	_halo.material_override = hm
-	_world.add_child(_halo)
-	# glow spilling onto the cement around the ball (additive, stepped)
-	var spill := MeshInstance3D.new()
-	spill.name = "GlowSpill"
-	var pm := PlaneMesh.new()
-	pm.size = Vector2(BALL_R * 6.0, BALL_R * 6.0)
-	spill.mesh = pm
-	var ss := Shader.new()
-	ss.code = """shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
-uniform vec3 glow : source_color = vec3(0.62, 0.86, 0.1);
-void fragment() {
-	float d = length(UV - 0.5) * 6.0;
-	float k = d < 1.3 ? 0.14 : (d < 1.9 ? 0.08 : (d < 2.6 ? 0.035 : 0.0));
-	ALBEDO = glow * k;
-}"""
-	var spm := ShaderMaterial.new()
-	spm.shader = ss
-	spill.material_override = spm
-	_world.add_child(spill)
 
 
 func _build_lens() -> void:
@@ -256,11 +216,8 @@ func _place() -> void:
 	for child in _world.get_children():
 		if child is MeshInstance3D and child.name == "BallShadow":
 			child.position = Vector3(centre.x, floor_y + 0.003, centre.z)
-		if child is MeshInstance3D and child.name == "GlowSpill":
-			child.position = Vector3(centre.x, floor_y + 0.005, centre.z)
 	_lens.set_shader_parameter("focus_depth", _cam.global_position.distance_to(centre))
 	_ball.position = centre
-	_halo.position = centre
 
 
 func _process(delta: float) -> void:
