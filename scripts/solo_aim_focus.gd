@@ -19,7 +19,7 @@ const Styles = preload("res://scripts/serve_style.gd")
 const Estimate = preload("res://scripts/aim_preview_estimate.gd")
 const ContactPlanner = preload("res://scripts/incoming_contact_planner.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
-const FocusShader = preload("res://shaders/solo_aim_focus.gdshader")
+const LensShader = preload("res://shaders/slowmo_lens.gdshader")
 const FocusDimShader = preload("res://shaders/solo_aim_focus_dim.gdshader")
 const VISUAL_ENTER_USEC: = 120000
 const PreviewStabilizer = preload("res://scripts/ui/aim_preview_stabilizer.gd")
@@ -49,6 +49,8 @@ var _screen_path: = PackedVector2Array()
 var _realtime_locked: = false
 var _dim: ColorRect
 var _material: ShaderMaterial
+var _lens: MeshInstance3D
+var _lens_material: ShaderMaterial
 var _drawing: Control
 var _target_screen: = Vector2.ZERO
 var _accuracy_outline: = PackedVector2Array()
@@ -76,9 +78,26 @@ func setup(owner_game) -> void :
 	_dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_material = ShaderMaterial.new()
-	_material.shader = FocusShader
+	_material.shader = FocusDimShader
 	_dim.material = _material
 	add_child(_dim)
+	# Full-screen quad in the 3D world, drawn first among transparents: it
+	# reads the opaque pass and its depth; the net, shadows and labels then
+	# draw on top (the screen copy has none of them).
+	_lens_material = ShaderMaterial.new()
+	_lens_material.shader = LensShader
+	_lens_material.render_priority = Material.RENDER_PRIORITY_MIN
+	var quad: QuadMesh = QuadMesh.new()
+	quad.size = Vector2(2.0, 2.0)
+	_lens = MeshInstance3D.new()
+	_lens.name = "SlowmoLens"
+	_lens.mesh = quad
+	_lens.material_override = _lens_material
+	_lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_lens.extra_cull_margin = 16384.0
+	_lens.custom_aabb = AABB(Vector3(-1e5, -1e5, -1e5), Vector3(2e5, 2e5, 2e5))
+	_lens.visible = false
+	add_child(_lens)
 	_drawing = FocusDrawing.new()
 	_drawing.process_priority = 1001 # After CameraRig (1000); presentation only.
 	_drawing.owner_focus = self
@@ -272,6 +291,7 @@ func _hide_presentation() -> void :
 	_visual_enter_usec = -1
 	_preview_stabilizer.reset()
 	if _dim: _dim.hide()
+	if _lens: _lens.hide()
 	if _drawing: _drawing.hide()
 
 func _update_presentation(now_usec: int) -> void :
@@ -323,8 +343,6 @@ func _update_presentation(now_usec: int) -> void :
 	if size.x <= 0.0 or size.y <= 0.0: _hide_presentation();return
 	var dim_amount: float = float(Settings.get_value("video.focus_dim", 0.14))
 	var blur_amount: float = float(Settings.get_value("video.focus_blur", 0.65))
-	var desired_shader: Shader = FocusShader if blur_amount > 0.0 else FocusDimShader
-	if _material.shader != desired_shader: _material.shader = desired_shader
 	if _visual_enter_usec < 0: _visual_enter_usec = now_usec
 	var progress: float = clampf(float(now_usec - _visual_enter_usec) / VISUAL_ENTER_USEC, 0.0, 1.0)
 	var visual_mix: float = smoothstep(0.0, 1.0, progress)
@@ -338,48 +356,28 @@ func _update_presentation(now_usec: int) -> void :
 	_material.set_shader_parameter("radius", 70.0 * Layout.scale_for(size))
 	_material.set_shader_parameter("strength", dim_amount * visual_mix)
 	if blur_amount > 0.0:
-		_set_lens(camera, size, blur_amount, visual_mix, target)
+		_set_lens(camera, size, blur_amount, dim_amount, visual_mix, target)
 	var display_path: PackedVector3Array = _preview_stabilizer.present(_world_path, _preview_revision, Estimate.risk_label(_last_estimate), now_usec)
 	# Advance present() above even while hidden, so reveal uses the current
 	# trajectory/blend state. Only unused screen geometry is skipped.
 	_screen_path = ArcStyle.project_path(display_path, camera) if show_preview else PackedVector2Array()
 	_presentation = true
-	_dim.visible = dim_amount > 0.0 or blur_amount > 0.0
+	_dim.visible = dim_amount > 0.0 and blur_amount <= 0.0
+	_lens.visible = blur_amount > 0.0
 	_drawing.visible = show_preview
 	if show_preview: _drawing.queue_redraw()
 
-## Lens depth of field for the slow-mo (PDF p.19-21): focus on the far court
-## depth, court-plane depth from the four corner rays, per-player masks.
-func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: float, target: Vector3) -> void:
+## Lens depth of field for the slow-mo (PDF p.19-21), drawn in the 3D pass
+## (shaders/slowmo_lens.gdshader) so it reads the real depth buffer: focus on
+## the far court where the shot goes, everything else blurs by its distance.
+func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, dim_amount: float, visual_mix: float, target: Vector3) -> void:
 	var scale: float = Layout.scale_for(size)
-	_material.set_shader_parameter("effect_mix", visual_mix)
-	_material.set_shader_parameter("max_blur_px", blur_amount * 9.0 * scale)
-	# Tilt-shift: the focus band sits on the opposite side of the court where
-	# the shot is going, so the server, near court and net soften toward the
-	# camera and the far scenery softens behind.
-	_material.set_shader_parameter("focus_depth", _ground_range(camera, target))
-	_material.set_shader_parameter("cam_origin", camera.project_ray_origin(Vector2.ZERO) if camera.projection == Camera3D.PROJECTION_PERSPECTIVE else camera.global_position)
-	_material.set_shader_parameter("ray_tl", camera.project_ray_normal(Vector2.ZERO))
-	_material.set_shader_parameter("ray_tr", camera.project_ray_normal(Vector2(size.x, 0.0)))
-	_material.set_shader_parameter("ray_bl", camera.project_ray_normal(Vector2(0.0, size.y)))
-	_material.set_shader_parameter("ray_br", camera.project_ray_normal(size))
-	var feet: PackedVector2Array = PackedVector2Array()
-	var heads: PackedVector2Array = PackedVector2Array()
-	var depths: PackedFloat32Array = PackedFloat32Array()
-	var players: Array = game.get_players() if game.has_method("get_players") else [game.player_left, game.player_right]
-	for i in 4:
-		var actor: Node3D = players[i] if i < players.size() else null
-		if actor == null or not is_instance_valid(actor) or not actor.visible:
-			feet.append(Vector2(-2, -2)); heads.append(Vector2(-2, -2)); depths.append(-1.0)
-			continue
-		# Actor origins sit about 1 m up; the mask runs from the shoes to above the head.
-		var ground: Vector3 = Vector3(actor.global_position.x, 0.05, actor.global_position.z)
-		feet.append(_protected_uv(camera, ground, size))
-		heads.append(_protected_uv(camera, ground + Vector3.UP * 1.85, size))
-		depths.append(-1.0 if camera.is_position_behind(ground) else _ground_range(camera, ground))
-	_material.set_shader_parameter("foot_uv", feet)
-	_material.set_shader_parameter("head_uv", heads)
-	_material.set_shader_parameter("player_depth", depths)
+	_lens_material.set_shader_parameter("effect_mix", visual_mix)
+	_lens_material.set_shader_parameter("strength", dim_amount)
+	_lens_material.set_shader_parameter("max_blur", blur_amount * 9.0 * scale / size.x)
+	_lens_material.set_shader_parameter("focus_depth", _ground_range(camera, target))
+	_lens_material.set_shader_parameter("ball_uv", _protected_uv(camera, game.ball.global_position, size))
+	_lens_material.set_shader_parameter("ball_radius", 24.0 * scale / size.x)
 
 ## Same measure the shader uses for the court: distance along the camera ray
 ## to the point on the ground.
