@@ -338,7 +338,7 @@ func _update_presentation(now_usec: int) -> void :
 	_material.set_shader_parameter("radius", 70.0 * Layout.scale_for(size))
 	_material.set_shader_parameter("strength", dim_amount * visual_mix)
 	if blur_amount > 0.0:
-		_set_lens(camera, size, blur_amount, visual_mix)
+		_set_lens(camera, size, blur_amount, visual_mix, target)
 	var display_path: PackedVector3Array = _preview_stabilizer.present(_world_path, _preview_revision, Estimate.risk_label(_last_estimate), now_usec)
 	# Advance present() above even while hidden, so reveal uses the current
 	# trajectory/blend state. Only unused screen geometry is skipped.
@@ -348,15 +348,16 @@ func _update_presentation(now_usec: int) -> void :
 	_drawing.visible = show_preview
 	if show_preview: _drawing.queue_redraw()
 
-## Lens depth of field for the slow-mo (PDF p.19-21): focus at the hitter's
+## Lens depth of field for the slow-mo (PDF p.19-21): focus on the far court
 ## depth, court-plane depth from the four corner rays, per-player masks.
-func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: float) -> void:
+func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, visual_mix: float, target: Vector3) -> void:
 	var scale: float = Layout.scale_for(size)
-	var hitter: Node3D = game.player_left
 	_material.set_shader_parameter("effect_mix", visual_mix)
 	_material.set_shader_parameter("max_blur_px", blur_amount * 9.0 * scale)
-	var hitter_ground: Vector3 = Vector3(hitter.global_position.x, 0.0, hitter.global_position.z)
-	_material.set_shader_parameter("focus_depth", _ground_range(camera, hitter_ground))
+	# Tilt-shift: the focus band sits on the opposite side of the court where
+	# the shot is going, so the server, near court and net soften toward the
+	# camera and the far scenery softens behind.
+	_material.set_shader_parameter("focus_depth", _ground_range(camera, target))
 	_material.set_shader_parameter("cam_origin", camera.project_ray_origin(Vector2.ZERO) if camera.projection == Camera3D.PROJECTION_PERSPECTIVE else camera.global_position)
 	_material.set_shader_parameter("ray_tl", camera.project_ray_normal(Vector2.ZERO))
 	_material.set_shader_parameter("ray_tr", camera.project_ray_normal(Vector2(size.x, 0.0)))

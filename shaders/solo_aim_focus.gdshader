@@ -20,7 +20,8 @@ uniform float strength = 0.14;          // cool dim at full blur
 uniform float max_blur_px = 6.0;        // logical px at full defocus
 uniform float desaturate = 0.32;
 uniform float focus_depth = 11.7;       // metres from the camera
-uniform float focus_band = 1.5;         // metres kept sharp around it
+uniform float focus_band = 3.5;         // metres kept sharp around it (the far service area)
+uniform float near_strength = 0.55;     // foreground (server, near court) blurs less than the background
 uniform float defocus_gain = 1.1;       // blur is full when |d - f| / d reaches 1 / gain
 uniform vec3 cam_origin = vec3(0.0, 8.0, 14.0);
 uniform vec3 ray_tl = vec3(0.0, 0.0, -1.0);
@@ -81,6 +82,7 @@ void fragment() {
 	float off = max(abs(depth - focus_depth) - focus_band * 0.5, 0.0) / max(depth, 0.5);
 	float defocus = clamp(off * defocus_gain, 0.0, 1.0);
 	defocus = defocus * defocus * (3.0 - 2.0 * defocus);
+	if (depth < focus_depth) defocus *= near_strength;
 	// The ball is the one thing kept sharp wherever it flies.
 	float ball = 1.0 - smoothstep(radius * 0.16, radius * 0.34, length(pixel - ball_uv * viewport_size));
 	defocus *= 1.0 - ball;
