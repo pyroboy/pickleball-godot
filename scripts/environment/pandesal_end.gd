@@ -5,7 +5,7 @@ extends RefCounted
 ## through `w._end_pos`.
 ##
 ## Highlight: a "rolling" malunggay pandesal cart, a bright green steel cabinet sidecar on
-## one small wheel, pushed by the vendor (wing doors with frosted panels, a glass display,
+## one small wheel, towed by a motorcycle on its far side (wing doors with frosted panels, a glass display,
 ## stainless warmer drawers, a flat canopy with the signboard and a jingle speaker). It
 ## drives in along the back lane, stops, the vendor gets off and opens the doors, a queue
 ## forms, rolls come out of the warmer in a puff of steam, buyers walk off eating; then it
@@ -383,7 +383,7 @@ static func _jeepney(w) -> void:
 
 static func _rolling_cart(w) -> void:
 	# Cart-local: cabinet centred on x = 0, its front (doors, display) facing +z, the
-	# push handle on its +x side; it is pushed toward -x.
+	# motorcycle on its far side (-z, hidden from the court); it is towed toward -x.
 	var green: Color = w._c("#46c83a")
 	var green_dk: Color = w._c("#34a32c")
 	var steel: Color = w._c("#c4c9cc")
@@ -459,10 +459,22 @@ static func _rolling_cart(w) -> void:
 	Kit.box(st, Vector3(-0.82, 2.16, 0.78), Vector3(0.1, 0.1, 0.1), w._c("#8a8f94"))
 	Kit.box(st, Vector3(-0.82, 2.2, 0.86), Vector3(0.2, 0.18, 0.06), w._c("#b9bcc0"))
 	Kit.box(st, Vector3(-0.82, 2.2, 0.9), Vector3(0.14, 0.12, 0.02), black)
-	# --- push handle on the +x side (the vendor walks behind, pushing)
-	for hz: float in [-0.3, 0.3]:
-		Kit.beam(st, Vector3(0.62, 0.8, hz), Vector3(1.15, 1.02, hz), 0.05, green_dk)
-	Kit.beam(st, Vector3(1.15, 1.02, -0.34), Vector3(1.15, 1.02, 0.34), 0.06, black)
+	# --- the motorcycle that tows it, on the far side of the cabinet (hidden from the
+	#     court; its wheels show underneath), joined by green rails
+	var mz := -0.95
+	for ry: float in [0.5, 0.8]:
+		for rx: float in [-0.4, 0.4]:
+			Kit.beam(st, Vector3(rx, ry, -0.42), Vector3(rx, ry, mz + 0.15), 0.04, green_dk)
+	for bx: float in [-0.5, 0.42]:
+		for k in 2:
+			Kit.box(st, Vector3(bx, 0.29, mz), Vector3(0.56, 0.56, 0.1), tyre, Basis(Vector3.BACK, PI * 0.25 * k))
+		Kit.box(st, Vector3(bx, 0.29, mz), Vector3(0.18, 0.18, 0.12), steel)
+	Kit.box(st, Vector3(0.0, 0.55, mz), Vector3(0.8, 0.22, 0.22), w._c("#c9332c"))
+	Kit.box(st, Vector3(0.2, 0.78, mz), Vector3(0.55, 0.1, 0.25), black)                        # seat
+	Kit.box(st, Vector3(-0.42, 0.74, mz), Vector3(0.2, 0.44, 0.26), w._c("#c9332c"))
+	Kit.beam(st, Vector3(-0.5, 0.29, mz), Vector3(-0.45, 1.05, mz), 0.05, steel)
+	Kit.box(st, Vector3(-0.45, 1.07, mz), Vector3(0.05, 0.04, 0.6), black)                     # handlebar
+	Kit.box(st, Vector3(-0.58, 0.95, mz), Vector3(0.06, 0.1, 0.12), w._c("#f2efe6"))           # headlight
 	var root := Node3D.new()
 	root.name = "RollingPandesal"
 	root.position = Vector3(40.0, 0.0, CART.z)
@@ -524,7 +536,7 @@ static func _rolling_cart(w) -> void:
 	nst.cart_x = 40.0
 	nst.cart_speed = 0.0
 	nst.cart_open = 0.0
-	nst.cart_shadow = w._shadow(CART + Vector3(0.1, 0, 0), Vector2(2.1, 1.3), true)
+	nst.cart_shadow = w._shadow(CART + Vector3(0.1, 0, -0.45), Vector2(2.1, 2.2), true)
 
 
 # ------------------------------------------------------------------ people
@@ -656,7 +668,7 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 			cart.visible = true
 			v.visible = true
 			var to_stop: float = float(st.cart_x) - STOP_X
-			st.cart_speed = clampf(to_stop * 0.8, 0.5, 1.3)
+			st.cart_speed = clampf(to_stop * 0.8, 0.6, 4.0)
 			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
 			if to_stop < 0.05:
 				st.cart_x = STOP_X
@@ -682,13 +694,13 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 				st.cart_state = "out"
 				st.cart_speed = 0.6
 		"out":
-			st.cart_speed = minf(float(st.cart_speed) + 1.0 * dt, 1.3)
+			st.cart_speed = minf(float(st.cart_speed) + 2.0 * dt, 4.0)
 			st.cart_x = float(st.cart_x) - float(st.cart_speed) * dt
 			if float(st.cart_x) < -18.0:
 				st.cart_state = "away"
 				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
 	cart.position = Vector3(round(float(st.cart_x) * 20.0) / 20.0, 0.0, CART.z)
-	w._move_shadow(int(st.cart_shadow), w._end_pos(Vector3(cart.position.x + 0.15, 0, CART.z - 0.05), 1), not cart.visible)
+	w._move_shadow(int(st.cart_shadow), w._end_pos(Vector3(cart.position.x + 0.15, 0, CART.z - 0.5), 1), not cart.visible)
 	var doors: Array = st.cart_doors
 	var opened := smoothstep(0.0, 1.0, float(st.cart_open))
 	(doors[0] as Node3D).rotation.y = round(deg_to_rad(170.0) * opened * 8.0) / 8.0
@@ -766,15 +778,15 @@ static func _step_vendor(w, v: Dictionary) -> void:
 	var st: Dictionary = w._near_state
 	var cs := str(st.get("cart_state", "away"))
 	if cs in ["in", "out"]:
-		# walking behind the cart, pushing the handle, toward -x at this end
-		v.pos = w._end_pos(Vector3(float(st.cart_x) + 1.5, 0, CART.z), 1)
+		# riding the motorcycle on the cabinet's far side (mostly hidden behind it)
+		v.pos = w._end_pos(Vector3(float(st.cart_x) + 0.2, 0, CART.z - 0.95), 1)
 		v.yaw = PI * 0.5
-		v.seated = false
-		v.posture = "stand"
-		v.walk = -float(st.cart_x) * PI / 0.65
+		v.seated = true
+		v.seat_h = 0.76
+		v.posture = "wide"
 		v.arm_l = "counter"
 		v.arm_r = "counter"
-		v.lean = 0.3
+		v.lean = 0.25
 		v.vstate = "idle"
 		return
 	v.pos = w._end_pos(VENDOR, 1)
