@@ -1277,17 +1277,17 @@ static func _note_point(point: Vector3) -> Array:
 ## ---- Contact rule (global, AI and human) -------------------------------------
 ## The ball must really meet the paddle (settlement only runs on a certified paddle
 ## contact). Given that, the planned trajectory wins over strict paddle geometry:
-##  - face angle: the angle between the face normal and the ball's planned departure
-##    (relative to the moving paddle) may be up to FACE_TOLERANCE_DEG. Past
-##    FACE_CLEAN_DEG the shot keeps its plan but gets deliberate error that grows
-##    with the angle (direction up to MAX_ERROR_DEG, speed up to MAX_SPEED_ERROR).
+##  - face angle (user's call, 2026-11-22): the pose is an approximation, so the paddle
+##    face never changes the shot. The ball leaves on its planned trajectory as if the
+##    face were right; no face error, no face pop-up.
 ##  - arm: the displayed paddle arm may be stretched up to ARM_STRETCH_TOLERANCE (m)
-##    or past its wrist animation limits; that also adds error.
-##  - beyond the face tolerance it is a real mishit: a soft pop-up to mid-court.
+##    or past its wrist animation limits; that adds deliberate error (direction up to
+##    MAX_ERROR_DEG, speed up to MAX_SPEED_ERROR).
 ## The error uses its own RNG seeded per contact (bench stays reproducible, the
 ## seeded AI RNG is untouched).
 const FACE_CLEAN_DEG := 70.0
 const FACE_TOLERANCE_DEG := 115.0
+const FACE_POPUP_ENABLED := false   # the face-angle mishit pop-up (off: the face never changes the shot)
 const ARM_STRETCH_TOLERANCE := 0.12
 const MAX_ERROR_DEG := 8.0
 const MAX_SPEED_ERROR := 0.10
@@ -1323,7 +1323,7 @@ func contact_launch(actor, certificate: Dictionary, launch: Dictionary, stage: S
 	var id: int = ActorIdentity.actor_id(actor)
 	var velocity: Vector3 = launch.velocity
 	var angle: float = face_angle(certificate, velocity)
-	if angle > FACE_TOLERANCE_DEG:
+	if FACE_POPUP_ENABLED and angle > FACE_TOLERANCE_DEG:
 		var pose: PostureDefinition = actor.posture.transition_pose_blend if actor.posture != null else null
 		PerfMonitor.note("shot_dropped", {"actor": id, "stage": stage, "posture": pose.posture_id if pose != null else -1,
 			"face_deg": snappedf(angle, 0.1) if is_finite(angle) else -1.0, "ball": _note_point(game.ball.global_position), "launch": _note_point(velocity)})
@@ -1337,7 +1337,7 @@ func contact_launch(actor, certificate: Dictionary, launch: Dictionary, stage: S
 	if angle > 90.0: _mishit_free[id] = Engine.get_physics_frames() + MISHIT_FREE_TICKS   # leaves through the face plane
 	if stage != "executed": return launch
 	var stretch: float = float(_contact_stretch.value) if int(_contact_stretch.get("actor_id", -1)) == id and int(_contact_stretch.get("frame", -1)) == Engine.get_physics_frames() else 0.0
-	var misfit: float = maxf(clampf((angle - FACE_CLEAN_DEG) / (FACE_TOLERANCE_DEG - FACE_CLEAN_DEG), 0.0, 1.0), 0.6 * clampf(stretch / ARM_STRETCH_TOLERANCE, 0.0, 1.0))
+	var misfit: float = 0.6 * clampf(stretch / ARM_STRETCH_TOLERANCE, 0.0, 1.0)   # arm stretch only: the face never adds error
 	if misfit <= 0.0: return launch
 	_contact_rng.seed = hash([game.ball.flight_id, id, Engine.get_physics_frames()])
 	var out: Dictionary = launch.duplicate(true)

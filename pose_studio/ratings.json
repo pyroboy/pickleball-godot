@@ -1,0 +1,79 @@
+[
+ {
+  "pose": "s00",
+  "version": 9,
+  "stars": 3,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:04:26",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s00",
+  "version": 11,
+  "stars": 4,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:04:26",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s05",
+  "version": 8,
+  "stars": 4,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:04:28",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s13",
+  "version": 9,
+  "stars": 2,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:44:51",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s18",
+  "version": 5,
+  "stars": 4,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:44:51",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s16",
+  "version": 6,
+  "stars": 2,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T03:44:51",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s00",
+  "version": 23,
+  "stars": 4,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-22T09:08:34",
+  "notes": [],
+  "comment": ""
+ }
+]

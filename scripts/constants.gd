@@ -15,7 +15,7 @@ const LINE_WIDTH: float = 0.05
 
 
 
-const PLAYER_SPEED: float = 5.8
+const PLAYER_SPEED: float = 4.9
 const AI_SPEED: float = PLAYER_SPEED
 const PADDLE_FORCE: float = 3.5
 const AI_PADDLE_FORCE: float = 1.8

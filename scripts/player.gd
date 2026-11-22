@@ -90,7 +90,7 @@ enum BasePoseState{
 	LANDING_RECOVERY, 
 	LATERAL_SHUFFLE, 
 	CROSSOVER_RUN, 
-	BACKPEDAL, 
+	BACKPEDAL,   # unused, no pose (removed); keeps DECEL_PLANT = 21 
 	DECEL_PLANT, 
 }
 
@@ -766,7 +766,10 @@ func _perf_process(delta: float) -> void:
 
 		_between_last_pose = pose.lerp_with(pose, 0.0)
 		var support_target: Vector3 = between.support_hand_target_for(get_actor_id())
-		if support_target.is_finite():
+		# Only a pose that hands its free hand to the controller (mode 4: the ball action's
+		# hand path, authored key offsets included) takes the target; a pose with its own
+		# free-hand mode keeps it (player_arm_ik.gd uses the target under the same rule).
+		if support_target.is_finite() and pose.left_hand_mode == 4:
 			var local: Vector3 = support_target - global_position
 			_between_last_pose.left_hand_mode = 4
 			_between_last_pose.left_hand_offset = Vector3(local.dot(_get_forehand_axis()) + 0.15, local.y - 0.15, local.dot(_get_forward_axis()) - 0.55)

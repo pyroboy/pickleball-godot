@@ -2,7 +2,7 @@ extends RefCounted
 
 # All values and timers are in simulation seconds, just like the ball and Blue.
 # Hard can match Blue's top speed; difficulty never buys superhuman movement.
-const SPEEDS: Array[float] = [4.35, 5.0, 5.8]
+const SPEEDS: Array[float] = [3.7, 4.25, 4.9]
 const ACCELERATIONS: Array[float] = [12.0, 14.0, 16.0]
 const BRAKES: Array[float] = [16.0, 18.0, 20.0]
 const REPLAN_SECONDS: Array[float] = [0.15, 0.12, 0.10]

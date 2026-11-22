@@ -163,11 +163,7 @@ func _build_defaults() -> void :
 		"front": 0.18, "back": -0.18, "body_pitch": 10.0, "torso_pitch": 8.0, 
 		"left_mode": 0, 
 	}))
-	definitions.append(_make(20, "Backpedal", {
-		"intent": 7, "mix": 0.74, "stance": 0.48, "crouch": 0.08, 
-		"front": -0.04, "back": -0.06, "body_pitch": -6.0, "torso_pitch": -4.0, 
-		"head_pitch": -6.0, "left_mode": 1, 
-	}))
+	# 20 was Backpedal: never chosen in play (backward travel uses Crossover Run), removed.
 	definitions.append(_make(21, "Decel Plant", {
 		"intent": 0, "mix": 0.88, "stance": 0.55, "crouch": 0.18, 
 		"front": 0.22, "back": -0.12, "body_pitch": 12.0, "torso_pitch": 10.0, 

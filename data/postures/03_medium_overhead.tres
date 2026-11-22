@@ -61,23 +61,23 @@ values = {
 script = ExtResource("1")
 values = {
 "back_foot_back": -0.12,
-"body_pitch_deg": 0.0,
-"body_roll_deg": 0.0,
+"body_pitch_deg": -12.740793,
+"body_roll_deg": -4.02258615,
 "body_yaw_deg": 15.0,
-"crouch_amount": 0.09,
+"crouch_amount": 0.113400525,
 "front_foot_forward": 0.16,
-"head_pitch_deg": 8.0,
+"head_pitch_deg": -13.31291773,
 "head_track_ball_weight": 0.8,
-"head_yaw_deg": 2.0,
-"hip_yaw_deg": 8.0,
+"head_yaw_deg": -68.8817884,
+"hip_yaw_deg": 18.49495357,
 "lead_foot": 1,
-"left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
+"left_elbow_pole": Vector3(-0.4798853, -0.35134974, -0.21849394),
 "left_foot_offset": Vector3(0, 0, 0),
 "left_foot_yaw_deg": 5.0,
 "left_hand_mode": 4,
-"left_hand_offset": Vector3(-0.1, 0.6, -0.4),
+"left_hand_offset": Vector3(-0.06438925, 0.75, -0.08655377),
 "left_knee_pole": Vector3(0, 0, 0),
-"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"left_shoulder_rotation_deg": Vector3(0.060630836, 7.9421234, -0.056788266),
 "paddle_pitch_sign_source": 1,
 "paddle_pitch_signed_deg": 0.0,
 "paddle_roll_sign_source": 1,
@@ -90,13 +90,13 @@ values = {
 "right_hand_offset": Vector3(0, 0, 0),
 "right_knee_pole": Vector3(0, 0, 0),
 "right_shoulder_rotation_deg": Vector3(0, -8, 0),
-"spine_curve_deg": 0.0,
+"spine_curve_deg": 8.91066795,
 "stance_width": 0.48,
-"torso_pitch_deg": -22.0,
-"torso_roll_deg": 0.0,
-"torso_yaw_deg": 14.0,
-"weight_shift": -0.5,
-"body_position_offset": Vector3(0.0, 0.0, 0.08),
+"torso_pitch_deg": -28.287146,
+"torso_roll_deg": 19.6163135,
+"torso_yaw_deg": 29.3222725,
+"weight_shift": -0.372312853,
+"body_position_offset": Vector3(-0.016993633, 0.048073858, -0.052866355),
 "elbow_swivel_weight": 1.0,
 "right_elbow_swivel_deg": -31.3331001,
 "right_foot_pitch_deg": 0.0,
@@ -149,8 +149,8 @@ torso_pitch_deg = -10.0
 head_yaw_deg = 2.0
 head_pitch_deg = 8.0
 head_track_ball_weight = 0.8
-charge_paddle_offset = Vector3(0.45, 0.34, -1.05)
-charge_paddle_rotation_deg = Vector3(-128.67682, -74.20677, 108.018135)
+charge_paddle_offset = Vector3(-0.035869617, 0.16675213, -1.424512)
+charge_paddle_rotation_deg = Vector3(5.101583, -6.1807213, 15.0)
 charge_body_rotation_deg = 12.0
 charge_hip_coil_deg = 10.0
 charge_back_foot_load = 0.65

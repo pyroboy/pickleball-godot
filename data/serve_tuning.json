@@ -4,32 +4,111 @@
   "code_windup": true,
   "windup": {
    "set": {
-    "stance_width": 0.4
+    "stance_width": 0.4,
+    "charge_paddle_offset": [
+     0.17775115,
+     0.77905023,
+     -1.5045669
+    ],
+    "charge_paddle_rotation_deg": [
+     -30.278408,
+     -56.664368,
+     -174.20183
+    ],
+    "right_knee_pole": [
+     0.44463176,
+     0.53645515,
+     0.6618083
+    ],
+    "left_knee_pole": [
+     -0.00025264235,
+     0.50083137,
+     1.0
+    ],
+    "crouch_amount": 0.107720985,
+    "weight_shift": -0.432121855,
+    "hip_yaw_deg": 6.43404833,
+    "torso_yaw_deg": 82.5666779,
+    "torso_pitch_deg": -34.3584242,
+    "torso_roll_deg": -6.03996937,
+    "spine_curve_deg": 11.05807953,
+    "shoulder_protraction_m": 0.023619475,
+    "body_position_offset": [
+     0.011953439,
+     0.03168937,
+     -0.085161775
+    ],
+    "body_pitch_deg": -0.448793848,
+    "body_roll_deg": 2.313553224,
+    "head_yaw_deg": -79.141962,
+    "head_pitch_deg": -5.16153171,
+    "left_hand_offset": [
+     -0.5,
+     0.05271146,
+     0.36177757
+    ],
+    "right_shoulder_rotation_deg": [
+     2.324204,
+     2.5487196,
+     -7.696994
+    ],
+    "left_shoulder_rotation_deg": [
+     -3.7668936,
+     0.8378845,
+     6.984511
+    ],
+    "right_elbow_pole": [
+     0.33427316,
+     -0.08003283,
+     -0.026673153
+    ],
+    "left_elbow_pole": [
+     0.18610066,
+     -0.26209602,
+     0.36429012
+    ],
+    "right_elbow_swivel_deg": 0.397506755
    },
    "add": {
     "front_foot_forward": 0.32,
     "back_foot_back": -0.03,
-    "weight_shift": -0.2,
-    "body_yaw_deg": 12,
-    "charge_paddle_offset": [
-     0.05,
-     0.27,
-     -0.24
-    ],
-    "body_position_offset": [
-     0,
-     0,
-     -0.12
-    ]
+    "body_yaw_deg": 12
    }
   },
   "contact": {
-   "add": {
+   "set": {
+    "left_hand_offset": [
+     -0.09463694,
+     -0.20996496,
+     -0.06839957
+    ],
+    "right_knee_pole": [
+     -0.09415938,
+     0.48264888,
+     0.9996717
+    ],
+    "left_knee_pole": [
+     -0.091668494,
+     0.5059059,
+     0.99351484
+    ],
+    "crouch_amount": 0.176545945,
+    "weight_shift": 0.085571572,
+    "hip_yaw_deg": -12.38693793,
+    "torso_yaw_deg": 13.4069154,
+    "torso_pitch_deg": -30.1784478,
+    "torso_roll_deg": -8.00690381,
+    "spine_curve_deg": -6.83010554,
+    "shoulder_protraction_m": 0.001436216,
     "body_position_offset": [
-     0,
-     0,
-     0.06
-    ]
+     -0.014004314,
+     -0.028910378,
+     0.048928514
+    ],
+    "body_pitch_deg": 22.10863192,
+    "body_roll_deg": 8.83362373,
+    "head_yaw_deg": 25.6431,
+    "head_pitch_deg": 37.5179393
    }
   },
   "finish": {
@@ -38,13 +117,30 @@
      0,
      0,
      0.25
-    ],
+    ]
+   },
+   "set": {
+    "body_pitch_deg": -0.762434359,
     "body_position_offset": [
-     0,
-     0,
-     0.15
+     -0.00717119,
+     0.0,
+     0.14244972
     ],
-    "weight_shift": 0.3
+    "body_roll_deg": -2.047688844,
+    "head_pitch_deg": 8.06519528,
+    "head_yaw_deg": 35.12609196,
+    "hip_yaw_deg": -13.07767058,
+    "left_hand_offset": [
+     -0.40568444,
+     -0.24979408,
+     -0.28532156
+    ],
+    "shoulder_protraction_m": 0.001586218,
+    "spine_curve_deg": -6.47265056,
+    "torso_pitch_deg": -9.10364441,
+    "torso_roll_deg": -1.74678665,
+    "torso_yaw_deg": -0.829099108,
+    "weight_shift": -0.44858082
    }
   }
  },

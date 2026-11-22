@@ -240,7 +240,9 @@ func set_serve_charge_visual(charge_ratio: float, control_delta: float = -1.0) -
 		if _player.is_ai and "ai_desired_posture" in _player:
 			current_def = _get_posture_def(_player.ai_desired_posture)
 		if current_def:
-			_apply_motion_pose(Motion.held_drive_pose(current_def, clamped_ratio, context.volley, context.spin, context.near))
+			# The AI's committed plan (power, tactical/compact/volley rules) shapes its held Wind-up too.
+			var plan: Dictionary = _player.ai_brain.motion_context if _player.is_ai and _player.ai_brain != null else {}
+			_apply_motion_pose(Motion.held_drive_pose(current_def, clamped_ratio, context.volley, context.spin, context.near, str(plan.get("shot_intent", "AUTO")), plan))
 			return
 	if current_def and current_def.charge_paddle_offset.length_squared() > 0.0001:
 		var windup: PostureDefinition = SwingPath.endpoint(current_def, 0)

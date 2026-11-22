@@ -104,6 +104,7 @@ var _sel_path := -1.0   # progress of the path key tapped on the arc (-1 = none)
 var _handle := ""
 var _drawer: Control
 var _drawer_list: VBoxContainer
+var _drawer_dragged := false   # the finger scrolled the pose list since it touched down: no pick
 var _drawer_open := {"Strokes": true, "Body stances": false, "Serves": false, "Ball actions": true}
 var _search: LineEdit
 var _star_popup: Control
@@ -878,6 +879,8 @@ func _build_drawer() -> void:
 	sp.add_child(_search); v.add_child(sp)
 	var scroll := ScrollContainer.new(); scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.scroll_deadzone = 12   # a short wobble is still a tap
+	scroll.scroll_started.connect(func(): _drawer_dragged = true)
 	_drawer_list = VBoxContainer.new(); _drawer_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_drawer_list.add_theme_constant_override("separation", 0)
 	scroll.add_child(_drawer_list); v.add_child(scroll)
@@ -915,7 +918,7 @@ func _fill_drawer() -> void:
 		var open: bool = q != "" or bool(_drawer_open.get(name_s, false))
 		var hb := _btn("%s   %d  %s" % [name_s.to_upper(), rows.size(), "▾" if open else "▸"], _toggle_group.bind(name_s), 0, 72)
 		hb.alignment = HORIZONTAL_ALIGNMENT_LEFT; hb.add_theme_font_size_override("font_size", SMALL)
-		_drawer_list.add_child(hb)
+		_drawer_row(hb)
 		if not open: continue
 		for r in rows:
 			var stars: int = Queue.stars_for(r[0])
@@ -923,15 +926,23 @@ func _fill_drawer() -> void:
 			var b := _btn(String(r[1]) + badge, _pick_pose.bind(r[0]), 0, TAP)
 			b.alignment = HORIZONTAL_ALIGNMENT_LEFT; b.clip_text = true
 			if r[0] == studio.key: _tint(b, true, Ui.SURFACE_HOVER)
-			_drawer_list.add_child(b)
+			_drawer_row(b)
 	var pend = _drawer.find_child("Pending", true, false)
 	if pend: pend.text = "%d waiting for the Mac sync" % Queue.pending().size()
 
+## The list is all buttons: let drags through to the ScrollContainer so a finger can scroll it.
+func _drawer_row(b: Button) -> void:
+	b.mouse_filter = Control.MOUSE_FILTER_PASS
+	b.button_down.connect(func(): _drawer_dragged = false)
+	_drawer_list.add_child(b)
+
 func _toggle_group(n: String) -> void:
+	if _drawer_dragged: return
 	_drawer_open[n] = not bool(_drawer_open.get(n, false))
 	_fill_drawer()
 
 func _pick_pose(k: String) -> void:
+	if _drawer_dragged: return
 	_close_sheet()
 	studio.select_pose(k)
 	_drawer.visible = false

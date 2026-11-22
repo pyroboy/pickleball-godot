@@ -19,6 +19,7 @@ var swing_tap := false           # it was a tap (a touch shot: drop intent, flat
 var _swing_pending := false       # the frames are owed (see ensure_swing)
 var _swing_player = null
 var swing_report: Dictionary = {}   # held-hit report at release (strong_weight, limited, ...)
+var serve_charge := 1.0          # serve power of the hold (Pose Studio Hold on a serve); 1 = full
 const Motion = preload("res://scripts/drive_serve_motion.gd")
 const Runtime = preload("res://scripts/runtime_motion_preview.gd")
 const ServeStore = preload("res://scripts/mobile_serve_pose_store.gd")
@@ -74,6 +75,14 @@ func configure(def: PostureDefinition, selected_mode: int = Mode.STROKE, selecte
 	if mode == Mode.STROKE_ONLY:
 		preparation_seconds = 0.0; prefix_seconds = 0.0
 		duration = stroke_seconds + (Motion.SERVE_HOLD_TIME if style >= 0 else Clock.hold_duration(source))
+	serve_charge = 1.0
+	if serve_hold_active():
+		# My serve: hold Hit `swing_hold` s (the server winds up with the charge, as in a match),
+		# then the serve plays at that hold's power.
+		var hold: float = clampf(swing_hold, 0.0, HOLD_MAX)
+		serve_charge = Swing.charge_for_hold(hold)
+		preparation_seconds = hold; prefix_seconds = hold
+		duration = hold + stroke_seconds
 	_bake_split()
 	_swing = []; _swing_pending = false; _swing_player = player
 	if swing_hold >= 0.0 and mode == Mode.STROKE and style < 0 and variant == null and source.posture_id != 20:
@@ -82,6 +91,9 @@ func configure(def: PostureDefinition, selected_mode: int = Mode.STROKE, selecte
 		_swing_times(); _swing_pending = true
 
 func swing_active() -> bool: return _swing_pending or not _swing.is_empty()
+
+## Pose Studio Hold on a serve: the hold charges the serve like the game's serve charge.
+func serve_hold_active() -> bool: return swing_hold >= 0.0 and style >= 0 and mode == Mode.STROKE and variant == null
 
 ## Bake the swing's frames if that is still owed (sample does it itself).
 func ensure_swing() -> void:
@@ -236,6 +248,11 @@ func sample(seconds: float) -> Dictionary:
 	var split: Dictionary = {}
 	if mode == Mode.RECEIVE_STROKE and t < RECEIVE_SECONDS:
 		pose = ready.duplicate(true); split = _split_at(t); phase = "Opponent cue · " + str(split.phase)
+	elif t < prefix_seconds and serve_hold_active():
+		var charge: float = Swing.charge_for_hold(t)
+		pose = Runtime.sample_serve_elapsed(style, 0.0, charge, 1.0, source, false)
+		pose.set_meta("mobile_serve_planted_stance", true)
+		phase = "Charging serve · power %d %%" % roundi(charge * 100.0)
 	elif t < prefix_seconds:
 		var preparation_elapsed := t-(RECEIVE_SECONDS if mode == Mode.RECEIVE_STROKE else 0.0)
 		var windup := _stroke_pose(0.0)
@@ -255,7 +272,7 @@ func sample(seconds: float) -> Dictionary:
 		t -= prefix_seconds
 		if style >= 0:
 			p = 0.5*t/release_seconds if t <= release_seconds else 0.5+0.5*minf((t-release_seconds)/Styles.sweep_duration(style),1.0)
-			pose = Runtime.sample_serve_elapsed(style,t,1.0,1.0,source,false)
+			pose = Runtime.sample_serve_elapsed(style,t,serve_charge,1.0,source,false)
 			pose.set_meta("mobile_serve_planted_stance", true)
 			phase = str(pose.get_meta("preview_serve_phase", "Serve"))
 			if variant != null:

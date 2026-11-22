@@ -3,7 +3,8 @@ const BodyPose = preload("res://scripts/stroke_body_pose.gd")
 
 
 const BODY_CHARGE_ROTATION_DEGREES: = 35.0
-const BODY_TRACK_BALL_MAX_DEGREES: = 25.0
+# Ball tracking is an addition to the authored body yaw, capped here.
+const BODY_TRACK_BALL_MAX_DEGREES: = 10.0
 const BODY_TRACK_HALFLIFE: = 0.08
 const STANCE_BASE_ROTATION_DEGREES: = 12.0
 const BODY_BACKHAND_ROTATION_DEGREES: = 35.0
@@ -69,6 +70,8 @@ func update_body_lean(delta: float) -> void :
 			var reach_lateral: float = contact.dot(fh_axis)
 			var lean_boost: float = clampf(abs(reach_lateral) - 0.2, 0.0, 0.7) * 12.0 * sign(reach_lateral)
 			target_lean_z -= lean_boost
+	# Life lean stays bounded; the authored pitch/roll are added on top below.
+	target_lean_z = clampf(target_lean_z, - BODY_LEAN_MAX_DEGREES, BODY_LEAN_MAX_DEGREES)
 
 	body_lean_z = _player._damp(body_lean_z, target_lean_z + base_roll_deg, BODY_LEAN_HALFLIFE, delta)
 	body_lean_x = _player._damp(body_lean_x, target_lean_x + base_pitch_deg, BODY_LEAN_HALFLIFE, delta)
@@ -80,25 +83,19 @@ func update_crouch(delta: float) -> void :
 	if not _player.body_pivot:
 		return
 
-	var target_crouch: float = CROUCH_BASE_AMOUNT
+	# Authored crouch wins: no per-posture floors. Low postures only settle faster.
 	var halflife: float = CROUCH_HALFLIFE
 	var p: int = _player.paddle_posture
 	if p in [_player.PaddlePosture.LOW_FOREHAND, _player.PaddlePosture.LOW_BACKHAND, 
 			_player.PaddlePosture.LOW_FORWARD, _player.PaddlePosture.LOW_WIDE_FOREHAND, 
 			_player.PaddlePosture.LOW_WIDE_BACKHAND]:
-		target_crouch = CROUCH_LOW_POSTURE_AMOUNT
 		halflife = CROUCH_LOW_HALFLIFE
-	elif p in [_player.PaddlePosture.MID_LOW_FOREHAND, _player.PaddlePosture.MID_LOW_BACKHAND, 
-			_player.PaddlePosture.MID_LOW_FORWARD, _player.PaddlePosture.MID_LOW_WIDE_FOREHAND, 
-			_player.PaddlePosture.MID_LOW_WIDE_BACKHAND]:
-		target_crouch = CROUCH_MID_LOW_POSTURE_AMOUNT
-
+	var pdef_c = _player.get_runtime_posture_def()
+	var target_crouch: float = pdef_c.crouch_amount if pdef_c else CROUCH_BASE_AMOUNT
+	# Manual crouch is player input, not a life layer: it keeps its floor.
 	if _player.manual_crouch:
 		target_crouch = maxf(target_crouch, CROUCH_LOW_POSTURE_AMOUNT)
 		halflife = CROUCH_LOW_HALFLIFE
-	var pdef_c = _player.get_runtime_posture_def()
-	if pdef_c:
-		target_crouch = maxf(target_crouch, pdef_c.crouch_amount)
 	crouch_amount = _player._damp(crouch_amount, target_crouch, halflife, delta)
 
 
@@ -153,16 +150,14 @@ func update_body_track_ball(delta: float) -> void :
 
 
 	var runtime_def = _player.get_runtime_posture_def()
+	# The authored body yaw is the base (fallback angles only with no pose).
 	var stance_base: float
-	if runtime_def and absf(runtime_def.body_yaw_deg) > 0.01:
+	if runtime_def:
 		stance_base = deg_to_rad(runtime_def.body_yaw_deg) * _player._get_swing_sign()
 	elif p_now in _player.BACKHAND_POSTURES:
 		stance_base = - deg_to_rad(BODY_BACKHAND_ROTATION_DEGREES) * _player._get_swing_sign()
 	else:
 		stance_base = deg_to_rad(STANCE_BASE_ROTATION_DEGREES) * _player._get_swing_sign()
-
-	if _player.posture and _player.posture._committed_incoming_posture >= 0:
-		stance_base *= 0.2
 
 	var b = _player._get_ball_ref()
 	if b == null:
@@ -181,8 +176,6 @@ func update_body_track_ball(delta: float) -> void :
 	if pdef_t:
 		track_w = pdef_t.head_track_ball_weight
 	var max_rad: float = deg_to_rad(BODY_TRACK_BALL_MAX_DEGREES) * clampf(track_w, 0.0, 1.0)
-	if to_ball.dot(forward) < 0.0:
-		max_rad = deg_to_rad(95.0)
 	var target_y: float = clampf(angle_to_ball, - max_rad, max_rad) + stance_base
 
 	_player.body_pivot.rotation.y = _player._damp(_player.body_pivot.rotation.y, target_y, BODY_TRACK_HALFLIFE, delta)

@@ -20,9 +20,10 @@ are in `docs/ROADMAP.md`. Read it before planning work.
 - Physics runs at 30 Hz with physics interpolation (`project.godot`). Visuals placed in
   `_process` must read `get_global_transform_interpolated()`, not `global_position`.
 - Contact rule (user's call): the ball must really meet the paddle, but the planned
-  trajectory wins over strict paddle geometry. Face angle within `FACE_TOLERANCE_DEG` and
-  small arm stretch keep the plan with deliberate error; past it a mishit pops up. All in
-  `match_contact_authority.gd` (`contact_launch`); don't re-tighten it elsewhere.
+  trajectory wins over strict paddle geometry. The pose is an approximation: the paddle
+  face angle never changes the shot (no face error, no face pop-up). Only arm stretch adds
+  small deliberate error. All in `match_contact_authority.gd` (`contact_launch`); don't
+  re-tighten it elsewhere.
 - Don't run `tools/bench.sh` by default. Run it only when required: the change could
   alter gameplay (shot physics, ball flight, AI, contact, input timing, anything gameplay
   reads), or the user asks. Then compare runs with `python3 tools/pose_diff.py` (expect

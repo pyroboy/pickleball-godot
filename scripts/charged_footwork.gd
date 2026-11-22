@@ -14,6 +14,12 @@ const SPLIT_TIME: = 0.1
 const PLANT_TIME: = 0.32
 const LOAD_TIME: = 0.08
 const ADJUST_DISTANCE: = 0.3
+# Standard ShotFootwork profile; stance deltas are measured from it.
+const STANCE_REF_WIDTH := 0.54
+const STANCE_REF_FRONT := 0.06
+const STANCE_REF_BACK := -0.06
+const STANCE_DELTA_MAX := 0.12
+const SPLIT_DIP := 0.045
 const ARRIVAL_DISTANCE: = 0.025
 # The shared travel estimate already reserves 0.32 s plant + 0.08 s load.
 # Add opening/face-play allowance, rather than counting that plant twice.
@@ -499,15 +505,26 @@ func apply_stance(pose: PostureDefinition) -> PostureDefinition:
 	if not active: return result
 	var neutral: bool = bool(plan.get("neutral", false))
 	var support: Dictionary = _support_profile()
-	result.stance_width = 0.48 if neutral else (0.66 if bool(plan.get("lunge", false)) else float(support.width))
-	result.lead_foot = 1 if neutral and int(plan.def.family) == 0 else load_side
-	result.front_foot_forward = 0.18 if neutral else float(support.front)
-	result.back_foot_back = -0.14 if neutral else float(support.back)
-	result.left_foot_offset = Vector3.ZERO
-	result.right_foot_offset = Vector3.ZERO
-	result.right_foot_yaw_deg = plan.def.right_foot_yaw_deg
-	result.left_foot_yaw_deg = plan.def.left_foot_yaw_deg
-	if state == "split": result.crouch_amount = maxf(result.crouch_amount, 0.13 + sin(clampf(elapsed / SPLIT_TIME, 0.0, 1.0) * PI) * 0.035)
+	# The authored stance of the planned stroke (plan.def: width, lead foot,
+	# foot spacing, foot yaw, foot offsets) is the base. Footwork only adds a
+	# bounded delta: how far its profile differs from the standard profile.
+	# Root travel, not stance, reaches the planned spot. plan.def (not the
+	# incoming pose) is the base so the delta never compounds across ticks:
+	# visual_pose is fed back through blends that drop metadata.
+	var authored: PostureDefinition = plan.def
+	var width: float = 0.48 if neutral else (0.66 if bool(plan.get("lunge", false)) else float(support.width))
+	var front: float = 0.18 if neutral else float(support.front)
+	var back: float = -0.14 if neutral else float(support.back)
+	result.stance_width = authored.stance_width + clampf(width - STANCE_REF_WIDTH, -STANCE_DELTA_MAX, STANCE_DELTA_MAX)
+	result.front_foot_forward = authored.front_foot_forward + clampf(front - STANCE_REF_FRONT, -STANCE_DELTA_MAX, STANCE_DELTA_MAX)
+	result.back_foot_back = authored.back_foot_back + clampf(back - STANCE_REF_BACK, -STANCE_DELTA_MAX, STANCE_DELTA_MAX)
+	result.lead_foot = authored.lead_foot
+	result.left_foot_offset = authored.left_foot_offset
+	result.right_foot_offset = authored.right_foot_offset
+	result.right_foot_yaw_deg = authored.right_foot_yaw_deg
+	result.left_foot_yaw_deg = authored.left_foot_yaw_deg
+	# Split step: a short dip on top of the authored crouch (no fixed floor).
+	if state == "split": result.crouch_amount = maxf(pose.crouch_amount, authored.crouch_amount + sin(clampf(elapsed / SPLIT_TIME, 0.0, 1.0) * PI) * SPLIT_DIP)
 
 	var load_weight: float = minf(load_elapsed / float(support.load_time), 1.0) if state == "load" else 0.0
 	if state == "swing": load_weight = 1.0 - clampf(human.elapsed / maxf(human.strike_time, 0.01), 0.0, 1.0)

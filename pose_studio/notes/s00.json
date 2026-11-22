@@ -1,0 +1,30 @@
+[
+ {
+  "id": "n1",
+  "pose": "s00",
+  "kind": "request",
+  "stage": "finish",
+  "field": null,
+  "time": 1.0,
+  "author": "user",
+  "text": "I want to be ab",
+  "status": "open",
+  "created": "2026-11-22T03:04:26",
+  "created_version": 9,
+  "reply": null
+ },
+ {
+  "id": "n2",
+  "pose": "s00",
+  "kind": "request",
+  "stage": "windup",
+  "field": null,
+  "time": null,
+  "author": "user",
+  "text": "I want to be able to edit frome ready to wondup trajectory",
+  "status": "open",
+  "created": "2026-11-22T03:04:26",
+  "created_version": 9,
+  "reply": null
+ }
+]

@@ -1,0 +1,198 @@
+[gd_resource type="Resource" script_class="PostureDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://dcwratt6mjxjp" path="res://scripts/stroke_body_keyframe.gd" id="1"]
+[ext_resource type="Script" uid="uid://c4e2paj0madt2" path="res://scripts/posture_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_od0sf"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.13,
+"body_pitch_deg": 0,
+"body_position_offset": Vector3(0.2, 0, 0.08),
+"body_roll_deg": 0,
+"body_yaw_deg": 15,
+"crouch_amount": 0.16,
+"front_foot_forward": 0.17,
+"head_pitch_deg": 0,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 0,
+"hip_yaw_deg": 10,
+"lead_foot": 0,
+"left_elbow_pole": Vector3(0.03999999910593033, -0.25, 0.2225193977355957),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": -50,
+"left_hand_mode": 1,
+"left_hand_offset": Vector3(-0.05999999865889549, -0.07000000029802322, 0),
+"left_knee_pole": Vector3(-0.7699999809265137, 0.5, 0.6399999856948853),
+"left_shoulder_rotation_deg": Vector3(-120, 97.19999694824219, -107.19999694824219),
+"main_grip_rotation_deg": -48,
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0,
+"right_elbow_pole": Vector3(0.28506040573120117, 0.10219836235046387, 0.4297475814819336),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": -35,
+"right_hand_offset": Vector3(0, -0.05000000074505806, 0),
+"right_knee_pole": Vector3(-0.5699999928474426, 0.5, 0.8199999928474426),
+"right_shoulder_rotation_deg": Vector3(0, 0, 0),
+"shoulder_protraction_m": 0.05,
+"spine_curve_deg": 0,
+"stance_width": 0.5,
+"support_grip_rotation_deg": -137,
+"support_grip_slide_m": 0.00825,
+"support_grip_style": 1,
+"support_index_closure": 0.4,
+"torso_pitch_deg": -6,
+"torso_roll_deg": 0,
+"torso_yaw_deg": 10,
+"weight_shift": 0.6,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 44.1347051
+}
+
+[sub_resource type="Resource" id="Resource_ly5iw"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.13,
+"body_pitch_deg": -1.154110218,
+"body_position_offset": Vector3(-0.006716847, -0.0013903416, -0.12294671),
+"body_roll_deg": -1.070669265,
+"body_yaw_deg": -50,
+"crouch_amount": 0.179358379,
+"front_foot_forward": 0.17,
+"head_pitch_deg": -12.15810708,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 74.463098,
+"hip_yaw_deg": -0.255642963,
+"lead_foot": 0,
+"left_elbow_pole": Vector3(0.47928816, 0.234, 0.20749977),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": -50,
+"left_hand_mode": 1,
+"left_hand_offset": Vector3(-0.16397618, 0.10748632, 0.24403228),
+"left_knee_pole": Vector3(-0.7699999809265137, 0.5, 0.6399999856948853),
+"left_shoulder_rotation_deg": Vector3(2.4281206, 6.2226143, 3.8468108),
+"main_grip_rotation_deg": -29.999999999999996,
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0,
+"right_elbow_pole": Vector3(-0.16763385, -0.39583454, 0.07327119),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": -35,
+"right_hand_offset": Vector3(0, -0.05000000074505806, 0),
+"right_knee_pole": Vector3(-0.5699999928474426, 0.5, 0.8199999928474426),
+"right_shoulder_rotation_deg": Vector3(-0.20855322, 0.38032168, 0.06996311),
+"shoulder_protraction_m": 0.025429101,
+"spine_curve_deg": 7.74753805,
+"stance_width": 0.5,
+"support_grip_rotation_deg": 0,
+"support_grip_slide_m": 0.00825,
+"support_grip_style": 1,
+"support_index_closure": 0.4,
+"torso_pitch_deg": -5.27135903,
+"torso_roll_deg": -1.560570663,
+"torso_yaw_deg": -29.86262866,
+"weight_shift": -0.606552033,
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -69.5173797,
+"paddle_in_hand_rotation_deg": 18.4020969
+}
+
+[resource]
+script = ExtResource("2")
+posture_id = 2
+display_name = "Backhand"
+family = 1
+back_foot_back = -0.22
+body_pitch_deg = 0
+body_position_offset = Vector3(0.05700000002980232, 0, 0)
+body_roll_deg = 0
+body_yaw_deg = -45
+charge_back_foot_load = 0.65
+charge_body_rotation_deg = -16
+charge_duration = 0.32
+charge_hip_coil_deg = -12
+charge_paddle_offset = Vector3(0.10659044, -0.52871734, -1.1534425)
+charge_paddle_rotation_deg = Vector3(-91.0379, 36.095016, -119.147705)
+compact_finish_elbow_offset = Vector3(0, 0, 0)
+compact_finish_lateral_scale = 0.82
+compact_motion_scale = 1
+contact_curve = 0
+crouch_amount = 0.14
+front_foot_forward = 0.22
+ft_duration_hold = 0.06
+ft_duration_settle = 0.18
+ft_duration_strike = 0.12
+ft_duration_sweep = 0.28
+ft_ease_curve = 2
+ft_front_foot_load = 0.8
+ft_hip_uncoil_deg = 8
+ft_paddle_offset = Vector3(1.091, 0.4474, -0.018)
+ft_paddle_rotation_deg = Vector3(-12.641373634338379, -21.262840270996094, 103.062744140625)
+has_zone = true
+head_pitch_deg = 0
+head_track_ball_weight = 0.8
+head_yaw_deg = 0
+hip_yaw_deg = 0
+lead_foot = 0
+left_elbow_path = PackedVector3Array(0.47928816, 0.234, 0.20749977, 0.4529942, 0.11866769, 0.05397903, 0.40684637, 0.11850126, 0.07076496, 0.36160284, 0.11822643, 0.0872482, 0.31730992, 0.11784529, 0.10341006, 0.27401397, 0.11735993, 0.11923184, 0.23176128, 0.11677243, 0.13469486, 0.19059816, 0.11608489, 0.14978042, 0.15057097, 0.11529938, 0.16446984, 0.11172602, 0.114418015, 0.17874442, 0.07410963, 0.11344286, 0.19258547, 0.037768118, 0.11237602, 0.2059743, 0.0027478097, 0.11121957, 0.21889222, -0.030904971, 0.109975606, 0.23132053, -0.0631439, 0.108646214, 0.24324055, -0.09392266, 0.10723349, 0.25463358, -0.123194925, 0.10573951, 0.26548094, -0.15091437, 0.10416637, 0.27576393, -0.17703468, 0.10251616, 0.28546384, -0.20150952, 0.10079096, 0.29456204, -0.22429258, 0.09899287, 0.30303976, -0.24533752, 0.097123966, 0.31087837, -0.26459804, 0.095186345, 0.31805915, -0.28202778, 0.093182094, 0.3245634, -0.29758048, 0.0911133, 0.33037245, -0.31120977, 0.08898205, 0.33546764, -0.32286933, 0.08679044, 0.3398302, -0.33251283, 0.08454055, 0.3434415, -0.340094, 0.08223448, 0.34628278, -0.34556645, 0.0798743, 0.34833544, -0.3488839, 0.077462114, 0.34958073, -0.35, 0.075, 0.35, -0.3498258, 0.0721476, 0.3499608, -0.34927225, 0.06857757, 0.34983075, -0.3482931, 0.064311504, 0.34959114, -0.346842, 0.059371024, 0.34922332, -0.34487262, 0.05377773, 0.34870854, -0.34233862, 0.047553223, 0.34802815, -0.3391937, 0.04071912, 0.34716344, -0.33539155, 0.033297025, 0.3460957, -0.33088583, 0.025308546, 0.3448063, -0.32563022, 0.01677529, 0.34327653, -0.3195784, 0.0077188625, 0.34148765, -0.31268403, -0.0018391263, 0.339421, -0.3049008, -0.01187707, 0.33705792, -0.2961824, -0.022373363, 0.33437967, -0.28648248, -0.033306394, 0.33136758, -0.27575475, -0.04465456, 0.32800293, -0.26395288, -0.05639625, 0.3242671, -0.2510305, -0.06850986, 0.32014132, -0.23694135, -0.08097378, 0.31560695, -0.22163908, -0.093766406, 0.31064528, -0.20507738, -0.10686612, 0.3052376, -0.18720989, -0.120251335, 0.29936525, -0.16799033, -0.13390042, 0.29300952, -0.14737236, -0.14779179, 0.28615174, -0.12530966, -0.16190381, 0.27877322, -0.1017559, -0.17621492, 0.27085522, -0.07666477, -0.19070345, 0.2623791, -0.04998993, -0.20534784, 0.25332615, -0.021685073, -0.22012646, 0.24367768, 0.008296129, -0.23501772, 0.233415, 0.04, -0.25, 0.2225194)
+left_elbow_pole = Vector3(-0.35, 0.075, 0.35)
+left_foot_offset = Vector3(0, 0, 0)
+left_foot_pitch_deg = 0
+left_foot_yaw_deg = -45
+left_hand_mode = 1
+left_hand_offset = Vector3(0, 0, 0)
+left_knee_pole = Vector3(-0.7699999809265137, 0.5, 0.6399999856948853)
+left_shoulder_rotation_deg = Vector3(0, 0, 0)
+main_grip_rotation_deg = -29.999999999999996
+paddle_floor_clearance = 0.06
+paddle_forehand_mul = -0.55
+paddle_forward_mul = 0.67
+paddle_hand = 0
+paddle_in_hand_rotation_deg = 0
+paddle_pitch_base_deg = 3.1318309973716425
+paddle_pitch_sign_source = 1
+paddle_pitch_signed_deg = 0
+paddle_roll_base_deg = -75.7651138182362
+paddle_roll_sign_source = 1
+paddle_roll_signed_deg = 0.0
+paddle_y_offset = 0.23089957237243652
+paddle_yaw_base_deg = 1.238696655784702
+paddle_yaw_sign_source = 1
+paddle_yaw_signed_deg = 0
+right_elbow_path = PackedVector3Array(-0.16763385, -0.39583454, 0.07327119, -0.16814831, -0.028282043, 0.08219122, -0.15448812, -0.022991374, 0.09566465, -0.14096278, -0.017743392, 0.10902231, -0.12758054, -0.012545168, 0.12224793, -0.11434968, -0.007403783, 0.13532524, -0.101278454, -0.0023263106, 0.14823796, -0.08837513, 0.0026801717, 0.16096982, -0.075647965, 0.007608588, 0.17350455, -0.06310524, 0.012451861, 0.18582587, -0.050755203, 0.017202916, 0.19791752, -0.038606126, 0.021854673, 0.20976323, -0.026666274, 0.02640006, 0.2213467, -0.014943908, 0.030831996, 0.2326517, -0.0034472938, 0.03514341, 0.24366191, 0.007815304, 0.03932722, 0.2543611, 0.018835623, 0.043376353, 0.26473296, 0.029605394, 0.04728373, 0.27476123, 0.04011636, 0.05104228, 0.28442964, 0.050360247, 0.05464492, 0.29372194, 0.0603288, 0.058084577, 0.3026218, 0.070013754, 0.061354175, 0.31111303, 0.079406835, 0.064446636, 0.3191793, 0.088499784, 0.06735488, 0.32680434, 0.09728435, 0.07007184, 0.3339719, 0.10575224, 0.07259043, 0.34066564, 0.113895215, 0.07490358, 0.34686938, 0.121704996, 0.07700421, 0.3525668, 0.12917332, 0.07888524, 0.35774165, 0.13629195, 0.08053961, 0.36237764, 0.14305258, 0.08196022, 0.36645848, 0.14944696, 0.083140016, 0.36996794, 0.15563764, 0.084188156, 0.37316456, 0.16178714, 0.08521782, 0.3763152, 0.16788718, 0.08622793, 0.3794158, 0.17392951, 0.08721741, 0.38246244, 0.17990588, 0.08818518, 0.38545108, 0.185808, 0.08913017, 0.3883778, 0.19162762, 0.09005129, 0.3912385, 0.19735648, 0.09094748, 0.39402932, 0.2029863, 0.09181764, 0.3967462, 0.20850883, 0.09266071, 0.39938515, 0.21391581, 0.09347561, 0.40194222, 0.21919894, 0.09426126, 0.40441343, 0.22435, 0.095016584, 0.40679476, 0.2293607, 0.095740505, 0.40908223, 0.23422278, 0.09643194, 0.41127187, 0.23892799, 0.09708982, 0.4133597, 0.24346805, 0.09771306, 0.4153417, 0.24783468, 0.09830059, 0.41721392, 0.25201967, 0.09885132, 0.41897234, 0.25601467, 0.0993642, 0.420613, 0.25981152, 0.09983812, 0.4221319, 0.26340187, 0.10027202, 0.42352507, 0.2667775, 0.100664824, 0.4247885, 0.26993012, 0.10101545, 0.42591825, 0.2728515, 0.10132282, 0.42691028, 0.27553335, 0.10158586, 0.42776063, 0.2779674, 0.10180349, 0.4284653, 0.28014538, 0.10197463, 0.42902032, 0.28205907, 0.102098204, 0.4294217, 0.28370017, 0.10217314, 0.42966545, 0.2850604, 0.10219836, 0.42974758)
+right_elbow_pole = Vector3(0.14944696426391602, 0.08314001560211182, 0.3699679374694824)
+right_foot_offset = Vector3(0, 0, 0)
+right_foot_pitch_deg = 0
+right_foot_yaw_deg = -45
+right_hand_offset = Vector3(0, -0.05000000074505806, 0)
+right_knee_pole = Vector3(-0.5699999928474426, 0.5, 0.8199999928474426)
+right_shoulder_rotation_deg = Vector3(0, 0, 0)
+shoulder_protraction_m = 0.0401
+spine_curve_deg = -4.399999999999999
+stance_width = 0.44
+support_grip_rotation_deg = 0
+support_grip_slide_m = -0.0039000000000000007
+support_grip_style = 0.792
+support_index_closure = 0.369
+swing_path_blend = 1
+torso_pitch_deg = -6
+torso_roll_deg = 0
+torso_yaw_deg = 0
+weight_shift = 0
+zone_forward_offset = 0.69
+zone_x_max = -0.2834
+zone_x_min = -0.6834
+zone_y_max = 1.3726
+zone_y_min = 0.9726
+windup_body = SubResource("Resource_ly5iw")
+follow_through_body = SubResource("Resource_od0sf")
+notes = "Right-dominant groundstroke; contact shaft below wrist, broad face through ball. Raised natural standing rig. Contact head coordinates unchanged."
+right_elbow_swivel_deg = -41.0669427
+elbow_swivel_weight = 1.0

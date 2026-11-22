@@ -12,10 +12,12 @@ rating in the app's Documents/pose_studio_queue. This tool:
      the phone shows: Claude's replies, stars, version history).
 Entries already applied (pose_studio/phone_applied.json) are never applied twice.
 
-Usage: python3 tools/pose_studio/phone_sync.py [--device UDID] [--bundle ID] [--local DIR] [--dry-run]
+Usage: python3 tools/pose_studio/phone_sync.py [--device UDID] [--bundle ID] [--local DIR] [--dry-run] [--auto]
+--auto (the background poll, tools/phone_sync_auto.sh): silent when the phone is unreachable or
+nothing changed; pushes back only when there is something new for the phone.
 Nothing is committed: review `git status` / `git diff` afterwards.
 """
-import argparse, json, os, shutil, subprocess, sys, tempfile
+import argparse, hashlib, json, os, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
@@ -25,6 +27,7 @@ import store as store_mod  # noqa: E402
 DEVICE = "00008130-001675341460001C"
 BUNDLE = "com.arjomagno.arjostylepickleball.ios"
 APPLIED = os.path.join(ROOT, "pose_studio", "phone_applied.json")
+PUSHED = os.path.join(ROOT, "logs", "phone_sync_pushed.sha1")   # --auto: what the phone last got
 
 
 def devicectl(*args):
@@ -100,11 +103,16 @@ def main():
     ap.add_argument("--bundle", default=BUNDLE)
     ap.add_argument("--local", help="a queue folder on this Mac instead of the phone (tests)")
     ap.add_argument("--dry-run", action="store_true", help="list what would be applied")
+    ap.add_argument("--auto", action="store_true", help="background poll: quiet, push only on changes")
     a = ap.parse_args()
     tmp = tempfile.mkdtemp(prefix="phone_sync_")
     try:
         qdir = a.local or os.path.join(tmp, "queue")
-        if not a.local: pull(a.device, a.bundle, qdir)
+        if not a.local:
+            try: pull(a.device, a.bundle, qdir)
+            except SystemExit:
+                if a.auto: return   # phone asleep / out of reach: try again next poll
+                raise
         names = sorted(n for n in os.listdir(qdir) if n.endswith(".json") and n != "synced.json") if os.path.isdir(qdir) else []
         applied = set(json.load(open(APPLIED)).get("ids", [])) if os.path.exists(APPLIED) else set()
         entries = []
@@ -136,6 +144,9 @@ def main():
         with open(os.path.join(out, "synced.json"), "w") as f: json.dump({"ids": done}, f)
         for name, obj in (("notes", notes), ("ratings", ratings), ("versions", versions)):
             with open(os.path.join(out, "sync", name + ".json"), "w") as f: json.dump(obj, f)
+        digest = hashlib.sha1(json.dumps([done, notes, ratings, versions], sort_keys=True).encode()).hexdigest()
+        if a.auto and not failed and new == 0 and os.path.exists(PUSHED) and open(PUSHED).read().strip() == digest:
+            return   # nothing new either way
         if a.local:
             shutil.copy(os.path.join(out, "synced.json"), os.path.join(qdir, "synced.json"))
             sync_dir = os.path.join(os.path.dirname(qdir.rstrip("/")), "pose_studio_sync")
@@ -145,7 +156,11 @@ def main():
             push(a.device, a.bundle, os.path.join(out, "synced.json"), "Documents/pose_studio_queue/synced.json")
             for name in ("notes", "ratings", "versions"):
                 push(a.device, a.bundle, os.path.join(out, "sync", name + ".json"), "Documents/pose_studio_sync/%s.json" % name)
-        print("%d applied, %d already applied before, %d failed. Nothing committed: review with git status / git diff" % (new, before, len(failed)))
+        if a.auto:
+            os.makedirs(os.path.dirname(PUSHED), exist_ok=True)
+            with open(PUSHED, "w") as f: f.write(digest)
+        if not a.auto or new or failed:
+            print("%d applied, %d already applied before, %d failed. Nothing committed: review with git status / git diff" % (new, before, len(failed)))
         if failed: sys.exit(1)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

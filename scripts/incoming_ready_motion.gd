@@ -18,18 +18,23 @@ static func ready_pose(source: PostureDefinition) -> PostureDefinition:
 
 	return source.lerp_with(source, 0.0)
 
+## `windup` (AI): the full, power-scaled Wind-up to prepare into instead of the
+## partial blend toward the authored key; `full_time` is when it is fully reached.
 static func prepare(contact: PostureDefinition, ready: PostureDefinition, 
-		time_to_contact: float, pre_bounce: bool, near_kitchen: bool = false) -> PostureDefinition:
+		time_to_contact: float, pre_bounce: bool, near_kitchen: bool = false,
+		windup: PostureDefinition = null, full_time: float = PREP_FULL_TIME) -> PostureDefinition:
 
 	var amount: float = 0.18 if pre_bounce else 0.46
 	if contact.height_tier <= 1: amount = 0.24
 	if contact.family == 3: amount = 0.52
-	var prepared: PostureDefinition = contact.lerp_with(Path.endpoint(contact, 0), amount)
+	var prepared: PostureDefinition = windup
+	if prepared == null:
+		prepared = contact.lerp_with(Path.endpoint(contact, 0), amount)
 
 
-	if contact.family == 1 and contact.left_hand_mode == 1:
-		prepared = Path.sample(contact, 0.5 * (1.0 - amount))
-	var urgency: float = smoothstep(PREP_START_TIME, PREP_FULL_TIME, maxf(time_to_contact, 0.0))
+		if contact.family == 1 and contact.left_hand_mode == 1:
+			prepared = Path.sample(contact, 0.5 * (1.0 - amount))
+	var urgency: float = smoothstep(PREP_START_TIME, full_time, maxf(time_to_contact, 0.0))
 
 	var pose: PostureDefinition = Path.blend_pose(prepared, ready, 1.0 - urgency)
 	if GripTransition.supports_both_joined(ready, prepared):

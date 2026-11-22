@@ -491,8 +491,11 @@ func _perf_physics_process(delta: float) -> void:
 					_set_phase("PASS_PREP")
 		"PASS_PREP":
 			var player = _players[retriever]
-			var windup: Vector3 = _carry_wrist(retriever) - player._get_forward_axis() * .1 - Vector3.UP * .1
-			var finish: Vector3 = _carry_wrist(retriever) + player._get_forward_axis() * .12 + Vector3.UP * .16
+			# Wind-back / Release hands in the same turned player frame as the carry and the
+			# authored key offsets (ball_actions.gd THROW_WINDUP / THROW_FINISH), so each key's
+			# hand lands where Pose Studio shows it; the shoulder arc only shapes the path between.
+			var windup: Vector3 = _carry_wrist(retriever) + _hand_world(retriever, Actions.THROW_WINDUP)
+			var finish: Vector3 = _carry_wrist(retriever) + _hand_world(retriever, Actions.THROW_FINISH)
 			var windup_time: float = Actions.timing(_throw_id, "windup_time", .15)
 			var release_time: float = Actions.timing(_throw_id, "release_time", 0.55)
 			var swing_time: float = .4 if windup_time == .15 and release_time == 0.55 else maxf(release_time - windup_time, 0.05)

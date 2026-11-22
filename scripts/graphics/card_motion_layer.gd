@@ -438,12 +438,26 @@ func _relax_goal(arm, paddle_arm, swinging: bool) -> float:
 	if bpc == null: return 0.0
 	var ph: String = str(bpc.get("phase"))
 	if ph in ["IDLE", "SET_SERVE"]: return 0.0
+	# A ball action (pickup / throw / catch / carry) is an authored Pose Studio pose for both
+	# arms: it plays as authored, never hung at the sides.
+	if _ball_action_playing(bpc): return 0.0
 	if arm == paddle_arm: return 0.0 if _reactions != null and _reactions.current() != "" else 1.0
-	var idx: int = bpc.index_for_actor(player)
-	if idx == int(bpc.get("_carry_team")): return 0.0
-	var handlers: Array = [int(bpc.get("retriever")), int(bpc.get("server")), int(bpc.get("catcher"))]
-	if idx in handlers and (ph in CardPartnerTap.BUSY_PHASES or ph == "HELPER_WAIT"): return 0.0
 	return 1.0
+
+## True while this player plays a ball action between points (handles the ball, or holds it).
+func _ball_action_playing(bpc = null) -> bool:
+	var player = _rig._player
+	if bpc == null:
+		if not player.has_method("_between_point_owner"): return false
+		bpc = player._between_point_owner()
+	if bpc == null: return false
+	var ph: String = str(bpc.get("phase"))
+	if ph in ["IDLE", "SET_SERVE"]: return false
+	var idx: int = bpc.index_for_actor(player)
+	if idx < 0: return false
+	if idx == int(bpc.get("_carry_team")): return true
+	var handlers: Array = [int(bpc.get("retriever")), int(bpc.get("server")), int(bpc.get("catcher"))]
+	return idx in handlers and (ph in CardPartnerTap.BUSY_PHASES or ph == "HELPER_WAIT")
 
 ## Between points the gameplay pose keeps the ready guard (paddle up, free hand out in front).
 ## The cards let both arms hang at the sides instead: the upper arm drops from the shoulder,
@@ -520,7 +534,7 @@ func _stand_straight(delta: float, swinging: bool) -> void:
 	var player = _rig._player
 	var want: = 0.0
 	if enabled() and not _rig._raw and not swinging and _expressions != null and _expressions.shown_context() == "idle" \
-			and not (_tap != null and _tap._hands_busy(player)):
+			and not (_tap != null and _tap._hands_busy(player)) and not _ball_action_playing():
 		want = 1.0 - smoothstep(0.3, 1.0, _speed)
 	# This player's own speed (CardProfile), eased in and out rather than linear.
 	var ease: float = STAND_EASE

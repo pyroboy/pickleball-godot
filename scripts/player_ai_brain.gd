@@ -781,6 +781,19 @@ var _pose_alignment_tick: = -1
 var _pose_alignment_flight: = -1
 
 const ALIGN_LEAD_SECONDS := 0.6
+const AI_WINDUP_FULL_MARGIN := 0.15   # preparation reaches the full Wind-up this long before alignment starts
+const AI_PRESENTATION_CHARGE := 0.5   # Wind-up scale before the shot plan (and its charge) exists
+const WINDUP_OFFSET_MAX_SPEED := 2.5  # m/s the held Wind-up head may move when a replan changes its key
+var _windup_offset_smoothed := Vector3.ZERO
+var _windup_offset_flight: int = -1
+var _windup_offset_bounces: int = -1
+var _windup_offset_tick: int = -100
+const DISPLAY_MAX_STEP := 0.1          # m per physics tick the displayed head may follow an anchor jump
+const DISPLAY_MAX_CORRECTION := 0.6    # m; scaled by (1 - strike) so Contact is exact
+var _display_correction := Vector3.ZERO
+var _display_anchor_local := Vector3.ZERO
+var _display_flight: int = -1
+var _display_tick: int = -100
 var _align_desired: PostureDefinition = null   # last intended (pre wrist-correction) aligned pose
 var _align_desired_flight: int = -1
 var _align_desired_tick: int = -100
@@ -851,8 +864,9 @@ func align_paddle_to_contact(delta: float) -> void :
 				base.set(field, _planned_contact_grip.get(field))
 	if ai_selected_contact_time <= 0.35:
 		if not motion_context.is_empty():
+			# Team-coordination receipt only (team_coordination_bridge reads it); keep its clock.
+			# The displayed stroke sweep is _strike_progress below.
 			coordination_forward_progress = 0.5 * (1.0 - clampf(ai_selected_contact_time / 0.18, 0.0, 1.0))
-			base = DriveMotion.sample_drive(base, coordination_forward_progress, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
 
 
 	var tick: int = Engine.get_physics_frames()
@@ -870,7 +884,11 @@ func align_paddle_to_contact(delta: float) -> void :
 
 
 		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
-		var prepare: PostureDefinition = preload("res://scripts/incoming_ready_motion.gd").prepare(base, ready, ai_selected_contact_time, ball.bounces_since_last_hit == 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65)
+		# Prepare into the stroke's full (power-scaled) Wind-up key, reached by
+		# ALIGN_LEAD_SECONDS + AI_WINDUP_FULL_MARGIN; the rate-limited blend below
+		# leaves a partial wind-up when the reaction is too short (contact never waits).
+		var windup: PostureDefinition = _stroke_presentation_pose(base, 0.0, ball) if ai_selected_contact_time < preload("res://scripts/incoming_ready_motion.gd").PREP_START_TIME else null
+		var prepare: PostureDefinition = preload("res://scripts/incoming_ready_motion.gd").prepare(base, ready, ai_selected_contact_time, ball.bounces_since_last_hit == 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65, windup, ALIGN_LEAD_SECONDS + AI_WINDUP_FULL_MARGIN)
 		var previous_preparation: PostureDefinition = incoming_pose_override if incoming_pose_override else ready
 		incoming_pose_override = preload("res://scripts/incoming_ready_motion.gd").blend_pose(incoming_pose_override if incoming_pose_override else ready, prepare, pose_delta)
 		var _al_prep := Time.get_ticks_usec()
@@ -882,6 +900,35 @@ func align_paddle_to_contact(delta: float) -> void :
 		_exchange_align_flight = -1
 		return
 
+	# Stroke presentation: hold the Wind-up, then sweep Wind-up -> Contact over the
+	# stroke's strike time, landing on Contact one update before the planned contact.
+	# The contact-point tracking (_exchange_align_head) is unchanged; the Wind-up
+	# head offset rides on top like the half-volley approach arc and is zero at Contact.
+	var _al_stroke := Time.get_ticks_usec()
+	var contact_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5, ball)
+	var strike: float = _strike_progress(base, ai_selected_contact_time, delta)
+	var windup_offset := Vector3.ZERO
+	if strike < 1.0:
+		var swing_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5 * strike, ball)
+		var swing_path = preload("res://scripts/stroke_swing_path.gd")
+		var contact_head: Vector3 = swing_path.world_transform(_player, contact_pose) * PaddleDimensions.HEAD_OFFSET
+		windup_offset = swing_path.world_transform(_player, swing_pose) * PaddleDimensions.HEAD_OFFSET - contact_head
+		# Replans switch the contact posture (and plan/no-plan charge) while the ball is
+		# in flight, and each posture has its own Wind-up: the raw offset jumped 0.4 m
+		# back and forth (bench: paddle flicker every 4-5 ticks). Rate-limit the full
+		# Wind-up offset and fade the correction out with the strike, so Contact is exact.
+		var full_offset: Vector3 = windup_offset if strike <= 0.0 else swing_path.world_transform(_player, _stroke_presentation_pose(base, 0.0, ball)) * PaddleDimensions.HEAD_OFFSET - contact_head
+		if _windup_offset_flight != ball.flight_id or _windup_offset_bounces != ball.bounces_since_last_hit or Engine.get_physics_frames() - _windup_offset_tick > 3:
+			_windup_offset_smoothed = full_offset
+		else:
+			_windup_offset_smoothed += (full_offset - _windup_offset_smoothed).limit_length(WINDUP_OFFSET_MAX_SPEED * maxf(delta, 0.0))
+		_windup_offset_flight = ball.flight_id; _windup_offset_bounces = ball.bounces_since_last_hit; _windup_offset_tick = Engine.get_physics_frames()
+		windup_offset += (_windup_offset_smoothed - full_offset) * (1.0 - strike)
+		base = swing_pose
+	else:
+		base = contact_pose
+		_windup_offset_flight = -1
+	PerfMonitor.record("al.stroke", Time.get_ticks_usec() - _al_stroke)
 	if ai_selected_contact_time <= maxf(delta, 0.0) and ball.global_position.distance_to(contact) < 0.55 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, ball.global_position):
 		contact = ball.global_position
 	var shoulder: Vector3 = PaddleReach.shoulder_world(_player)
@@ -899,9 +946,9 @@ func align_paddle_to_contact(delta: float) -> void :
 	var head: Vector3 = PaddleReach.head_world(_player)
 	if _exchange_align_flight != ball.flight_id:
 		_exchange_align_flight = ball.flight_id
-		_exchange_align_head = head
+		_exchange_align_head = head - windup_offset
 	head = _exchange_align_head
-	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact - _hitting_face_offset(base), shoulder,
+	var target_head: Vector3 = PaddleReach.clamp_head_with_floor(contact - _hitting_face_offset(contact_pose), shoulder,
 		_player.COURT_FLOOR_Y + 0.06)
 	var rate: float = 42.0 if ball.global_position.distance_to(contact) < 0.55 else 22.0
 	var blend: float = 1.0 - exp( - maxf(delta, 0.0) * rate)
@@ -913,6 +960,22 @@ func align_paddle_to_contact(delta: float) -> void :
 		var approach_phase: float = (.20 - ai_selected_contact_time) / (.20 - .033333333333333)
 		approach_offset = _player._get_forward_axis() * (.04 * sin(PI * approach_phase))
 		aligned += approach_offset
+	aligned += windup_offset
+	# A replan can move the contact target ~0.9 m in one tick (posture/contact sample
+	# flips while the ball is in flight); the anchor then jumped half of that, and the
+	# Wind-up hold plus the strike made it read as a back-and-forth flicker. Absorb
+	# body-relative anchor motion past DISPLAY_MAX_STEP per tick into a presentation
+	# correction that eases out, capped to zero by Contact (contact targets unchanged).
+	var anchor_local: Vector3 = aligned - approach_offset - windup_offset - _player.global_position
+	if _display_flight != ball.flight_id or Engine.get_physics_frames() - _display_tick > 3:
+		# First aligned tick (often a late reaction): start from where the paddle was.
+		_display_correction = Vector3.ZERO
+		_display_anchor_local = head - _player.global_position
+	_display_correction -= anchor_local - _display_anchor_local
+	_display_flight = ball.flight_id; _display_tick = Engine.get_physics_frames(); _display_anchor_local = anchor_local
+	_display_correction = _display_correction.move_toward(Vector3.ZERO, DISPLAY_MAX_STEP * maxf(delta, 0.0) * float(Engine.physics_ticks_per_second))
+	_display_correction = _display_correction.limit_length(DISPLAY_MAX_CORRECTION * (1.0 - strike))
+	aligned += _display_correction
 
 
 
@@ -943,7 +1006,7 @@ func align_paddle_to_contact(delta: float) -> void :
 	PerfMonitor.record("al.joint_path", Time.get_ticks_usec() - _al_js)
 	PerfMonitor.record("al.final_pose", Time.get_ticks_usec() - _al_final_pose)
 	aligned = preload("res://scripts/stroke_swing_path.gd").world_transform(_player, pose) * PaddleDimensions.HEAD_OFFSET
-	_exchange_align_head = aligned - approach_offset
+	_exchange_align_head = aligned - approach_offset - windup_offset - _display_correction
 	pose.set_meta("live_approach_offset", approach_offset)
 	incoming_pose_override = pose
 	_player.hitting.charge_visual_active = false
@@ -956,6 +1019,23 @@ func align_paddle_to_contact(delta: float) -> void :
 # the head thickness), like the dive / grounded reach. Aimed at the ball centre,
 # a rising soft ball met an open face on its underside and the shot was dropped
 # (bench: 31 of 694 hits, nearly all ended the point in the net).
+## Wind-up (0) -> Contact (1) of the displayed stroke at this time to contact: the
+## strike part's authored duration and speed ramp (Pose Studio), ending `lead`
+## (one alignment update) before the planned contact so the contact interval
+## itself is presented at Contact, as before.
+func _strike_progress(def: PostureDefinition, time_to_contact: float, delta: float) -> float:
+	var lead: float = maxf(delta, 1.0 / float(Engine.physics_ticks_per_second))
+	var x: float = clampf(1.0 - (time_to_contact - lead) / preload("res://scripts/stroke_playback_clock.gd").strike_duration(def), 0.0, 1.0)
+	return preload("res://scripts/stroke_speed_ramp.gd").normalized(def, preload("res://scripts/stroke_speed_ramp.gd").STRIKE, x)
+
+## The stroke pose at swing progress (0 Wind-up, 0.5 Contact) through DriveMotion, so the
+## committed plan's power, volley/kitchen/compact and tactical rules apply. Before the
+## plan exists the AI shows a medium charge.
+func _stroke_presentation_pose(contact_def: PostureDefinition, progress: float, ball) -> PostureDefinition:
+	if not motion_context.is_empty():
+		return DriveMotion.sample_drive(contact_def, progress, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
+	return DriveMotion.sample_drive(contact_def, progress, AI_PRESENTATION_CHARGE, ball.bounces_since_last_hit == 0, 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65)
+
 func _hitting_face_offset(pose: PostureDefinition) -> Vector3:
 	var normal: Vector3 = preload("res://scripts/stroke_swing_path.gd").paddle_basis(_player, pose).z.normalized()
 	var toward_net: Vector3 = Vector3(0.0, 0.3, -signf(_player.global_position.z) if absf(_player.global_position.z) > 0.01 else 1.0)

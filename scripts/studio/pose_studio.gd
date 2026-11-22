@@ -1550,7 +1550,7 @@ func set_hold(seconds: float) -> void:
 
 ## Hold button down: Hit is held. The wind-up plays as in a match until it is let go.
 func hold_begin() -> void:
-	if not _ok() or key == "" or not _timeline.motion() or engine.get("_action") or engine._serve: return
+	if not _ok() or key == "" or not _timeline.motion() or engine.get("_action"): return
 	stop_drag()
 	engine._stop()
 	Sequence.swing_hold = Sequence.HOLD_MAX   # up to the release, every longer hold plays the same
@@ -1591,6 +1591,7 @@ func _hold_tick() -> void:
 func hold_status() -> String:
 	var h: float = engine._timeline.elapsed if holding and _ok() else hold_seconds
 	var power: float = SwingShape.charge_for_hold(h)
+	if engine._serve: return "%s %.2f s · serve power %d %%" % ["Holding" if holding else "Hold", h, roundi(power * 100.0)]
 	if holding: return "Holding %.2f s · power %d %%%s" % [h, roundi(power * 100.0), _strong_text(h)]
 	if ShotChoice.is_tap(power): return "Tap %.2f s · touch shot" % h
 	return "Hold %.2f s · power %d %%%s" % [h, roundi(power * 100.0), _strong_text(h)]

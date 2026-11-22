@@ -1,0 +1,10 @@
+{
+ "n": 5,
+ "author": "user",
+ "message": "phone: studio edit: left_hand_offset, right_knee_pole, left_knee_pole, right_foot_offset, left_foot_offset, crouch_amount, weight_shift, hip_yaw_deg, torso_yaw_deg, torso_pitch_deg, torso_roll_deg, spine_curve_deg, shoulder_protraction_m, body_position_offset, body_pitch_deg, body_roll_deg, head_yaw_deg, head_pitch_deg, charge_paddle_offset, charge_paddle_rotation_deg, paddle_path_times, paddle_path_offsets, paddle_path_tangents, body_pitch_deg, body_roll_deg, crouch_amount, head_pitch_deg, head_yaw_deg, hip_yaw_deg, left_elbow_pole, left_foot_offset, left_hand_offset, left_knee_pole, left_shoulder_rotation_deg, right_elbow_pole, right_foot_offset, right_knee_pole, right_shoulder_rotation_deg, spine_curve_deg, torso_pitch_deg, torso_roll_deg, torso_yaw_deg, weight_shift, body_position_offset, paddle_in_hand_rotation_deg, body_pitch_deg, body_roll_deg, crouch_amount, head_pitch_deg, head_yaw_deg, hip_yaw_deg, left_foot_offset, left_knee_pole, weight_shift, body_position_offset",
+ "time": "2026-11-22T03:04:27",
+ "notes": [],
+ "score": null,
+ "flags": [],
+ "approved": false
+}

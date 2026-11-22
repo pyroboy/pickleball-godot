@@ -1,0 +1,10 @@
+{
+ "n": 6,
+ "author": "user",
+ "message": "phone: studio edit: paddle_forehand_mul, paddle_forward_mul, paddle_y_offset, paddle_pitch_base_deg, paddle_yaw_base_deg, paddle_in_hand_rotation_deg, right_elbow_pole, right_shoulder_rotation_deg, right_elbow_swivel_deg, right_foot_yaw_deg, crouch_amount, weight_shift, hip_yaw_deg, torso_yaw_deg, torso_pitch_deg, torso_roll_deg, spine_curve_deg, shoulder_protraction_m, body_position_offset, body_pitch_deg, body_roll_deg, head_yaw_deg, head_pitch_deg, charge_paddle_offset, charge_paddle_rotation_deg, ft_paddle_offset, ft_paddle_rotation_deg, paddle_path_times, paddle_path_offsets, paddle_path_tangents",
+ "time": "2026-11-22T03:44:51",
+ "notes": [],
+ "score": null,
+ "flags": [],
+ "approved": false
+}

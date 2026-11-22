@@ -686,7 +686,9 @@ func _refresh_preview()->void:
 	var display_source:Resource=_elbow_preset_panel.preview_source(_current) if _elbow_preset_panel else _current
 	if _variant_mode!=0 and (_motion_dirty or _variant==null):
 		_variant=WindupVariants.new();_variant.configure(display_source,_variant_mode,ServeStore.sample if _serve else Callable(),_preview.player)
-	var p:PostureDefinition=display_source.to_preview_posture(PostureLibrary.instance().get_def(20)) if _base else _variant.sample(display_source,_progress) if _variant_mode!=0 else ServeStore.sample(display_source,_progress) if _serve else Path.sample(display_source,_progress)
+	# A body stance previews at its own "Live body-stance blend" (stroke_overlay_mix), the weight
+	# pose_controller.gd blends it onto the stroke in play, so the studio shows what plays.
+	var p:PostureDefinition=display_source.blend_onto_stroke(PostureLibrary.instance().get_def(20)) if _base else _variant.sample(display_source,_progress) if _variant_mode!=0 else ServeStore.sample(display_source,_progress) if _serve else Path.sample(display_source,_progress)
 	p=_timeline.pose(p)
 	if _elbow_preset_panel:p=_elbow_preset_panel.preview_pose(p)
 	_preview.show_pose(p)

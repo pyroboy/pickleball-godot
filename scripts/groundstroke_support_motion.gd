@@ -5,10 +5,10 @@ extends RefCounted
 
 const Path = preload("res://scripts/stroke_swing_path.gd")
 
+## Only for a left hand left on Auto: a hand set to Free in Pose Studio keeps its posed place,
+## before and during the swing (the user's poses win over this reach-and-tuck).
 static func eligible(contact: PostureDefinition, compact: bool) -> bool:
-
-
-	return not compact and contact.family == 0 and contact.height_tier == 2 and contact.left_hand_mode in [0, 4]
+	return not compact and contact.family == 0 and contact.height_tier == 2 and contact.left_hand_mode == 0
 
 static func tracking_target(contact: PostureDefinition) -> Vector3:
 

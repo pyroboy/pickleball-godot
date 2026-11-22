@@ -4,6 +4,10 @@ const YAW_LIMIT: = deg_to_rad(85.0)
 const PITCH_UP_LIMIT: = deg_to_rad(70.0)
 const PITCH_DOWN_LIMIT: = deg_to_rad(55.0)
 const RESPONSE: = 16.0
+# The authored head (pose head_yaw_deg / head_pitch_deg) is the base; the gaze
+# only pulls it toward the ball by at most these angles.
+const GAZE_YAW_OFFSET: = deg_to_rad(25.0)
+const GAZE_PITCH_OFFSET: = deg_to_rad(20.0)
 var _initialized: = false
 var _direction: = Vector3.FORWARD
 var _last_player: = Vector3.ZERO
@@ -32,6 +36,32 @@ static func local_gaze_basis(parent_basis: Basis, forward: Vector3, world_direct
 	pitch = clampf(pitch, - PITCH_DOWN_LIMIT, PITCH_UP_LIMIT)
 	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch * - forward.z)
 
+## Authored head angles plus a clamped pull toward the ball direction.
+static func gaze_offset_basis(player, parent_basis: Basis, world_direction: Vector3) -> Basis:
+	var def = _displayed_def(player)
+	var swing: float = player._get_swing_sign()
+	var authored_yaw: float = - deg_to_rad(def.head_yaw_deg) if def else 0.0
+	var authored_pitch: float = deg_to_rad(def.head_pitch_deg) * swing if def else 0.0
+	var weight: float = clampf(def.head_track_ball_weight, 0.0, 1.0) if def else 1.0
+	var forward: Vector3 = player._get_forward_axis()
+	var gaze_yaw: = authored_yaw
+	var gaze_pitch: = authored_pitch
+	if world_direction.length_squared() > 1e-06:
+		var local: Vector3 = parent_basis.orthonormalized().inverse() * world_direction.normalized()
+		var flat: = Vector3(local.x, 0, local.z)
+		if flat.length_squared() > 1e-06: gaze_yaw = clampf(forward.signed_angle_to(flat.normalized(), Vector3.UP), - YAW_LIMIT, YAW_LIMIT)
+		gaze_pitch = clampf(atan2(local.y, maxf(flat.length(), 1e-05)), - PITCH_DOWN_LIMIT, PITCH_UP_LIMIT) * - forward.z
+	var yaw: float = authored_yaw + clampf(angle_difference(authored_yaw, gaze_yaw), - GAZE_YAW_OFFSET, GAZE_YAW_OFFSET) * weight
+	var pitch: float = authored_pitch + clampf(gaze_pitch - authored_pitch, - GAZE_PITCH_OFFSET, GAZE_PITCH_OFFSET) * weight
+	return Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, pitch)
+
+static func _displayed_def(player):
+	var posture = player.posture if "posture" in player else null
+	# The pose last applied to the rig is the one whose head the gaze offsets.
+	if posture != null and posture._presented_body_pose != null: return posture._presented_body_pose
+	if posture != null and posture.transition_pose_blend != null: return posture.transition_pose_blend
+	return player.get_runtime_posture_def()
+
 func update(player, ball, delta: float) -> void :
 	if player.body_pivot == null or ball == null: return
 	var torso: Node3D = player.body_pivot.get_node_or_null("TorsoMesh")
@@ -45,6 +75,6 @@ func update(player, ball, delta: float) -> void :
 	elif not _initialized:
 		_direction = torso.global_transform.basis * player._get_forward_axis()
 		_initialized = true
-	head.basis = local_gaze_basis(torso.global_transform.basis, player._get_forward_axis(), _direction)
+	head.basis = gaze_offset_basis(player, torso.global_transform.basis, _direction)
 	_last_player = player.global_position
 	_last_ball = ball.global_position
