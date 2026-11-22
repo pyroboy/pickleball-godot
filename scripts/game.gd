@@ -932,7 +932,8 @@ func _perform_player_swing(charge_ratio: float) -> void :
 	if not restore_choice.is_empty():
 		selected_shot_intent = restore_choice[0]; selected_spin_mode = restore_choice[1]
 	if not swing_ok:
-		if selected_movement_intent == "AUTO" and driver != null and driver.maybe_start_reach(charge_ratio, reach_intent):
+		if PickleballConstants.MATCH_SPECIAL_ACTIONS and selected_movement_intent == "AUTO" and driver != null and driver.maybe_start_reach(charge_ratio, reach_intent):
+			PerfMonitor.note("special_action", {"kind": "REACH", "actor": 0})
 			scoreboard_ui.set_state_text("Grounded reach")
 			return
 		player_left.hitting.clear_charge_visual()

@@ -328,7 +328,45 @@ func _physics_process(_delta: float) -> void:
 			joints["paddle_x"] = _v(t.origin + t.basis.x * 0.1)
 			joints["paddle_y"] = _v(t.origin + t.basis.y * 0.1)
 		row["p%d" % p.actor_id] = joints
+		row["i%d" % p.actor_id] = _pose_info(p)
 	_pose_file.store_line(JSON.stringify(row, "", false))
+
+# Which poses a player is playing this tick, for tools/pose_timeline.py:
+# [stroke posture id, base pose id, base pose mix onto the stroke, swing phase (-1 none), flags,
+#  body [pivot pitch, pivot roll, crouch, runtime crouch, runtime pitch, runtime roll]]
+# flags: c charging, s swing contact window, f follow-through, v serve, r special reach
+func _pose_info(p) -> Array:
+	var base_mix := 0.0
+	if p.pose_controller != null:
+		var b = p.pose_controller.get_base_pose_def()
+		if b != null: base_mix = snappedf(b.stroke_overlay_mix, 0.01)
+	var phase := -1
+	var flags := ""
+	if p.posture != null and p.posture.human_contact != null: phase = int(p.posture.human_contact.phase)
+	var h = p.hitting
+	if h != null:
+		if h.charge_visual_active: flags += "c"
+		if h.stroke_contact_active: flags += "s"
+		if h.is_in_follow_through: flags += "f"
+		if h.serving_visual_active: flags += "v"
+	if p.special_reach_driver != null and p.special_reach_driver.active: flags += "r"
+	# Body as driven this tick: pivot pitch/roll (deg), crouch; and the composed runtime pose
+	# (stroke + base) it aims for: crouch, pitch, roll.
+	var body := []
+	if p.body_pivot != null:
+		body = [snappedf(rad_to_deg(p.body_pivot.rotation.x), 0.1), snappedf(rad_to_deg(p.body_pivot.rotation.z), 0.1), snappedf(p.body_anim.crouch_amount if p.body_anim != null else 0.0, 0.01)]
+		var rt = p.get_runtime_posture_def()
+		if rt != null: body += [snappedf(rt.crouch_amount, 0.01), snappedf(rt.body_pitch_deg, 0.1), snappedf(rt.body_roll_deg, 0.1)]
+	# AI prediction this tick: [predicted contact posture, time to contact (s), charging 0/1,
+	#  shot charge 0..1 (-1 none), ball flight id, predicted contact height (m), reachable 0/1]
+	var ai := []
+	var brain = p.ai_brain if p.is_ai else null
+	if brain != null:
+		var charge: float = float(brain.motion_context.get("charge", -1.0)) if not brain.motion_context.is_empty() else -1.0
+		ai = [int(brain.ai_desired_posture), snappedf(brain.ai_selected_contact_time, 0.01), 1 if brain.ai_is_charging else 0,
+			snappedf(charge, 0.01), int(brain._observed_flight_id), snappedf(brain.ai_predicted_contact_position.y, 0.01),
+			1 if brain.ai_selected_contact_reachable else 0]
+	return [int(p.paddle_posture), int(p.base_pose_state), base_mix, phase, flags, body, ai]
 
 func _v(v: Vector3) -> Array:
 	return [snappedf(v.x, 0.0001), snappedf(v.y, 0.0001), snappedf(v.z, 0.0001)]

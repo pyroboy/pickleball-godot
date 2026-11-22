@@ -15,7 +15,11 @@ const LINE_WIDTH: float = 0.05
 
 
 
-const PLAYER_SPEED: float = 4.9
+const PLAYER_SPEED: float = 5.8
+# Match special actions whose whole-body pose is built in code, not from the pose editor:
+# the emergency lunge (grounded reach) and the Erne jump. Off: players only play editor poses
+# and must move to the ball. The code stays for a later editable version.
+const MATCH_SPECIAL_ACTIONS: bool = false
 const AI_SPEED: float = PLAYER_SPEED
 const PADDLE_FORCE: float = 3.5
 const AI_PADDLE_FORCE: float = 1.8

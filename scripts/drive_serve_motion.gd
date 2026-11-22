@@ -26,13 +26,24 @@ const SERVE_SWEEP_TIME: = 0.3
 const SERVE_HOLD_TIME: = 0.08
 const SERVE_RECOVERY_TIME: = 0.24
 
+## How much of the stroke's Wind-up / Finish a hit plays, from its charge: a soft touch still
+## shows a short backswing of the authored keys, a full charge plays them exactly.
+const MIN_SWING := 0.35
+static func swing_amount(charge: float) -> float:
+	return lerpf(MIN_SWING, 1.0, clampf(charge, 0.0, 1.0))
+
+## "My keys play" (the default): the stroke's own Wind-up / Finish keys, scaled by charge, for
+## every shot (volleys, drops, kitchen and tactical shots included). Game-built keys opt out.
+static func plays_authored_keys(base: PostureDefinition) -> bool:
+	return base.game_built_keys != 1
+
 static func drive_strength(base: PostureDefinition, charge: float, is_volley: bool = false, near_kitchen: bool = false) -> float:
 	if near_kitchen or is_volley or base.family not in [0, 1] or base.height_tier != 2:
 		return 0.0
 	return smoothstep(0.58, 0.95, clampf(charge, 0.0, 1.0))
 
 static func drive_definition(base: PostureDefinition, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
-	if TacticalMotion.eligible(motion_context): return TacticalMotion.definition(base, motion_context)
+	if not plays_authored_keys(base) and TacticalMotion.eligible(motion_context): return TacticalMotion.definition(base, motion_context)
 	if not motion_context.is_empty():
 		charge = float(motion_context.get("charge", charge))
 		is_volley = bool(motion_context.get("is_volley", is_volley))
@@ -207,7 +218,7 @@ static func _two_hand_backhand_definition(base: PostureDefinition, charge: float
 	return def
 
 static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
-	if TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, 0.0, motion_context)
+	if not plays_authored_keys(base) and TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, 0.0, motion_context)
 	if not motion_context.is_empty():
 		charge = float(motion_context.get("charge", charge))
 		is_volley = bool(motion_context.get("is_volley", is_volley))
@@ -218,10 +229,10 @@ static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: b
 	if str(motion_context.get("profile", "")) == "SMASH": near_kitchen = false
 	var def: PostureDefinition = drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
 	if base.family == 1 and base.left_hand_mode == 1:
-		var linked: PostureDefinition = Path.sample(def, 0.5 * (1.0 - clampf(charge, 0.0, 1.0)))
+		var linked: PostureDefinition = Path.sample(def, 0.5 * (1.0 - (swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))))
 		linked.set_meta("visual_wrist_lag_deg", 0.0)
 		return linked
-	var pose: PostureDefinition = Path.blend_pose(def, Path.endpoint(def, 0), clampf(charge, 0.0, 1.0))
+	var pose: PostureDefinition = Path.blend_pose(def, Path.endpoint(def, 0), swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))
 	if base.family == 1 and base.height_tier == 2 and not is_volley and not near_kitchen and shot_intent != "DROP":
 		pose.left_elbow_pole = PostureDefinition.blend_elbow_pole(pose.left_elbow_pole, Vector3(0, -0.25, 0.35), smoothstep(0.35, 0.65, charge), false)
 	Support.swing(pose, base, 0.0, charge, is_volley or near_kitchen or shot_intent == "DROP")
@@ -230,7 +241,7 @@ static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: b
 	return pose
 
 static func sample_drive(base: PostureDefinition, progress: float, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
-	if TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, progress, motion_context)
+	if not plays_authored_keys(base) and TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, progress, motion_context)
 	if not motion_context.is_empty():
 		charge = float(motion_context.get("charge", charge))
 		is_volley = bool(motion_context.get("is_volley", is_volley))
@@ -244,7 +255,7 @@ static func sample_drive(base: PostureDefinition, progress: float, charge: float
 	if base.family == 1 and base.left_hand_mode == 1:
 
 
-		var linked: PostureDefinition = Path.sample(def, lerpf(0.5, t, clampf(charge, 0.0, 1.0)))
+		var linked: PostureDefinition = Path.sample(def, lerpf(0.5, t, swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0)))
 		linked.set_meta("visual_wrist_lag_deg", 0.0)
 		ElbowPreset.tag(linked,base,t,"stroke_runtime")
 		return linked
@@ -262,7 +273,7 @@ static func sample_drive(base: PostureDefinition, progress: float, charge: float
 		if base.family == 1:
 			pose.left_elbow_pole = PostureDefinition.blend_elbow_pole(pose.left_elbow_pole, Vector3(-0.3, 0.0, 0.65), slot, false)
 			pose.left_hand_offset += Vector3(-0.1, -0.15, 0.0) * slot
-	var result: PostureDefinition = Path.blend_pose(def, pose, clampf(charge, 0.0, 1.0))
+	var result: PostureDefinition = Path.blend_pose(def, pose, swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))
 	Support.swing(result, base, t, charge, is_volley or near_kitchen or shot_intent == "DROP")
 	# The load turn of the paddle face (strongest at Wind-up, gone before Contact). With "My keys
 	# play" the keys already hold it (baked_keys), and the paddle follows the keys' own rotation.
@@ -312,7 +323,7 @@ static func _compact_or_overhead_definition(base: PostureDefinition, charge: flo
 	# "My keys play" on a stroke whose own swing is this compact / overhead motion (low and
 	# mid-low strokes, overheads): its authored Wind-up / Finish keys, in that same plain context.
 	# Volleys, drops and kitchen play keep the built motion (the keys were not posed for them).
-	if base.game_built_keys != 1 and not near_kitchen and kind == motion_kind(base, 1.0):
+	if plays_authored_keys(base):
 		_write_endpoint(def, _authored_windup(base), true)
 		return def
 	var windup: PostureDefinition = base.lerp_with(base, 0.0)

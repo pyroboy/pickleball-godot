@@ -289,11 +289,18 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 		# most one AI re-plans per physics tick; the others keep their plan (or hold
 		# position) for a tick or two, like a slightly longer reaction.
 		var tick: int = Engine.get_physics_frames()
-		if (_movement_plan.is_empty() or _observation_time >= _movement_plan_due) and _intercept_slot_tick != tick:
+		# Last moments before contact: keep the reachable plan (contact point and pose) instead
+		# of re-solving onto a different point of the same flight, which switched the pose
+		# right as the swing began (tools/pose_timeline.py --flights).
+		var plan_left: float = float(_movement_plan.get("time", -1.0)) - (_observation_time - float(_movement_plan.get("observed_at", _observation_time)))
+		var plan_locked: bool = not _movement_plan.is_empty() and bool(_movement_plan.get("reachable", false))\
+			and int(_movement_plan.get("flight_id", -1)) == ball.flight_id and plan_left > 0.0 and plan_left < PLAN_LOCK_SECONDS
+		if (_movement_plan.is_empty() or _observation_time >= _movement_plan_due and not plan_locked) and _intercept_slot_tick != tick:
 			_intercept_slot_tick = tick
 			_movement_plan = _get_ai_intercept_solution(predicted_landing)
 			_movement_plan_due = _observation_time + Movement.REPLAN_SECONDS[clampi(ai_difficulty, 0, 2)]
 			_movement_plan["observed_at"] = _observation_time
+			_movement_plan["flight_id"] = ball.flight_id
 		if _movement_plan.is_empty():
 			intercept_solution = {"target": _player.global_position, "posture": PP_READY, "contact": predicted_landing,
 				"time": -1.0, "reachable": false, "observed_at": _observation_time, "deferred": true}
@@ -331,8 +338,9 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 
 	# Ordinary prediction and its movement/contact policy have priority. Special
 	# actions see the same real flight only when that ordinary route is absent.
-	if not ai_selected_contact_reachable:
+	if not ai_selected_contact_reachable and PickleballConstants.MATCH_SPECIAL_ACTIONS:
 		if _player.erne_action != null and _player.erne_action.maybe_start_ai(ball, _get_predicted_flight(ball), {"normal_reachable": false, "flight_id": ball.flight_id}):
+			PerfMonitor.note("special_action", {"kind": "ERNE", "actor": _player.player_num})
 			return Vector3.ZERO
 		# The reach driver refuses a call without the AI's delayed view of the
 		# ball; it was called with none, so the AI never lunged for a ball it
@@ -341,6 +349,7 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 			var seen: Dictionary = preload("res://scripts/special_action_identity.gd").annotate(_player,
 				{"ready": _perception_ready, "bounces": _observed_contact_bounces(), "flight_id": _observed_flight_id})
 			if _player.special_reach_driver.maybe_start_ai(_get_predicted_flight(ball), seen):
+				PerfMonitor.note("special_action", {"kind": "REACH", "actor": _player.player_num})
 				return Vector3.ZERO
 
 	intercept_target.x = clamp(intercept_target.x, _player.min_x, _player.max_x)
@@ -782,6 +791,8 @@ var _pose_alignment_flight: = -1
 
 const ALIGN_LEAD_SECONDS := 0.6
 const AI_WINDUP_FULL_MARGIN := 0.15   # preparation reaches the full Wind-up this long before alignment starts
+## The contact plan stops re-solving this long before contact (unless it turns unreachable).
+const PLAN_LOCK_SECONDS := 0.45
 const AI_PRESENTATION_CHARGE := 0.5   # Wind-up scale before the shot plan (and its charge) exists
 const WINDUP_OFFSET_MAX_SPEED := 2.5  # m/s the held Wind-up head may move when a replan changes its key
 var _windup_offset_smoothed := Vector3.ZERO

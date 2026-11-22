@@ -20,7 +20,7 @@ first = None
 for i in range(n):
     a, b = A[i], B[i]
     for key in a:
-        if key == "tick" or key not in b: continue
+        if key == "tick" or key not in b or not isinstance(a[key], (dict, list)) or (isinstance(a[key], list) and key != "ball"): continue
         if key == "ball":
             pairs = {"ball": (a[key], b[key])}
         else:

@@ -6,6 +6,7 @@ const JUMP_TAKEOFF_FALLBACK = 0.18
 const DECEL_PLANT_FALLBACK = 0.14
 const LUNGE_LATERAL_THRESHOLD = 0.72
 const LOW_SCOOP_HEIGHT = 0.28
+const LUNGE_MAX_DISTANCE = 1.4
 const RUN_SPEED_THRESHOLD = 3.0
 const SHUFFLE_SPEED_THRESHOLD = 1.2
 const DECEL_TRIGGER_SPEED_DELTA = 2.2
@@ -255,30 +256,38 @@ func _resolve_live_context() -> Dictionary:
 	var contact_point: Vector3 = _player.global_position + forward_axis * 0.8 + Vector3.UP * 0.6
 	var pre_bounce: bool = true
 	var has_contact_hint: bool = false
+	# True while contact_point is only the ball's current position (no planned contact):
+	# fine for intent, but never a reason to lunge (the ball may be across the court).
+	var from_ball: bool = false
 
 	var ball = _player._get_ball_ref()
 	if ball != null:
 		pre_bounce = not ball.ball_bounced_since_last_hit
 		contact_point = ball.global_position
 		has_contact_hint = true
+		from_ball = true
 
 	if _player.is_ai and _player.ai_brain and _player.ai_brain.ai_predicted_contact_position != Vector3.ZERO:
 		contact_point = _player.ai_brain.ai_predicted_contact_position
 		has_contact_hint = true
+		from_ball = false
 	elif _player.debug_visual:
 		if not _player.debug_visual.human_committed_pre_intercepts.is_empty():
 			contact_point = _player.debug_visual.human_committed_pre_intercepts.back()
 			pre_bounce = true
 			has_contact_hint = true
+			from_ball = false
 		elif not _player.debug_visual.human_committed_post_intercepts.is_empty():
 			contact_point = _player.debug_visual.human_committed_post_intercepts[0]
 			pre_bounce = false
 			has_contact_hint = true
+			from_ball = false
 
 	if _player.posture and _player.posture._committed_incoming_posture >= 0\
 	and _player.posture._contact_point_local != Vector3.ZERO:
 		contact_point = _player.global_position + _player.posture._contact_point_local
 		has_contact_hint = true
+		from_ball = false
 
 	if not has_contact_hint:
 		var player_z_abs_idle: float = absf(_player.global_position.z)
@@ -317,7 +326,10 @@ func _resolve_live_context() -> Dictionary:
 		"forward_dot": vel_flat.dot(forward_axis), 
 		"lateral_dot": vel_flat.dot(forehand_axis), 
 		"speed": speed, 
-		"is_lunge": absf(lateral_reach) >= LUNGE_LATERAL_THRESHOLD, 
+		# A lunge is a planned contact out to the side but still within a stretch of the
+		# body. Farther away the player is travelling to it, not lunging.
+		"is_lunge": not from_ball and absf(lateral_reach) >= LUNGE_LATERAL_THRESHOLD\
+			and Vector2(lateral_reach, forward_reach).length() <= LUNGE_MAX_DISTANCE, 
 	}
 
 
