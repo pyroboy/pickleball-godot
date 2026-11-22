@@ -16,13 +16,16 @@ extends Node3D
 ## one is shared with the seeded AI). The crowd only listens: ball paddle hits and bounces,
 ## rally end reasons, serve launch, post hits, the score and `view_flipped()`.
 ##
-## Local -z is always the far end. After a doubles change of ends the camera rig turns half
-## a turn about the court centre, so this node turns with it (and the floor shader's `flip`).
+## Two ends with their own scenery: the barangay hall end at -z and the pandesal end at
+## +z (scripts/environment/pandesal_end.gd, built in a child node turned half a turn so it
+## is authored the same way, "far = -z"). After a doubles change of ends the camera looks
+## at the other end; only the end in view is animated.
 
 const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 const Fig := preload("res://scripts/environment/env_figures.gd")
 const People := preload("res://scripts/environment/env_people.gd")
 const Pal := preload("res://scripts/environment/env_palette.gd")
+const PandesalEnd := preload("res://scripts/environment/pandesal_end.gd")
 const ToonShader := preload("res://shaders/env_toon.gdshader")
 const FloorShader := preload("res://shaders/env_floor.gdshader")
 const ShadowShader := preload("res://shaders/env_shadow.gdshader")
@@ -44,6 +47,12 @@ var _tick_t := 0.0
 var _flipped := false
 var _toon: ShaderMaterial
 var _grimy: ShaderMaterial
+var _toon_n: ShaderMaterial      # the pandesal end's copies, lit for that end's facing
+var _grimy_n: ShaderMaterial
+var _near: Node3D                # the pandesal end (turned half a turn)
+var _build_end := 0              # 0: hall end (-z), 1: pandesal end (+z) while building
+var _live_end := 0               # the end the camera looks at
+var _near_state: Dictionary = {} # pandesal end runtime (vendor, queue, jeepney, ...)
 var _floor: ShaderMaterial
 
 var _mm_fig: MultiMesh
@@ -61,6 +70,8 @@ var _last_cam := Vector3.INF
 var _playing := false          # behind the hall, seen between the buildings
 var _crowd: Array = []           # the ones who react as a crowd
 var _chickens: Array = []
+var _cats: Array = []
+const CAT_PARTS := 6
 var _chicks: Array = []          # follow the first chicken (the hen)
 var _hen_trail: Array = []       # the hen's recent positions, newest first
 var _dog: Dictionary = {}
@@ -114,6 +125,23 @@ func setup(game: Node, parent: Node3D) -> void:
 	_add_mesh("BarangayBuildings", bld, _grimy)
 	_add_mesh("BarangayProps", props)
 	_add_mesh("BarangayCloth", cloth)
+	# the pandesal end: authored "far = -z" in a child turned half a turn, lit to match
+	_near = Node3D.new()
+	_near.name = "PandesalEnd"
+	_near.transform.basis = Basis(Vector3.UP, PI)
+	add_child(_near)
+	_toon_n = _toon.duplicate()
+	_grimy_n = _grimy.duplicate()
+	for m in [_toon_n, _grimy_n]: m.set_shader_parameter("light_dir", _near.transform.basis * LIGHT)
+	_build_end = 1
+	var nb := Kit.begin()
+	var np := Kit.begin()
+	var nc := Kit.begin()
+	PandesalEnd.build_geometry(self, nb, np, nc)
+	_add_mesh("PandesalBuildings", nb, _grimy_n, _near)
+	_add_mesh("PandesalProps", np, _toon_n, _near)
+	_add_mesh("PandesalCloth", nc, _toon_n, _near)
+	_build_end = 0
 	_build_figures()
 	_build_shadows()
 
@@ -124,16 +152,22 @@ func _c(code: String) -> Color:
 	return Pal.hex(code)
 
 
-func _add_mesh(label: String, st: SurfaceTool, material: Material = null) -> void:
+func _add_mesh(label: String, st: SurfaceTool, material: Material = null, parent: Node3D = null) -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = label
 	mi.mesh = st.commit()
 	mi.material_override = material if material != null else _toon
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
+	(parent if parent != null else self).add_child(mi)
+
+
+## End-local (authored "far = -z") to this node's space for the end being built.
+func _end_pos(v: Vector3, end := -1) -> Vector3:
+	return Vector3(-v.x, v.y, -v.z) if (_build_end if end < 0 else end) == 1 else v
 
 
 func _shadow(pos: Vector3, size: Vector2, rect := false) -> int:
+	pos = _end_pos(pos)
 	_shadow_specs.append([Vector2(pos.x, pos.z), size, 1.0 if rect else 0.0])
 	return _shadow_specs.size() - 1
 
@@ -152,7 +186,7 @@ func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0)
 	l.position = pos
 	l.rotation.y = yaw
 	l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(l)
+	(_near if _build_end == 1 else self).add_child(l)
 	return l
 
 
@@ -835,7 +869,11 @@ func _bg_house(st: SurfaceTool, x0: float, x1: float, zc: float, h: float, d: fl
 
 func _person(pos: Vector3, yaw: float, seated: bool, crowd := true, scale_f := -1.0) -> Dictionary:
 	var i := _people.size()
+	if _build_end == 1:
+		pos = _end_pos(pos)
+		yaw += PI
 	var p := People.new_person(pos, yaw, seated, (i * 7 + 3) % 16, scale_f if scale_f > 0.0 else _rng.randf_range(0.95, 1.04))
+	p.end = _build_end
 	p.next_idle = _rng.randf_range(1.0, 6.0)
 	p.rate = _rng.randf_range(5.0, 7.0)
 	p.base_seated = seated
@@ -919,6 +957,7 @@ func _build_figures() -> void:
 			[Vector3(0.8, 0, 11.2), PI, "knee_up", 0.12]]:
 		var k := _person(spec[0], spec[1], true, false, 0.7)
 		k.role = "ballkid"
+		k.end = -1
 		k.home = spec[0]
 		k.home_yaw = spec[1]
 		k.home_posture = spec[2]
@@ -934,6 +973,10 @@ func _build_figures() -> void:
 		k.watch = true
 		_kids.append(k)
 	_game.set_meta("ball_kids", self)
+	# the pandesal end's people (vendor, audience, lolos, commuters, kids, passers-by)
+	_build_end = 1
+	PandesalEnd.build_people(self)
+	_build_end = 0
 	# chickens and a dog on the dirt behind the far end
 	for k in 3:
 		var pos := Vector3(_rng.randf_range(1.2, 4.2), 0, _rng.randf_range(-13.2, -11.4))
@@ -942,6 +985,13 @@ func _build_figures() -> void:
 		ch.yaw = _rng.randf() * TAU
 		ch.next = _rng.randf_range(0.5, 3.0)
 		_chickens.append(ch)
+	var rooster := Fig.new_chicken(_end_pos(Vector3(4.3, 0.1, -18.85), 1), {"body": _c("#b9733f"), "tail": _c("#1f3a2e"),
+		"comb": _c("#d8382f"), "beak": _c("#e8b33c"), "wing": _c("#7a3f22")})
+	rooster.caged = true
+	rooster.next = 1e9
+	rooster.yaw = PI
+	_chickens.append(rooster)
+	_cats = PandesalEnd.build_animals(self)
 	# the hen (first chicken) leads four chicks
 	_chickens[0].c.body = _c("#c98a4a")
 	_chickens[0].c.wing = _c("#a86c38")
@@ -955,7 +1005,7 @@ func _build_figures() -> void:
 	_dog.yaw = -1.2
 	# people: pixel cards (one mesh); props and animals: one MultiMesh of unit cubes
 	_cards = People.CardBatch.new(self, _people.size())
-	var count := _people.size() * PROP_SLOTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS
+	var count := _people.size() * PROP_SLOTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS + _cats.size() * CAT_PARTS
 	var cube := Kit.begin()
 	Kit.box(cube, Vector3.ZERO, Vector3.ONE, Color.WHITE, Basis.IDENTITY, false)
 	_mm_fig = MultiMesh.new()
@@ -983,6 +1033,11 @@ func _build_figures() -> void:
 		Fig.color_chick(_mm_fig, chick, _c("#f7dc4a"), _c("#f0a030"))
 		Fig.pose_chick(_mm_fig, chick)
 		chick.shadow = _shadow(chick.pos, Vector2(0.18, 0.15))
+	for cat in _cats:
+		cat.base = base
+		base += CAT_PARTS
+		for k in CAT_PARTS: _mm_fig.set_instance_color(int(cat.base) + k, cat.c if k != 3 else Color(cat.c).darkened(0.25))
+		_pose_cat(cat)
 	_dog.base = base
 	Fig.color_dog(_mm_fig, _dog)
 	Fig.pose_dog(_mm_fig, _dog)
@@ -1042,10 +1097,8 @@ func _process(delta: float) -> void:
 	var flipped: bool = _game != null and _game.has_method("view_flipped") and bool(_game.view_flipped())
 	if flipped != _flipped:
 		_flipped = flipped
-		transform.basis = Basis(Vector3.UP, PI) if flipped else Basis.IDENTITY
-		_floor.set_shader_parameter("flip", -1.0 if flipped else 1.0)
-		_toon.set_shader_parameter("light_dir", transform.basis * LIGHT)
-		_grimy.set_shader_parameter("light_dir", transform.basis * LIGHT)
+		_live_end = 1 if flipped else 0   # the camera now faces the other end
+		for p in _people: p.erase("sig")  # redraw everyone once
 		_react_all("clap", 1.8)      # applause for the change of ends
 	_tick_t += delta
 	if _tick_t >= TICK:
@@ -1164,7 +1217,8 @@ func _on_rally_ended(_winner: int, reason: String, _detail: String) -> void:
 	_react(_neighbour, "wave" if big else "lean", 2.0)
 	# passers-by on the near lane stop, turn and clap on a big point
 	for w in _walkers:
-		if big and w.state == "walk" and Vector3(w.pos).z > LANE_B - 0.2 and w.kind != "far" and w.trait in ["curious", "friendly"]:
+		var lane_z: float = Vector3(w.pos).z * (-1.0 if int(w.get("end", 0)) == 1 else 1.0)
+		if big and w.state == "walk" and lane_z > LANE_B - 0.2 and w.kind != "far" and w.trait in ["curious", "friendly"]:
 			w.state = "stop"
 			w.wait_until = _t + _rng.randf_range(1.4, 2.4)
 	_score_pending = _t + 0.5
@@ -1189,6 +1243,7 @@ func _react_all(mode: String, duration: float, share := 1.0) -> void:
 
 
 func _scatter(ch: Dictionary, from: Vector3) -> void:
+	if ch.get("caged", false): return
 	var away := Vector3(ch.pos) - from
 	away.y = 0
 	if away.length() < 0.1: away = Vector3(_rng.randf_range(-1, 1), 0, -1)
@@ -1217,6 +1272,7 @@ func _step() -> void:
 	_update_score()
 	for w in _walkers: _step_walker(w)
 	for k in _kids: _step_kid(k, playing, have_ball, ball_local)
+	if _live_end == 1: PandesalEnd.step(self, TICK)
 	var cam := get_viewport().get_camera_3d()
 	var cam_local := to_local(cam.get_global_transform_interpolated().origin) if cam != null else Vector3(0, 10, 15)
 	# Cards face the camera, so a camera move redraws everyone; otherwise only people whose
@@ -1226,7 +1282,9 @@ func _step() -> void:
 	var changed := false
 	for i in _people.size():
 		var p: Dictionary = _people[i]
-		if p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
+		if int(p.get("end", -1)) >= 0 and int(p.end) != _live_end and p.has("sig"): continue   # the end behind the camera
+		if p.role in ["vendor", "dama", "pump", "mechanic"]: PandesalEnd.step_person(self, p)
+		elif p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
 		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
 		if not cam_moved and sig == p.get("sig", []): continue
 		p.sig = sig
@@ -1237,6 +1295,10 @@ func _step() -> void:
 	if changed: _cards.commit()
 	for ch in _chickens: _step_chicken(ch)
 	_step_chicks()
+	if _live_end == 1:
+		for cat in _cats:
+			cat.step = int(cat.step) + 1
+			_pose_cat(cat)
 	_step_dog()
 
 
@@ -1542,8 +1604,12 @@ func _step_walker(w: Dictionary) -> void:
 				w.pos = wp
 				w.walk_phase = float(w.walk_phase) + step / 0.7 * PI
 				_walk_pose(w, true, 0.7)
+		"queue", "served":
+			_walk_pose(w, false, 0.7)
+			w.arm_l = "idle_stand"
+			w.arm_r = "pocket" if w.state == "queue" else "point"
 		"wait", "watch", "stop":
-			if str(w.state) == "stop": w.yaw = 0.0
+			if str(w.state) == "stop": w.yaw = PI if int(w.get("end", 0)) == 1 else 0.0
 			_walk_pose(w, false, 0.7)
 			if w.state == "watch":
 				w.arm_l = "arms_crossed" if int(_t / 4.0) % 2 == 0 else "idle_stand"
@@ -1564,6 +1630,14 @@ func _step_walker(w: Dictionary) -> void:
 
 
 func _walk_pose(w: Dictionary, moving: bool, stride: float) -> void:
+	_walk_pose_base(w, moving, stride)
+	if w.get("bread", false):
+		# walks off with the paper bag, a bite now and then
+		w.prop = "paper_bag"
+		w.arm_r = "drink" if int(_t * 1.2 + float(w.walk_phase)) % 3 == 0 else "hold_ball"
+
+
+func _walk_pose_base(w: Dictionary, moving: bool, stride: float) -> void:
 	var ph: float = w.walk_phase
 	w.walk = ph if moving else -1.0
 	w.bounce = 0.025 * absf(sin(ph)) if moving else 0.0
@@ -1614,6 +1688,9 @@ func _walk_pose(w: Dictionary, moving: bool, stride: float) -> void:
 
 
 func _start_trip(w: Dictionary) -> void:
+	if int(w.get("end", 0)) == 1:
+		PandesalEnd.start_trip(self, w)
+		return
 	var side := -1.0 if _rng.randf() < 0.5 else 1.0
 	w.visible = true
 	w.state = "walk"
@@ -1662,6 +1739,9 @@ func _start_trip(w: Dictionary) -> void:
 
 
 func _arrive(w: Dictionary) -> void:
+	if int(w.get("end", 0)) == 1:
+		PandesalEnd.arrive(self, w)
+		return
 	match str(w.dest):
 		"store":
 			w.state = "wait"
@@ -1679,6 +1759,9 @@ func _arrive(w: Dictionary) -> void:
 
 
 func _leave(w: Dictionary) -> void:
+	if int(w.get("end", 0)) == 1:
+		PandesalEnd.leave(self, w)
+		return
 	var side := -1.0 if _rng.randf() < 0.5 else 1.0
 	var here: Vector3 = w.pos
 	w.watch = false
@@ -1703,6 +1786,17 @@ func _pose_props(p: Dictionary, j: Dictionary) -> void:
 			xf[1] = Transform3D(Fig._along(fore, Vector3(0.2, 0.24, 0.03)), wr + fore * 0.22)
 			col[0] = _c("#2a2a2e")
 			col[1] = _c(["#e0473b", "#3e7fd0", "#f2c84b"][int(p.profile) % 3])
+		"paper_bag":
+			xf[0] = Transform3D(Basis(Vector3.UP, float(p.yaw)) * Basis.from_scale(Vector3(0.13, 0.18, 0.08)), wr + Vector3.DOWN * 0.04)
+			col[0] = _c("#b9895a")
+		"steam":
+			# puffs rising out of the opened pandesal box
+			var top := _end_pos(PandesalEnd.CART, 1) + Vector3.UP * 1.55
+			for k in 3:
+				var f := fmod(_t * 0.8 + k / 3.0, 1.0)
+				var sz := 0.16 * (1.0 - f) + 0.04
+				xf[k] = Transform3D(Basis.from_scale(Vector3(sz, sz, sz)), top + Vector3(0.25 * (k - 1) + 0.08 * sin(_t * 3.0 + k), 0.75 * f, 0.05 * k))
+				col[k] = _c("#f2f0ea")
 		"ball":
 			xf[0] = Transform3D(Basis.from_scale(Vector3(0.09, 0.09, 0.09)), wr + fore * 0.05)
 			col[0] = _c("#e8e04a")
@@ -1820,6 +1914,18 @@ func _step_chicks() -> void:
 		elif str(k.mode) == "run" and _t >= float(k.next): k.mode = "follow"
 		Fig.pose_chick(_mm_fig, k)
 		_move_shadow(k.shadow, pos)
+
+
+func _pose_cat(cat: Dictionary) -> void:
+	var root := Transform3D(Basis(Vector3.UP, float(cat.yaw)), Vector3(cat.pos))
+	var b: int = cat.base
+	var flick := 0.5 * sin(float(cat.step) * 0.9)
+	_mm_fig.set_instance_transform(b + 0, root * Transform3D(Basis.from_scale(Vector3(0.18, 0.2, 0.3)), Vector3(0, 0.12, 0)))
+	_mm_fig.set_instance_transform(b + 1, root * Transform3D(Basis.from_scale(Vector3(0.14, 0.13, 0.12)), Vector3(0, 0.27, 0.12)))
+	for side: float in [-1.0, 1.0]:
+		_mm_fig.set_instance_transform(b + (2 if side < 0.0 else 3), root * Transform3D(Basis.from_scale(Vector3(0.04, 0.06, 0.03)), Vector3(side * 0.045, 0.36, 0.12)))
+	_mm_fig.set_instance_transform(b + 4, root * Transform3D(Basis(Vector3.UP, flick) * Basis(Vector3.RIGHT, 0.4) * Basis.from_scale(Vector3(0.04, 0.04, 0.3)), Vector3(0.05, 0.06, -0.25)))
+	_mm_fig.set_instance_transform(b + 5, root * Transform3D(Basis.from_scale(Vector3(0.14, 0.12, 0.05)), Vector3(0, 0.05, 0.14)))
 
 
 func _step_dog() -> void:
