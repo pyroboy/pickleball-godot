@@ -25,10 +25,24 @@ const People := preload("res://scripts/environment/env_people.gd")
 const CART := Vector3(6.55, 0, -13.1)          # parking spot
 const PARK_YAW := -0.4
 const CART_LANE := -22.4                       # it arrives and leaves along the back lane
-const PATH_IN := [Vector3(18.0, 0, -22.4), Vector3(10.0, 0, -22.4), Vector3(8.6, 0, -16.0), Vector3(6.55, 0, -13.1)]
-const PATH_OUT := [Vector3(8.8, 0, -16.5), Vector3(10.5, 0, -22.4), Vector3(18.0, 0, -22.4)]
+# Driving curves (cubic Béziers: start, control, control, end). In: along the back lane,
+# swing in toward the court, arc into the angled spot already lined up. Out: carry on
+# forward, curve away from the court and back onto the lane.
+const CURVE_IN := [
+	[Vector3(20.0, 0, -22.4), Vector3(18.5, 0, -22.4), Vector3(17.0, 0, -22.4), Vector3(15.0, 0, -22.4)],
+	[Vector3(15.0, 0, -22.4), Vector3(11.4, 0, -22.4), Vector3(9.6, 0, -20.4), Vector3(9.6, 0, -16.0)],
+	[Vector3(9.6, 0, -16.0), Vector3(9.6, 0, -14.2), Vector3(8.21, 0, -12.4), Vector3(6.55, 0, -13.1)]]
+const CURVE_OUT := [
+	[Vector3(6.55, 0, -13.1), Vector3(4.71, 0, -13.88), Vector3(4.2, 0, -16.6), Vector3(4.2, 0, -18.6)],
+	[Vector3(4.2, 0, -18.6), Vector3(4.2, 0, -20.4), Vector3(2.6, 0, -22.4), Vector3(1.0, 0, -22.4)],
+	[Vector3(1.0, 0, -22.4), Vector3(-5.0, 0, -22.4), Vector3(-12.0, 0, -22.4), Vector3(-18.0, 0, -22.4)]]
+const CART_TOP_SPEED := 3.5     # m/s
+const CART_ACCEL := 1.4         # m/s^2 pulling away
+const CART_BRAKE := 1.1         # m/s^2 gentle stop into the spot (and before bends)
+const CART_GRIP := 1.0          # m/s^2 sideways: slows the rig for tight bends
+const SELL_SECONDS := 300.0     # it stays five minutes
 const VENDOR := Vector3(5.55, 0, -12.92)       # beside the cart's front, serving
-const QUEUE := [Vector3(6.16, 0, -12.18), Vector3(6.26, 0, -11.58), Vector3(6.41, 0, -10.98)]
+const QUEUE := [Vector3(6.16, 0, -12.18), Vector3(6.5, 0, -11.65), Vector3(6.85, 0, -11.15), Vector3(7.2, 0, -10.65), Vector3(7.55, 0, -10.15)]
 const BUYER_YAW := 2.74                        # end-local: buyers face the cart's front
 const VENDOR_YAW := 0.69                       # end-local: the vendor faces the buyers
 const LANE := -14.45         # this end's walking lane (between the curb sitters and the standing group)
@@ -542,7 +556,8 @@ static func _rolling_cart(w) -> void:
 	nst.cart_next = 3.0
 	nst.cart_pos = Vector3(40.0, 0, CART_LANE)
 	nst.cart_yaw = 0.0
-	nst.cart_path = []
+	nst.cart_curve = {}
+	nst.cart_s = 0.0
 	nst.cart_speed = 0.0
 	nst.cart_open = 0.0
 	nst.cart_shadow = w._shadow(CART, Vector2(2.1, 2.2), true)
@@ -560,23 +575,27 @@ static func build_people(w) -> void:
 	v.until = 0.0
 	v.next_call = 4.0
 	st.vendor = v
-	st.queue = [null, null, null]
+	st.queue = [null, null, null, null, null]
 	st.served_at = 0.0
 	# audience: on the curb, on crates, on the motorbike, under the umbrella, and a loose
 	# standing group by the sticker post (one leans on it)
+	var might_buy: Array = []
 	for cs in [[-4.05, 0.2, "knee_up"], [-3.15, -0.1, "wide"], [-0.95, 0.35, "tucked"]]:
 		var c: Dictionary = w._person(Vector3(cs[0], 0, -14.05), cs[1], true)
 		c.seat_h = 0.15
 		c.posture = cs[2]
+		might_buy.append(c)
 	for cr in [[Vector3(-5.2, 0, -12.95), 0.4], [Vector3(-4.55, 0, -13.2), -0.3]]:
 		var c2: Dictionary = w._person(cr[0], cr[1], true)
 		c2.seat_h = 0.34
+		might_buy.append(c2)
 	for bx: float in [-2.8, -2.25]:
 		var b: Dictionary = w._person(Vector3(bx, 0, -13.2), 0.15 if bx < -2.5 else -0.2, true)
 		b.seat_h = 0.72
 		b.posture = "wide" if bx < -2.5 else "crossed"
 	w._person(Vector3(0.3, 0, -12.65), -0.2, true)
-	st.buyers = [w._people[w._people.size() - 1]]   # the one on the chair under the umbrella
+	st.buyers = might_buy
+	st.buyers.append(w._people[w._people.size() - 1])   # the one on the chair under the umbrella
 	var leaner: Dictionary = w._person(Vector3(1.15, 0, -14.85), 0.5, false)
 	leaner.posture = "cross_ankles"
 	leaner.trait = "nonchalant"
@@ -664,26 +683,84 @@ static func steam_origin(w) -> Vector3:
 	return w._end_pos(CART + Basis(Vector3.UP, PARK_YAW) * Vector3(0, 1.15, 0.6), 1)
 
 
-## Move the cart along its path; it faces where it is going (its -x is forward).
-static func _drive(st: Dictionary, dt: float, top: float) -> bool:
-	var path: Array = st.cart_path
-	if path.is_empty(): return true
-	var pos: Vector3 = st.cart_pos
-	var to: Vector3 = path[0]
-	var d := to - pos
-	d.y = 0.0
-	var left := d.length()
-	for i in range(1, path.size()): left += (path[i] as Vector3).distance_to(path[i - 1])
-	st.cart_speed = clampf(left * 0.8, 0.6, top)
-	var step := float(st.cart_speed) * dt
-	if d.length() <= step:
-		st.cart_pos = to
-		path.pop_front()
-	else:
-		st.cart_pos = pos + d.normalized() * step
-		var want := atan2(d.z, -d.x)
-		st.cart_yaw = lerp_angle(float(st.cart_yaw), want, 0.3)
-	return path.is_empty()
+static func _bezier(c: Array, t: float) -> Vector3:
+	var u := 1.0 - t
+	return (c[0] as Vector3) * u * u * u + (c[1] as Vector3) * 3.0 * u * u * t + (c[2] as Vector3) * 3.0 * u * t * t + (c[3] as Vector3) * t * t * t
+
+
+## Sample the Bézier chain into points with running distance, for even-speed travel.
+static func _curve(segments: Array) -> Dictionary:
+	var pts: Array = []
+	var cum: Array = []
+	var total := 0.0
+	for seg in segments:
+		for i in 64:
+			var p := _bezier(seg, float(i) / 64.0)
+			if not pts.is_empty(): total += p.distance_to(pts[-1])
+			pts.append(p)
+			cum.append(total)
+	var last: Vector3 = (segments[-1] as Array)[3]
+	total += last.distance_to(pts[-1])
+	pts.append(last)
+	cum.append(total)
+	# speed limit at each sample from how sharply the path bends there
+	var limit: Array = []
+	for i in pts.size():
+		var a: Vector3 = pts[maxi(i - 2, 0)]
+		var m: Vector3 = pts[i]
+		var b: Vector3 = pts[mini(i + 2, pts.size() - 1)]
+		var d1 := m - a
+		var d2 := b - m
+		var v := CART_TOP_SPEED
+		if d1.length() > 0.001 and d2.length() > 0.001:
+			var bend := absf(atan2(d1.cross(d2).y, d1.dot(d2)))
+			var k := bend / maxf((d1.length() + d2.length()) * 0.5, 0.001)   # curvature, 1/m
+			if k > 0.0001: v = minf(v, sqrt(CART_GRIP / k))
+		limit.append(maxf(v, 0.5))
+	return {"pts": pts, "cum": cum, "len": total, "limit": limit}
+
+
+static func _curve_at(curve: Dictionary, s_along: float) -> Array:
+	var cum: Array = curve.cum
+	var pts: Array = curve.pts
+	var i := 1
+	while i < cum.size() - 1 and float(cum[i]) < s_along: i += 1
+	var a: Vector3 = pts[i - 1]
+	var b: Vector3 = pts[i]
+	var seg := maxf(float(cum[i]) - float(cum[i - 1]), 0.0001)
+	var f := clampf((s_along - float(cum[i - 1])) / seg, 0.0, 1.0)
+	return [a.lerp(b, f), b - a]
+
+
+## Advance along the current curve with a smooth speed profile: pull away gently, cruise,
+## brake evenly to a stop at the end. The rig faces along the curve (its -x is forward).
+## Returns true on arrival.
+static func _drive(st: Dictionary, dt: float) -> bool:
+	var curve: Dictionary = st.cart_curve
+	var s_along: float = st.cart_s
+	var remaining := float(curve.len) - s_along
+	var v := minf(CART_TOP_SPEED, sqrt(2.0 * CART_BRAKE * maxf(remaining, 0.0)) + 0.1)
+	# brake in time for any bend in the next few metres
+	var cum: Array = curve.cum
+	var limit: Array = curve.limit
+	for i in cum.size():
+		var ahead := float(cum[i]) - s_along
+		if ahead < -0.3: continue
+		if ahead > 10.0: break
+		v = minf(v, sqrt(pow(float(limit[i]), 2.0) + 2.0 * CART_BRAKE * maxf(ahead, 0.0)))
+	# never change speed faster than the rig can (pull away / brake)
+	var prev := float(st.get("cart_speed", 0.0))
+	v = clampf(v, prev - CART_BRAKE * 1.6 * dt, prev + CART_ACCEL * dt)
+	st.cart_speed = v
+	s_along = minf(s_along + v * dt, float(curve.len))
+	st.cart_s = s_along
+	st.cart_pos = (_curve_at(curve, s_along) as Array)[0]
+	# heading from a short stretch of the curve, so the turn reads smoothly
+	var behind: Vector3 = (_curve_at(curve, maxf(s_along - 0.35, 0.0)) as Array)[0]
+	var front: Vector3 = (_curve_at(curve, minf(s_along + 0.35, float(curve.len))) as Array)[0]
+	var d := front - behind
+	if d.length() > 0.0001: st.cart_yaw = atan2(d.z, -d.x)
+	return s_along >= float(curve.len) - 0.001
 
 
 static func _step_cart(w, st: Dictionary, dt: float) -> void:
@@ -696,27 +773,26 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 			v.visible = false
 			if t > float(st.cart_next) and str(st.jeep_state) == "away":
 				st.cart_state = "in"
-				st.cart_pos = PATH_IN[0]
+				st.cart_curve = _curve(CURVE_IN)
+				st.cart_s = 0.0
+				st.cart_speed = CART_TOP_SPEED * 0.8   # it comes in already driving
+				st.cart_pos = (CURVE_IN[0] as Array)[0]
 				st.cart_yaw = 0.0
-				st.cart_path = PATH_IN.slice(1)
 		"in":
 			cart.visible = true
 			v.visible = true
-			if _drive(st, dt, 4.0):
-				st.cart_state = "parking"
-		"parking":
-			# settle into the angled spot
-			st.cart_yaw = lerp_angle(float(st.cart_yaw), PARK_YAW, 0.35)
-			if absf(angle_difference(float(st.cart_yaw), PARK_YAW)) < 0.02:
+			if _drive(st, dt):
+				st.cart_pos = CART
 				st.cart_yaw = PARK_YAW
 				st.cart_state = "opening"
 		"opening":
 			st.cart_open = minf(float(st.cart_open) + dt / 0.8, 1.0)
 			if float(st.cart_open) >= 1.0:
 				st.cart_state = "selling"
-				st.cart_until = t + w._rng.randf_range(26.0, 38.0)
+				st.cart_until = t + SELL_SECONDS
 				v.vstate = "call"
 				v.until = t + 2.5
+				st.rush = w._rng.randi_range(2, 3)   # a little rush of buyers when it opens
 		"selling":
 			if t > float(st.cart_until) and str(v.vstate) == "idle":
 				st.cart_state = "closing"
@@ -729,15 +805,17 @@ static func _step_cart(w, st: Dictionary, dt: float) -> void:
 			st.cart_open = maxf(float(st.cart_open) - dt / 0.8, 0.0)
 			if float(st.cart_open) <= 0.0 and str(st.jeep_state) == "away":
 				st.cart_state = "out"
-				st.cart_path = PATH_OUT.duplicate()
+				st.cart_curve = _curve(CURVE_OUT)
+				st.cart_s = 0.0
+				st.cart_speed = 0.0
 		"out":
-			if _drive(st, dt, 4.0):
+			if _drive(st, dt):
 				st.cart_state = "away"
 				st.cart_next = t + w._rng.randf_range(20.0, 40.0)
 	var pos: Vector3 = st.cart_pos
 	# whole 5 cm moves and 1/16-rad turns so the pixels jump cleanly
 	cart.position = Vector3(round(pos.x * 20.0) / 20.0, 0.0, round(pos.z * 20.0) / 20.0)
-	cart.rotation.y = round(float(st.cart_yaw) * 16.0) / 16.0
+	cart.rotation.y = round(float(st.cart_yaw) * 24.0) / 24.0
 	var shadow_at: Vector3 = cart.position + Basis(Vector3.UP, cart.rotation.y) * Vector3(0.15, 0, -0.5)
 	w._move_shadow(int(st.cart_shadow), w._end_pos(shadow_at, 1), not cart.visible)
 	var doors: Array = st.cart_doors
@@ -819,7 +897,7 @@ static func _step_vendor(w, v: Dictionary) -> void:
 	var t: float = w._t
 	var st: Dictionary = w._near_state
 	var cs := str(st.get("cart_state", "away"))
-	if cs in ["in", "out", "parking"]:
+	if cs in ["in", "out"]:
 		# riding the motorcycle on the cabinet's far side (mostly hidden behind it)
 		var b := Basis(Vector3.UP, float(st.cart_yaw))
 		v.pos = w._end_pos(Vector3(st.cart_pos) + b * Vector3(0.2, 0, -0.95), 1)
@@ -949,7 +1027,10 @@ static func _step_jeep(w, st: Dictionary, dt: float) -> void:
 
 ## Audience members now and then walk over to buy while the cart is open.
 static func _maybe_send_buyer(w, st: Dictionary) -> void:
-	if not cart_selling(w) or w._rng.randf() > 0.012: return
+	if not cart_selling(w): return
+	var rush := int(st.get("rush", 0))
+	if rush > 0: st.rush = rush - 1
+	elif w._rng.randf() > 0.03: return
 	var slot := -1
 	for i in QUEUE.size():
 		if st.queue[i] == null:
