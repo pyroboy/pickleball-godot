@@ -179,3 +179,25 @@ contact near full extension in front of the hitting shoulder, follow-through dow
 - Reach-up (request from the AI/smash work): High Overhead contact raised to ~2.44 m standing
   (arm straight, slight rise; was 2.04 m), zone_y_max 2.11 -> 2.5 (jump adds 0.24 m), Medium
   Overhead top 1.70 -> 1.85 to meet it. point_fits now accepts Medium 1.6-1.8 m, High 1.8-2.4 m standing.
+
+### 04 High Overhead — smash key poses, Drop key, air legs — 2026-11-24
+Reference: `logs/smash_refs/smash_key_poses.png` (row A from the TikTok lesson @letspicklenow
+7501426426441108767; jump rows from scissor-kick guides). Contact is unchanged.
+- Wind-up (trophy): hips/shoulders 23/37° -> 44/66°, knees 21° -> 50°, elbow 30° -> 81° (cocked),
+  paddle head from 0.75 m out to the side to behind the head (0.40, 1.95, -0.28), tip tilted back.
+- New 4th key, Drop (`drop_body`, `drop_paddle_offset`, `drop_paddle_rotation_deg`, `drop_time` 0.3):
+  elbow up (swivel 175°, 0.30 m above the shoulder), paddle hanging behind the shoulder blades
+  (head 0.26, 1.12, -0.26, tip down). Passed through in the strike, never held. A stroke without
+  `drop_body` plays as before. `ft_duration_strike` is still 0.12 s, so the Drop is on screen for
+  about one physics tick; a longer strike is a gameplay timing change and was not made.
+- Finish: paddle down by the opposite hip (head -0.28, 0.80, 0.30, tip down; it pointed up before),
+  trunk lean 6° -> 19°, weight 0.85.
+- Air legs: `air_*_foot_offset` (two-foot leap) and `air_scissor_*_foot_offset` (jump started while
+  moving back, `player.jump_style`) on every key; only read while the player is off the ground.
+- Checks: swing strip `tools/pose_review.sh s04 --strip`; bench `smash_drop` (Hard, seed 3): 0 script
+  errors, the High Overhead hit met the ball at 4.9 cm. The AI's jump rule did not fire in any
+  shoot or bench, so the air legs were only seen in staged jumps (`tools/photo_shoot.gd --shoot-force-jump=1`).
+- Not done: Medium Overhead (03) has no Drop key; the phone editor and Pose Studio have no Drop
+  stage or air-leg handles yet (edit with `tools/pose_set.py s04 drop.<field>=...`,
+  `contact.air_right_foot_offset=...`; place the paddle with `tools/pose_paddle.gd`).
+

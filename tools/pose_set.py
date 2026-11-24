@@ -3,7 +3,9 @@
 Usage: python3 tools/pose_set.py s00 windup.body_yaw_deg=32 contact.crouch_amount=0.2 \
            finish.weight_shift=0.85 contact.charge_paddle_offset.y=-0.45
   key:   s<id> stroke posture, b<id> body pose
-  stage: windup (windup_body keyframe), finish (follow_through_body keyframe), contact (main pose)
+  stage: windup (windup_body keyframe), finish (follow_through_body keyframe), contact (main pose),
+         drop (drop_body keyframe, only on strokes that have one; its paddle is contact.drop_paddle_offset
+         and contact.drop_paddle_rotation_deg, its time contact.drop_time)
   A trailing .x/.y/.z sets one component of a Vector3. Without = prints current values for stage(s)."""
 import glob, os, sys
 
@@ -47,7 +49,7 @@ def main():
     text = open(path).read()
     edits = sys.argv[2:]
     if not edits:
-        for st in ("windup", "contact", "finish"):
+        for st in ("windup", "drop", "contact", "finish"):
             try:
                 show(text, st)
             except SystemExit:

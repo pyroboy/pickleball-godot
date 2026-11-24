@@ -152,6 +152,7 @@ var locomotion_mode: = "stance"
 var _heading_def
 var _locomotion_body_applied: = false
 var _airborne: = false
+const AIR_LEGS_FULL_HEIGHT := 0.12   # jump height (m) at which authored air legs are fully applied
 var _air_time: = 0.0
 var _air_right_offset: = Vector3.ZERO
 var _air_left_offset: = Vector3.ZERO
@@ -1084,6 +1085,19 @@ func _update_airborne_feet(delta: float, def, base: Vector3, elevation: float) -
 	left_foot_smooth = (base + _air_left_offset).lerp(targets[1], gather)
 	right_foot_smooth.y = ANKLE_HEIGHT + elevation + tuck
 	left_foot_smooth.y = ANKLE_HEIGHT + elevation + tuck
+	if def != null and "air_right_foot_offset" in def:
+		# Authored air legs: the pose's own offsets, faded in with height so take-off and
+		# landing still meet the floor stance. Scissor pair when the jump began moving back.
+		var scissor: bool = "jump_style" in _player and int(_player.jump_style) == 1
+		var air: float = smoothstep(0.0, AIR_LEGS_FULL_HEIGHT, elevation)
+		var fh: Vector3 = _player._get_forehand_axis()
+		var fwd: Vector3 = _player._get_forward_axis()
+		var right_air: Vector3 = (def.air_scissor_right_foot_offset if scissor else def.air_right_foot_offset) * air
+		var left_air: Vector3 = (def.air_scissor_left_foot_offset if scissor else def.air_left_foot_offset) * air
+		right_foot_smooth += fh * right_air.x + fwd * right_air.z + Vector3.UP * right_air.y
+		left_foot_smooth += fh * left_air.x + fwd * left_air.z + Vector3.UP * left_air.y
+		right_foot_smooth.y = maxf(right_foot_smooth.y, ANKLE_HEIGHT)
+		left_foot_smooth.y = maxf(left_foot_smooth.y, ANKLE_HEIGHT)
 	right_foot_locked = false
 	left_foot_locked = false
 	right_step_t = 0.5

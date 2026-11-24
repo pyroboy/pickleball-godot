@@ -12,9 +12,25 @@ const ElbowPreset = preload("res://scripts/elbow_preset_runtime.gd")
 const Ramp = preload("res://scripts/stroke_speed_ramp.gd")
 
 
+## True when the stroke has the optional Drop key (PostureDefinition.drop_body).
+static func has_drop(def: PostureDefinition) -> bool:
+	return def.drop_body != null and def.drop_time > 0.01 and def.drop_time < 0.49
+
+## stage: 0 Wind-up, 1 Contact, 2 Finish, 3 Drop (between Wind-up and Contact, when the stroke has one).
 static func endpoint(def: PostureDefinition, stage: int) -> PostureDefinition:
 	var pose: PostureDefinition = def.lerp_with(def, 0.0)
 	if stage == 1:
+		Rotation.normalize_channels(pose)
+		return pose
+	if stage == 3:
+		pose.paddle_forehand_mul += def.drop_paddle_offset.x
+		pose.paddle_y_offset += def.drop_paddle_offset.y
+		pose.paddle_forward_mul += def.drop_paddle_offset.z
+		pose.paddle_pitch_base_deg += def.drop_paddle_rotation_deg.x
+		pose.paddle_yaw_base_deg += def.drop_paddle_rotation_deg.y
+		pose.paddle_roll_base_deg += def.drop_paddle_rotation_deg.z
+		if def.drop_body and def.drop_body.has_method("apply_to"):
+			def.drop_body.apply_to(pose)
 		Rotation.normalize_channels(pose)
 		return pose
 	var offset: Vector3 = def.charge_paddle_offset if stage == 0 else def.ft_paddle_offset
@@ -60,8 +76,23 @@ static func sample_with_endpoints(def: PostureDefinition, progress: float, windu
 	var tangent: = (p2 - p0) * 0.5
 	var m0: Vector3 = p1 - p0 if t <= 0.5 else tangent
 	var m1: Vector3 = tangent if t <= 0.5 else p2 - p1
+	var path_blend: float = def.swing_path_blend
+	if t > 0.0 and t < 0.5 and has_drop(def):
+		# Drop key: Wind-up -> Drop -> Contact. The paddle slows into the Drop (zero slope there)
+		# and reaches Contact on the same line and speed as without it.
+		var drop: PostureDefinition = endpoint(def, 3)
+		var pd := Vector3(drop.paddle_forehand_mul, drop.paddle_y_offset, drop.paddle_forward_mul)
+		var dt: float = def.drop_time
+		if t <= dt:
+			a = windup; b = drop; u = t / dt
+			start = p0; end = pd; m0 = pd - p0; m1 = Vector3.ZERO
+		else:
+			a = drop; b = def; u = (t - dt) / (0.5 - dt)
+			start = pd; end = p1; m0 = Vector3.ZERO; m1 = tangent * ((0.5 - dt) * 2.0)
+		pose = a.lerp_with(b, u)
+		path_blend = 1.0
 	var curved: = (2 * u * u * u - 3 * u * u + 1) * start + (u * u * u - 2 * u * u + u) * m0 + (-2 * u * u * u + 3 * u * u) * end + (u * u * u - u * u) * m1
-	var position: Vector3 = start.lerp(end, u).lerp(curved, def.swing_path_blend) + path_offset(def, t)
+	var position: Vector3 = start.lerp(end, u).lerp(curved, path_blend) + path_offset(def, t)
 	if t > 0.5:
 		# Follow-through (the ball has left): the paddle sweeps around the body, not through it.
 		# Canonical frame is (x, y, -forward); Contact and Finish themselves never move.

@@ -188,6 +188,7 @@ var ai_movement_enabled: bool = true
 var ground_y: float = 0.0
 var vertical_velocity: float = 0.0
 var is_jumping: bool = false
+var jump_style: int = 0   # air legs of the current / last jump: 0 two-foot leap, 1 scissor kick (moving back)
 
 
 var jump_landing_remaining: float = 0.0
@@ -970,6 +971,10 @@ func request_contextual_jump(contact: Dictionary, charge: float) -> bool:
 			if absf(foot.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.13: return false
 	_contextual_jump = {"flight": ball.flight_id, "delay": lead - apex_time, 
 		"speed": launch_speed}
+	# Scissor-kick air legs when the jump starts while backing up, or for a ball behind the body.
+	var back_speed: float = - current_velocity.dot(_get_forward_axis())
+	var behind: float = - (point - global_position).dot(_get_forward_axis())
+	jump_style = 1 if back_speed > 0.2 or behind > 0.12 else 0
 	_jump_last_position = global_position
 	_jump_position_initialized = true
 	return true

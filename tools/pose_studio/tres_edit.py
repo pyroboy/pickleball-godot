@@ -8,6 +8,8 @@ Stages map to file sections:
   contact -> the [resource] block (main pose, incl. charge_* / ft_* deltas)
   windup  -> the windup_body sub-resource `values = {...}` dictionary
   finish  -> the follow_through_body sub-resource dictionary
+  drop    -> the optional drop_body sub-resource dictionary (the key between windup and contact;
+             its paddle offset / rotation are drop_paddle_* in the contact block)
 """
 import glob
 import os
@@ -16,7 +18,7 @@ import re
 STAGES = ("windup", "contact", "finish")
 KEY_RE = re.compile(r"^[sba]\d\d$")
 FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-_KEYFRAME_PROP = {"windup": "windup_body", "finish": "follow_through_body"}
+_KEYFRAME_PROP = {"windup": "windup_body", "finish": "follow_through_body", "drop": "drop_body"}
 _NUM_RE = re.compile(r"[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|(?<![A-Za-z])(?:inf|nan)(?![A-Za-z])")
 
 

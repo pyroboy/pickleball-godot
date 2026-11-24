@@ -116,6 +116,13 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export var left_knee_pole: Vector3 = Vector3.ZERO
 @export var right_foot_offset: Vector3 = Vector3.ZERO
 @export var left_foot_offset: Vector3 = Vector3.ZERO
+## Air legs (jump smash): added to each foot only while the player is off the ground, scaled by
+## how high the jump is (x forehand side, y up, z toward the net; metres). The plain pair is the
+## two-foot leap; the scissor pair plays when the jump starts while moving back (player.jump_style).
+@export var air_right_foot_offset: Vector3 = Vector3.ZERO
+@export var air_left_foot_offset: Vector3 = Vector3.ZERO
+@export var air_scissor_right_foot_offset: Vector3 = Vector3.ZERO
+@export var air_scissor_left_foot_offset: Vector3 = Vector3.ZERO
 @export_enum("Right", "Left") var lead_foot: int = 0
 @export var crouch_amount: float = 0.0
 @export_range(-1.0, 1.0) var weight_shift: float = 0.0
@@ -211,6 +218,14 @@ const PaddleRotation = preload("res://scripts/paddle_rotation.gd")
 @export_enum("My keys", "Game-built") var game_built_keys: int = 0
 @export var windup_body: Resource
 @export var follow_through_body: Resource
+## Optional 4th key, Drop, between Wind-up and Contact (an overhead's paddle drop behind the
+## shoulder blades). drop_body is a StrokeBodyKeyframe; the paddle offset / rotation are added to
+## Contact like charge_* and ft_*. Null = no Drop: the swing goes straight from Wind-up to Contact.
+## It is passed through during the strike (at progress drop_time, 0.5 = Contact) and never held.
+@export var drop_body: Resource
+@export var drop_paddle_offset: Vector3 = Vector3.ZERO
+@export var drop_paddle_rotation_deg: Vector3 = Vector3.ZERO
+@export_range(0.05, 0.45) var drop_time: float = 0.3
 @export var charge_duration: float = 0.3
 
 
@@ -319,6 +334,10 @@ func lerp_with(other, w: float):
 	o.left_knee_pole = left_knee_pole.lerp(other.left_knee_pole, t)
 	o.right_foot_offset = right_foot_offset.lerp(other.right_foot_offset, t)
 	o.left_foot_offset = left_foot_offset.lerp(other.left_foot_offset, t)
+	o.air_right_foot_offset = air_right_foot_offset.lerp(other.air_right_foot_offset, t)
+	o.air_left_foot_offset = air_left_foot_offset.lerp(other.air_left_foot_offset, t)
+	o.air_scissor_right_foot_offset = air_scissor_right_foot_offset.lerp(other.air_scissor_right_foot_offset, t)
+	o.air_scissor_left_foot_offset = air_scissor_left_foot_offset.lerp(other.air_scissor_left_foot_offset, t)
 	o.lead_foot = lead_foot if t < 0.5 else other.lead_foot
 	if lead_foot != other.lead_foot:
 		# Lead is a discrete label, but each named foot needs a continuous path.
@@ -385,6 +404,10 @@ func lerp_with(other, w: float):
 	o.game_built_keys = game_built_keys if t < 0.5 else other.game_built_keys
 	o.windup_body = windup_body
 	o.follow_through_body = follow_through_body
+	o.drop_body = drop_body
+	o.drop_paddle_offset = drop_paddle_offset
+	o.drop_paddle_rotation_deg = drop_paddle_rotation_deg
+	o.drop_time = drop_time
 	o.charge_duration = lerpf(charge_duration, other.charge_duration, t)
 	o.schema_version = schema_version
 	o.notes = notes

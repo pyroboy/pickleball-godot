@@ -54,6 +54,9 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   (wind-up/contact/finish, paddle trace) with before/after vs `HEAD` and a metrics table (feet,
   centre of gravity, hip/shoulder turn, knees, elbow, paddle path) in `logs/pose_review/`.
   Edit values with `python3 tools/pose_set.py s00 windup.body_yaw_deg=32 contact.crouch_amount=0.2`.
+  A stroke can have a 4th key, Drop, between Wind-up and Contact (`drop.<field>`, only High Overhead has one),
+  and air legs for jumps (`air_*_foot_offset`). `tools/pose_paddle.gd` turns "paddle head here, tip pointing there"
+  into the pose_set values.
   Plan and per-pose log: `docs/POSE_PASS_PLAN.md`.
 - Headless smoke check:
 

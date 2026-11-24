@@ -4,6 +4,7 @@ const FIELDS: Array[String] = [
 	"stance_width", "front_foot_forward", "back_foot_back", "right_foot_yaw_deg", "left_foot_yaw_deg", 
 	"right_foot_pitch_deg", "left_foot_pitch_deg",
 	"right_knee_pole", "left_knee_pole", "right_foot_offset", "left_foot_offset", "lead_foot", "crouch_amount", "weight_shift", 
+	"air_right_foot_offset", "air_left_foot_offset", "air_scissor_right_foot_offset", "air_scissor_left_foot_offset",
 	"hip_yaw_deg", "torso_yaw_deg", "torso_pitch_deg", "torso_roll_deg", "spine_curve_deg", "shoulder_protraction_m", 
 	"body_position_offset", "body_yaw_deg", "body_pitch_deg", "body_roll_deg", "head_yaw_deg", "head_pitch_deg", "head_track_ball_weight", 
 	"right_hand_offset", "left_hand_offset", "right_shoulder_rotation_deg", "left_shoulder_rotation_deg", 
