@@ -170,6 +170,28 @@ func spawn_bubble(player) -> void:
 	_bubbles.append({"node": bubble, "player": player, "age": 0.0, "back": back, "label": label})
 	_place_bubble(_bubbles[-1])
 	fx_spawned.emit("bubble", bubble)
+	# The result banner pops just before this bubble and sits at the far players' head
+	# height: tell the HUD where the bubble is so the banner steps clear of it.
+	var rect: Rect2 = screen_rect(_bubbles[-1], w, h + tail)
+	var hud = _game.get("hud")
+	if hud != null and hud.has_method("avoid_for_banner") and rect.has_area(): hud.avoid_for_banner([rect])
+	PerfMonitor.note("ouch_bubble", {"actor": int(player.get_actor_id()) if player.has_method("get_actor_id") else -1,
+		"screen": [roundi(rect.position.x), roundi(rect.position.y), roundi(rect.size.x), roundi(rect.size.y)]})
+
+## Screen rect of a bubble at full size (w x h bubble pixels, tail tip at the node), with
+## room for its pop and drift; empty when the camera is missing or behind it.
+func screen_rect(entry: Dictionary, w: int, h: int) -> Rect2:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null or not is_instance_valid(entry.node): return Rect2()
+	var anchor: Vector3 = _head_anchor(entry.player) if is_instance_valid(entry.player) else (entry.node as Node3D).global_position
+	if cam.is_position_behind(anchor): return Rect2()
+	var right: Vector3 = cam.global_transform.basis.x
+	var up: Vector3 = cam.global_transform.basis.y
+	var half_w: float = w * BUBBLE_PX * 0.5 * 1.25          # pop overshoot
+	var tall: float = h * BUBBLE_PX * 1.25 + 0.12 * BUBBLE_SECONDS   # pop + drift up
+	var a: Vector2 = cam.unproject_position(anchor - right * half_w)
+	var b: Vector2 = cam.unproject_position(anchor + right * half_w + up * tall)
+	return Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)), (a - b).abs())
 
 func _head_anchor(player) -> Vector3:
 	var head: Node3D = player.find_child("HeadMesh", true, false) as Node3D

@@ -2,6 +2,7 @@ extends RefCounted
 ## Read-only actual contact inputs shared by human and AI execution tuning.
 const D = preload("res://scripts/paddle_dimensions.gd")
 const Surface = preload("res://scripts/paddle_clearance.gd")
+const Tuning = preload("res://scripts/gameplay_tuning.gd")
 
 static func capture(actor, ball, charge: float, timing_error_seconds: float = 0.0, serve: bool = false) -> Dictionary:
 	var local: Vector3 = actor.paddle_node.to_local(ball.global_position)
@@ -30,6 +31,26 @@ static func capture(actor, ball, charge: float, timing_error_seconds: float = 0.
 		"face_offset_normalized": face_offset, "arm_extension_ratio": actual_extension,
 		"movement_speed": speed, "planted_feet": planted, "support_evidence": support, "incoming_speed": ball.linear_velocity.length(),
 		"serve": serve, "player_num": actor.player_num}
+
+## How hard the incoming ball was to play (GAME_MECHANICS_PLAN change 1), 0..1.
+## Ball and movement facts only: never the pose, paddle face or arm (contact rule).
+##   pace: incoming speed; rush: time since the opponent's contact; low: contact below
+##   the net tape, only counts with pace or rush; move: receiver's run speed; body: a
+##   fast ball arriving at the torso.
+static func carry(actor, ball, since_hit: float) -> Dictionary:
+	var speed: float = ball.linear_velocity.length()
+	var pace: float = clampf((speed - 5.0) / 10.0, 0.0, 1.0)
+	var rush: float = clampf((0.9 - since_hit) / 0.5, 0.0, 1.0) if since_hit >= 0.0 else 0.0
+	var below: float = (PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT) - ball.global_position.y
+	var low: float = clampf(below / 0.5, 0.0, 1.0) * maxf(pace, rush)
+	var move: float = clampf(Vector2(actor.current_velocity.x, actor.current_velocity.z).length() / maxf(actor.move_speed, 0.1), 0.0, 1.0)
+	var lateral: float = Vector2(ball.global_position.x - actor.global_position.x, ball.global_position.z - actor.global_position.z).length()
+	var body: float = clampf((0.45 - lateral) / 0.25, 0.0, 1.0) * clampf((speed - 8.0) / 4.0, 0.0, 1.0)
+	# Blocking a fast ball met at or below the waist: the caller scales this by the blocker's
+	# stamina (a fresh block sends the pace back, a tired one pops up).
+	var block: float = Tuning.BLOCK_FLOAT * clampf((speed - 12.0) / 4.0 + 0.5, 0.0, 1.0) if speed >= 12.0 and ball.global_position.y - PickleballConstants.FLOOR_Y <= 1.0 else 0.0
+	var value: float = clampf(0.40 * pace + 0.30 * rush + 0.20 * low + 0.25 * move * move + 0.35 * body, 0.0, 1.0)
+	return {"carry": value, "pace": pace, "rush": rush, "low": low, "move": move, "body": body, "block": block}
 
 static func actual_support(actor) -> Array[Dictionary]:
 	# A cached IK lock is intent, not evidence of a foot on the court. Measure

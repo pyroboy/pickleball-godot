@@ -4,6 +4,8 @@ extends Control
 
 enum Kind{SCOREBOARD, GUIDANCE, GUIDE, PAUSE, PILL, SKIP}
 
+const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
+
 const ICE: = Color("eaf4ff")
 const BLUE: = Color("4eb8ff")
 const RED: = Color("ff6278")
@@ -30,6 +32,7 @@ var guidance_details: = true:
 
 func _ready() -> void :
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	resized.connect(queue_redraw)
 
 func _draw() -> void :
@@ -41,8 +44,10 @@ func _draw() -> void :
 			_draw_book()
 		Kind.PAUSE:
 			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
-			draw_style_box(_rounded_fill(ICE, 2), Rect2(-10, -14, 6, 28))
-			draw_style_box(_rounded_fill(ICE, 2), Rect2(4, -14, 6, 28))
+			# Pixel pause bars: square blocks with a darker bottom step.
+			for bx in [-10.0, 4.0]:
+				draw_rect(Rect2(bx, -14, 6, 28), ICE)
+				draw_rect(Rect2(bx, 11, 6, 3), Color(ICE.darkened(0.35)))
 		Kind.PILL: _draw_pill()
 		Kind.SKIP:
 			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
@@ -53,13 +58,14 @@ func _draw() -> void :
 func _draw_pill() -> void :
 	# Team colour dots at both ends of the score pill; the server's dot wears a ring.
 	var r: = size.y * 0.2
+	var u: float = maxf(1.0, roundf(size.y / 22.0))   # one UI pixel at the pill's size
 	var left_color: = BLUE if first_team == 0 else RED
 	var right_color: = RED if first_team == 0 else BLUE
 	var left_at: = Vector2(size.y * 0.5, size.y * 0.5)
 	var right_at: = Vector2(size.x - size.y * 0.5, size.y * 0.5)
-	draw_circle(left_at, r + 3.0, ICE, false, 2.0, false)
-	draw_circle(left_at, r, left_color, true, -1, false)
-	draw_circle(right_at, r, right_color, true, -1, false)
+	PixelDraw.ring(self, left_at, r + 2.0 * u, u, ICE, 1)
+	PixelDraw.disc(self, left_at, r, u, left_color)
+	PixelDraw.disc(self, right_at, r, u, right_color)
 
 func _draw_scoreboard() -> void :
 	var w: = size.x
@@ -154,7 +160,7 @@ func _draw_book() -> void :
 		Vector2(-18, 12), Vector2(-11, 10), Vector2(-5, 11), Vector2(0, 14), 
 		Vector2(5, 11), Vector2(11, 10), Vector2(18, 12), Vector2(18, -12), 
 		Vector2(12, -15), Vector2(5, -14), Vector2(0, -10), Vector2(0, 14)
-	]), ICE, 2.3, true)
+	]), ICE, 3.0, false)
 
 func _outline(points: PackedVector2Array, color: Color, line_width: float) -> void :
 	var closed: = points.duplicate()

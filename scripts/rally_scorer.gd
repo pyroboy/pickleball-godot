@@ -575,10 +575,18 @@ func check_momentum_fault(delta: float = -1.0) -> Dictionary:
 	return {"valid": true}
 
 
+## Perf: a rigged player standing further than NET_CHECK_DEPTH_M from the net cannot reach it
+## or its plane (body lean + arm + paddle is well under 2 m), so its meshes are not scanned.
+## The two net checks scanned every mesh of all four players every tick (0.65 ms of a tick).
+const NET_CHECK_DEPTH_M := 2.2
+func _far_from_net(player) -> bool:
+	return player is Node3D and "body_pivot" in player and absf(player.global_position.z) > NET_CHECK_DEPTH_M
+
 func check_net_touch() -> Dictionary:
 	for player in _players():
 		var pnum: int = ActorIdentity.actor_id(player)
 		if not is_instance_valid(player): continue
+		if _far_from_net(player): continue
 		var contact: Dictionary = ActorIdentity.annotate(SurfaceContacts.net_contact(player), player)
 		if not contact.hit and not ("body_pivot" in player):
 			# Non-rig fixtures retain a narrow compatibility path, now finite-x.
@@ -600,6 +608,7 @@ func check_net_plane() -> Dictionary:
 	for player in _players():
 		var pnum: int = ActorIdentity.actor_id(player)
 		if not is_instance_valid(player) or not (player is Node3D): continue
+		if _far_from_net(player): continue
 		var extent: Dictionary = ActorIdentity.annotate(SurfaceContacts.net_plane_extent(player, ActorIdentity.court_side(player)), player)
 		if not extent.crossed: continue
 		# Follow-through never authorizes grounded opponent-court contact.

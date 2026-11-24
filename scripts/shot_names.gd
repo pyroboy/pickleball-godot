@@ -43,6 +43,15 @@ const KITCHEN_DEPTH := 2.75      # kitchen line area (NVZ 2.13 m + a step)
 const TRANSITION_DEPTH := 5.2    # beyond this: baseline area
 const HIGH_CONTACT := 1.0        # m: ball met above the net (net 0.91 m)
 const SOFT_SPEED := 8.0          # m/s
+## Swing room: how far the stroke's wind-up takes the paddle back from contact (the pose's
+## charge_paddle_offset, m). A drive needs room to load the paddle; a compact pose held in front
+## of the body (the Forward poses: 0.10 to 0.15 m) can only speed the ball up, so a hard hit from
+## one is a SPEED-UP, never a DRIVE (user's call, 2026-11-24). Forehands are 0.75 m and more.
+const SHORT_SWING_ROOM := 0.45
+
+## Swing room of a pose (INF when there is none to read).
+static func swing_room(pose) -> float:
+	return Vector3(pose.charge_paddle_offset).length() if pose != null and "charge_paddle_offset" in pose else INF
 const HARD_SPEED := 10.5
 
 static func zone(depth: float) -> String:
@@ -67,6 +76,7 @@ static func classify(profile: Dictionary, velocity: Vector3, volley: bool, rally
 	var arc: float = velocity.y / maxf(horizontal, 0.01)
 	var high: bool = contact_height >= HIGH_CONTACT
 	var where: String = zone(depth)
+	var compact: bool = float(profile.get("swing_room", INF)) < SHORT_SWING_ROOM   # no room to load: not a drive
 	# Overhead put away, and lobs: clear from plan or flight.
 	if motion == "SMASH" or tactic == "SMASH" or shot_type == "SMASH" or (contact_height >= 1.5 and velocity.y <= -1.0 and speed >= HARD_SPEED): return "SMASH"
 	var planned_any: bool = tactic != "" or shot_type not in ["", "GROUNDSTROKE"]
@@ -77,13 +87,13 @@ static func classify(profile: Dictionary, velocity: Vector3, volley: bool, rally
 	var soft: bool = speed < SOFT_SPEED or (not hard and tactic in ["DINK", "DROP", "RESET"])
 	if rally_hit == 3 and not high:
 		if soft: return "THIRD_DROP"
-		if hard or tactic == "DRIVE": return "THIRD_DRIVE"
+		if hard or tactic == "DRIVE": return "SPEED_UP" if compact else "THIRD_DRIVE"
 	# Contact styles that already describe position and timing.
 	if motion in ["COUNTER", "ROLL", "FLICK", "HALF_VOLLEY", "JAMMED"]: return motion
 	if high:
 		# Ball met above the net: soft is a block, hard is an attack.
 		if soft or motion == "BLOCK": return "BLOCK"
-		if hard: return ("PUNCH" if motion == "PUNCH" else "SPEED_UP") if where != "BASELINE" else "DRIVE"
+		if hard: return ("PUNCH" if motion == "PUNCH" else "SPEED_UP") if where != "BASELINE" or compact else "DRIVE"
 		return "PUNCH" if motion == "PUNCH" else "VOLLEY"
 	if motion == "BLOCK": return "BLOCK"
 	if soft:
@@ -91,6 +101,6 @@ static func classify(profile: Dictionary, velocity: Vector3, volley: bool, rally
 			"KITCHEN": return "DINK"
 			"TRANSITION": return "RESET"
 			_: return "DROP"
-	if hard: return "SPEED_UP" if where == "KITCHEN" else "DRIVE"
+	if hard: return "SPEED_UP" if where == "KITCHEN" or compact else "DRIVE"
 	if volley: return "PUNCH" if motion == "PUNCH" else "VOLLEY"
 	return "GROUNDSTROKE"

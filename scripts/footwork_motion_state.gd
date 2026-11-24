@@ -9,7 +9,10 @@ const BACKWARD_EXIT := 0.22
 const LATERAL_ENTER := 0.65
 const LATERAL_EXIT := 0.53
 const TURN_ROUTE_TIME := 0.18
-const LATERAL_TURN_DISTANCE := 0.75
+## Sideways travel stays a side shuffle (feet wide, never crossing) up to this distance; only a
+## longer sprint crosses over and runs. Was 0.75: any fast sideways move became a crossover run
+## and no shuffle was ever seen at speed (user's call, 2026-11-24).
+const LATERAL_TURN_DISTANCE := 4.0
 const WALL_TURN_DISTANCE := 1.25
 const LOB_DROP_STEP_TIME := 0.20
 const LOB_FACE_TIME := 0.95
@@ -31,6 +34,8 @@ var desired_heading := 0.0
 var gait := "stance"
 var phase := "ready"
 var route_distance := 0.0
+var lateral_distance := 0.0   # m travelled sideways without a break, in one direction
+var _lateral_side := 0.0
 var route_time := 0.0
 var route_direction := Vector3.ZERO
 var lob_active := false
@@ -75,6 +80,7 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 	walk_turning = 0.0
 	if speed <= IDLE_SPEED:
 		_walk_turn_side = 0.0; _walk_total = 0.0; _walk_last = INF
+		lateral_distance = 0.0
 		route_distance = 0.0
 		route_time = 0.0
 		route_direction = Vector3.ZERO
@@ -94,6 +100,11 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 		route_time += delta
 		var backward := -travel.dot(court)
 		var lateral := absf(travel.dot(Vector3(-court.z, 0, court.x)))
+		# Distance covered sideways in one go (a curved route that only ends sideways does not count
+		# its earlier part: route_distance carried over from a backpedal made the shuffle a crossover at once).
+		var lateral_side := signf(travel.dot(Vector3(-court.z, 0, court.x)))
+		lateral_distance = lateral_distance + traveled if lateral > LATERAL_EXIT and lateral_side == _lateral_side else 0.0
+		_lateral_side = lateral_side
 		var backward_limit := BACKWARD_EXIT if state in ["backpedal", "backward_strafe"] else BACKWARD_ENTER
 		var lateral_limit := LATERAL_EXIT if state in ["lateral_shuffle", "backward_strafe"] else LATERAL_ENTER
 		var forced_shuffle := charged_phase in ["shuffle", "adjust", "plant", "load", "swing"]
@@ -130,10 +141,10 @@ func update(delta: float, velocity: Vector3, traveled: float, court: Vector3,
 			next = "backward_strafe" if lateral > 0.35 else "backpedal"
 			reason = "retreat while facing play"
 			gait = "shuffle"
-		elif charged_phase == "crossover" or lateral > lateral_limit and speed > 1.65 and route_distance > turn_distance and sustained and not forced_shuffle:
+		elif charged_phase == "crossover" or lateral > lateral_limit and speed > 1.65 and (lateral_distance if context != "wall" else route_distance) > turn_distance and sustained and not forced_shuffle:
 			next = "lateral_crossover"; reason = "sustained lateral coverage, Ready-facing"
 			# Travel direction does not redefine Ready/paddle presentation heading.
-			gait = "crossover" if charged_phase == "crossover" or route_distance < turn_distance + 0.72 else "run"
+			gait = "crossover" if charged_phase == "crossover" or (lateral_distance if context != "wall" else route_distance) < turn_distance + 0.72 else "run"
 		elif lateral > lateral_limit or forced_shuffle:
 			next = "lateral_shuffle"; reason = "short adjustment or contact approach"
 			gait = "shuffle"

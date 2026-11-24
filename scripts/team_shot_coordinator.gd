@@ -2,6 +2,7 @@ extends RefCounted
 ## Advisory ownership only. This object cannot touch ball physics or scoring.
 const SWITCH_ADVANTAGE_SECONDS := 0.16
 const MIN_CLAIM_SECONDS := 0.14
+const LATE_SWITCH_SECONDS := 0.45
 const COVER_TARGET_SPEED := 2.5
 const MIDDLE_DEADBAND := 0.55
 const CHASE_MIN_RUN := 0.05        # m: an offer with no run target is not a chase
@@ -184,7 +185,10 @@ func _resolve_team(team: int) -> Dictionary:
    selected=old_id;reason="existing physical forward stroke retains reachable owner"
   if selected>=0 and reason!="observed reachable human commitment" and prior.has(old_id) and _eligible(prior[old_id],team) and not _yields_to_human(old_id,team,prior):
    var old_cost:float=_cost(prior[old_id])
-   if bool(prior[old_id].committed) or _time-float(old.get("since",_time))<MIN_CLAIM_SECONDS or old_cost-best<SWITCH_ADVANTAGE_SECONDS:
+   # No hand-off in the last moments: a partner given the ball under LATE_SWITCH_SECONDS before
+   # its contact cannot set up (bench: owner changed 0.2-0.4 s before contact, nobody hit it).
+   var late:bool=selected!=old_id and maxf(0.0,float(prior[selected].deadline)-_time)<LATE_SWITCH_SECONDS
+   if late or bool(prior[old_id].committed) or _time-float(old.get("since",_time))<MIN_CLAIM_SECONDS or old_cost-best<SWITCH_ADVANTAGE_SECONDS:
     selected=old_id
     if reason!="existing physical forward stroke retains reachable owner":reason="stable reachable claim"
   if selected<0:

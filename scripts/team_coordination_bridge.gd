@@ -3,6 +3,7 @@ extends RefCounted
 ## delayed ordinary AIBrain offer/predictor, never from a fresh ball prediction.
 const Policy=preload("team_shot_coordinator.gd")
 const Avoidance=preload("team_avoidance.gd")
+const HITTER_RADIUS:=0.0   # m: own avoidance radius while going for a reachable ball (partner keeps 0.68)
 const Cancel=preload("ai_pending_contact_cancellation.gd")
 const RuntimePolicy=preload("runtime_policy.gd")
 var cancellations:Array=[]
@@ -269,6 +270,10 @@ func filter_ground_velocity(brain,desired:Vector3,delta:float) -> Vector3:
   var item:Dictionary=observed.visible[other_id].duplicate()
   item.root=Vector3(item.root)+Vector3(item.velocity)*float(observed.age)
   partners.append(item)
- var result:Dictionary=Avoidance.steer(actor.global_position,actor.current_velocity,desired,partners,delta,float(actor.move_speed),16.0)
+ # The player going for the ball has the right of way (small own radius): the partner, who
+ # keeps the full radius, is the one who steps aside.
+ var stop:Vector3=brain.ai_target_position-actor.global_position;stop.y=0.0
+ var radius:float=HITTER_RADIUS if brain.ai_selected_contact_reachable else Avoidance.DEFAULT_RADIUS
+ var result:Dictionary=Avoidance.steer(actor.global_position,actor.current_velocity,desired,partners,delta,float(actor.move_speed),16.0,radius,stop.length())
  last_steering_by_actor[id]=result
  return result.velocity

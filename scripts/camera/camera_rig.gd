@@ -189,6 +189,8 @@ func _perf_process(delta: float) -> void:
 	if _game_root and _game_root.practice_launcher and _game_root.practice_launcher.is_wall() and gameplay_camera.mode == GameplayCamera.CENTER: return
 	if gameplay_camera.mode == GameplayCamera.POV:
 		gameplay_camera._update_pov(camera, _player_left, _ball, delta)
+	elif gameplay_camera.mode == GameplayCamera.FIRST_PERSON:
+		gameplay_camera.update_first_person(camera, _player_left, _ball, delta, true)
 	elif gameplay_camera.active_kind != "center":
 		gameplay_camera._keep_ball_visible(camera, _ball)
 
@@ -397,6 +399,7 @@ func _update_centered(delta: float) -> void:
 	if MobileLayout.is_portrait(viewport_size):
 		_update_portrait_camera(viewport_size)
 		if portrait_adaptive_framing: _apply_portrait_action_framing(delta)
+		_apply_pickup_framing(delta)
 		_apply_slowmo_focus(delta)
 		return
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
@@ -679,6 +682,51 @@ func _portrait_projected_bounds() -> Rect2:
 				maximum = maximum.max(point)
 	return Rect2(minimum, maximum - minimum)
 
+
+## Between points: while one of the PLAYING players walks to pick up the ball, ease the
+## camera straight back along its view (the court stays centred, just smaller) until that
+## player sits above the controls. Only playing players count: a ball kid fetching from
+## outside the court (retriever -1) and the ball thrown back in get no camera move.
+## Far-side pickups are already in view, so it stays put there.
+const PICKUP_PHASES := ["APPROACH", "BEND", "LIFT", "PASS_PREP"]
+const PICKUP_MAX_PULL := 14.0     # m the camera may back off
+const PICKUP_EASE := 2.5          # 1/s: how fast it eases out and back in
+var _pickup_pull := 0.0
+var pickup_framing_enabled := true
+
+func _pickup_targets() -> Array:
+	var bp = _game_root.get("between_point_controller") if _game_root != null else null
+	if bp == null or not bp.is_active() or bp.retriever < 0 or not (bp.phase in PICKUP_PHASES): return []
+	var fetcher: Node3D = bp._players[bp.retriever]
+	var feet: Vector3 = fetcher.get_global_transform_interpolated().origin
+	return [feet, feet + Vector3.UP * 1.9]
+
+func _pickup_fits(points: Array, area: Rect2) -> bool:
+	for point in points:
+		if camera.is_position_behind(point) or not area.has_point(camera.unproject_position(point)): return false
+	return true
+
+func _apply_pickup_framing(delta: float) -> void:
+	var base: Vector3 = camera.position
+	var back: Vector3 = camera.transform.basis.z   # camera looks along -z: +z backs away
+	var points: Array = _pickup_targets() if pickup_framing_enabled else []
+	var want: float = 0.0
+	if not points.is_empty():
+		var view: Vector2 = get_viewport().get_visible_rect().size
+		var area: Rect2 = MobileLayout.court_rect(view, MobileLayout.safe_rect(get_viewport())).grow(-12.0)
+		camera.position = base
+		if not _pickup_fits(points, area):
+			var low: float = 0.0
+			var high: float = PICKUP_MAX_PULL
+			for _i in 12:
+				var mid: float = (low + high) * 0.5
+				camera.position = base + back * mid
+				if _pickup_fits(points, area): high = mid
+				else: low = mid
+			want = high
+	_pickup_pull = lerpf(_pickup_pull, want, 1.0 - exp(-PICKUP_EASE * maxf(delta, 0.0)))
+	if _pickup_pull < 0.01 and want == 0.0: _pickup_pull = 0.0
+	camera.position = base + back * _pickup_pull
 
 func begin_between_point_cinematic(focus_provider: Callable = Callable(), duration: float = 4.0) -> bool:
 	if not between_point_cinematic_enabled: return false

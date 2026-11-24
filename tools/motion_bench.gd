@@ -18,6 +18,11 @@ const COURSE := [
 	["shuffle_r", 1.0, 2.0, 0.0],
 	["shuffle_l", 2.0, -2.0, 0.0],
 	["shuffle_r2", 1.0, 2.0, 0.0],
+	["shuffle_fast_r", 1.0, 3.4, 0.0],
+	["shuffle_fast_l", 1.0, -3.4, 0.0],
+	["stop2", 0.8, 0.0, 0.0],
+	["diag_fwd_r", 1.2, 2.3, 2.3],
+	["diag_fwd_l", 1.2, -2.3, 2.3],
 	["diagonal", 1.4, 1.8, -2.4],
 	["settle", 1.2, 0.0, 0.0],
 ]
@@ -74,6 +79,8 @@ func _initialize() -> void:
 		_course.append(["react:" + name, R.duration(name) + 0.4, 0.0, 0.0])
 	for name in load("res://scripts/graphics/card_expressions.gd").NAMES:
 		_course.append(["expr:" + name, 3.0, 0.0, 0.0])
+	for i in load("res://scripts/graphics/card_stance.gd").STANCES.size():
+		_course.append(["stance:%d" % i, 2.5, 0.0, 0.0])
 	_game = (load("res://scenes/game.tscn") as PackedScene).instantiate()
 	root.add_child.call_deferred(_game)
 	var d := Driver.new()
@@ -120,7 +127,8 @@ func _physics(delta: float) -> void:
 		if m._reactions == null: m._reactions = m.CardReactionsScript.new(_p)
 		m._reactions.play(str(seg[0]).trim_prefix("react:"))
 	if _seg_t == 0.0 and _rig != null and _rig.get("_motion") != null and _rig._motion._expressions != null:
-		_rig._motion._expressions.force(str(seg[0]).trim_prefix("expr:") if str(seg[0]).begins_with("expr:") else "")
+		_rig._motion._expressions.force(str(seg[0]).trim_prefix("expr:") if str(seg[0]).begins_with("expr:") else ("idle" if str(seg[0]).begins_with("stance:") else ""))
+		if _rig._motion._stance != null: _rig._motion._stance.force(int(str(seg[0]).trim_prefix("stance:")) if str(seg[0]).begins_with("stance:") else -1)
 	var target: Vector3 = _fh * float(seg[2]) + _fwd * float(seg[3])
 	_vel = _vel.move_toward(target, ACCEL * delta)
 	_move.vel = _vel
@@ -161,6 +169,31 @@ func _sample(_delta: float) -> void:
 				var a: Vector3 = _drawn(leg.foot_pivot) if drawn else leg.foot_pivot.get_global_transform_interpolated().origin
 				bends.append(180.0 - rad_to_deg((h - k).angle_to(a - k)))
 		row["knee"] = snappedf(maxf(bends[0], bends[2]), 0.1)        # drawn, the more bent leg
+		row["knee_r"] = snappedf(bends[0], 0.1)
+		row["knee_l"] = snappedf(bends[2], 0.1)
+		row["stance"] = m.stance()
+		row["low"] = snappedf(m.shuffle_drop, 0.0001)
+		row["hop"] = snappedf(m.flow.x, 0.0001)
+		row["drop"] = snappedf(m.flow.y, 0.0001)
+		row["turn"] = snappedf(m.flow.z, 0.01)
+		row["loco"] = str(_p.leg_ik.locomotion_state) if _p.leg_ik != null else ""
+		# Paddle in the hand: how far the drawn grip is from the drawn paddle hand, beyond the gameplay gap.
+		var parm = _rig.get("_paddle_arm")
+		var pad: Node3D = _p.get("paddle_node")
+		if parm != null and pad != null:
+			var pxf: Transform3D = pad.get_global_transform_interpolated()
+			var hraw: Vector3 = parm.hand_pivot.get_global_transform_interpolated().origin
+			row["grip_gap"] = snappedf(absf((m.paddle_delta(parm) * pxf.origin).distance_to(_drawn(parm.hand_pivot)) - pxf.origin.distance_to(hraw)), 0.0001)
+		var fr: Vector3 = _drawn(_p.right_leg_node.foot_pivot)
+		var fl: Vector3 = _drawn(_p.left_leg_node.foot_pivot)
+		var hipc: Vector3 = (_drawn(_p.right_leg_node.thigh_pivot) + _drawn(_p.left_leg_node.thigh_pivot)) * 0.5
+		row["feet_wide"] = snappedf(absf((fr - fl).dot(_fh)), 0.001)
+		row["feet_fwd"] = snappedf((fr - fl).dot(_fwd), 0.001)    # + = right foot ahead
+		row["hip_side"] = snappedf((hipc - (fr + fl) * 0.5).dot(_fh) * signf((fr - fl).dot(_fh)), 0.001)   # + = toward the right foot
+		row["heel"] = snappedf(maxf(fr.y, fl.y) - minf(fr.y, fl.y), 0.001)
+		var hip_line: Vector3 = _drawn(_p.right_leg_node.thigh_pivot) - _drawn(_p.left_leg_node.thigh_pivot)
+		hip_line.y = 0.0
+		if hip_line.length() > 0.001: row["feet_side"] = snappedf((fr - fl).dot(hip_line.normalized()), 0.001)   # negative = crossed
 		row["knee_game"] = snappedf(maxf(bends[1], bends[3]), 0.1)   # gameplay legs
 		row["spin"] = snappedf(rad_to_deg(m.paddle_spin()), 0.1)
 		var body_raw: Vector3 = _p.body_pivot.get_global_transform_interpolated().origin

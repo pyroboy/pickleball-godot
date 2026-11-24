@@ -111,6 +111,76 @@ const TAP_FEET_TURN_DEG: = 60.0  # the one who turns fully also turns the feet t
 var _taps: Array = []
 var _tap_rng: = RandomNumberGenerator.new()
 
+# Pacing: a player with nothing to do after a point strolls a few steps away from their spot
+# and back (letting the tension go) while the ball is fetched. A slow walk, not a dash, along one
+# of four routes; restless players pace more often and a little faster. The serve waits until
+# they are back on their spot, so the routes are short.
+#   out    a few steps to the side, stand there, walk back
+#   loop   out to the side, drift back from the net, then home: a small triangle, no long stop
+#   back   turn and walk back from the net, stand, return
+#   cross  out to the side, back past the spot a little toward the partner, then home
+const PACE_CHANCE: = Vector2(0.3, 0.75)  # calm .. restless player
+const PACE_SPEED: = Vector2(1.1, 1.5)    # m/s stroll, calm .. restless
+const PACE_START: = Vector2(1.3, 2.2)    # s into the between-point: after the reaction
+const PACE_AWAY: = Vector2(1.7, 2.4)     # s away from the spot (walking and standing)
+const PACE_SIDE: = Vector2(0.5, 0.9)     # m sideways, away from the partner
+const PACE_BACK: = Vector2(0.1, 0.5)     # m back from the net
+const PACE_RESTLESS: = [0.1, 0.9, 0.75, 0.05]   # by seat, as card_profile.gd
+const PACE_ROUTES: = ["out", "loop", "back", "cross"]
+var _pace: Array = []                    # per player: {} or {pts: [[offset, until s], ...], from, to, speed, route}
+var _pace_rng: = RandomNumberGenerator.new()
+
+func _plan_paces() -> void:
+	_pace = []
+	for index in _players.size(): _pace.append({})
+	if phase != "APPROACH" or (_game.doubles_mode and _game.doubles_state.end_change_pending): return
+	for index in _players.size():
+		if index == server or index == retriever or not _tap_of(index).is_empty(): continue
+		var player = _players[index]
+		var restless: float = float(PACE_RESTLESS[posmod(int(player.get_actor_id()), 4)]) if player.has_method("get_actor_id") else 0.5
+		if _pace_rng.randf() > lerpf(PACE_CHANCE.x, PACE_CHANCE.y, restless): continue
+		var side: Vector3 = player._get_forehand_axis()
+		for other in _players.size():
+			if other == index or _players[other].get_team_id() != player.get_team_id(): continue
+			var gap: Vector3 = player.global_position - _players[other].global_position
+			if gap.dot(side) < 0.0: side = -side
+		var back: Vector3 = -player._get_forward_axis()
+		side.y = 0.0
+		back.y = 0.0
+		var far: float = _pace_rng.randf_range(PACE_SIDE.x, PACE_SIDE.y)
+		var deep: float = _pace_rng.randf_range(PACE_BACK.x, PACE_BACK.y)
+		var from: float = elapsed + _pace_rng.randf_range(PACE_START.x, PACE_START.y)
+		var away: float = _pace_rng.randf_range(PACE_AWAY.x, PACE_AWAY.y)
+		var route: String = PACE_ROUTES[_pace_rng.randi_range(0, PACE_ROUTES.size() - 1)]
+		var pts: Array = []   # [offset from the spot, share of the time away at which the next one starts]
+		match route:
+			"loop": pts = [[side * far + back * deep * 0.3, 0.5], [side * far * 0.35 + back * (deep + 0.35), 1.0]]
+			"back": pts = [[back * (deep + 0.45) + side * far * 0.2, 1.0]]
+			"cross": pts = [[side * far + back * deep * 0.5, 0.6], [-side * 0.3 + back * deep, 1.0]]
+			_: pts = [[side * far + back * deep, 1.0]]
+		for pt in pts: pt[1] = from + away * float(pt[1])
+		_pace[index] = {"pts": pts, "from": from, "to": from + away, "speed": lerpf(PACE_SPEED.x, PACE_SPEED.y, restless), "route": route}
+		PerfMonitor.note("pace", {"player": index, "route": route, "m": snappedf(Vector3(pts[0][0]).length(), 0.01), "from": snappedf(from, 0.01), "away": snappedf(away, 0.01)})
+
+## True while this player may stroll: nothing else needs them.
+func _pace_free(index: int) -> bool:
+	if index >= _pace.size() or _pace[index].is_empty(): return false
+	if index == server or index == retriever or (index == catcher and phase.begins_with("PASS")): return false
+	return not (phase.begins_with("END") or phase == "SET_SERVE" or not _tap_of(index).is_empty())
+
+func _pace_offset(index: int) -> Vector3:
+	if not _pace_free(index): return Vector3.ZERO
+	var plan: Dictionary = _pace[index]
+	if elapsed < float(plan.from) or elapsed > float(plan.to): return Vector3.ZERO
+	for pt in plan.pts:
+		if elapsed <= float(pt[1]): return pt[0]
+	return Vector3.ZERO
+
+## Walking speed for this player's stroll (out and back home), or 0 when they are not pacing.
+func _pace_speed(index: int) -> float:
+	if not _pace_free(index) or elapsed < float(_pace[index].from): return 0.0
+	return float(_pace[index].speed)
+
 func _tap_of(index: int) -> Dictionary:
 	for tap in _taps:
 		if index in tap.pair: return tap
@@ -247,6 +317,7 @@ func setup(game: Node) -> void :
 	_initialize_roster_storage()
 	game.ball.bounced.connect(_on_bounced)
 	RuntimePolicy.seed_rng(_tap_rng, 14)
+	RuntimePolicy.seed_rng(_pace_rng, 15)
 
 func is_active() -> bool:
 	return _active
@@ -348,6 +419,7 @@ func cancel() -> void :
 	if not _active: return
 	_active = false
 	_taps = []
+	_pace = []
 	_end_route.cancel()
 	_motion_velocity.fill(Vector3.ZERO)
 	for team in _players.size():
@@ -380,7 +452,7 @@ func velocity_for(actor_id: int) -> Vector3:
 	if not _active or team < 0 or team >= _players.size() or _targets.size() != _players.size(): return Vector3.ZERO
 	var tap: Dictionary = _tap_of(team)
 	if not tap.is_empty(): return _tap_velocity(team, tap)
-	var offset: Vector3 = _targets[team] - _players[team].global_position
+	var offset: Vector3 = _targets[team] + _pace_offset(team) - _players[team].global_position
 	offset.y = 0.0
 	var distance: float = offset.length()
 
@@ -400,7 +472,8 @@ func velocity_for(actor_id: int) -> Vector3:
 		if phase == "PASS" and team == catcher:
 			_motion_velocity[team] = offset.normalized() * minf(CARRY_SPEED, distance * 8.0) if distance > 0.025 else Vector3.ZERO
 			return _motion_velocity[team]
-		return _walk_velocity(team, offset, CARRY_SPEED, 0.025)
+		var stroll: float = _pace_speed(team)
+		return _walk_velocity(team, offset, stroll if stroll > 0.0 else CARRY_SPEED, 0.025)
 	var dt: float = maxf(get_physics_process_delta_time(), 1e-05)
 
 
@@ -485,6 +558,7 @@ func _perf_physics_process(delta: float) -> void:
 			if phase_elapsed > 0.35:
 				_choose_retriever()
 				_plan_partner_taps()
+				_plan_paces()
 		"APPROACH":
 			if not _reachable_ball():
 				_start_offscreen_return()

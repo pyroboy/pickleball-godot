@@ -6,6 +6,8 @@ extends RefCounted
 ## - Panels and buttons: crisp edges (no anti-aliasing), small stepped corners, a chunky
 ##   darker lower bevel instead of black outlines; buttons sink into the bevel when pressed.
 
+# Dark navy / teal panels (the user's pick over the PDF's plum), cream ink, team blue / red,
+# gold, lime. Kit shapes from the PDF p.23 stay: cut corners, light top edge, dark bevel.
 const INK: = Color("f2f6ee")
 const MUTED: = Color("a3b8c2")
 const PANEL: = Color("0f2230")
@@ -19,6 +21,11 @@ const GOLD: = Color("ffd46b")
 const BLUE: = Color("84ceff")
 const RED: = Color("ff9f8c")
 const BACKDROP: = Color("0b1a24")
+const TEAM_BLUE: = Color("4f8ee0")   # banner / badge fills (match the character palettes)
+const TEAM_RED: = Color("e0645a")
+const KIT_GOLD: = Color("f5d060")    # ball, serve, charge, winners
+const PLUM_RED: = Color("a3352f")    # deep red ribbons ("SIDE OUT", went against you)
+const KIT_GREEN: = Color("6cd096")
 
 const PIXEL_FONT_PATH: = "res://assets/fonts/arjo_pixel.fnt"
 const PIXEL_UNIT: = 9        # the pixel font's native size; display sizes are whole multiples
@@ -61,31 +68,36 @@ static func use_pixel(control: Control, px: float) -> void:
 	control.add_theme_font_size_override("font_size", pixel_size(px))
 	crisp(control)
 
+## Cut (45 degree) corners, the kit's look instead of rounded ones.
+static func cut_corners(style: StyleBoxFlat, cut: int) -> void:
+	style.set_corner_radius_all(cut)
+	style.corner_detail = 1
+
+## Kit panel: dark navy, lighter top edge, chunky darker bottom bevel, cut corners.
 static func panel_style() -> StyleBoxFlat:
 	var style: = StyleBoxFlat.new()
 	style.bg_color = PANEL
 	style.border_color = BORDER
 	style.anti_aliasing = false
-	style.set_border_width_all(2)
-	style.border_width_bottom = BEVEL + 1
-	style.set_corner_radius_all(4)
+	style.border_width_top = 3
+	cut_corners(style, 9)
 	style.content_margin_left = 20
 	style.content_margin_right = 20
 	style.content_margin_top = 18
 	style.content_margin_bottom = 18
-	style.shadow_color = Color(0.0, 0.03, 0.06, 0.45)
+	style.shadow_color = PANEL.darkened(0.55)   # the bevel, not a soft drop shadow
 	style.shadow_size = 1
-	style.shadow_offset = Vector2(0, 6)
+	style.shadow_offset = Vector2(0, BEVEL + 1)
 	return style
 
-## Score pill: dark chunky plate with a lighter bevel.
+## Score pill: dark chunky plate with a lighter top edge.
 static func pill_style(scale_f: float = 1.0) -> StyleBoxFlat:
 	var style: = panel_style()
-	style.bg_color = Color("13293a")
-	style.border_color = Color("4a6c90")
-	style.set_border_width_all(maxi(2, roundi(2.0 * scale_f)))
-	style.border_width_bottom = maxi(4, roundi(6.0 * scale_f))
-	style.set_corner_radius_all(roundi(8.0 * scale_f))
+	style.bg_color = PANEL
+	style.border_color = BORDER
+	style.border_width_top = maxi(2, roundi(3.0 * scale_f))
+	style.shadow_offset = Vector2(0, maxi(4, roundi(6.0 * scale_f)))
+	cut_corners(style, roundi(6.0 * scale_f))
 	return style
 
 static func button_style(color: Color, pressed: bool = false) -> StyleBoxFlat:
@@ -94,7 +106,12 @@ static func button_style(color: Color, pressed: bool = false) -> StyleBoxFlat:
 	style.anti_aliasing = false
 	style.border_color = color.darkened(0.42)   # bevel: darker chunky lower edge, not an outline
 	style.border_width_bottom = 1 if pressed else BEVEL
-	style.set_corner_radius_all(4)
+	cut_corners(style, 6)
+	# Lighter top lip (one UI pixel), gone while pressed.
+	if not pressed and color.a > 0.5:
+		style.shadow_color = color.lightened(0.3)
+		style.shadow_size = 1
+		style.shadow_offset = Vector2(0, -3)
 	style.content_margin_left = 18
 	style.content_margin_right = 18
 	# Pressed buttons sink into their bevel: the label moves down with the face.
@@ -109,7 +126,7 @@ static func make_primary(button: Button) -> void:
 	button.add_theme_stylebox_override("hover", button_style(ACCENT_HOVER))
 	button.add_theme_stylebox_override("pressed", button_style(ACCENT.darkened(0.08), true))
 	button.add_theme_stylebox_override("hover_pressed", button_style(ACCENT.darkened(0.08), true))
-	button.add_theme_stylebox_override("disabled", button_style(Color("2a3f2e")))
+	button.add_theme_stylebox_override("disabled", button_style(Color("2e3a2a")))
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		button.add_theme_color_override(state, PANEL)
 	button.add_theme_color_override("font_disabled_color", MUTED)
@@ -139,13 +156,13 @@ static func create() -> Theme:
 		result.set_stylebox("hover", type, button_style(SURFACE_HOVER))
 		result.set_stylebox("pressed", type, button_style(SURFACE_PRESSED, true))
 		result.set_stylebox("hover_pressed", type, button_style(SURFACE_PRESSED, true))
-		result.set_stylebox("disabled", type, button_style(Color("15283a")))
+		result.set_stylebox("disabled", type, button_style(SURFACE_PRESSED))
 		var focus: = StyleBoxFlat.new()
 		focus.draw_center = false
 		focus.anti_aliasing = false
 		focus.border_color = ACCENT
 		focus.set_border_width_all(2)
-		focus.set_corner_radius_all(5)
+		cut_corners(focus, 8)
 		focus.set_expand_margin_all(3)
 		result.set_stylebox("focus", type, focus)
 		for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:

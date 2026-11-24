@@ -69,6 +69,11 @@ Status: done, in progress, next, later.
 ### Phase 4: Effects and feel (later)
 - [ ] Effects sprite sheet: impact burst, spark ring, bounce, dust, swing arc, speed lines,
       landing marker, smash flash, out stamp, ball trails (pooled through `fx_pool.gd`)
+- [x] Rally moments (2026-11-23, `scripts/fx/rally_moments.gd`, own RNG): point-won confetti
+      (more after long rallies), PERFECT sparks + white card flash (`flash` uniform in
+      `pixel_card.gdshader`), rally-end stamp (OUT / NET / KITCHEN / WINNER!), rally counter
+      over the far baseline from shot 6 with milestone pops every 5 from 10. Notes
+      `rally_moment` in perf.jsonl. On-device look not yet checked
 - [ ] Trajectory restyle: serve preview (gold), incoming guide (red), aim arc (cyan)
 - [ ] Slow-mo: lens depth of field focused on the hitter, opponent soft-focused,
       Kawase blur on a half-res copy; restyles the existing aim-focus slow-mo

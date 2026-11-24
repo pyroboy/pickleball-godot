@@ -7,8 +7,14 @@ const ACCELERATIONS: Array[float] = [12.0, 14.0, 16.0]
 const BRAKES: Array[float] = [16.0, 18.0, 20.0]
 const REPLAN_SECONDS: Array[float] = [0.15, 0.12, 0.10]
 
+const Tuning = preload("res://scripts/gameplay_tuning.gd")
+
+## EQUAL_MOVEMENT: every level runs like the human player; difficulty is reading.
+static func _level(difficulty: int) -> int:
+	return 2 if Tuning.EQUAL_MOVEMENT else clampi(difficulty, 0, 2)
+
 static func speed(difficulty: int) -> float:
-	return SPEEDS[clampi(difficulty, 0, 2)]
+	return PickleballConstants.PLAYER_SPEED if Tuning.EQUAL_MOVEMENT else SPEEDS[clampi(difficulty, 0, 2)]
 
 # Block lunge: the last step toward a hard-hit ball is a quick lunge, not a jog.
 # The body was 0.2-0.4 m short of a fast volley and the arm could not cover it.
@@ -16,7 +22,7 @@ const LUNGE_SPEED_MUL := 1.35
 const LUNGE_ACCELERATION := 26.0
 
 static func velocity(current: Vector3, input: Vector3, offset: Vector3, difficulty: int, delta: float, lunge: bool = false) -> Vector3:
-	var level: int = clampi(difficulty, 0, 2)
+	var level: int = _level(difficulty)
 	if lunge:
 		var top: float = speed(level) * LUNGE_SPEED_MUL
 		current.y = 0.0
@@ -39,7 +45,7 @@ static func velocity(current: Vector3, input: Vector3, offset: Vector3, difficul
 
 static func travel_distance(current: Vector3, direction: Vector3, seconds: float, difficulty: int) -> float:
 	# Optimistic reachable bound that still pays for acceleration and reversal.
-	var level: int = clampi(difficulty, 0, 2)
+	var level: int = _level(difficulty)
 	var initial: float = clampf(current.dot(direction.normalized()), -speed(level), speed(level))
 	var duration: float = maxf(seconds, 0.0)
 	var acceleration: float = ACCELERATIONS[level]

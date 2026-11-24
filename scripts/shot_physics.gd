@@ -463,7 +463,7 @@ func _perf_solve_aimed_launch(start: Vector3, requested_target: Vector3, charge:
 	var resolved_type: String = "GROUNDSTROKE" if shot_type in ["DROP", "DINK", ""] else shot_type
 	var profile: Dictionary = profiles.create(spin_mode, charge, resolved_type)
 	var power: float = pow(clampf(charge, 0.0, 1.0), 0.7)
-	var net_margin: float = 0.14 if shot_type == "SERVE" else 0.08
+	var net_margin: float = 0.14 if shot_type == "SERVE" else preload("res://scripts/gameplay_tuning.gd").DRIVE_NET_MARGIN
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
 	var horizontal: float = Vector2(target.x - start.x, target.z - start.z).length()
 	var drag: float = 0.5 * _Ball.AIR_DENSITY * _Ball.DRAG_COEFFICIENT * PI * _Ball.BALL_RADIUS * _Ball.BALL_RADIUS / _Ball.BALL_MASS * _Ball.AERO_EFFECT_SCALE

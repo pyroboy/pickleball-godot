@@ -265,6 +265,8 @@ func _ensure_all_arms() -> void:
 		if "posture" in p and p.posture != null: p.posture.ensure_arm_pose()
 
 const CONTACT_CAPTURE_RADIUS_M := 3.0
+var FAR_POSE_VERSION: PackedByteArray = PackedByteArray([1])   # published pose version of a player out of the ball's reach
+var _far_published: Dictionary = {}
 
 ## This tick's snapshot of an actor, capturing it now if it was skipped as out of reach.
 func _current_snapshot(actor) -> Dictionary:
@@ -1098,11 +1100,18 @@ func _seal_contact_intents(pending: Dictionary, seconds: float) -> bool:
 	_intent_interval = {"frame": Engine.get_physics_frames(), "reset_epoch": _interval_reset_epoch, "flight": game.ball.flight_id,
 		"native_serial": int(pending.native_sample.serial), "seconds": seconds, "control_seconds": _control_delta}
 	if not _intents.begin(_intent_interval, roster): return false
+	_far_published.clear()
 	for actor in _players():
 		var id: int = ActorIdentity.actor_id(actor)
-		var version: PackedByteArray = _snapshot_version(_current_snapshot(actor))
-		if not _intents.publish_pose(id, actor.get_instance_id(), _intent_interval, version): return false
 		var offer: Dictionary = _published_intents.get(id, {})
+		# Perf: a player the ball cannot reach this tick (skipped by _capture_current) with no
+		# contact offer cannot take part in a contact. Sealing used to snapshot and hash every
+		# mesh of all four players every tick anyway. Such a player is published as "far" and
+		# the checks that compare published poses skip it.
+		var far: bool = offer.is_empty() and not _frame_current.has(id)
+		if far: _far_published[id] = true
+		var version: PackedByteArray = FAR_POSE_VERSION if far else _snapshot_version(_current_snapshot(actor))
+		if not _intents.publish_pose(id, actor.get_instance_id(), _intent_interval, version): return false
 		if offer.is_empty() or int(offer.frame) != Engine.get_physics_frames() or int(offer.flight) != game.ball.flight_id or int(offer.epoch) != _interval_reset_epoch or int(offer.instance) != actor.get_instance_id() or int(offer.team_id) != ActorIdentity.team_id(actor) or int(offer.court_side) != ActorIdentity.court_side(actor): continue
 		var controller = _controller_for_intent(actor, str(offer.intent.get("kind", "")))
 		if controller == null or not controller.contact_intent_is_current(offer.intent): continue
@@ -1244,7 +1253,7 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	if not boundary.is_empty(): return boundary
 	_intents.finish_claim(int(entry.token), int(entry.generation))
 	for other in _players():
-		if before_versions[ActorIdentity.actor_id(other)] != _snapshot_version(Surface.snapshot(other, true)):
+		if before_versions.has(ActorIdentity.actor_id(other)) and before_versions[ActorIdentity.actor_id(other)] != _snapshot_version(Surface.snapshot(other, true)):
 			return {"unresolved": true, "reason": "intended settlement changed published geometry"}
 	settlement_receipts.append({"frame": Engine.get_physics_frames(), "actor_id": id, "fraction": evidence.fraction,
 		"incoming_flight": entry.interval.flight, "outgoing_flight": game.ball.flight_id, "accepted": result.get("accepted", false),
@@ -1423,6 +1432,7 @@ func _finish_owned_first_floor(candidate: Dictionary, event: Dictionary) -> void
 		_hold_unresolved(remaining, "ordered floor callback changed physical transition"); return
 	for actor in _players():
 		var id: int = ActorIdentity.actor_id(actor)
+		if _far_published.has(id) and not _frame_current.has(id): continue   # out of the ball's reach this tick
 		if not _frame_current.has(id) or _snapshot_version(Surface.snapshot(actor, true)) != _snapshot_version(_frame_current[id]):
 			_hold_unresolved(remaining, "ordered floor callback changed published endpoint"); return
 	_ordered_first_floor = candidate.duplicate(true)

@@ -13,6 +13,10 @@ const HEAD_PROFILE: = [Vector3(0.032, - 0.11, 0.041), Vector3(0.057, - 0.099, 0.
 	Vector3(0.087, - 0.005, 0.08), Vector3(0.087, 0.03, 0.079), 
 	Vector3(0.079, 0.064, 0.072), Vector3(0.059, 0.094, 0.055), 
 	Vector3(0.027, 0.113, 0.028), Vector3(0, 0.118, 0)]
+## The head is never drawn (players are pixel cards); the mesh only exists so the ball can hit
+## it, and gameplay tests the ball against every triangle of the rig. SIMPLE_HEAD keeps the
+## skull's outline and drops the ears, eyes, nose, mouth and hair (1,742 -> 88 triangles).
+const SIMPLE_HEAD := true
 static var _meshes: Dictionary = {}
 
 static func apply(head: MeshInstance3D, skin: Color, forward: Vector3, kit_material: Material) -> void :
@@ -37,7 +41,7 @@ static func _build(skin: Color, forward: Vector3) -> ArrayMesh:
 
 
 	_head(surface, skin)
-	for side in [-1.0, 1.0]:
+	for side in ([] if SIMPLE_HEAD else [-1.0, 1.0]):
 		_ellipsoid(surface, Vector3(side * 0.087, - 0.006, 0.001), Vector3(0.014, 0.025, 0.012), skin, 8, 6)
 		_ellipsoid(surface, Vector3(side * 0.093, - 0.006, - 0.008), Vector3(0.006, 0.014, 0.005), skin.darkened(0.15), 6, 4)
 
@@ -51,11 +55,12 @@ static func _build(skin: Color, forward: Vector3) -> ArrayMesh:
 		_ellipsoid(surface, eye_center + eye_front * 0.0062 + Vector3( - side * 0.0022, 0.0035, 0), Vector3(0.0016, 0.0019, 0.0006), EYE_WHITE, 6, 4, eye_frame)
 
 		_ribbon(surface, [Vector3(side * 0.014, 0.041, - 0.077), Vector3(side * 0.029, 0.043, - 0.077), Vector3(side * 0.048, 0.038, - 0.069)], 0.006, BROW)
-	_nose(surface, skin)
+	if not SIMPLE_HEAD:
+		_nose(surface, skin)
 
-	_ribbon(surface, [Vector3( - 0.025, - 0.047, - 0.071), Vector3( - 0.009, - 0.051, - 0.08), Vector3(0.01, - 0.051, - 0.08), Vector3(0.024, - 0.046, - 0.071)], 0.0035, MOUTH)
-	_ribbon(surface, [Vector3( - 0.013, - 0.056, - 0.077), Vector3(0.012, - 0.055, - 0.077)], 0.003, skin.lightened(0.09))
-	_hair(surface)
+		_ribbon(surface, [Vector3( - 0.025, - 0.047, - 0.071), Vector3( - 0.009, - 0.051, - 0.08), Vector3(0.01, - 0.051, - 0.08), Vector3(0.024, - 0.046, - 0.071)], 0.0035, MOUTH)
+		_ribbon(surface, [Vector3( - 0.013, - 0.056, - 0.077), Vector3(0.012, - 0.055, - 0.077)], 0.003, skin.lightened(0.09))
+		_hair(surface)
 	surface.index()
 	var result: ArrayMesh = surface.commit()
 	var arrays: = result.surface_get_arrays(0)
@@ -76,8 +81,12 @@ static func _build(skin: Color, forward: Vector3) -> ArrayMesh:
 
 static func _head(surface: SurfaceTool, skin: Color) -> void :
 
-	var profile: = HEAD_PROFILE
-	const SIDES: = 20
+	var profile: Array = HEAD_PROFILE
+	var SIDES: int = 20
+	if SIMPLE_HEAD:
+		# Every other ring of the skull, 8 sides: 88 triangles instead of 1,742.
+		profile = [HEAD_PROFILE[0], HEAD_PROFILE[2], HEAD_PROFILE[4], HEAD_PROFILE[6], HEAD_PROFILE[8], HEAD_PROFILE[9]]
+		SIDES = 8
 	for row in range(profile.size() - 1):
 		for i in range(SIDES):
 			var a: = TAU * i / SIDES

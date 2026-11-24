@@ -20,6 +20,8 @@ const SEARCH_BISECTIONS := 5
 # carried-cup case each check costs ~1 ms, and uncapped searches hit ~100 checks
 # (100+ ms frames). If nothing fits within the cap the body keeps the base offset.
 const MAX_BUDGET_CHECKS := 8
+const RALLY_ARM_REACH := false   # true: shift the body so both arms reach, during rallies too (as before)
+const RALLY_WRIST_SEARCH := false   # true: shift the body for wrist limits during rallies too (as before)
 # Between points (cut-scene) each check also tests the carried cup (~0.5 ms); cap lower.
 const MAX_BUDGET_CHECKS_BETWEEN := 2
 # ...and no bisection refinement there: each between-point check also runs the
@@ -43,6 +45,15 @@ static func enabled(player, pose) -> bool:
 	var human = player.posture.human_contact
 	return human != null and (human.phase >= 0 or human._charge_cancel_recovering)
 
+## A live rally ball with no serve motion showing: the only time the rally solvers are skipped.
+## Serves need them (with them off the serve never launched: the bench looped WAITING <-> SERVING).
+static func in_rally(player) -> bool:
+	if player.hitting != null and player.hitting.serving_visual_active: return false
+	var ball = player._get_ball_ref()
+	if ball == null or not ball.is_in_play: return false
+	var game = player.get_parent()
+	return game != null and "game_state" in game and game.game_state == game.GameState.PLAYING
+
 static func _serve_cup(player) -> bool:
 	if player.hitting == null or not player.hitting.serving_visual_active: return false
 	if not "arm_ik" in player or player.arm_ik == null or player.arm_ik._hands == null: return false
@@ -53,6 +64,10 @@ static func _serve_cup(player) -> bool:
 static func solve(player, pose, feet: Array) -> Dictionary:
 	var report := {"active": false, "feasible": true, "world_offset": Vector3.ZERO, "iterations": 0}
 	if not enabled(player, pose) or feet.size() != 2 or player.paddle_node == null: return report
+	# Rally poses are used as posed: no body shift to bring the arms within reach either. It
+	# changed by 20-40 mm from one tick to the next while the player moved (drawn torso bumps).
+	# The contact rule already allows a slightly stretched arm.
+	if not RALLY_ARM_REACH and in_rally(player) and (not player.has_method("_between_point_owner") or player._between_point_owner() == null): return report
 	var main = player.left_arm_node if pose.paddle_hand == 1 else player.right_arm_node
 	var support = player.right_arm_node if pose.paddle_hand == 1 else player.left_arm_node
 	if main == null or support == null: return report
@@ -108,7 +123,13 @@ static func solve(player, pose, feet: Array) -> Dictionary:
 	report.feasible = solved.feasible and solved.offset.length() <= MAX_BODY_SHIFT_M
 	if report.feasible:
 		var offset: Vector3 = solved.offset
-		if (not serve_cup or player.has_meta("carried_cup_continuity")) and not _wrist_budgets_fit(player, pose, paddle, offset):
+		# Rally poses are used as posed (user's call, 2026-11-23: solvers belong in Pose Studio, not
+		# in play). The wrist-limit body shift below stays for the serve hand, the carried ball and
+		# between points only. In rallies it cost 12% of a physics tick and moved the torso every
+		# tick (drawn torso shake 275 -> 142 per player-minute without it).
+		var searches: bool = RALLY_WRIST_SEARCH or between != null or serve_cup or not release.is_empty() or not in_rally(player)
+		if not searches: report["wrist_budget_feasible"] = true
+		elif (not serve_cup or player.has_meta("carried_cup_continuity")) and not _wrist_budgets_fit(player, pose, paddle, offset):
 			# Slight knee flexion changes the shoulder-to-fixed-grip geometry
 			# enough to admit a legal elbow plane, including the live Ready
 			# entry. Lowering preserves grounded contacts and never lengthens

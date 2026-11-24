@@ -19,6 +19,16 @@ Per segment (card motion is what the pixel cards draw on top of the gameplay pos
   head/look/torso  largest head nod, head turn and torso lean, deg; shrug cm
   knee      mean drawn knee bend of the more bent leg, deg (0 = straight); knee game: the gameplay legs
   raise     largest body lift from standing straight, cm
+  stance    the standing leg stance at the end of the segment (stance:<n> segments force one), with
+            feet wide / feet fwd (drawn feet apart sideways, and right foot ahead of left, cm),
+            hip side (hips toward the right foot, cm), heel (one foot higher than the other, cm),
+            knee R / knee L (drawn knee bends, deg), jump (largest one-frame change of the feet, mm)
+  grip cm   largest distance of the drawn paddle grip from the drawn paddle hand, beyond the gameplay gap
+  feet far  largest sideways gap of the drawn feet along the hip line, cm
+  low cm    how far the drawn body is lowered for a side shuffle; feet state: the footwork state shown most
+  hop / drop / turn  footwork flow (docs/FOOTWORK_PLAN.md): split-step hop cm, gravity-step body drop cm,
+            chest turn toward a diagonal run deg
+  feet min  smallest sideways gap of the drawn feet along the hip line, cm (negative = legs crossed)
 With a base run: changes per segment, and the gameplay joints (body, hands, shoulders, feet,
 paddle) compared frame by frame: IDENTICAL means the change is visual only.
 """
@@ -82,6 +92,20 @@ def metrics(rows):
     m["knee"] = sum(r.get("knee", 0.0) for r in rows) / len(rows)
     m["knee_game"] = sum(r.get("knee_game", 0.0) for r in rows) / len(rows)
     m["raise"] = max(r.get("raise", 0.0) for r in rows) * 100
+    end = rows[-1]   # the stance as held at the end of the segment
+    m["stance"] = end.get("stance") or None
+    for k in ("feet_wide", "feet_fwd", "hip_side", "heel"): m[k] = end.get(k, 0.0) * 100
+    for k in ("knee_r", "knee_l"): m[k] = end.get(k, 0.0)
+    m["grip_gap"] = max(r.get("grip_gap", 0.0) for r in rows) * 100
+    m["low"] = max(r.get("low", 0.0) for r in rows) * 100
+    m["hop"] = max(r.get("hop", 0.0) for r in rows) * 100
+    m["drop"] = max(r.get("drop", 0.0) for r in rows) * 100
+    m["turn"] = max((r.get("turn", 0.0) for r in rows), key=abs)
+    locos = [r.get("loco", "") for r in rows if r.get("loco")]
+    m["loco"] = max(set(locos), key=locos.count) if locos else None
+    m["feet_far"] = max(r.get("feet_side", 0.0) for r in rows) * 100
+    m["feet_min"] = min(r.get("feet_side", 1.0) for r in rows) * 100
+    m["foot_jump"] = max([abs(b.get(k, 0.0) - a.get(k, 0.0)) for a, b in zip(rows, rows[1:]) for k in ("feet_wide", "feet_fwd")] or [0.0]) * 1000
     m.update(swing=swing * 100, twist=twist, in_step=(100.0 * ok / n) if n else None, steps=steps,
              slide=slide * 1000, pop=pop * 1000)
     return m
@@ -92,7 +116,9 @@ COLS = [("speed", "speed m/s", "{:.2f}"), ("w_mean", "w mean", "{:.2f}"), ("w_ma
         ("react", "react s", "{:.2f}"), ("paddle", "paddle cm", "{:.1f}"), ("bob", "bob cm", "{:.1f}"), ("spin", "spin deg", "{:.0f}"),
         ("head", "head deg", "{:.0f}"), ("look", "look deg", "{:.0f}"), ("torso", "torso deg", "{:.0f}"), ("shrug", "shrug cm", "{:.1f}"),
         ("knee", "knee deg", "{:.0f}"), ("knee_game", "knee game", "{:.0f}"), ("raise", "raise cm", "{:.1f}"),
-        ("expr", "expr", "{}")]
+        ("feet_wide", "feet wide", "{:.0f}"), ("feet_fwd", "feet fwd", "{:.0f}"), ("hip_side", "hip side", "{:.0f}"),
+        ("heel", "heel cm", "{:.1f}"), ("knee_r", "knee R", "{:.0f}"), ("knee_l", "knee L", "{:.0f}"), ("grip_gap", "grip cm", "{:.1f}"), ("feet_min", "feet min", "{:.0f}"), ("feet_far", "feet far", "{:.0f}"), ("low", "low cm", "{:.1f}"), ("hop", "hop cm", "{:.1f}"), ("drop", "drop cm", "{:.1f}"), ("turn", "turn deg", "{:.0f}"), ("loco", "feet state", "{}"), ("foot_jump", "jump mm", "{:.1f}"),
+        ("stance", "stance", "{}"), ("expr", "expr", "{}")]
 
 def fmt(c, v):
     return "-" if v is None else c[2].format(v)

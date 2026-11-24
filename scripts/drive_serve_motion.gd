@@ -198,24 +198,54 @@ static func authored_paddle(base: PostureDefinition, stage: int, fallback: Vecto
 	var key: PostureDefinition = Path.endpoint(base, stage)
 	return Vector3(key.paddle_forehand_mul, key.paddle_y_offset, key.paddle_forward_mul)
 
+## Perf: this ran for every caller every physics tick (5 callers during a held or queued two-hand
+## backhand drive), each time re-sampling the compact swing once per elbow-path point and per arm
+## (62 pose samples per call): 90 ms per tick on the Mac, 115-140 ms on iPhone 15 Pro (7 fps for
+## the whole swing). Now one sample serves both arms, every third point is sampled, and a call
+## with the same pose object and inputs in the same tick reuses the result.
+const TWO_HAND_POLE_STRIDE := 3
+static var _two_hand_memo: Dictionary = {}
+static var _two_hand_memo_tick: int = -1
 static func _two_hand_backhand_definition(base: PostureDefinition, charge: float, is_volley: bool, near_kitchen: bool, shot_intent: String) -> PostureDefinition:
 	if base.posture_id == 9: return base.lerp_with(base, 0.0)
 	var strength: float = 0.0 if shot_intent == "DROP" else drive_strength(base, charge, is_volley, near_kitchen)
 	var compact: PostureDefinition = _compact_or_overhead_definition(base, minf(charge, 0.58), is_volley, near_kitchen, shot_intent)
 	if is_zero_approx(strength): return compact
+	var tick: int = Engine.get_physics_frames()
+	if tick != _two_hand_memo_tick:
+		_two_hand_memo_tick = tick; _two_hand_memo.clear()
+	var memo_key: Array = [base.get_instance_id(), charge, is_volley, near_kitchen, shot_intent]
+	if _two_hand_memo.has(memo_key): return (_two_hand_memo[memo_key] as PostureDefinition).duplicate(false)
 	var def: PostureDefinition = base.lerp_with(base, 0.0)
 	_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 0), Path.endpoint(base, 0), strength), true)
 	_write_endpoint(def, Path.blend_pose(Path.endpoint(compact, 2), Path.endpoint(base, 2), strength), false)
+	# The compact swing's elbow poles vary smoothly along the swing: sample every
+	# TWO_HAND_POLE_STRIDE-th path point (and the last) and interpolate between them.
+	var poles: Dictionary = {}   # path size -> [right poles, left poles]
+	for path_size in [base.right_elbow_path.size(), base.left_elbow_path.size()]:
+		if path_size == 0 or poles.has(path_size): continue
+		var right_poles := PackedVector3Array(); right_poles.resize(path_size)
+		var left_poles := PackedVector3Array(); left_poles.resize(path_size)
+		var previous := -1
+		for i in range(path_size):
+			if i % TWO_HAND_POLE_STRIDE != 0 and i != path_size - 1: continue
+			var pose: PostureDefinition = Path.sample(compact, float(i) / maxf(path_size - 1, 1))
+			right_poles[i] = pose.right_elbow_pole; left_poles[i] = pose.left_elbow_pole
+			for j in range(previous + 1, i):
+				var f: float = float(j - previous) / float(i - previous)
+				right_poles[j] = right_poles[previous].lerp(right_poles[i], f); left_poles[j] = left_poles[previous].lerp(left_poles[i], f)
+			previous = i
+		poles[path_size] = [right_poles, left_poles]
 	for right in [true, false]:
 		var authored: PackedVector3Array = base.right_elbow_path if right else base.left_elbow_path
-		var blended: = PackedVector3Array()
-		for i in range(authored.size()):
-			var pose: PostureDefinition = Path.sample(compact, float(i) / maxf(authored.size() - 1, 1))
-			var pole: Vector3 = pose.right_elbow_pole if right else pose.left_elbow_pole
-			blended.append(pole.lerp(authored[i], strength))
+		var blended := PackedVector3Array()
+		if authored.size() > 0:
+			var compact_poles: PackedVector3Array = poles[authored.size()][0 if right else 1]
+			for i in range(authored.size()): blended.append(compact_poles[i].lerp(authored[i], strength))
 		if right: def.right_elbow_path = blended
 		else: def.left_elbow_path = blended
-	return def
+	_two_hand_memo[memo_key] = def
+	return def.duplicate(false)
 
 static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
 	if not plays_authored_keys(base) and TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, 0.0, motion_context)

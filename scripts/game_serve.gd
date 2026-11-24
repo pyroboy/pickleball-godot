@@ -103,6 +103,20 @@ func _server_for_team(team: int):
 func _from_right() -> bool:
 	return _game.get_server_logical_court() == 0
 
+## ---- One writer for the serve charge pose (2026-11-25) ----
+## While the server waits, the physics tick writes the whole serve pose 30 times a second and
+## finishes it (arms refitted to the body, head turned to the ball). The held-HIT input also
+## wrote the pose on every rendered frame, without that finish, so on alternate frames the head
+## flipped about 27 degrees and the torso, head and body shifted about 5 mm: a 30-per-second
+## shake through the whole charge. The input now only advances the held clock while the tick is
+## presenting; the tick reads that clock and writes the pose. If no tick has presented for a
+## moment (paused tools), the input writes as before.
+const WAITING_TICK_STALE_USEC := 120000
+var _waiting_tick_usec: int = 0
+
+func tick_presents_waiting() -> bool:
+	return Time.get_ticks_usec() - _waiting_tick_usec < WAITING_TICK_STALE_USEC
+
 func has_committed_physics_presentation(actor) -> bool:
 	if actor == null or _game == null or actor.get_parent() != _game: return false
 	if get_tree().paused or _game._tool_state_active(): return false
@@ -217,7 +231,7 @@ func _prepare_server(charge: float, refresh_pose: bool = true) -> void :
 
 	# Explicit input can change the pose between physics ticks. Finish its rig
 	# immediately without advancing the physics gaze/support clocks.
-	if not Engine.is_in_physics_frame(): _commit_physics_presentation(server, 0.0)
+	if not Engine.is_in_physics_frame() and not tick_presents_waiting(): _commit_physics_presentation(server, 0.0)
 
 func start_charge() -> void :
 	if not _attempt_permitted(): return
@@ -377,6 +391,7 @@ func _perf_physics_process(delta: float) -> void:
 		if not _pending_release.is_empty(): _cancel_pending_release()
 		return
 	if _game.game_state == _game.GameState.WAITING and _ready_for_serve():
+		_waiting_tick_usec = Time.get_ticks_usec()
 		_advance_waiting_presentation(delta)
 		_commit_physics_presentation(_server(), delta)
 		_game._update_held_ball_position()

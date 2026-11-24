@@ -6,6 +6,7 @@ extends CanvasLayer
 const SettingsPanelScript = preload("res://scripts/ui/settings_panel.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+const PixelBanner = preload("res://scripts/ui/pixel_banner.gd")
 const TITLE_SCENE: = "res://scenes/title.tscn"
 
 var _hint: Label
@@ -26,8 +27,9 @@ var _settings_button: Button
 var _pose_button: Button
 var _reset_button: Button
 var _menu_button: Button
-var _eyebrow: Label
-var _title: Label
+var _photo_button: Button
+var _photo_mode: Node = null
+var _banner: Control   # pixel_banner.gd header: PAUSED + ribbon
 var _subtitle: Label
 var _score: Label
 
@@ -45,7 +47,7 @@ func _contact_reset_required() -> bool:
 
 func _build() -> void :
 	var dim: = ColorRect.new()
-	dim.color = Color(UiTheme.BACKDROP, 0.78)
+	dim.color = Color(UiTheme.BACKDROP, 0.4)   # light: the court stays visible behind
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(dim)
@@ -66,10 +68,15 @@ func _build() -> void :
 	_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_scroll.add_child(_content)
 	var reset_needed: = _contact_reset_required()
-	_eyebrow = _label("PRACTICE PAUSED" if _is_practice() else "MATCH PAUSED", 18, UiTheme.ACCENT, true)
-	_title = _label("Contact check" if reset_needed else "Take a breather", 36, UiTheme.INK, true)
-	_subtitle = _label("A collision could not be resolved. No point was awarded. Reset to continue." if reset_needed else _subtitle_text(), 16, UiTheme.MUTED)
-	_score = _label(_score_text(), 18, UiTheme.INK, true)
+	# Kit header (proposal PDF p.23): a big banner with a ribbon, slammed in on open.
+	_banner = PixelBanner.new()
+	_banner.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_content.add_child(_banner)
+	_banner.set_meta("title", "CONTACT CHECK" if reset_needed else "PAUSED")
+	_banner.set_meta("ribbon", "PRACTICE" if _is_practice() else "MATCH")
+	_banner.set_meta("fill", UiTheme.PLUM_RED if reset_needed else UiTheme.TEAM_BLUE)
+	_subtitle = _label("A collision could not be resolved. No point was awarded. Reset to continue." if reset_needed else _subtitle_text(), 16, UiTheme.MUTED, true)
+	_score = _label(_score_text(), 27, UiTheme.KIT_GOLD, true)
 	_score.visible = not _score.text.is_empty()
 	_main_list = VBoxContainer.new()
 	_content.add_child(_main_list)
@@ -77,6 +84,7 @@ func _build() -> void :
 	_resume_button.disabled = reset_needed
 	UiTheme.make_primary(_resume_button)
 	_reset_button = _add_button(_main_list, _reset_caption(), _on_reset_requested)
+	_photo_button = _add_button(_main_list, "Photo mode", _on_photo_mode)
 	_add_button(_main_list, "Practice drills", _on_practice)
 	_settings_button = _add_button(_main_list, "Settings", _on_settings)
 	_pose_button = _add_button(_main_list, "Pose Studio", _on_pose_editor)
@@ -88,11 +96,11 @@ func _build() -> void :
 	_confirm_box.hide()
 	_content.add_child(_confirm_box)
 	_confirm_title = _label("", 27, UiTheme.GOLD, true, _confirm_box)
-	_confirm_text = _label("", 16, UiTheme.MUTED, false, _confirm_box)
+	_confirm_text = _label("", 16, UiTheme.MUTED, true, _confirm_box)
 	_confirm_ok = _add_button(_confirm_box, "Confirm", _on_confirm_accepted)
 	UiTheme.make_primary(_confirm_ok)
 	_confirm_cancel = _add_button(_confirm_box, "Cancel", _close_confirm)
-	_hint = _label("", 14, UiTheme.MUTED)
+	_hint = _label("", 14, UiTheme.MUTED, true)
 
 func _label(text: String, size: int, color: Color, pixel: bool = false, parent: Node = null) -> Label:
 	var label: = Label.new()
@@ -100,7 +108,11 @@ func _label(text: String, size: int, color: Color, pixel: bool = false, parent: 
 	label.set_meta("font_size", size)
 	label.set_meta("pixel", pixel)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_color_override("font_color", color)
+	label.add_theme_color_override("font_shadow_color", Color(0.02, 0.07, 0.1, 0.92))
+	label.add_theme_constant_override("shadow_offset_x", 0)
+	label.add_theme_constant_override("shadow_offset_y", 3)
 	if pixel: label.add_theme_font_override("font", UiTheme.pixel_font())
 	(parent if parent != null else _content).add_child(label)
 	return label
@@ -120,7 +132,7 @@ func _subtitle_text() -> String:
 func _score_text() -> String:
 	var game = get_tree().current_scene
 	if game == null or _is_practice() or not "score_left" in game: return ""
-	return "SCORE  %d – %d" % [int(game.score_left), int(game.score_right)]
+	return "%d – %d" % [int(game.score_left), int(game.score_right)]
 
 func _reset_caption() -> String:
 	if _is_wall(): return "Reset ball"
@@ -131,24 +143,31 @@ func _fit_panel() -> void :
 	var viewport_size: = get_viewport().get_visible_rect().size
 	var portrait: bool = Layout.is_portrait(viewport_size)
 	_hint.text = "Tap Resume to return to court" if portrait else "ESC  Resume     TAB / arrows  Navigate"
+	# Compact on the phone (user's call): no flavour line or hint, only what to do.
+	_hint.visible = not portrait
+	_subtitle.visible = not portrait or _contact_reset_required()
 	var window_size: = Vector2(get_window().size).max(Vector2.ONE)
 	var scale: float = Layout.scale_for(viewport_size) if portrait else viewport_size.y / window_size.y
 	var safe: Rect2 = Layout.safe_rect(get_viewport())
-	var pad: = roundi((28 if portrait else 24) * scale)
+	var pad: = roundi((18 if portrait else 24) * scale)
 	for side in ["left", "right", "top", "bottom"]: _margin.add_theme_constant_override("margin_" + side, pad)
-	var gap: = roundi((12 if portrait else 8) * scale)
+	var gap: = roundi((8 if portrait else 8) * scale)
 	_content.add_theme_constant_override("separation", gap)
 	_main_list.add_theme_constant_override("separation", gap)
 	_confirm_box.add_theme_constant_override("separation", gap)
 	for box in [_main_list, _confirm_box]:
 		for widget in box.get_children():
 			if widget is Button:
-				widget.custom_minimum_size.y = ceili((88.0 if portrait else 46.0) * scale)
-				widget.add_theme_font_size_override("font_size", UiTheme.pixel_size((27 if portrait else 18) * scale))
+				widget.custom_minimum_size.y = ceili((60.0 if portrait else 46.0) * scale)
+				widget.add_theme_font_size_override("font_size", UiTheme.pixel_size(18 * scale))
 	for label in _all_labels():
-		var size: float = float(label.get_meta("font_size", 16)) * (1.35 if portrait else 1.0) * scale
+		var size: float = float(label.get_meta("font_size", 16)) * scale
 		label.add_theme_font_size_override("font_size", UiTheme.pixel_size(size) if label.get_meta("pixel", false) else int(size))
-	var width: float = minf((640 if portrait else 480) * scale, safe.size.x - 32 * scale)
+	_banner.s = scale * 0.8
+	_banner.max_width = minf((500 if portrait else 480) * scale, safe.size.x - 32 * scale) - pad * 2
+	_banner.present(str(_banner.get_meta("title")), str(_banner.get_meta("ribbon")), _banner.get_meta("fill"), UiTheme.KIT_GOLD, false)   # static: the scroll area would clip a slam
+	_banner.custom_minimum_size = _banner.size
+	var width: float = minf((500 if portrait else 480) * scale, safe.size.x - 32 * scale)
 	_panel.size = Vector2(width, 0)
 	_panel.reset_size()
 	var wanted: float = _content.get_combined_minimum_size().y + pad * 2 + _panel.get_theme_stylebox("panel").get_minimum_size().y
@@ -180,8 +199,28 @@ func _on_settings_closed() -> void :
 	_panel.show()
 	_settings_button.grab_focus()
 
-## Back / ESC: closes the confirmation or settings first. Returns true when it did.
+## Photo mode (photo_mode.gd): the match stays paused, the camera roams free.
+func _on_photo_mode() -> void:
+	if is_instance_valid(_photo_mode): return
+	var photo = preload("res://scripts/ui/photo_mode.gd").new()
+	get_parent().add_child(photo)
+	if not photo.begin(self):
+		photo.queue_free()
+		return
+	_photo_mode = photo
+
+func _exit_tree() -> void:
+	if is_instance_valid(_photo_mode): _photo_mode.finish()
+
+func photo_mode_closed() -> void:
+	_photo_mode = null
+	_photo_button.grab_focus()
+
+## Back / ESC: closes photo mode, the confirmation or settings first. Returns true when it did.
 func close_settings() -> bool:
+	if is_instance_valid(_photo_mode):
+		_photo_mode.finish()
+		return true
 	if _confirm_box.visible:
 		_close_confirm()
 		return true

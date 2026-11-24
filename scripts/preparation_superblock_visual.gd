@@ -60,7 +60,7 @@ func sync() -> void :
 		item.node.global_transform = Transform3D(frame, Regions.world_point(player, (b.x_min + b.x_max) * 0.5, (b.y_min + b.y_max) * 0.5, b.forward))
 		var mat: StandardMaterial3D = item.node.material_override
 		var color: Color = Regions.COLORS[int(b.band)]
-		mat.albedo_color = Color(color, 0.25 if int(id) == active else 0.08)
+		mat.albedo_color = Color(color, 0.45 if int(id) == active else 0.08)
 	for item in authored:
 		item.node.global_transform = Transform3D(frame, Regions.world_point(player, item.x, item.y, item.forward))
 

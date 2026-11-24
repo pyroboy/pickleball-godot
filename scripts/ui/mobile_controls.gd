@@ -4,11 +4,13 @@ extends Control
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HitTiming = preload("res://scripts/ui/hit_timing_feedback.gd")
+const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
 const HumanShots = preload("res://scripts/human_shot_choice.gd")
 const TIMING_RING_WIDTH_FRACTION: = 0.54
 const TIMING_RING_MIN_GAP_FRACTION: = 0.16
 const TIMING_RING_SMOOTH_SECONDS: = 0.045
 var _hit_timing = HitTiming.new()
+var _move_closer_dir := 0   # screen side (-1 left, +1 right) of the lit side band, 0 for none
 var _timing_caption_center: = Vector2.ZERO
 var _timing_caption_rect: = Rect2()
 var _timing_ring_max: = 194.4
@@ -69,6 +71,7 @@ func setup(p_game: Node) -> void :
 	name = "MobileControls"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # pixel discs and font (pixel_draw.gd)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -80,9 +83,9 @@ func _layout() -> void :
 	visible = enabled
 	_s = Layout.scale_for(viewport_size)
 	_deck_rect = Layout.deck_rect(viewport_size, Layout.safe_rect(get_viewport()))
-	_stick_radius = 78.0 * _s
+	_stick_radius = 96.0 * _s   # was 78: bigger move stick (user's call)
 	_charge_radius = 78.0 * _s
-	_stick_center = Vector2(_deck_rect.position.x + 112 * _s, _deck_rect.end.y - 108 * _s)
+	_stick_center = Vector2(_deck_rect.position.x + 122 * _s, _deck_rect.end.y - 124 * _s)
 	_charge_center = Vector2(_deck_rect.end.x - 136 * _s, _stick_center.y)
 
 
@@ -106,6 +109,9 @@ func _process(delta: float) -> void:
 
 func _perf_process(delta: float) -> void:
 	if game == null: return
+	if _shot_fb_age < SHOT_FB_SECONDS:
+		_shot_fb_age += delta
+		queue_redraw()
 	_serve_contact_flash = maxf(0, _serve_contact_flash - delta)
 	_serve_timing = {}
 	if game.game_serve and game.game_serve.has_method("get_serve_timing_state"):
@@ -204,6 +210,9 @@ func _toolbar_at_point(point: Vector2) -> Button:
 	for child in game.hud._toolbar.get_children():
 		if child is Button and child.is_visible_in_tree() and not child.disabled and child.get_global_rect().has_point(point):
 			return child
+	for extra in game.get("extra_touch_buttons") if game.get("extra_touch_buttons") != null else []:
+		if is_instance_valid(extra) and extra is Button and extra.is_visible_in_tree() and not extra.disabled and extra.get_global_rect().has_point(point):
+			return extra
 	return null
 
 func _press_toolbar(id: int, point: Vector2) -> bool:
@@ -240,7 +249,13 @@ func _press(id: int, point: Vector2) -> bool:
 	queue_redraw()
 	return true
 
+## Flick aiming (docs/PLAYER_FEEL_PLAN.md): the swipe of a short press, read by the game
+## at release. dir: drag from the press point in hit-circle radii (y down), seconds: press time.
+var last_flick: Dictionary = {}
+var _press_usec := 0
+
 func _begin_shot(id: int, point: Vector2, shot: String) -> void:
+	_press_usec = Time.get_ticks_usec()
 	_charge_id = id
 	_owners[id] = "charge"
 	_charge_origin = point
@@ -294,6 +309,7 @@ func _release(id: int, canceled: bool = false) -> void :
 		_guide_show = 0.0
 		if _charge_owns_action and (canceled or _cancel_armed) and is_instance_valid(game) and game.input_handler:
 			game.input_handler.cancel_charge_input()
+		last_flick = {"dir": _charge_vector, "seconds": float(Time.get_ticks_usec() - _press_usec) / 1000000.0} if not canceled and not _cancel_armed else {}
 		if _charge_owns_action:
 			Input.action_release("ui_accept")
 			# Queue a normal rally release in this input event. Restoring real
@@ -421,7 +437,7 @@ func _shot_preview() -> Dictionary:
 	var preparation: Dictionary = human.preparation_contact()
 	if preparation.is_empty(): return {}
 	var root: Vector3 = preparation.get("target_root", actor.global_position)
-	return HumanShots.names_for(absf(root.z), Vector3(preparation.point).y, _smash_state() == 2)
+	return HumanShots.names_for(absf(root.z), Vector3(preparation.point).y, _smash_state() == 2, preload("res://scripts/shot_names.gd").swing_room(preparation.get("def")))
 
 static func _shot_word(key: String) -> String:
 	return {"SPEED_UP": "SPEED-UP"}.get(key, key)
@@ -445,50 +461,56 @@ func _select_shot(shot: String) -> void :
 		if game.selected_spin_mode == mode: break
 		game.cycle_spin_mode()
 
-# Scoped minima are authored 720-wide portrait units, so their proportions
-# survive high-DPI framebuffers. Match the bounds-checked narrow portrait UI.
+# Captions use the 5x7 pixel font at whole-pixel sizes (18 at 720 wide; 27 for >= 27
+# authored). Minimum sizes are authored 720-wide portrait units, as before.
 func _caption_size(font_size: int, minimum_design_size: int = 0) -> int:
-	var authored_size: = maxi(10, roundi(font_size * _s))
-	if minimum_design_size <= 0 or not enabled: return authored_size
-	return maxi(authored_size, floori(minimum_design_size * _s))
+	var want: float = float(maxi(font_size, minimum_design_size if enabled else 0)) * _s
+	return maxi(UiTheme.PIXEL_UNIT, floori(want / UiTheme.PIXEL_UNIT) * UiTheme.PIXEL_UNIT)
 
-# If a small second line grows, keep its ascent below the first line's shadow.
-# These are paint baselines only, never input or ring geometry.
+# Keep a second caption line's ascent below the first line's shadow.
 func _second_caption_baseline(first_size: int, second_size: int, authored_y: float, second_minimum: int) -> float:
-	if _caption_size(second_size, second_minimum) <= maxi(10, roundi(second_size * _s)): return authored_y * _s
-	var font: Font = ThemeDB.fallback_font
-	return maxf(authored_y * _s, -2 * _s + font.get_descent(_caption_size(first_size, 19)) + 2 * _s + font.get_ascent(_caption_size(second_size, second_minimum)))
+	var font: Font = PixelDraw.font()
+	return maxf(authored_y * _s, font.get_descent(_caption_size(first_size, 19)) + PixelDraw.unit(_s) * 2.0 + font.get_ascent(_caption_size(second_size, second_minimum)))
 
 func _caption(text: String, center: Vector2, font_size: int, color: Color, minimum_design_size: int = 0) -> void :
-	var font: = ThemeDB.fallback_font
-	var actual_size: = _caption_size(font_size, minimum_design_size)
-	var width: = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, actual_size).x
-	var origin: = center - Vector2(width * 0.5, 0)
-	draw_string(font, origin + Vector2(0, 2 * _s), text, HORIZONTAL_ALIGNMENT_LEFT, -1, actual_size, Color(0.02, 0.05, 0.07, 0.9))
-	draw_string(font, origin, text, HORIZONTAL_ALIGNMENT_LEFT, -1, actual_size, color)
+	PixelDraw.text(self, text, center, _caption_size(font_size, minimum_design_size), color, PixelDraw.unit(_s))
+
+## Base of a round control: translucent navy disc, bevel, coloured pixel rim.
+func _pad(center: Vector2, radius: float, rim: Color, fill_alpha: float = 0.55, rim_width: int = 1) -> void:
+	PixelDraw.disc(self, center, radius, PixelDraw.unit(_s), Color(UiTheme.PANEL, fill_alpha), rim, rim_width)
 
 func _draw() -> void :
 	if game == null or not enabled: return
+	var u: float = PixelDraw.unit(_s)
 	var stick_color: Color = UiTheme.BLUE
-
-	draw_circle(_stick_center, _stick_radius, Color(0.04, 0.1, 0.15, 0.18))
-	draw_arc(_stick_center, _stick_radius, 0, TAU, 64, Color(stick_color, 0.72), 2.5 * _s, true)
+	_pad(_stick_center, _stick_radius, Color(stick_color, 0.8))
 	for axis in [Vector2.RIGHT, Vector2.DOWN]:
-		draw_line(_stick_center - axis * _stick_radius * 0.66, _stick_center + axis * _stick_radius * 0.66, Color(stick_color, 0.25), 2 * _s)
-	draw_circle(_stick_center + _stick_vector * _stick_radius * 0.64, 29 * _s, Color(stick_color, 0.64 if _stick_id != -1 else 0.34))
-	_caption("MOVE", _stick_center + Vector2(0, 106 * _s), 22, stick_color)
+		var half: Vector2 = axis * _stick_radius * 0.6
+		var thick: Vector2 = Vector2(axis.y, axis.x) * u
+		draw_rect(Rect2((_stick_center - half - thick * 0.5).round(), (half * 2.0 + thick).round()), Color(stick_color, 0.22))
+	PixelDraw.disc(self, _stick_center + _stick_vector * _stick_radius * 0.64, 36 * _s, u, Color(stick_color, 0.85 if _stick_id != -1 else 0.45))
+	_caption("MOVE", _stick_center + Vector2(0, 120 * _s), 22, stick_color)
 	var held: = _charge_id != -1
 	var perfect: bool = _hit_timing.ready
 	var hit_color: Color = UiTheme.RED if _cancel_armed else UiTheme.ACCENT if perfect or held and _gesture_is_serve else UiTheme.BLUE
 	var smash: int = 0 if _cancel_armed or _is_serve_context() else _smash_state()
 	if smash > 0 and not perfect: hit_color = Color("ff9a3c")
-	draw_circle(_charge_center, _charge_radius, Color(0.04, 0.1, 0.15, 0.18))
-	draw_arc(_charge_center, _charge_radius, 0, TAU, 64, Color(hit_color, 0.8), 2.5 * _s, true)
+	_pad(_charge_center, _charge_radius, Color(hit_color, 0.9), 0.55, 2 if perfect else 1)
 	var ratio: float = game.hud._charge_bar.value
 	if held and ratio > 0:
-		draw_arc(_charge_center, _charge_radius - 7 * _s, - PI * 0.5, - PI * 0.5 + TAU * ratio, 64, hit_color, 5 * _s, true)
+		PixelDraw.arc(self, _charge_center, _charge_radius - 4 * u, u, - PI * 0.5, - PI * 0.5 + TAU * ratio, hit_color, 2)
+	# Tired: the most power this hold can give (stamina_display / STAMINA_UX_PLAN).
+	if held and not _gesture_is_serve and game.game_state == 2:
+		var tuning = preload("res://scripts/gameplay_tuning.gd")
+		var cap: float = 1.0 - tuning.TIRED_CHARGE_CAP * game.player_left.stamina.tiredness()
+		if cap < 0.98:
+			var ang: float = - PI * 0.5 + TAU * cap
+			var dir := Vector2(cos(ang), sin(ang))
+			draw_line(_charge_center + dir * (_charge_radius - 14 * u), _charge_center + dir * (_charge_radius + 4 * u), Color(1.0, 0.45, 0.2), 4.0 * _s)
+	_draw_stamina_cost(held)
+	_draw_shot_feedback()
 	var knob: = _charge_center + _charge_vector * _charge_radius * 0.6
-	draw_circle(knob, 28 * _s, Color(hit_color, 0.2))
+	PixelDraw.disc(self, knob, 28 * _s, u, Color(hit_color, 0.22), Color(0, 0, 0, 0), 1, false)
 	_caption("CANCEL" if _cancel_armed else _hit_label(), _charge_center + Vector2(0, -2 * _s), 19, hit_color, 19)
 	var serve_locked: bool = _is_serve_context() and bool(_serve_timing.get("locked", false))
 	var subcaption: String = "HOLD + AIM"
@@ -504,15 +526,13 @@ func _draw() -> void :
 		subcaption = "LOCKED" if not _charge_owns_action and _gesture_is_serve else "NEXT SHOT" if not _charge_owns_action else "%d%%" % roundi(ratio * 100)
 		footer = "CONTACT" if not _charge_owns_action and _gesture_is_serve else "NEXT SHOT" if not _charge_owns_action else "RELEASE TO HIT"
 	if _cancel_armed: subcaption = "RELEASE"
-	var subcaption_minimum: int = 23 if subcaption == "HOLD + AIM" else 19
-	_caption(subcaption, _charge_center + Vector2(0, _second_caption_baseline(19, 15, 23, subcaption_minimum)), 15, UiTheme.INK, subcaption_minimum)
+	_caption(subcaption, _charge_center + Vector2(0, _second_caption_baseline(19, 15, 23, 19)), 15, UiTheme.INK, 19)
 	if not _cancel_armed:
 		_caption(footer, _charge_center + Vector2(0, 106 * _s), 20, hit_color, 23)
 
 	if held:
 		var cancel_color: Color = UiTheme.RED if _cancel_armed else UiTheme.MUTED
-		draw_circle(_cancel_center, _cancel_radius, Color(UiTheme.PANEL, 0.94))
-		draw_arc(_cancel_center, _cancel_radius, 0, TAU, 40, cancel_color, 2.0 * _s, true)
+		_pad(_cancel_center, _cancel_radius, cancel_color, 0.94)
 		_caption("CANCEL", _cancel_center + Vector2(0, 6 * _s), 15, cancel_color, 19)
 
 	_draw_hit_timing()
@@ -537,6 +557,7 @@ func _update_hit_timing(blocked: bool, real_delta: float = 0.0) -> void :
 		return
 	var held: bool = _charge_id != -1 and _charge_owns_action and not _gesture_is_serve
 	_hit_timing.update(human.release_timing_state(), held, bool(Settings.get_value("gameplay.timing_vibration", true)))
+	_move_closer_dir = _band_screen_side(human) if held else 0
 	if not _hit_timing.active:
 		_timing_draw_flight = -1
 		return
@@ -581,12 +602,55 @@ func _timing_corner_arc_angles(radius: float) -> Vector2:
 
 func _draw_timing_arc(radius: float, angles: Vector2, color: Color, flash: float) -> void :
 	if angles.y <= angles.x: return
-	draw_arc(_charge_center, radius, angles.x, angles.y, 96, Color(0.015, 0.035, 0.06, 0.9), (11.0 + 4.0 * flash) * _s, true)
-	draw_arc(_charge_center, radius, angles.x, angles.y, 96, color.lerp(Color.WHITE, flash), (5.5 + 4.0 * flash) * _s, true)
+	var u: float = PixelDraw.unit(_s)
+	PixelDraw.arc(self, _charge_center, radius, u, angles.x, angles.y, Color(UiTheme.PANEL, 0.9), 4 + roundi(flash))
+	PixelDraw.arc(self, _charge_center, radius, u, angles.x, angles.y, color.lerp(Color.WHITE, flash), 2 + roundi(flash))
+
+## Which way on screen the lit side band is (-1 left, +1 right, 0 none): the MOVE CLOSER arrow.
+func _band_screen_side(human) -> int:
+	var hint: Dictionary = human.superblock_hint
+	var camera: Camera3D = get_viewport().get_camera_3d()
+	if hint.is_empty() or not hint.has("side") or camera == null: return 0
+	var me = game.player_left
+	var at: Vector3 = me.global_position
+	var toward: Vector3 = at + me._get_forehand_axis() * float(hint.side)
+	if camera.is_position_behind(at) or camera.is_position_behind(toward): return 0
+	return 1 if camera.unproject_position(toward).x > camera.unproject_position(at).x else -1
+
+## MOVE CLOSER: larger, pulsing, with an arrow to the side the ball is passing.
+func _draw_move_closer(color: Color) -> void:
+	var text: String = "MOVE CLOSER"
+	if _move_closer_dir < 0: text = "<< " + text
+	elif _move_closer_dir > 0: text = text + " >>"
+	var size: int = _caption_size(22, 24)
+	var font: Font = PixelDraw.font()
+	var width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	var pulse: float = 0.5 + 0.5 * sin(float(Time.get_ticks_msec()) * 0.0126)   # about 2 per second
+	var center: Vector2 = _timing_caption_center + Vector2(0, -10 * _s)
+	var rect := Rect2(center - Vector2(width * 0.5 + 8 * _s, font.get_ascent(size) + 4 * _s), Vector2(width + 16 * _s, font.get_height(size) + 8 * _s))
+	draw_style_box(_guide_caption_backing, rect)
+	draw_rect(rect, Color(UiTheme.RED, 0.35 + 0.45 * pulse), false, maxf(2.0, PixelDraw.unit(_s) * 2.0))
+	_caption(text, center, 22, color.lerp(Color.WHITE, 0.6 * pulse), 24)
+
+## Risk (0..1) of the rally hold in progress; 0 when nothing is held.
+func _hold_risk() -> float:
+	if _charge_id == -1 or not _charge_owns_action or _gesture_is_serve or game == null or game.game_state != 2: return 0.0
+	var handler = game.input_handler
+	var me = game.player_left
+	if handler == null or me == null or me.posture == null or not handler.serve_is_charging: return 0.0
+	var human = me.posture.human_contact
+	if human == null or not human.has_method("hold_risk"): return 0.0
+	return human.hold_risk(float(handler.serve_charge_time))
 
 func _draw_hit_timing() -> void :
 	if _is_serve_context() or _cancel_armed: return
 	var color: Color = UiTheme.ACCENT if _hit_timing.ready else Color("ffe5a3")
+	# Risk of the hold in progress: yellow, then red when this much power on this low a ball
+	# is likely to go into the net (the rule itself: human_contact_controller.hold_risk).
+	var risk: float = _hold_risk()
+	var Tune = preload("res://scripts/gameplay_tuning.gd")
+	if risk >= Tune.RISK_RED: color = UiTheme.RED
+	elif risk >= Tune.RISK_YELLOW: color = Color("ffb23c")
 	if _hit_timing.active:
 		var radius: float = _timing_radius()
 		var angles: Vector2 = _timing_arc_angles(radius)
@@ -595,21 +659,84 @@ func _draw_hit_timing() -> void :
 
 		_draw_timing_arc(radius, angles, color, flash)
 		_draw_timing_arc(radius, _timing_corner_arc_angles(radius), color, flash)
-	if not _hit_timing.caption.is_empty():
+	if _hit_timing.caption == "MOVE CLOSER" and risk < Tune.RISK_RED:
+		_draw_move_closer(Color("ffb23c"))
+	elif not _hit_timing.caption.is_empty():
 
 		draw_style_box(_guide_caption_backing, _timing_caption_rect)
-		_caption(_hit_timing.caption, _timing_caption_center, 16, color if _hit_timing.active else UiTheme.RED, 19)
+		_caption("TOO LOW" if risk >= Tune.RISK_RED else _hit_timing.caption, _timing_caption_center, 16, color if _hit_timing.active else UiTheme.RED, 19)
+
+## Shot feedback at the HIT ring (STAMINA_UX / player feel): when a rally shot is released,
+## its name pops above the ring (DINK, RESET, FAST DINK, DRIVE ...), and a flick shows
+## chevrons running out of the ring in the swipe direction.
+const SHOT_FB_SECONDS := 0.7
+var _shot_fb_age := 99.0
+var _shot_fb_name := ""
+var _shot_fb_dir := Vector2.ZERO
+var _shot_fb_color := Color.WHITE
+
+func show_shot_feedback(shot_name: String, flick_dir: Vector2, touch: bool) -> void:
+	_shot_fb_name = shot_name.replace("_", " ")
+	_shot_fb_dir = flick_dir if flick_dir.length() >= 0.25 else Vector2.ZERO
+	_shot_fb_color = Color("7dff9a") if touch else Color("ff9a3c")
+	_shot_fb_age = 0.0
+	_timing_word = ""
+	queue_redraw()
+
+## The release timing word (PERFECT / GOOD / EARLY / LATE), above the shot name.
+var _timing_word := ""
+const TIMING_WORD_COLORS := {"PERFECT": Color("7dff9a"), "GOOD": Color("ffe5a3"), "EARLY": Color("ff6b5e"), "LATE": Color("ff6b5e")}
+func show_timing_word(word: String) -> void:
+	_timing_word = word
+	queue_redraw()
+
+func _draw_shot_feedback() -> void:
+	if _shot_fb_age >= SHOT_FB_SECONDS or _shot_fb_name.is_empty(): return
+	if _timing_word != "":
+		var tw: float = _shot_fb_age / SHOT_FB_SECONDS
+		_caption(_timing_word, _charge_center + Vector2(0, -_charge_radius * (1.6 + 0.35 * tw)), 18, Color(TIMING_WORD_COLORS.get(_timing_word, Color.WHITE), 1.0 - tw * tw))
+	var t: float = _shot_fb_age / SHOT_FB_SECONDS
+	var fade: float = 1.0 - t * t
+	# Word: pops up out of the ring and fades.
+	var pop: float = 1.0 + 0.35 * maxf(0.0, 1.0 - _shot_fb_age / 0.12)
+	_caption(_shot_fb_name, _charge_center + Vector2(0, -_charge_radius * (1.25 + 0.35 * t)), int(22 * pop), Color(_shot_fb_color, fade))
+	# Chevrons along the flick, running outward.
+	if _shot_fb_dir == Vector2.ZERO: return
+	var dir: Vector2 = _shot_fb_dir.normalized()
+	var side: Vector2 = Vector2(-dir.y, dir.x)
+	var w: float = 14.0 * _s
+	for k in 3:
+		var d: float = _charge_radius * (0.55 + 0.32 * float(k) + 0.6 * t)
+		var tip: Vector2 = _charge_center + dir * d
+		var a: float = fade * (1.0 - 0.25 * float(k))
+		draw_polyline(PackedVector2Array([tip - dir * w + side * w, tip, tip - dir * w - side * w]), Color(_shot_fb_color, a), 5.0 * _s)
+
+## Stamina cost chip beside the HIT ring while a rally shot is held (STAMINA_UX_PLAN.md):
+## "-1" for a tap (rest), the drive cost growing with your drive streak, amber when the
+## shot would take you under the penalty line, red under 25.
+func _draw_stamina_cost(held: bool) -> void:
+	if not bool(Settings.get_value("gameplay.stamina_bars", false)): return   # stamina numbers are off with the bars
+	if not held or _gesture_is_serve or _cancel_armed or game.game_state != 2: return
+	var handler = game.input_handler
+	var me = game.player_left
+	if handler == null or me == null or not handler.serve_is_charging: return
+	var tuning = preload("res://scripts/gameplay_tuning.gd")
+	if not tuning.STAMINA_ON: return
+	var touch: bool = float(handler.serve_charge_time) < preload("res://scripts/human_shot_choice.gd").TAP_SECONDS
+	var cost: float = 1.0 if touch else me.stamina.contact_cost("DRIVE", 12.0) + tuning.STREAK_COST * float(me.stamina.power_streak)
+	var after: float = float(me.stamina.value) - cost
+	var color: Color = Color(1, 1, 1) if after >= tuning.STAMINA_PENALTY_AT else (Color(1.0, 0.68, 0.2) if after >= 25.0 else Color(1.0, 0.3, 0.25))
+	_caption("-%d" % int(round(cost)), _charge_center + Vector2(_charge_radius * 0.95, -_charge_radius * 0.95), 20, color)
 
 func _draw_serve_selector() -> void :
 	var active: = _serve_selector_id != -1
 	var color: Color = UiTheme.ACCENT if active else UiTheme.MUTED
-	draw_circle(_serve_selector_center, _serve_selector_radius, Color(0.04, 0.1, 0.15, 0.12))
-	draw_arc(_serve_selector_center, _serve_selector_radius, 0, TAU, 64, Color(color, 0.65), 2 * _s, true)
+	_pad(_serve_selector_center, _serve_selector_radius, Color(color, 0.75), 0.4)
 	var options: = _serve_options()
 	for i in range(options.size()):
 		var angle: float = - PI * 0.5 + TAU * i / options.size() + _serve_selector_rotation
 		var axis: = Vector2.from_angle(angle)
-		draw_line(_serve_selector_center + axis * (_serve_selector_radius - 5 * _s), _serve_selector_center + axis * (_serve_selector_radius + 5 * _s), color, 2 * _s, true)
+		draw_line((_serve_selector_center + axis * (_serve_selector_radius - 5 * _s)).round(), (_serve_selector_center + axis * (_serve_selector_radius + 5 * _s)).round(), color, PixelDraw.unit(_s), false)
 	var option: = _selected_serve_option()
 	var delivery: String = str(option.get("delivery", "Volley")).to_upper()
 	if delivery == "EXPERIMENTAL DROP":
@@ -629,12 +756,12 @@ func _draw_serve_selector() -> void :
 func _draw_serve_timing() -> void :
 	var phase: String = str(_serve_timing.get("phase", "HELD"))
 	if _serve_contact_flash > 0:
-		draw_arc(_charge_center, _charge_radius + 12 * _s, 0, TAU, 64, UiTheme.ACCENT, 5 * _s, true)
+		PixelDraw.ring(self, _charge_center, _charge_radius + 12 * _s, PixelDraw.unit(_s), UiTheme.ACCENT, 2)
 		_caption("CONTACT", _charge_center + Vector2(0, -111 * _s), 20, UiTheme.ACCENT, 19)
 	elif phase not in ["", "IDLE", "HELD"]:
 		var progress: float = clampf(float(_serve_timing.get("progress", 0.0)), 0, 1)
 		var radius: = lerpf(_charge_radius + 25 * _s, _charge_radius * 0.58, progress)
-		draw_arc(_charge_center, radius, 0, TAU, 64, UiTheme.ACCENT, 3 * _s, true)
+		PixelDraw.ring(self, _charge_center, radius, PixelDraw.unit(_s), UiTheme.ACCENT, 1)
 		_caption(phase.replace("_", " "), _charge_center + Vector2(0, -111 * _s), 18, UiTheme.MUTED, 19)
 
 func _cache_hit_guide() -> void :
@@ -651,10 +778,9 @@ func _cache_hit_guide() -> void :
 	var safe: Rect2 = Layout.safe_rect(get_viewport())
 
 
-	_guide_caption_backing = StyleBoxFlat.new()
-	_guide_caption_backing.bg_color = Color(UiTheme.PANEL, 0.93)
-	_guide_caption_backing.set_corner_radius_all(roundi(4 * _s))
-	var status_font: Font = ThemeDB.fallback_font
+	_guide_caption_backing = UiTheme.button_style(Color(UiTheme.PANEL, 0.93))
+	_guide_caption_backing.set_content_margin_all(0)
+	var status_font: Font = PixelDraw.font()
 	var status_size: int = _caption_size(16, 19)
 	var status_width: float = status_font.get_string_size("MOVE CLOSER", HORIZONTAL_ALIGNMENT_LEFT, -1, status_size).x
 	_timing_caption_rect = Rect2(_timing_caption_center - Vector2(status_width * 0.5 + 4 * _s, status_font.get_ascent(status_size) + 2 * _s), Vector2(status_width + 8 * _s, status_font.get_height(status_size) + 4 * _s))
@@ -663,8 +789,8 @@ func _cache_hit_guide() -> void :
 	for index in 4:
 		var text: String = GUIDE_LABELS[index] if index < 3 else "CENTER · FLAT"
 		var center: Vector2 = _guide_labels[index] if index < 3 else _guide_flat
-		var font_size: int = maxi(10, roundi((18 if index < 3 else 14) * _s))
-		var font: Font = ThemeDB.fallback_font
+		var font_size: int = _caption_size(18 if index < 3 else 14, 19)
+		var font: Font = PixelDraw.font()
 		var width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
 		var rect: = Rect2(center - Vector2(width * 0.5 + 4 * _s, font.get_ascent(font_size) + 2 * _s), Vector2(width + 8 * _s, font.get_height(font_size) + 4 * _s))
 		rect.position.y = minf(rect.position.y, safe.end.y - rect.size.y)
@@ -676,12 +802,11 @@ func _draw_hit_guide() -> void :
 		var chosen: bool = _charge_id != -1 and _gesture_sector == GUIDE_LABELS[index]
 		var color: Color = UiTheme.ACCENT if chosen else UiTheme.MUTED
 		var center: Vector2 = _guide_nodes[index]
-		draw_circle(center, _shot_button_radius, Color(UiTheme.PANEL, 0.96))
-		draw_arc(center, _shot_button_radius, 0, TAU, 48, color, (3.0 if chosen else 1.8) * _s, true)
+		_pad(center, _shot_button_radius, color, 0.96, 2 if chosen else 1)
 		if chosen:
 			var tip: Vector2 = center + _charge_vector * _shot_button_radius * 0.65
-			draw_line(center, tip, Color(color, 0.6), 3 * _s, true)
-			draw_circle(tip, 12 * _s, Color(color, 0.3))
+			draw_line(center.round(), tip.round(), Color(color, 0.6), PixelDraw.unit(_s), false)
+			PixelDraw.disc(self, tip, 12 * _s, PixelDraw.unit(_s), Color(color, 0.3), Color(0, 0, 0, 0), 1, false)
 		_caption(GUIDE_LABELS[index], _guide_labels[index], 16, color, 19)
 	if _cancel_armed:
 		_caption("CANCEL ON RELEASE", _charge_center + Vector2(0, 106 * _s), 16, UiTheme.RED, 19)

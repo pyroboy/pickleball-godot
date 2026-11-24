@@ -199,7 +199,7 @@ func _event(kind: String, data: Dictionary = {}) -> void:
 	data["tick"] = Engine.get_physics_frames()
 	# Point-level events also go to perf.jsonl on every run (a few per point), so
 	# bench/phone reports can summarise gameplay; the frame log gets all of them.
-	if kind in ["state", "rally_end", "post_hit", "body_hit", "hit"]:
+	if kind in ["state", "rally_end", "post_hit", "body_hit", "hit", "bounce"]:   # bounce: actual landings
 		_write({"kind": "event", "event": kind, "t": _t(Time.get_ticks_usec()), "data": data})
 	if _frame_file != null: _events.append(data)
 

@@ -29,9 +29,17 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   reads), or the user asks. Then compare runs with `python3 tools/pose_diff.py` (expect
   `IDENTICAL` for visual-only work). Never add nodes or meshes under a player's
   `BodyPivot`; gameplay scans every mesh there.
-- Gameplay or animation calls need several seeds: `tools/bench_seeds.sh <name> [secs=120] ["1 2 3"]` runs the
-  bench per seed (low priority, about 1.5 min for three), sums points, hits and the pose checks below, and
-  prints the animation rules as PASS / FAIL (no late pose switch, paddle meets ball, no snap-back, wind-up wobble, flutter).
+- Every bench follows `docs/BENCH_RULES.md` (read it first): state the objective (`OBJ="..."`,
+  required), check its datapoints exist (`python3 tools/bench_plan.py <note> [--rate p --detect d]`,
+  also sizes the seeds), start with one seed and justify more (`WHY="..."`, required), stop when
+  the run can't change the decision, then recalibrate instead of re-running. Each run appends to
+  `docs/BENCH_LOG.md`; fill in its Verdict, and check the log before a new bench.
+- Gameplay or animation calls: `OBJ="..." tools/bench_seeds.sh <name> [secs=120] ["1"]` runs the bench
+  per seed (low priority, about 30 s each), sums points, hits and the pose checks below, and prints the
+  animation rules as PASS / FAIL (no late pose switch, paddle meets ball, no snap-back, wind-up wobble,
+  flutter). `NEED=a,b` names the perf notes it must record, `BASE=<name>` compares poses, `ADD=1` adds
+  seeds to a finished run. It stops by itself on script errors, a missing datapoint, or poses
+  identical to the base.
 - Which poses played: `python3 tools/pose_timeline.py <bench name> [player] [--from S --to S]` lists each
   player's stroke pose + base pose (with blend) over time and marks hits; `--summary` gives poses at contact;
   `--flights` checks AI pose prediction per ball (pose changes, late switches, charge at contact);

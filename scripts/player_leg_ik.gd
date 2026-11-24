@@ -29,6 +29,8 @@ const RUN_ENTER_SPEED: = 1.65
 const RUN_EXIT_SPEED: = 1.35
 const RUN_CONTACT_TRAVEL: = 0.64
 const RUN_SETTLE_DURATION: = 0.14
+const RUN_SWING_GROUND_MATCH := 0.0   # 0: plain smoothstep swing (as before); 1: lift-off and landing fully match the ground speed
+const RUN_PLANT_AFTER_SWING := true   # false: a lifted foot may be re-planted mid-swing (as before)
 const STANCE_STEP_LIFT: = 0.035
 const FOOT_UNLOCK_RADIUS: = 0.35
 const MIN_FOOT_SEPARATION: = 0.18
@@ -130,6 +132,18 @@ const MAX_SUPPORT_TURN_DEGREES := 42.0
 var locomotion_phase := "ready"
 var locomotion_gait := "stance"
 const LATERAL_SHUFFLE_DISTANCE := 0.48
+## Fast side shuffle (the running foot cycle while the state is lateral_shuffle): each foot lands
+## this far out on its own side, and is on the ground for a shorter stretch at a quicker beat, so
+## the trailing foot closes toward the lead foot but never reaches or passes it. Before, both feet
+## landed 0.13 m either side of the body and travelled 0.55 m on the ground: they crossed by 0.27 m.
+## Prep steps (charged footwork "adjust": the last 0.3 m to the hitting spot): quick, small
+## stutter steps to set the spacing, instead of two slow ones.
+const STUTTER_STRIDE := 0.15
+const STUTTER_TIME := 0.10
+const STUTTER_LIFT := 0.022
+const SHUFFLE_HALF_WIDTH := 0.26
+const SHUFFLE_CONTACT_TRAVEL := 0.30
+const SHUFFLE_CADENCE := 1.65
 const LATERAL_RUN_DISTANCE := 1.20
 const TURN_RATE := 300.0
 var locomotion_hip_yaw_deg := 0.0
@@ -668,6 +682,10 @@ func _update_moving_feet(delta: float, from: Vector3, to: Vector3, velocity: Vec
 	var lateral: float = absf(velocity.normalized().dot(_player._get_forehand_axis()))
 	var lift: float = lerpf(STEP_LIFT_HEIGHT, STEP_RUN_LIFT_HEIGHT, ratio) * lerpf(1.0, 0.35, lateral)
 	if locomotion_gait == "walk": lift = .045
+	if locomotion_phase == "adjust":
+		stride_budget = minf(stride_budget, STUTTER_STRIDE)
+		duration = minf(duration, STUTTER_TIME)
+		lift = minf(lift, STUTTER_LIFT)
 	if not _moving:
 		_moving = true
 		_live_stance_initialized = false
@@ -717,11 +735,16 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 	var speed: float = velocity.length()
 	var ratio: float = clampf((speed - RUN_ENTER_SPEED) / maxf(_player.move_speed - RUN_ENTER_SPEED, 0.1), 0.0, 1.0)
 	var cadence: float = lerpf(3.2, 4.6, ratio)
+	# How much of a side shuffle this is: travelling along the body's own side axis.
+	var shuffle: float = 0.0
+	if locomotion_state == "lateral_shuffle" and speed > 0.1:
+		shuffle = smoothstep(0.5, 0.9, absf((velocity / speed).dot(Vector3(-_heading_forward.z, 0.0, _heading_forward.x))))
+	cadence *= lerpf(1.0, SHUFFLE_CADENCE, shuffle)
 	if _run_active and _travel_velocity.dot(velocity) < 0.0: _turn_cadence_remaining = .22
 	_turn_cadence_remaining = maxf(0.0,_turn_cadence_remaining-delta)
 	if _turn_cadence_remaining > 0.0: cadence *= 1.25
 	var cycle: float = 2.0 / cadence
-	var contact_fraction: float = minf(0.46, RUN_CONTACT_TRAVEL / maxf(speed * cycle, 0.1))
+	var contact_fraction: float = minf(0.46, lerpf(RUN_CONTACT_TRAVEL, SHUFFLE_CONTACT_TRAVEL, shuffle) / maxf(speed * cycle, 0.1))
 	var contact_time: float = cycle * contact_fraction
 	var forward: Vector3 = _heading_forward
 	_run_forward = forward
@@ -730,6 +753,7 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 
 
 	half_width *= lerpf(1.0, 0.86, absf(velocity.normalized().dot(_player._get_forehand_axis())))
+	half_width = lerpf(half_width, SHUFFLE_HALF_WIDTH, shuffle)
 	var lift: float = lerpf(0.105, 0.16, ratio)
 	if locomotion_state in ["backpedal", "backward_strafe", "lateral_shuffle"]: lift *= 0.70
 	if not _run_active or _run_stopping:
@@ -776,7 +800,12 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 			var reach: Vector3 = foot - base
 			reach.y = 0.0
 			if locked and reach.length() > 0.5: _run_early_liftoff[side] = true
-			if phase < contact_fraction and not _run_early_liftoff[side]:
+			# A foot in the air lands only once its swing has run out (the gait phase wrapped since
+			# it lifted). The contact window widens when the player slows down, and a foot that had
+			# just lifted found itself "inside the window" again: it was planted at once, up to
+			# 0.75 m away in a single tick, then lifted again (the drawn foot / knee pops).
+			var swinging: bool = not locked and phase >= _run_swing_starts[side] and RUN_PLANT_AFTER_SWING
+			if phase < contact_fraction and not _run_early_liftoff[side] and not swinging:
 				if not locked:
 					foot = base + offset
 					foot.y = maxf(ANKLE_HEIGHT, foot.y)
@@ -797,6 +826,12 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 				_swing_yaw(side, progress)
 				var blend: float = smoothstep(0.0, 1.0, progress)
 				foot = base + _run_origins[side].lerp(offset, blend)
+				# The swing leaves and meets the ground at the ground's own speed (a Hermite curve
+				# whose end tangents are the ground moving back under the body). With a plain
+				# smoothstep the foot hung still under the body at both ends and then reversed in
+				# one tick at lift-off and landing: the drawn foot and knee popped on every step.
+				var ground: Vector3 = -velocity * (maxf(1.0 - start, 0.001) * cycle) * RUN_SWING_GROUND_MATCH
+				foot += ground * (progress * (2.0 * progress - 1.0) * (progress - 1.0))
 				foot.y = ANKLE_HEIGHT + maxf(maxf(0.0, _run_origins[side].y) * (1.0 - blend), sin(PI * progress) * lift)
 				foot = _clear_running_shoe(foot, side, side_axis)
 			if side == 0:
@@ -913,9 +948,22 @@ func _update_live_stance(delta: float, def) -> void :
 			_begin_step(side, targets[side], STANCE_STEP_DURATION, STANCE_STEP_LIFT, Vector3.ZERO)
 	_advance_step(delta)
 
+const SPLIT_BODY_RATE := 0.36   # m/s the split-step body offset may change (12 mm per physics tick)
+var _split_body_smooth := 0.0
+var _split_body_tick := -1
 func _apply_locomotion_body(def) -> void:
 	var locomotion_body: bool = BodyPose.locomotion_enabled(_player, def)
-	if locomotion_body or _locomotion_body_applied or _split_pose_active or _split_body_applied:
+	# The split step's load crouch lasts 45 ms: at 30 physics ticks a second that is one tick of
+	# -28 mm and back (and a split that is cancelled drops out at once). Drawn, it is a twitch of
+	# the torso and knees, not a crouch. The body offset now follows its target at
+	# SPLIT_BODY_RATE, so it eases in and out over a few ticks.
+	var tick: int = Engine.get_physics_frames()
+	if tick != _split_body_tick:
+		var step: float = SPLIT_BODY_RATE * float(tick - _split_body_tick) / float(Engine.physics_ticks_per_second) if _split_body_tick >= 0 and tick - _split_body_tick <= 2 else INF
+		_split_body_smooth = move_toward(_split_body_smooth, _split_body_offset if _split_pose_active else 0.0, step)
+		_split_body_tick = tick
+	var split_body: bool = _split_pose_active or absf(_split_body_smooth) > 0.00001
+	if locomotion_body or _locomotion_body_applied or split_body or _split_body_applied:
 
 
 		var paddle = _player.paddle_node if "paddle_node" in _player else null
@@ -923,16 +971,19 @@ func _apply_locomotion_body(def) -> void:
 		if "right_arm_node" in _player: BodyPose.apply(_player, def)
 		if paddle: paddle.global_transform = paddle_world
 	_locomotion_body_applied = locomotion_body
-	if _split_pose_active and _player.body_pivot:
-		_player.body_pivot.position.y += _split_body_offset
-		hip_shift_applied += Vector3.UP * _split_body_offset
-	_split_body_applied = _split_pose_active
+	if split_body and _player.body_pivot:
+		_player.body_pivot.position.y += _split_body_smooth
+		hip_shift_applied += Vector3.UP * _split_body_smooth
+	_split_body_applied = split_body
 	if _landing_remaining > 0.0 and _player.body_pivot:
 		var settle:float=1.0-_landing_remaining/LANDING_DURATION
 		var landing:Vector3=Vector3.DOWN*sin(PI*settle)*.055
 		_player.body_pivot.position+=landing
 		hip_shift_applied+=landing
 
+const KNEE_FOLLOW := 0.35   # share of the gap the knee target closes per physics tick (1 = follow at once, as before)
+var _knee_goal: Array = [Vector3.ZERO, Vector3.ZERO]
+var _knee_goal_tick: Array[int] = [-1, -1]
 func _solve_legs(delta: float, def, authored: bool = false) -> void:
 	var _pt := Time.get_ticks_usec()
 	_perf_solve_legs(delta, def, authored)
@@ -965,6 +1016,16 @@ func _perf_solve_legs(delta: float, def, authored: bool = false) -> void:
 			var shoe_side := Vector3(-shoe_forward.z,0,shoe_forward.x)
 			# One authored pole in one contact frame through travel AND stopping.
 			pole_offset = shoe_side*pole.x + Vector3.UP*pole.y + shoe_forward*pole.z
+		if not authored and KNEE_FOLLOW < 1.0:
+			# The knee target follows its goal over a few ticks instead of jumping with it. The
+			# goal jumps whenever a pose with unset knee poles (Ready) blends with one that has
+			# them (the pole is scaled from zero, so its direction flips in one tick) and when a
+			# foot is planted: the drawn knee snapped up to 20 cm in a tick.
+			var tick: int = Engine.get_physics_frames()
+			if _knee_goal_tick[side] < 0 or tick - _knee_goal_tick[side] > 2: _knee_goal[side] = pole_offset
+			elif tick != _knee_goal_tick[side]: _knee_goal[side] = Vector3(_knee_goal[side]).lerp(pole_offset, 1.0 - pow(1.0 - KNEE_FOLLOW, float(tick - _knee_goal_tick[side])))
+			_knee_goal_tick[side] = tick
+			pole_offset = _knee_goal[side]
 		leg.solve_ik(foot, foot + pole_offset, tilt)
 		var foot_forward: Vector3 = _run_forward if _run_active else fwd
 		var target_yaw: float = atan2( - foot_forward.x, - foot_forward.z) - deg_to_rad(yaw)

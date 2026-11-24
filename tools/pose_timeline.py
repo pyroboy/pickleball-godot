@@ -78,7 +78,13 @@ if flights:
             last_change = next((hit - track[i][0] for i in range(len(track) - 1, 0, -1) if track[i][1] != track[i - 1][1]), None)
             early = next((s for t, s, _ in reversed(track) if hit - t >= 9), None)  # shown pose 0.3 s before
             tot["hits"] += 1; tot["pred_flips"] += pf; tot["shown_flips"] += sf; tot["back_and_forth"] += bounce
-            if early is not None and early != shown[-1]: tot["changed_in_last_0.3s"] += 1
+            if early is not None and early != shown[-1]:
+                # A switch needs a plan to switch from: the AI had a reachable contact for
+                # this ball 0.3 s or more before the hit. Without one (a fast attack that
+                # arrives within the AI's reaction delay) the first commitment is a reflex
+                # block, counted on its own line.
+                planned_early = any(a[6] for t, _, a in track if hit - t >= 9)
+                tot["changed_in_last_0.3s" if planned_early else "reaction_commit_last_0.3s"] += 1
             if last_change is not None: late.append(last_change / 30.0)
             charge = ai_at_hit[3]
             by_charge[STROKES[shown[-1]] if 0 <= shown[-1] < len(STROKES) else shown[-1]].append(charge)
@@ -88,6 +94,7 @@ if flights:
     print(f"  predicted-pose changes per ball: {tot['pred_flips'] / n:.2f}   back-and-forth (A>B>A): {tot['back_and_forth']}")
     print(f"  shown-pose changes per ball:     {tot['shown_flips'] / n:.2f}")
     print(f"  shown pose changed in the last 0.3 s before contact: {tot['changed_in_last_0.3s']} of {tot['hits']}")
+    print(f"  first commitment in the last 0.3 s (fast ball inside the reaction delay, no earlier plan): {tot['reaction_commit_last_0.3s']} of {tot['hits']}")
     if late: print(f"  last shown-pose change before contact: median {sorted(late)[len(late) // 2]:.2f} s, min {min(late):.2f} s")
     print("  most-changed balls (shown flips, predicted flips, player, time, poses in order):")
     for w in sorted(worst, reverse=True)[:6]: print(f"    {w[0]:2d} {w[1]:2d}  p{w[2]} {w[3]:6.1f}s  {' > '.join(w[4])}")

@@ -10,6 +10,7 @@ signal skip_retrieval_requested
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HudChrome = preload("res://scripts/ui/hud_chrome.gd")
+const PixelBanner = preload("res://scripts/ui/pixel_banner.gd")
 const AI_DIFFICULTY_COLORS: Array[Color] = [UiTheme.ACCENT, Color("f5d38b"), UiTheme.RED]
 const DEMO_CUES: = {"SOFT": "Soft dink · watch the angle", "POPUP": "Loose dink · attack chance", 
 	"HIGH_POPUP": "High popup · overhead chance", "SMASH": "Smash · block and reset", 
@@ -65,6 +66,9 @@ var _rally_banner: Panel
 var _rally_headline: Label
 var _rally_detail: Label
 var _rally_reason: Label   # short friendly reason, between the headline and the score line
+var _rally_pixel: Control  # pixel_banner.gd: draws the whole result banner (the labels stay hidden)
+var _rally_reason_fill: = Color("a3352f")
+var _banner_avoid: Array = []   # screen rects the result banner must not cover (e.g. an "Ouch!" bubble)
 var _serve_label: Label
 var _blue_label: Label
 var _red_label: Label
@@ -342,21 +346,19 @@ func _build_singles_feedback() -> void:
 	add_child(_serve_ball)
 	_rally_banner = _panel()
 	_rally_banner.name = "RallyResult"
-	var style := UiTheme.panel_style()
-	style.bg_color = Color("14283b")
-	style.border_color = Color("d9ec68")
-	style.set_border_width_all(2)
-	_rally_banner.add_theme_stylebox_override("panel", style)
+	# Kit banner (proposal PDF p.23-24): the PixelBanner child draws plate, headline and
+	# ribbon; the panel is only the box scoreboard_ui fades. Old labels kept, never shown.
+	_rally_banner.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 	_rally_headline = _label("", 34, Color("effa92"), true)
-	_rally_headline.add_theme_font_override("font", UiTheme.pixel_font())
-	UiTheme.crisp(_rally_headline)
 	_rally_detail = _label("", 17, UiTheme.INK, true)
 	_rally_reason = _label("", 22, UiTheme.INK, true)
 	for label in [_rally_headline, _rally_reason, _rally_detail]:
 		remove_child(label)
 		_rally_banner.add_child(label)
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.hide()
+	_rally_pixel = PixelBanner.new()
+	_rally_pixel.name = "PixelBanner"
+	_rally_banner.add_child(_rally_pixel)
 	_rally_banner.hide()
 
 func team_name(team: int) -> String:
@@ -372,22 +374,36 @@ func _team_label_text(team: int) -> String:
 	if game != null and game.get("doubles_mode") == true: owner = "YOUR TEAM" if team == 0 else "OPPONENTS"
 	return owner + ("\n" if _portrait else " · ") + ("BLUE" if team == 0 else "RED")
 
-func show_rally_result(headline: String, detail: String, headline_color: Color = UiTheme.INK) -> void:
-	_rally_headline.add_theme_color_override("font_color", headline_color)
+## headline_color is the banner's fill (team blue / red, gold for a second server).
+func show_rally_result(headline: String, detail: String, headline_color: Color = UiTheme.TEAM_BLUE) -> void:
 	_rally_headline.text = headline
-	PerfMonitor.note("rally_banner", {"headline": headline, "detail": detail, "board": [_board._scores[0], _board._scores[1]] if is_instance_valid(_board) else []})
 	_rally_detail.text = detail
+	# The reason (show_fault -> set_rally_reason) arrives BEFORE this call: keep it on
+	# the ribbon; the detail line is only used when there is no reason.
+	var has_reason: bool = not _rally_reason.text.is_empty()
+	_rally_pixel.present(headline.to_upper(), _rally_reason.text.to_upper() if has_reason else detail.to_upper(),
+		headline_color, _rally_reason_fill if has_reason else UiTheme.PANEL)
 	_rally_banner.modulate.a = 1.0
 	_rally_banner.visible = _gameplay_visible
 	_place_rally_banner()
+	PerfMonitor.note("rally_banner", {"headline": headline, "detail": detail, "ribbon": _rally_pixel.ribbon, "rect": [_rally_banner.position.x, _rally_banner.position.y, _rally_banner.size.x, _rally_banner.size.y], "board": [_board._scores[0], _board._scores[1]] if is_instance_valid(_board) else []})
 
-## One banner for the whole result: headline, why the point ended, score line.
+## One banner for the whole result: the reason replaces the detail line on the ribbon
+## (gold when it went your way, deep red when it didn't).
 func set_rally_reason(text: String, color: Color) -> void:
 	_rally_reason.text = text
-	_rally_reason.add_theme_color_override("font_color", color)
+	_rally_reason_fill = color
+	_rally_pixel.set_ribbon(text.to_upper(), color)
+	if _rally_banner.visible: _place_rally_banner()
+
+## Keep the result banner clear of these screen rects (body_hit_fx.gd: the "Ouch!"
+## bubble pops right after the banner, often over the far players at banner height).
+func avoid_for_banner(rects: Array) -> void:
+	_banner_avoid = rects
 	if _rally_banner.visible: _place_rally_banner()
 
 func clear_rally_result() -> void:
+	_banner_avoid = []
 	_rally_banner.hide()
 	_rally_headline.text = ""
 	_rally_detail.text = ""
@@ -408,26 +424,25 @@ func _place_rally_banner() -> void:
 	var rect := _score_panel.get_global_rect()
 	var view := get_viewport().get_visible_rect().size
 	var s := MobileLayout.scale_for(view) if _portrait else 1.0
-	var banner_width := minf(420.0 * s, view.x - 32.0 * s)
-	var has_reason: bool = not _rally_reason.text.is_empty()
-	var height: float = ((126.0 if has_reason else 94.0) * s) if _portrait else (118.0 if has_reason else 88.0)
+	_rally_pixel.s = s
+	_rally_pixel.max_width = view.x - 32.0 * s
+	_rally_pixel.resize_to_fit()
+	var banner_size: Vector2 = _rally_pixel.size
 	var top := rect.end.y + 198.0 * s if _portrait else view.y * 0.35 + 136.0
 	# Sit in the middle of the screen with the bottom edge just above the net.
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	var net_top := Vector3(0.0, PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT, 0.0)
 	if camera != null and not camera.is_position_behind(net_top):
-		top = maxf(rect.end.y + 8.0 * s, camera.unproject_position(net_top).y - height - 12.0 * s)
-	var banner_x := (view.x - banner_width) * 0.5
+		top = maxf(rect.end.y + 8.0 * s, camera.unproject_position(net_top).y - banner_size.y - 12.0 * s)
+	var banner_x := (view.x - banner_size.x) * 0.5
 	if not _portrait and view.x < 1100.0:
-		banner_x = _status_panel.position.x + (_status_panel.size.x - banner_width) * 0.5
-	_place(_rally_banner, Rect2(banner_x, top, banner_width, height))
-	_place(_rally_headline, Rect2(10 * s, 6 * s, banner_width - 20 * s, 46 * s))
-	_place(_rally_reason, Rect2(10 * s, 50 * s, banner_width - 20 * s, 32 * s))
-	_place(_rally_detail, Rect2(10 * s, (86 if has_reason else 52) * s, banner_width - 20 * s, 30 * s))
-	_rally_reason.visible = has_reason
-	_rally_headline.add_theme_font_size_override("font_size", roundi(36 * s))
-	_rally_reason.add_theme_font_size_override("font_size", roundi(23 * s))
-	_rally_detail.add_theme_font_size_override("font_size", roundi((16 if has_reason else 18) * s))
+		banner_x = _status_panel.position.x + (_status_panel.size.x - banner_size.x) * 0.5
+	# Step below anything it must not cover (a live "Ouch!" bubble).
+	for avoid in _banner_avoid:
+		if Rect2(Vector2(banner_x, top), banner_size).intersects(avoid):
+			top = minf(avoid.end.y + 10.0 * s, view.y - banner_size.y - 8.0 * s)
+	_place(_rally_banner, Rect2(Vector2(banner_x, top).round(), banner_size))
+	_rally_pixel.position = Vector2.ZERO
 
 func _build_toolbar() -> void :
 	_toolbar = HBoxContainer.new()
@@ -737,7 +752,7 @@ func set_charge(ratio: float, charging: bool) -> void :
 		set_aim_state(_aim_mode)
 
 func set_end_change_pending(pending: bool) -> void:
-	var next_text: String = "Changing ends" if pending else "Skip to serve"
+	var next_text: String = "Changing ends" if pending else "SKIP >>"
 	var text_changed: bool = _skip_button.text != next_text
 	_skip_button.disabled = pending
 	_skip_button.text = next_text
@@ -916,6 +931,8 @@ func _run_debug_tool(caption: String) -> void :
 func _restore_desktop_fonts() -> void :
 	_toolbar.add_theme_constant_override("separation", 8)
 	_skip_button.clip_text = false
+	for key in ["normal", "hover", "pressed"]: _skip_button.remove_theme_stylebox_override(key)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]: _skip_button.remove_theme_color_override(state)
 	_score_panel.modulate.a = 1.0
 	_score_panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
 	_score_chrome.hide()
@@ -994,9 +1011,12 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 		button.custom_minimum_size = Vector2(ceilf(100 * s), ceilf(92 * s))
 		button.add_theme_font_size_override("font_size", roundi(21 * s))
 		for key in ["normal", "hover", "pressed"]:
-			var style: = UiTheme.button_style(Color(0.08, 0.15, 0.25, 0.94 if key == "normal" else 1.0))
-			# Round icon button: same touch rect, drawn as a circle (stadium for the wider Skip).
+			var style: = UiTheme.button_style(Color(UiTheme.PANEL, 0.94 if key == "normal" else 1.0))
+			# Round icon button, pixel style: same touch rect, drawn as a chunky
+			# few-sided "pixel circle" (stadium for the wider Skip), no anti-aliasing.
 			style.set_corner_radius_all(roundi(46 * s))
+			style.corner_detail = 3
+			style.shadow_color = Color(0, 0, 0, 0)
 			style.expand_margin_left = - 4 * s
 			style.expand_margin_right = - 4 * s
 			style.border_width_bottom = maxi(2, roundi(4 * s))
@@ -1004,11 +1024,22 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 			style.content_margin_right = 16 * s
 			style.content_margin_top = 10 * s
 			style.content_margin_bottom = 10 * s
-			style.border_color = Color("49647f") if key == "normal" else UiTheme.BLUE
-			style.set_border_width_all(maxi(1, roundi(s)))
+			style.border_color = UiTheme.BORDER if key == "normal" else UiTheme.BLUE
+			style.set_border_width_all(maxi(2, roundi(3 * s)))
+			style.border_width_bottom = maxi(3, roundi(6 * s))
 			button.add_theme_stylebox_override(key, style)
 	_guide_button.text = ""
 	_pause_button.text = ""
+	# Skip is the one action on this row and only shows between points: lime with dark ink
+	# and larger text, so it reads at a glance (it was the same dark pill as the icon buttons).
+	for key in ["normal", "hover", "pressed"]:
+		var skip_style: StyleBoxFlat = _skip_button.get_theme_stylebox(key).duplicate()
+		skip_style.bg_color = UiTheme.ACCENT if key == "normal" else (UiTheme.ACCENT_HOVER if key == "hover" else UiTheme.ACCENT.darkened(0.08))
+		skip_style.border_color = UiTheme.ACCENT.darkened(0.42)
+		_skip_button.add_theme_stylebox_override(key, skip_style)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		_skip_button.add_theme_color_override(state, UiTheme.PANEL)
+	_skip_button.add_theme_font_size_override("font_size", roundi(27 * s))
 	# Size from the actual text/style minimum, then anchor the whole row inside
 	# the safe area. A long translation may ellipsize instead of pushing Pause
 	# or Skip offscreen; both retain their full touch target and original action.

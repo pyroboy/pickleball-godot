@@ -47,6 +47,9 @@ var phase: int = -1
 var stroke_serial: int = 0
 var elapsed: float = 0.0
 var strike_time: float = 0.12
+## Seconds between this release and the ideal one (+ early, - late; NAN: not known). The swing
+## times itself to the ball, so this is the player's timing (docs/SHOT_QUALITY_PLAN.md).
+var release_error: float = NAN
 var swing_def: PostureDefinition
 var swing_flight_id: int = -1
 var motion_context: Dictionary = {}
@@ -106,6 +109,7 @@ func update(delta: float) -> void:
 	PerfMonitor.record("human.update", Time.get_ticks_usec() - _pt)
 
 func _perf_update(delta: float) -> void:
+	_physics_update_usec = Time.get_ticks_usec()
 	if "special_reach_driver" in player and player.special_reach_driver != null and player.special_reach_driver.owns_presentation(): return
 	if not Input.is_action_pressed("ui_accept"): _preparation_hold_suppressed = false
 	var ball = player._get_ball_ref()
@@ -216,9 +220,24 @@ func preparation_contact() -> Dictionary:
 	var ball = player._get_ball_ref()
 	if ball == null or ball.flight_id != _flight_id or phase >= 2 or ball.bounces_since_last_hit >= 2 or not Planner.should_track(player, ball): return {}
 	if not contact.is_empty(): return contact
-	if phase < 0 and Input.is_action_pressed("ui_accept") and not _preparation_hold_suppressed and not superblock_hint.is_empty(): return superblock_hint
 	if footwork.active and not footwork.plan.is_empty(): return footwork.plan
+	if phase < 0 and Input.is_action_pressed("ui_accept") and not _preparation_hold_suppressed and not superblock_hint.is_empty(): return superblock_hint
 	return anticipated_contact
+
+## Risk of the hold in progress (0..1): a hard hit on a ball that will be met below the tape,
+## close to the net. The same number the mishit score uses at contact (game.gd "low_drive"), so
+## the ring colour is the rule (docs/SHOT_QUALITY_PLAN.md).
+func hold_risk(hold_seconds: float) -> float:
+	var Tuning = preload("res://scripts/gameplay_tuning.gd")
+	if hold_seconds < preload("res://scripts/human_shot_choice.gd").TAP_SECONDS: return 0.0   # a tap is a touch shot
+	var preparation: Dictionary = preparation_contact()
+	var ball = player._get_ball_ref()
+	if preparation.is_empty() or ball == null or not ball.both_bounces_complete or not preparation.has("point"): return 0.0
+	var point: Vector3 = preparation.point
+	var below: float = clampf(((PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT) - point.y) / 0.4, 0.0, 1.0)
+	var near_net: float = clampf((Tuning.LOW_DRIVE_FAR - absf(point.z)) / 1.5, 0.0, 1.0)
+	var charge: float = minf(clampf(hold_seconds / PickleballConstants.RALLY_FULL_HOLD, 0.0, 1.0), 1.0 - Tuning.TIRED_CHARGE_CAP * player.stamina.tiredness())
+	return below * charge * near_net
 
 func release_timing_state() -> Dictionary:
 
@@ -280,6 +299,10 @@ func _update_anticipation(delta: float, ball, flight: Dictionary) -> void :
 
 	elif footwork._eligible(ball) and (contact.is_empty() or phase == 0):
 		anticipated_contact = Footwork.select_plan(player, ball, flight)
+		# A ball beside you (side band) starts footwork too, when the sideways step fits in time.
+		if anticipated_contact.is_empty() and player.hitting.charge_visual_active:
+			var band: Dictionary = Footwork.band_plan(player, ball, flight)
+			if bool(band.get("reachable", false)): anticipated_contact = band
 		if anticipated_contact.is_empty() and (player.hitting.charge_visual_active or phase == 0):
 			anticipated_contact = Footwork.select_preparation(player, ball, flight, previous_id)
 	elif phase < 0 and not smash_spot.is_empty() and not Footwork.is_smash_contact(player, contact) and footwork._eligible(ball):
@@ -302,8 +325,130 @@ func _update_anticipation(delta: float, ball, flight: Dictionary) -> void :
 		anticipation_path.append(samples[index].pos)
 	anticipation_path.append(preparation.point)
 
+## ---- One hold target at a time (user, 2026-11-25) ----
+## While HIT is held the body aims at a planned contact (a pose and a point). The plan can come
+## from four places (in-reach contact, footwork plan, side band, anticipation) and is refreshed
+## ten times a second, and it sometimes jumped between two ways to take the same ball (about one
+## refresh in ten moved the point some 2 m), with the pose chasing each jump. The held pose now
+## commits to one choice:
+##  - small refinements of the same choice are followed as before;
+##  - a different choice must stay the candidate for HOLD_SWITCH_CONFIRM seconds, and not sooner
+##    than HOLD_SWITCH_LOCK after the last switch;
+##  - a choice that was left is not gone back to on this ball (no back and forth);
+##  - the in-reach contact (the swing that will really happen) always wins, and a committed
+##    choice whose moment has passed is dropped at once.
+## Only the held (wind-up) pose reads this. The release timing, footwork and the swing itself
+## still read preparation_contact(), so what the shot does is unchanged.
+const HOLD_SAME_POINT_M := 0.35
+const HOLD_SWITCH_CONFIRM := 0.2
+const HOLD_SWITCH_LOCK := 0.5
+const HOLD_GAP_GRACE := 0.5               # s the choice is kept while the planner offers nothing
+var _held_gap_s: float = 0.0
+const HOLD_SWITCH_BLEND_S := 0.4          # the blend is slower for this long after a switch ...
+const HOLD_SWITCH_HALFLIFE := 0.14        # ... starting from this half-life (0.055 otherwise)
+const HOLD_TARGET_HALFLIFE := 0.07        # s: easing of the target pose itself
+var _held_target_pose: PostureDefinition = null
+## ---- One writer for the rig (2026-11-25) ----
+## The held pose is advanced on the input clock every rendered frame (so the wind-up keeps real
+## time through slow motion), and it used to be written to the rig there too. The physics tick
+## writes the rig as well, 30 times a second, and its version carries what the input-clock
+## write left out (the footwork stance, the legs' own body drop, the support refit). So the body
+## flipped between two slightly different poses on alternate frames: about 5 mm at the torso and
+## head, more at the elbows. In a rally that hides in the motion; in the aim slow motion, with
+## everything else nearly still, it was a visible shake, and the first-person view shook with it.
+## Now the input clock only advances the pose; the tick writes it. Ticks keep their real-time
+## rate in slow motion (the engine scales the step, not the rate), so the pose is at most one
+## tick (33 ms) behind the hold. If no tick has run for a moment (a paused tool), the input
+## clock writes as before.
+const RIG_TICK_STALE_USEC := 120000
+var _physics_update_usec: int = 0
+
+func _tick_writes_rig() -> bool:
+	return Time.get_ticks_usec() - _physics_update_usec < RIG_TICK_STALE_USEC
+
+var held_target: Dictionary = {}          # the committed choice (tests read it)
+var held_target_switches: int = 0
+var _held_flight: int = -1
+var _held_candidate: Dictionary = {}
+var _held_candidate_s: float = 0.0
+var _held_lock_s: float = 0.0
+var _held_since_switch_s: float = 99.0
+var _held_left: Array = []                # [posture id, point] of choices already left on this ball
+
+static func _held_same(a: Dictionary, b: Dictionary) -> bool:
+	if a.is_empty() or b.is_empty(): return false
+	if int(a.get("posture", -1)) != int(b.get("posture", -2)): return false
+	if not a.has("point") or not b.has("point"): return true
+	return Vector3(a.point).distance_to(Vector3(b.point)) <= HOLD_SAME_POINT_M
+
+func _reset_held_target() -> void:
+	_held_gap_s = 0.0
+	_held_target_pose = null
+	held_target = {}
+	_held_candidate = {}
+	_held_candidate_s = 0.0
+	_held_lock_s = 0.0
+	_held_since_switch_s = 99.0
+	_held_left = []
+
+func _commit_held(choice: Dictionary, counted: bool) -> void:
+	if counted and not held_target.is_empty():
+		_held_left.append({"posture": held_target.get("posture", -1), "point": held_target.get("point", Vector3.INF)})
+		held_target_switches += 1
+		_held_lock_s = HOLD_SWITCH_LOCK
+		_held_since_switch_s = 0.0
+	held_target = choice.duplicate()   # a copy: the sources keep changing their own dictionaries
+	_held_candidate = {}
+	_held_candidate_s = 0.0
+
+## The choice the held pose aims at. `fresh` is preparation_contact(); `delta` advances the clocks
+## (0 when this interval was already counted).
+func _held_preparation(fresh: Dictionary, delta: float) -> Dictionary:
+	var ball = player._get_ball_ref()
+	var flight: int = ball.flight_id if ball != null else -1
+	if phase >= 0 or flight != _held_flight:
+		_reset_held_target()
+		_held_flight = flight
+		if fresh.is_empty() or phase >= 0: return fresh
+	# The plan drops out for a moment on the same ball (often for two frames, while one planner
+	# hands over to another): the committed choice is kept through the gap, so the pose does
+	# not stop and start again. A longer gap ends it; choices already left stay left.
+	if fresh.is_empty():
+		_held_gap_s += delta
+		if held_target.has("time"): held_target["time"] = float(held_target.time) - delta
+		if held_target.is_empty() or _held_gap_s > HOLD_GAP_GRACE or float(held_target.get("time", 1.0)) < 0.0:
+			held_target = {}
+			_held_candidate = {}
+			_held_candidate_s = 0.0
+			return fresh
+		return held_target
+	_held_gap_s = 0.0
+	_held_lock_s = maxf(0.0, _held_lock_s - delta)
+	_held_since_switch_s += delta
+	if held_target.is_empty() or _held_same(fresh, held_target):
+		_commit_held(fresh, false)                       # first choice, or the same one refined
+		return held_target
+	if held_target.has("time"): held_target["time"] = float(held_target.time) - delta
+	# The swing that will really happen, or a committed moment that has passed: switch now.
+	if not contact.is_empty() and _held_same(fresh, contact) or float(held_target.get("time", 1.0)) < 0.0:
+		_commit_held(fresh, true)
+		return held_target
+	# A choice already left on this ball is not gone back to.
+	for left in _held_left:
+		if _held_same(fresh, left): return held_target
+	# A different choice has to hold as the candidate for a moment, one switch at a time.
+	if _held_same(fresh, _held_candidate): _held_candidate_s += delta
+	else: _held_candidate_s = 0.0
+	_held_candidate = fresh
+	if _held_candidate_s >= HOLD_SWITCH_CONFIRM and _held_lock_s <= 0.0: _commit_held(fresh, true)
+	return held_target
+
+func _held_blend_halflife() -> float:
+	return lerpf(HOLD_SWITCH_HALFLIFE, 0.055, clampf(_held_since_switch_s / HOLD_SWITCH_BLEND_S, 0.0, 1.0))
+
 func begin_held_hit() -> void:
 	if phase >= 0: return
+	_reset_held_target()
 	held_hit_seconds = 0.0
 	_charge_control_clock = false
 	_charge_cancel_recovering = false
@@ -334,29 +479,33 @@ func set_charge(ratio: float, control_delta: float = -1.0) -> void :
 
 			_prediction_clock = 0.0
 			_update_anticipation(0.0, ball, flight)
-	var preparation: Dictionary = preparation_contact()
+	var preparation: Dictionary = _held_preparation(preparation_contact(), maxf(control_delta, 0.0))
 	if preparation.is_empty():
 		if visual_pose == null: visual_pose = _ready_pose(0.0)
-		_apply_visual()
+		if not _tick_writes_rig(): _apply_visual()
 		return
 	_charge_target_pose = _held_preparation_pose(preparation)
 	if visual_pose == null: visual_pose = _ready_pose(0.0)
 	if control_delta >= 0.0 and phase < 0:
 		_update_charge_pose(control_delta, true, _charge_target_pose)
 	posture.transition_pose_blend = visual_pose
-	posture.force_posture_update(visual_pose)
+	if not _tick_writes_rig(): posture.force_posture_update(visual_pose)
 
 func _update_charge_pose(delta: float, from_control_clock: bool = false, prepared_pose: PostureDefinition = null) -> void :
 	# Only the control-clock call consumes a target during a live held input.
 	# Sampling one on a world tick was discarded here and overwritten by the
 	# next control update, including its latest moving contact/root/body state.
 	if phase < 0 and _charge_control_clock and not from_control_clock: return
-	var preparation: Dictionary = preparation_contact()
+	# The control clock already advanced the commitment in set_charge for this interval.
+	var preparation: Dictionary = _held_preparation(preparation_contact(), 0.0 if from_control_clock else delta)
 	if preparation.is_empty(): return
 	# The input path has already sampled this exact held interval and contact.
 	_charge_target_pose = BodyTurn.sample(prepared_pose if prepared_pose != null else _held_preparation_pose(preparation))
 	var previous_preparation: PostureDefinition = visual_pose
-	visual_pose = ReadyMotion.blend_pose(visual_pose if visual_pose != null else _ready_pose(0.0), _charge_target_pose, delta, 0.055)
+	# The target is re-aimed in steps (the ball prediction refreshes ten times a second); easing the
+	# target first, then the pose toward it, turns each step into a smooth move instead of a pulse.
+	_held_target_pose = ReadyMotion.blend_pose(_held_target_pose if _held_target_pose != null else _charge_target_pose, _charge_target_pose, delta, HOLD_TARGET_HALFLIFE)
+	visual_pose = ReadyMotion.blend_pose(visual_pose if visual_pose != null else _ready_pose(0.0), _held_target_pose, delta, _held_blend_halflife())
 	if phase < 0: visual_pose = held_hit_motion.fit_live_preparation(visual_pose, player, previous_preparation, delta)
 
 func _held_preparation_pose(preparation: Dictionary) -> PostureDefinition:
@@ -410,14 +559,19 @@ func request_swing(ratio: float) -> bool:
 	if ball == null or ball.flight_id != _flight_id: return false
 	var action_game = player.get_parent()
 	_released_joint_path = false
-	if action_game.selected_movement_intent == "ERNE":
+	# The Erne marker (special_moments.gd) means "an Erne is on here": HIT takes it.
+	# If the jump no longer fits, the ordinary swing goes ahead (only an explicit
+	# ERNE pick refuses the swing, as before).
+	var auto_erne: bool = action_game.selected_movement_intent == "AUTO" and bool(action_game.get("erne_chance_live"))
+	if action_game.selected_movement_intent == "ERNE" or auto_erne:
 		var opportunity: Dictionary = player.erne_action.choose_plan(ball)
-		if not player.erne_action.begin(opportunity, ball): return false
-		_released_joint_path = true
-		footwork.cancel("Erne owns lateral jump", false)
-		contact = {}
-		anticipated_contact = opportunity
-		action_game.selected_movement_intent = "AUTO"
+		if player.erne_action.begin(opportunity, ball):
+			_released_joint_path = true
+			footwork.cancel("Erne owns lateral jump", false)
+			contact = {}
+			anticipated_contact = opportunity
+			action_game.selected_movement_intent = "AUTO"
+		elif not auto_erne: return false
 	if contact.is_empty() and not footwork.active and not player.erne_action.active and not anticipated_contact.is_empty():
 		footwork.activate_plan(anticipated_contact, player._get_ball_ref())
 	var preparation: Dictionary = preparation_contact()
@@ -427,6 +581,10 @@ func request_swing(ratio: float) -> bool:
 	_released_joint_path = true
 	charge_ratio = clampf(ratio, 0, 1)
 	_swing_near_kitchen = _near_kitchen_context()
+	var timed: Dictionary = contact if not contact.is_empty() else preparation
+	release_error = NAN
+	if not timed.is_empty() and timed.get("def") != null and is_finite(float(timed.get("time", NAN))):
+		release_error = float(timed.time) - float(timed.def.ft_duration_strike) - preload("res://scripts/gameplay_tuning.gd").TIMING_CENTRE
 
 
 	queued_movement_allowed = contact.is_empty() or footwork.active and not footwork.ready_to_strike() or Vector2(player.current_velocity.x, player.current_velocity.z).length() > 0.35

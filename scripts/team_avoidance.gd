@@ -7,7 +7,10 @@ static func closest_distance(relative_position: Vector3, relative_velocity: Vect
  relative_position.y=0.0;relative_velocity.y=0.0
  var time:float=clampf(-relative_position.dot(relative_velocity)/relative_velocity.length_squared(),0.0,seconds) if relative_velocity.length_squared()>.000001 else 0.0
  return (relative_position+relative_velocity*time).length()
-static func steer(position: Vector3, current: Vector3, desired: Vector3, partners: Array, delta: float, max_speed: float=5.8, acceleration: float=16.0, radius: float=DEFAULT_RADIUS) -> Dictionary:
+## stop_distance: how far the player still has to go. The look-ahead ends where the player
+## stops, so a spot short of the partner is not refused because the path "continues" into them
+## (before: the hitter was steered 0.5 m off its hitting spot on middle balls and missed).
+static func steer(position: Vector3, current: Vector3, desired: Vector3, partners: Array, delta: float, max_speed: float=5.8, acceleration: float=16.0, radius: float=DEFAULT_RADIUS, stop_distance: float=INF) -> Dictionary:
  if not position.is_finite() or not current.is_finite() or not desired.is_finite() or not is_finite(delta) or delta<=0.0:return {"velocity":Vector3.ZERO,"safe":false,"reason":"invalid steering input"}
  current.y=0.0;desired.y=0.0;desired=desired.limit_length(max_speed)
  var step:float=maxf(acceleration,0.0)*delta
@@ -18,11 +21,12 @@ static func steer(position: Vector3, current: Vector3, desired: Vector3, partner
  var best:=Vector3.ZERO;var best_cost:=INF;var best_margin:=-INF;var any_safe:=false
  for candidate in candidates:
   var margin:=INF
+  var horizon:float=maxf(minf(HORIZON,stop_distance/maxf(candidate.length(),.01)),delta)
   for partner:Dictionary in partners:
    var other_position:Vector3=partner.get("root",Vector3.INF);var other_velocity:Vector3=partner.get("velocity",Vector3.ZERO)
    if not other_position.is_finite() or not other_velocity.is_finite():return {"velocity":current.move_toward(Vector3.ZERO,step),"safe":false,"reason":"invalid teammate observation"}
    var combined:float=radius+float(partner.get("radius",DEFAULT_RADIUS))
-   margin=minf(margin,closest_distance(position-other_position,candidate-other_velocity,maxf(HORIZON,delta))-combined)
+   margin=minf(margin,closest_distance(position-other_position,candidate-other_velocity,horizon)-combined)
   var safe:bool=margin>=-.000001
   var cost:float=candidate.distance_squared_to(desired)+candidate.length_squared()*.002
   if safe and (not any_safe or cost<best_cost) or not safe and not any_safe and (margin>best_margin+.000001 or absf(margin-best_margin)<=.000001 and cost<best_cost):

@@ -5,6 +5,7 @@ extends RefCounted
 const SurfaceContacts = preload("res://scripts/player_surface_contacts.gd")
 const LINE_EPSILON: = 0.0001
 const GROUND_EPSILON: = 0.006
+const FAR_FROM_KITCHEN_M := 1.8
 var established_outside: = false
 var _last_root: = Vector3.INF
 
@@ -51,8 +52,11 @@ func update(player) -> void :
 		established_outside = false
 		return
 	var other_inside := false
-	for contact in SurfaceContacts.ground_contacts(player):
-		if contact.inside: other_inside = true
+	# Perf: no body part of a player standing more than FAR_FROM_KITCHEN_M behind the kitchen
+	# line can be on the ground inside the kitchen, so the mesh scan is skipped for them.
+	if absf(player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + FAR_FROM_KITCHEN_M:
+		for contact in SurfaceContacts.ground_contacts(player):
+			if contact.inside: other_inside = true
 	if other_inside: established_outside = false
 	var both_outside: = not other_inside
 	for foot in feet:

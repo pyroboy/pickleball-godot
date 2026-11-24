@@ -42,6 +42,9 @@ const OVERHEAD_RELEASE_RADIUS: float = 2.0
 const MIN_SERVE_SPEED: float = 5.5
 const MAX_SERVE_SPEED: float = 12.0
 const MAX_SERVE_CHARGE_TIME: float = 0.45
+## Rally shots: power grows with the hold up to this many seconds (a tap under
+## human_shot_choice.TAP_SECONDS is still a touch shot). Serves keep MAX_SERVE_CHARGE_TIME.
+const RALLY_FULL_HOLD: float = 1.0
 
 
 const SIDE_BOUND_MARGIN: float = 2.4

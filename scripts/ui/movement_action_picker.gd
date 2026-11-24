@@ -3,6 +3,10 @@ extends Control
 ## commits a physically eligible incoming-ball action through the match driver.
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+# Hidden (user's call 2026-11-23): the "Move: Auto" button between the stick and HIT is
+# gone and movement always stays on Auto (the game still starts reaches itself in Auto).
+# true brings the button, the picker and the V shortcut back.
+const SHOW_PICKER := false
 var game
 var action_button: Button
 var overlay: ColorRect
@@ -95,7 +99,7 @@ func _perf_process(_delta: float) -> void:
 	var driver = game.player_left.special_reach_driver
 	var busy: bool = driver != null and driver.owns_presentation() or _committed_move_busy()
 	var blocked: bool = game._tool_state_active() or not game.hud._gameplay_visible or game.hud._between_point_active or game.hud._guide.visible or game.match_over
-	action_button.visible = not blocked and not _open and not get_tree().paused and game.game_state == game.GameState.PLAYING
+	action_button.visible = SHOW_PICKER and not blocked and not _open and not get_tree().paused and game.game_state == game.GameState.PLAYING
 	action_button.disabled = busy
 	action_button.text = "Move: " + str(game.selected_movement_intent).capitalize()
 	choices.DIVE.disabled = not game.dive_actions_enabled
@@ -112,6 +116,7 @@ func _committed_move_busy() -> bool:
 func is_open() -> bool: return _open
 
 func open_picker() -> void:
+	if not SHOW_PICKER: return
 	if game != null and game._point_transition_blocks_attempt(): return
 	if _open or get_tree().paused or game == null or game._tool_state_active() or game.game_state != game.GameState.PLAYING: return
 	var driver = game.player_left.special_reach_driver

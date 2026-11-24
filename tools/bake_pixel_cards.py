@@ -38,6 +38,25 @@ DETAIL = False          # True: fine marks (brows, ears, laces, logo, strands...
 ELEV = 44.0             # game camera elevation the cards were measured at
 PART_ELEV = {"head": 30.0, "torso": 40.0, "shorts": 44.0, "shoe": 44.0}   # limbs/hand: side view
 PART_SCALE = {"head": 1.25, "hand": 1.3, "shoe": 1.15}                      # drawn larger than life
+# Limbs were 2-3 texels wide and read as sticks, most of all close up (first person). Radius x this.
+LIMB_THICK = {"upper_arm": 1.32, "forearm": 1.36, "thigh": 1.16, "shin": 1.22}
+# Hands are drawn on a finer grid (this many texels per normal texel) so fingers can be shown.
+PART_DETAIL = {"hand": 2.0}
+HAND_STEP = 0.002       # solid sampling step for the hand (its texels are a third of a normal one)
+HAND_STATES = ["open", "grip", "reach", "cup"]   # rows: hand, hand_grip, hand_reach, hand_cup
+# The same parts seen from other heights. The normal rows are drawn for the match camera
+# (PART_ELEV, 30-44 degrees up). "low": about level, another player seen from eye height in
+# first person. "top": from almost overhead, your own body when you look down, top cameras.
+# Limbs and hands seen along their length. The normal limb and hand rows are pure side views; a
+# limb that points toward or away from the eye (your own arm in first person, a leg from above)
+# then has no drawing and was squashed into a block. These rows are the same part tilted
+# toward the camera by this many degrees: "a" seen from its root end (shoulder, elbow, hip, knee,
+# wrist), "b" from its far end. Row names: <part>_a42, <part>_b70, hand_grip_a50, ...
+LIMB_AXIAL = (42.0, 70.0)
+HAND_AXIAL = (50.0,)
+LIMB_PARTS = ["upper_arm", "forearm", "thigh", "shin"]
+VIEW_ELEV = {"low": 8.0, "top": 78.0}
+VIEW_PARTS = ["head", "torso", "shorts", "shoe"]
 LIGHT = np.array([-0.45, 0.75, 0.55]); LIGHT /= np.linalg.norm(LIGHT)
 OUTLINE = 0.62          # silhouette texels: colour x this
 
@@ -114,14 +133,17 @@ def const(key): return lambda p: np.full(len(p), key, dtype=object)
 # Part-local coordinates: x lateral, y up, z forward (toward the camera in view 0),
 # metres from the card's joint.
 
-def _grid(lo, hi):
-    axes = [np.arange(a, b + STEP, STEP) for a, b in zip(lo, hi)]
+def _grid(lo, hi, step=None):
+    step = step or STEP
+    axes = [np.arange(a, b + step, step) for a, b in zip(lo, hi)]
     return np.stack(np.meshgrid(*axes, indexing="ij"), -1).reshape(-1, 3)
 
 class Solid:
-    def __init__(self, kind, centre, radii, paint, y0=None, y1=None, keep=None, taper=1.0, priority=0):
+    def __init__(self, kind, centre, radii, paint, y0=None, y1=None, keep=None, taper=1.0, priority=0, step=None, end=None):
         self.kind, self.c, self.r = kind, np.array(centre, float), np.array(radii, float)
         self.paint, self.y0, self.y1, self.keep, self.taper, self.priority = paint, y0, y1, keep, taper, priority
+        self.step = step or STEP
+        self.end = None if end is None else np.array(end, float)
         self._pts = None
 
     def points(self):
@@ -130,22 +152,34 @@ class Solid:
 
     def _points(self):
         c, r = self.c, self.r
-        if self.kind == "ell":
-            p = _grid(c - r, c + r)
+        st = self.step
+        if self.kind == "cap":     # capsule from c to end, radius r[0] (tapering to r[1] at the end)
+            e = self.end; rm = float(max(r[0], r[1]))
+            p = _grid(np.minimum(c, e) - rm, np.maximum(c, e) + rm, st)
+            ax = e - c; L2 = max(float(ax @ ax), 1e-12)
+            t = np.clip(((p - c) @ ax) / L2, 0.0, 1.0)
+            near = c + t[:, None] * ax
+            rad = r[0] + (r[1] - r[0]) * t
+            off = p - near
+            m = (off ** 2).sum(1) <= rad ** 2
+            p = p[m]; n = off[m]
+            n[np.linalg.norm(n, axis=1) < 1e-9] = [0, 0, 1]
+        elif self.kind == "ell":
+            p = _grid(c - r, c + r, st)
             m = (((p - c) / r) ** 2).sum(1) <= 1.0
             p = p[m]; n = (p - c) / r ** 2
         elif self.kind == "cyl":   # elliptical cylinder along y; radius x taper at y0
             rr = r * max(1.0, self.taper)
-            p = _grid([c[0] - rr[0], self.y0, c[2] - rr[2]], [c[0] + rr[0], self.y1, c[2] + rr[2]])
+            p = _grid([c[0] - rr[0], self.y0, c[2] - rr[2]], [c[0] + rr[0], self.y1, c[2] + rr[2]], st)
             t = (p[:, 1] - self.y0) / max(self.y1 - self.y0, 1e-6)
             scale = self.taper + (1.0 - self.taper) * t
             q = (p[:, [0, 2]] - c[[0, 2]]) / (r[[0, 2]] * scale[:, None])
             m = (q ** 2).sum(1) <= 1.0
             p = p[m]; n = (p - c) / (np.array([r[0], 1.0, r[2]]) * scale[m, None]) ** 2; n[:, 1] = 0.0
             ends = np.zeros(len(p))      # flat caps
-            n[p[:, 1] > self.y1 - STEP * 1.5] += [0, 2.0, 0]
+            n[p[:, 1] > self.y1 - st * 1.5] += [0, 2.0, 0]
         else:
-            p = _grid(c - r, c + r)
+            p = _grid(c - r, c + r, st)
             n = (p - c) / r
             n = np.where(np.abs(n) == np.abs(n).max(1, keepdims=True), np.sign(n), 0.0)
         if self.keep is not None and len(p):
@@ -156,6 +190,7 @@ class Solid:
 def ell(c, r, paint, **kw): return Solid("ell", c, r, paint, **kw)
 def box(c, r, paint, **kw): return Solid("box", c, r, paint, **kw)
 def cyl(c, r, y0, y1, paint, **kw): return Solid("cyl", c, [r[0], 0, r[1]], paint, y0=y0, y1=y1, **kw)
+def cap(p0, p1, r0, r1, paint, **kw): return Solid("cap", p0, [r0, r1, 0], paint, end=p1, **kw)
 
 class Decal:
     """Pixel-exact mark at a surface point: drawn only when that point is the visible
@@ -364,7 +399,7 @@ def limb(length, r_top, r_bot, base, covers):
     return s
 
 def upper_arm_part(pr, L):
-    a = pr["arms"]; g = v(a, "upper", 1.0); top = pr["top"]
+    a = pr["arms"]; g = v(a, "upper", 1.0) * LIMB_THICK["upper_arm"]; top = pr["top"]
     sleeved = top.get("type") in ("tee", "polo", "compression")
     covers = []
     sl = v(top, "sleeve_length", 0.4)
@@ -378,10 +413,12 @@ def upper_arm_part(pr, L):
         s.append(ell([0, -0.42 * L, 0.01], [0.046 * g, 0.075, 0.052 * g], const(pr["skin"])))      # biceps
         s.append(ell([0, -0.5 * L, -0.012], [0.04 * g, 0.08, 0.045 * g], const(pr["skin"])))      # triceps
     s.append(ell([0, 0, 0], [0.05 * g, 0.045, 0.05 * g], const(covers[0][2] if sleeved else pr["skin"])))
+    # The elbow end is rounded so it meets the forearm's elbow as a joint, not a seam.
+    s.append(ell([0, -L, 0], [0.037 * g, 0.03, 0.037 * g], const(pr["skin"] if not (sleeved and sl >= 0.95) else covers[0][2])))
     return s, []
 
 def forearm_part(pr, L):
-    a = pr["arms"]; g = v(a, "fore", 1.0); acc = a.get("forearm", {})
+    a = pr["arms"]; g = v(a, "fore", 1.0) * LIMB_THICK["forearm"]; acc = a.get("forearm", {})
     skin = a.get("forearm_skin", pr["skin"])
     covers = []
     kind, col = acc.get("type"), acc.get("color", "#1a1a1a")
@@ -392,23 +429,71 @@ def forearm_part(pr, L):
     if kind == "compression_sleeve": covers.append((0.0, 0.95, col, 0.004))
     s = limb(L, 0.038 * g, 0.027 * g, skin, covers)
     if DETAIL: s.append(ell([0, -0.22 * L, 0.004], [0.042 * g, 0.075, 0.04 * g], const(covers[0][2] if covers and covers[0][0] == 0.0 else skin)))
-    d = [Decal([0, -0.02, -0.036 * g], [0, 0, -1], skin if not covers or covers[0][0] > 0 else covers[0][2], ((0, 0),), shade=2)]  # elbow
+    elbow = skin if not covers or covers[0][0] > 0 else covers[0][2]
+    # The elbow: a knob a little wider than the arm, with its point shaded at the back.
+    s.append(ell([0, -0.004, -0.004], [0.043 * g, 0.036, 0.045 * g], const(elbow)))
+    d = [Decal([0, -0.012, -0.047 * g], [0, 0, -1], elbow, ((0, 0), (0, 1)), shade=2, essential=True)]
     return s, d
 
-def hand_part(pr):
-    a = pr["arms"]; size = v(a, "hand", 1.0); col = a.get("glove", pr["skin"])
-    s = [ell([0, -0.035 * size, 0], [0.033 * size, 0.042 * size, 0.02 * size], const(col)),
-         ell([0, -0.075 * size, 0.004], [0.03 * size, 0.03 * size, 0.017 * size], const(col)),          # fingers
-         ell([0.03 * size, -0.03 * size, 0.012], [0.012 * size, 0.026 * size, 0.012 * size], const(col))]  # thumb
-    d = []
-    for x in (-0.011, 0.0, 0.011):
-        d.append(Decal([x * size, -0.085 * size, 0.02 * size], [0, 0, 1], col, ((0, 0),), shade=2))
+def hand_part(pr, state="open"):
+    """A hand with a palm, four fingers and a thumb, on the hand's finer grid (PART_DETAIL).
+    y runs down from the wrist, x across the palm (+ = thumb side), z out of the palm.
+    open:  ready for the ball: fingers straight and a little apart, thumb out.
+    grip:  closed round the paddle handle (either hand that is on the paddle).
+    reach: fingers straight and spread wide, at full stretch.
+    cup:   holding the ball: fingers and thumb curled forward round it, palm hollowed."""
+    a = pr["arms"]; S = v(a, "hand", 1.0); col = a.get("glove", pr["skin"])
+    kw = {"step": HAND_STEP}
+    paint = const(col)
+    s, d = [], []
+    s.append(ell([0, -0.036 * S, 0], [0.037 * S, 0.040 * S, 0.016 * S], paint, **kw))                   # palm
+    s.append(cap([0, 0.004 * S, 0], [0, -0.014 * S, 0], 0.024 * S, 0.028 * S, paint, **kw))             # wrist
+    xs = (0.026, 0.0088, -0.0088, -0.026)          # index, middle, ring, little across the knuckles
+    lens = (0.058, 0.064, 0.059, 0.046)
+    ky = -0.068
+    r = 0.0086 * S
+    line_z = 0.016
+    if state == "grip":
+        for x in xs:    # over the knuckle, down the front, tips tucked back toward the palm
+            s.append(cap([x * S, ky * S, 0.002 * S], [x * S, (ky - 0.020) * S, 0.022 * S], r, r, paint, **kw))
+            s.append(cap([x * S, (ky - 0.020) * S, 0.022 * S], [x * S, (ky + 0.004) * S, 0.032 * S], r, r * 0.92, paint, **kw))
+        s.append(cap([0.034 * S, -0.026 * S, 0.010 * S], [-0.006 * S, -0.058 * S, 0.036 * S], 0.0105 * S, 0.0095 * S, paint, **kw))   # thumb across
+        line_z = 0.030
+    elif state == "cup":
+        for x, L in zip(xs, lens):   # out from the knuckle, then curling forward and up round the ball
+            mid = [x * 1.12 * S, (ky - L * 0.5) * S, 0.022 * S]
+            tip = [x * 1.16 * S, (ky - L * 0.62) * S, 0.048 * S]
+            s.append(cap([x * S, ky * S, 0.002 * S], mid, r, r * 0.95, paint, **kw))
+            s.append(cap(mid, tip, r * 0.95, r * 0.86, paint, **kw))
+        s.append(cap([0.030 * S, -0.022 * S, 0.008 * S], [0.050 * S, -0.050 * S, 0.026 * S], 0.0105 * S, 0.0098 * S, paint, **kw))   # thumb, curling in
+        s.append(cap([0.050 * S, -0.050 * S, 0.026 * S], [0.040 * S, -0.064 * S, 0.046 * S], 0.0098 * S, 0.009 * S, paint, **kw))
+        line_z = 0.026
+    else:
+        spread = 1.55 if state == "reach" else 1.24
+        curl = 0.004 if state == "reach" else 0.009
+        grow = 1.06 if state == "reach" else 1.0
+        for x, L in zip(xs, lens):
+            tip = [x * spread * S, (ky - L * grow) * S, curl * S]
+            s.append(cap([x * S, ky * S, 0.0], tip, r, r * 0.86, paint, **kw))
+        if state == "reach":
+            s.append(cap([0.030 * S, -0.020 * S, 0.004 * S], [0.070 * S, -0.050 * S, 0.006 * S], 0.0105 * S, 0.009 * S, paint, **kw))
+        else:
+            s.append(cap([0.030 * S, -0.022 * S, 0.006 * S], [0.062 * S, -0.058 * S, 0.012 * S], 0.0105 * S, 0.009 * S, paint, **kw))
+    # The lines between the fingers, on both faces (pixel-exact, so they survive the downsample).
+    line = ((0, 0), (0, 1), (0, 2)) if state in ("grip", "cup") else ((0, 0), (0, 1), (0, 2), (0, 3))
+    for x in (0.0174, 0.0, -0.0174):
+        y = (ky - 0.008) * S if state in ("grip", "cup") else (ky - 0.006) * S
+        sx = x * {"reach": 1.12, "open": 1.06, "cup": 1.06}.get(state, 1.0)
+        d.append(Decal([sx * S, y, line_z * S], [0, 0, 1], col, line, shade=2, essential=True, facing=0.3))
+        d.append(Decal([sx * S, y, -0.012 * S], [0, 0, -1], col, line, shade=2, essential=True, facing=0.3))
+    for x in xs:      # knuckles, a light spot each on the back of the hand
+        d.append(Decal([x * S, (ky + 0.004) * S, -0.012 * S], [0, 0, -1], col, ((0, 0),), shade=0, essential=True, facing=0.3))
     if a.get("tape"):
-        s.append(box([0, -0.07 * size, 0], [0.032 * size, 0.006, 0.02 * size], const(a["tape"]), priority=1))
+        s.append(box([0, -0.062 * S, 0], [0.036 * S, 0.006, 0.018 * S], const(a["tape"]), priority=1, **kw))
     return s, d
 
 def thigh_part(pr, L):
-    lg = pr["legs"]; g = v(lg, "thigh", 1.0); b = pr["bottom"]
+    lg = pr["legs"]; g = v(lg, "thigh", 1.0) * LIMB_THICK["thigh"]; b = pr["bottom"]
     covers = []
     cov, key = v(b, "thigh_cover", 0.25), b.get("color", "T")
     skirt = b.get("type", "").startswith("skirt")
@@ -426,11 +511,11 @@ def thigh_part(pr, L):
                      keep=lambda p: np.abs(p[:, 0]) > r * 0.75))
     d = []
     if cov < 0.85:   # kneecap highlight
-        d.append(Decal([0, -L + 0.015, 0.046 * g], [0, 0, 1], pr["skin"], ((0, 0), (1, 0)), shade=0))
+        d.append(Decal([0, -L + 0.015, 0.046 * g], [0, 0, 1], pr["skin"], ((0, 0), (1, 0)), shade=0, essential=True))
     return s, d
 
 def shin_part(pr, L):
-    lg = pr["legs"]; g = v(lg, "shin", 1.0); sock = lg.get("socks", {})
+    lg = pr["legs"]; g = v(lg, "shin", 1.0) * LIMB_THICK["shin"]; sock = lg.get("socks", {})
     covers = []
     b = pr["bottom"]
     over = v(b, "thigh_cover", 0.25) - 1.0
@@ -449,6 +534,8 @@ def shin_part(pr, L):
         covers.append((0.84, 0.98, lg["ankle_tape"], 0.01)); covers.append((0.9, 0.92, scale_hex(lg["ankle_tape"], 0.8), 0.011))
     s = limb(L, 0.045 * g, 0.028 * g, pr["skin"], covers)
     if DETAIL: s.append(ell([0, -0.3 * L, -0.014], [0.045 * g, 0.085, 0.046 * g], const(pr["skin"] if not lg.get("calf_sleeve") else lg["calf_sleeve"])))   # calf
+    knee = covers[0][2] if covers and covers[0][0] == 0.0 and covers[0][1] > 0.05 else pr["skin"]
+    s.append(ell([0, -0.004, 0.006], [0.049 * g, 0.04, 0.05 * g], const(knee)))                    # the knee, a knob
     return s, []
 
 def shoe_part(pr):
@@ -557,38 +644,72 @@ def colourise(out, keys, edge, team, comp):
     return img
 
 def grid_for(meta):
-    """Profile grid: same rows/parts as the original cards at TEXEL / CELL."""
+    """Profile grid: the original nine rows at TEXEL / CELL, then the extra rows.
+    hand rows carry "detail" (texels per normal texel); *_low / *_top are other view heights."""
     k = meta["meters_per_texel"] / TEXEL
     off = (CELL - meta["cell"][0] * k) / 2.0
     parts = {}
     for name, info in meta["parts"].items():
         q = {"row": info["row"], "anchor": [info["anchor"][0] * k + off, info["anchor"][1] * k + off]}
         if "end" in info: q["end"] = [info["end"][0] * k + off, info["end"][1] * k + off]
+        if name in PART_DETAIL: q["detail"] = PART_DETAIL[name]
         parts[name] = q
-    return {"cell": [CELL, CELL], "meters_per_texel": TEXEL, "parts": parts}
+    row = int(meta["rows"])
+    for state in HAND_STATES[1:]:
+        q = dict(parts["hand"]); q["row"] = row; row += 1
+        parts["hand_" + state] = q
+    for tag in VIEW_ELEV:
+        for name in VIEW_PARTS:
+            q = dict(parts[name]); q["row"] = row; q["elev"] = VIEW_ELEV[tag]; row += 1
+            parts["%s_%s" % (name, tag)] = q
+    def axial(base, degrees):
+        nonlocal row
+        for e in degrees:
+            for tag, sign in (("a", 1.0), ("b", -1.0)):
+                q = dict(parts[base]); q["row"] = row; q["axial"] = sign * e; q["of"] = base; row += 1
+                if "end" in q:      # the far joint, where the tilted drawing puts it
+                    q["end"] = [q["end"][0], q["anchor"][1] + (q["end"][1] - q["anchor"][1]) * math.cos(math.radians(e))]
+                parts["%s_%s%d" % (base, tag, int(e))] = q
+    for name in LIMB_PARTS: axial(name, LIMB_AXIAL)
+    for state in HAND_STATES: axial("hand" if state == "open" else "hand_" + state, HAND_AXIAL)
+    return {"cell": [CELL, CELL], "cols": COLS, "rows": row, "meters_per_texel": TEXEL, "parts": parts,
+            "view_elev": dict(VIEW_ELEV, mid=ELEV)}
 
 def build_parts(pr, grid):
     parts = grid["parts"]
     L = lambda name: (parts[name]["end"][1] - parts[name]["anchor"][1]) * TEXEL
-    return {
+    built = {
         "head": head_part(pr), "torso": torso_part(pr), "shorts": bottom_part(pr),
         "upper_arm": upper_arm_part(pr, L("upper_arm")), "forearm": forearm_part(pr, L("forearm")),
-        "hand": hand_part(pr), "thigh": thigh_part(pr, L("thigh")), "shin": shin_part(pr, L("shin")),
+        "hand": hand_part(pr, "open"), "thigh": thigh_part(pr, L("thigh")), "shin": shin_part(pr, L("shin")),
         "shoe": shoe_part(pr),
     }
+    for state in HAND_STATES[1:]: built["hand_" + state] = hand_part(pr, state)
+    return built
 
 def bake(pid, meta):
     with open(os.path.join(PROFILES, pid + ".json")) as f: pr = json.load(f)
     comp = make_compensator(float(meta.get("gain", 1.0)))
     grid = grid_for(meta)
     parts = build_parts(pr, grid)
-    rows = int(meta["rows"])
+    rows = int(grid["rows"])
     atlases = {team: np.zeros((rows * CELL, COLS * CELL, 4), np.uint8) for team in TEAMS}
+    jobs = []     # (row name, solids, decals, base part, elevation)
     for name, (solids, decals) in parts.items():
+        base = "hand" if name.startswith("hand") else name
+        jobs.append((name, solids, decals, base, PART_ELEV.get(base, 0.0)))
+    for tag, elev in VIEW_ELEV.items():
+        for name in VIEW_PARTS:
+            jobs.append(("%s_%s" % (name, tag), parts[name][0], parts[name][1], name, elev))
+    for name, info in grid["parts"].items():
+        if "axial" in info:
+            src = info["of"]
+            jobs.append((name, parts[src][0], parts[src][1], "hand" if src.startswith("hand") else src, float(info["axial"])))
+    for name, solids, decals, base, elev in jobs:
         info = grid["parts"][name]
-        mpt = TEXEL / PART_SCALE.get(name, 1.0)
+        mpt = TEXEL / PART_SCALE.get(base, 1.0) / PART_DETAIL.get(base, 1.0)
         for k in range(COLS):
-            out, keys, edge = render(solids, decals, k, info["anchor"], PART_ELEV.get(name, 0.0), mpt)
+            out, keys, edge = render(solids, decals, k, info["anchor"], elev, mpt)
             for team, atlas in atlases.items():
                 atlas[info["row"] * CELL:(info["row"] + 1) * CELL, k * CELL:(k + 1) * CELL] = colourise(out, keys, edge, team, comp)
     paths = {}
@@ -626,10 +747,14 @@ def _figure(atlas, k, grid):
             info = grid["parts"][name]
             img = cell(name, k if side < 0 else (COLS - k) % COLS)
             if side > 0: img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            img.info["detail"] = float(info.get("detail", 1.0))
             sy = ce if "end" in info and name != "hand" else 1.0
             items.append((side * x * math.sin(th), img, -side * x, y, info["anchor"], sy))
     for depth, img, x, y, anc, sy in sorted(items, key=lambda t: t[0]):
         if sy != 1.0: img = img.resize((CELL, max(1, round(CELL * sy))), Image.NEAREST); anc = (anc[0], anc[1] * sy)
+        if img.info.get("detail", 1.0) != 1.0:     # finer-grid parts (hands) are drawn at 1 / detail, as in the game
+            dt = img.info["detail"]
+            img = img.resize((max(1, round(img.width / dt)), max(1, round(img.height / dt))), Image.BOX); anc = (anc[0] / dt, anc[1] / dt)
         px = ox + x * math.cos(th) / mpt - anc[0]
         py = oy - y * ce / mpt - anc[1]
         canvas.alpha_composite(img, (int(round(px)), int(round(py))))
@@ -647,6 +772,25 @@ def sheet(ids, meta, team, views=(0, 2, 4, 6, 8, 12)):
         for c, fig in enumerate(row): out.alpha_composite(fig, (c * fw, r * fh))
     out.convert("RGB").resize((out.width * 2, out.height * 2), Image.NEAREST).save(os.path.join(ROOT, "logs/sprite_profiles_%s.png" % team))
 
+def detail_sheet(pid, meta, team="blue", scale=6):
+    """Close-ups for review: the three hand rows, and head / torso / shorts / shoe at the three
+    view heights, eight views each -> logs/sprite_detail_<id>_<team>.png (on-screen colours)."""
+    grid = meta["profiles"][pid]["grid"]
+    atlas = _display(Image.open(os.path.join(OUT, "%s_%s.png" % (pid, team))).convert("RGBA"), float(meta.get("gain", 1.0)))
+    names = ["hand", "hand_a50", "hand_b50", "hand_grip", "hand_grip_a50", "hand_cup", "hand_cup_a50", "hand_cup_b50"]
+    for limb_name in ("upper_arm", "forearm", "thigh"):
+        names += [limb_name + "_b70", limb_name + "_b42", limb_name, limb_name + "_a42", limb_name + "_a70"]
+    for part in VIEW_PARTS: names += [part + "_low", part, part + "_top"]
+    views = (0, 2, 4, 6, 8, 10, 12, 14)
+    out = Image.new("RGBA", (CELL * len(views), CELL * len(names)), (30, 93, 167, 255))
+    for r, name in enumerate(names):
+        row = grid["parts"][name]["row"]
+        for c, k in enumerate(views):
+            out.alpha_composite(atlas.crop((k * CELL, row * CELL, (k + 1) * CELL, (row + 1) * CELL)), (c * CELL, r * CELL))
+    path = os.path.join(ROOT, "logs/sprite_detail_%s_%s.png" % (pid, team))
+    out.convert("RGB").resize((out.width * scale, out.height * scale), Image.NEAREST).save(path)
+    return path
+
 if __name__ == "__main__":
     np.seterr(all="ignore")  # numpy 2 + Accelerate raises spurious matmul warnings
     with open(META) as f: meta = json.load(f)
@@ -663,3 +807,6 @@ if __name__ == "__main__":
         all_ids = sorted(profiles)
         for team in TEAMS: sheet(all_ids, meta, team)
         print("preview: logs/sprite_profiles_blue.png, logs/sprite_profiles_red.png")
+    if "--detail" in sys.argv:
+        os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
+        for pid in ids: print("detail:", detail_sheet(pid, meta))

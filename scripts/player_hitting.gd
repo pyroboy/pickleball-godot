@@ -206,7 +206,13 @@ func set_serve_charge_visual(charge_ratio: float, control_delta: float = -1.0) -
 	if game and "game_serve" in game and game.game_serve and game.game_serve.is_charging() and game.game_state == game.GameState.WAITING:
 		if game.serving_team == _player.player_num:
 			if control_delta >= 0.0: game.game_serve.advance_held_visual(control_delta)
-			set_underhand_serve_charge(charge_ratio)
+			# The physics tick writes the charge pose (game_serve.gd "One writer"); writing it
+			# here as well made the body flip between two poses on alternate frames.
+			if game.game_serve.has_method("tick_presents_waiting") and game.game_serve.tick_presents_waiting():
+				serving_visual_active = true
+				charge_visual_active = true
+			else:
+				set_underhand_serve_charge(charge_ratio)
 		return
 	serving_visual_active = false
 	if _player.posture and "human_contact" in _player.posture and _player.posture.human_contact and _player.posture.human_contact.phase >= 1:

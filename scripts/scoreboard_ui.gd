@@ -21,6 +21,7 @@ var _game: Node
 var _context_key: Array = []
 var _context_portrait: = false
 
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const AI_DIFFICULTY_NAMES: Array[String] = ["EASY", "MEDIUM", "HARD"]
 const AI_DIFFICULTY_COLORS: Array[Color] = [Color(0.4, 1.0, 0.4), Color(1.0, 0.85, 0.3), Color(1.0, 0.35, 0.35)]
 
@@ -70,30 +71,28 @@ func update_difficulty(difficulty: int) -> void :
 
 func show_rally_result(winner: int, side_out: bool, complete: bool = false) -> void:
 	if not is_instance_valid(_hud) or not is_instance_valid(_game): return
-	# Name the team every time, in its colour: who won the rally and what changed.
+	# Kit banner: a short headline on a plate in the winning team's colour; the ribbon
+	# under it says what changed. The score pill already shows the score.
 	var owner: String = _hud.team_name(winner)
 	var other: String = _hud.team_name(1 - winner) if winner in [0, 1] else ""
-	var color: Color = Color("4eb8ff") if winner == 0 else Color("ff6278")
-	var plural: bool = owner not in ["You", "Opponents"]   # "Your team scores", "Opponents score"
-	var score_line := "%s %d  –  %d %s" % [_hud.team_name(0), _game.score_left, _game.score_right, _hud.team_name(1)]
-	var headline := "SIDE OUT" if side_out else ("%s SCORE%s" % [owner.to_upper(), "S" if plural else ""])
-	var detail := ("%s serve%s now" % [owner, "s" if plural else ""]) if side_out else score_line
+	var color: Color = UiTheme.TEAM_BLUE if winner == 0 else UiTheme.TEAM_RED
+	var plural: bool = owner not in ["You", "Opponents"]   # "Your team serves", "Opponents serve"
+	var pvp: bool = _game.get("pvp_mode") == true
+	var headline: String = ("POINT %s!" % owner.to_upper()) if pvp else ("YOUR POINT!" if winner == 0 else "THEIR POINT")
+	var detail := ""
+	if side_out:
+		headline = "SIDE OUT"
+		detail = "%s serve%s now" % [owner, "s" if plural else ""]
 	if _game.get("doubles_mode") == true and not complete:
 		var outcome: Dictionary = _game.doubles_controller.last_outcome
-		if not bool(outcome.get("point_scored", false)):
-			if side_out:
-				headline = "SIDE OUT"
-				detail = "%s serve%s now" % [owner, "s" if plural else ""]
-			else:
-				# Serving team lost the rally but keeps serve: the winner did NOT score.
-				color = Color("ffd25a")
-				headline = "SECOND SERVER"
-				detail = "%s win%s the rally · %s keep%s serving" % [owner, "s" if plural else "", other, "s" if other not in ["You", "Opponents"] else ""]
-		else:
-			detail = score_line
+		if not bool(outcome.get("point_scored", false)) and not side_out:
+			# Serving team lost the rally but keeps serve: the winner did NOT score.
+			color = UiTheme.KIT_GOLD
+			headline = "2ND SERVER"
+			detail = "%s keep%s serving" % [other, "s" if other not in ["You", "Opponents"] else ""]
 	if complete:
 		headline = "%s WIN%s!" % [owner.to_upper(), "S" if plural else ""]
-		detail = "Final · " + score_line
+		detail = "Final  %d – %d" % [_game.score_left, _game.score_right]
 	_hud.show_rally_result(headline, detail, color)
 	_rally_visible_timer = 2.8
 	_rally_generation = _game._point_reset_generation
@@ -108,7 +107,7 @@ func show_fault(headline: String, detail: String, tone: int = 0) -> void :
 	if tone != 0 and is_instance_valid(_hud) and _hud.has_method("set_rally_reason"):
 		# With a human playing, the reason joins the result banner (one banner,
 		# not two): headline, this short line, then the score.
-		_hud.set_rally_reason(detail, Color("bde879") if tone > 0 else Color("ff8f80"))
+		_hud.set_rally_reason(detail, UiTheme.KIT_GOLD if tone > 0 else UiTheme.PLUM_RED)
 		if _hud.get("fault"): _hud.fault.visible = false
 		_fault_visible_timer = 0.0
 		return
@@ -132,20 +131,22 @@ func _place_fault_banner(edge: Color, font_size: int) -> void:
 	var view: Vector2 = label.get_viewport().get_visible_rect().size
 	var portrait: bool = layout.is_portrait(view)
 	var scale: float = layout.scale_for(view) if portrait else 1.0
-	var panel := StyleBoxFlat.new()
-	panel.bg_color = Color(0.04, 0.08, 0.12, 0.9)
-	panel.border_color = edge
-	panel.set_border_width_all(maxi(2, roundi(2.0 * scale)))
-	panel.set_corner_radius_all(roundi(12.0 * scale))
+	# Kit ribbon: solid gold (went your way) or deep red plate, pixel text, cut corners.
+	var good: bool = edge.g > edge.r
+	var panel := UiTheme.button_style(UiTheme.KIT_GOLD if good else UiTheme.PLUM_RED)
+	label.add_theme_color_override("font_color", UiTheme.PANEL if good else UiTheme.INK)
+	label.add_theme_font_override("font", UiTheme.pixel_font())
+	label.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	label.text = label.text.to_upper()
 	panel.content_margin_left = 16.0 * scale
 	panel.content_margin_right = 16.0 * scale
 	panel.content_margin_top = 9.0 * scale
 	panel.content_margin_bottom = 10.0 * scale
 	label.add_theme_stylebox_override("normal", panel)
-	label.add_theme_font_size_override("font_size", roundi(font_size * scale))
+	label.add_theme_font_size_override("font_size", UiTheme.pixel_size(font_size * scale))
 	# Size the panel to its text: each line measured, never wider than the screen.
 	var font: Font = label.get_theme_font("font")
-	var size_px: int = roundi(font_size * scale)
+	var size_px: int = UiTheme.pixel_size(font_size * scale)
 	var lines: PackedStringArray = label.text.split("\n")
 	var text_width := 0.0
 	for line in lines: text_width = maxf(text_width, font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, size_px).x)

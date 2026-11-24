@@ -28,6 +28,8 @@ const FAR_M := 0.75                                        # paths further than 
 const AROUND_FADE := 0.3                                   # step 1 fades in as the straight path comes this close
 
 static var enabled: bool = OS.get_environment("PICKLEBALL_AROUND_BODY") != "0"
+static var _probe_on: bool = OS.get_cmdline_user_args().has("--blend-probe")
+static var _probe: Dictionary = {}
 static var _rings: Array = []   # body_surface_profile rings: [half-width, y, half-depth], pelvis -> neck
 
 ## Torso half-width and half-depth at body-pivot height y (the game's surface profile, pelvis to
@@ -45,6 +47,11 @@ static func section(y: float) -> Vector2:
 ## Translation for the paddle of a blend at fraction `t` (0..1): `hand` / `head` now, and at the
 ## blend's start (`*_a`) and end (`*_b`). Canonical pose frame; ZERO when the path is clear.
 static func shift(pose, hand: Vector3, head: Vector3, hand_a: Vector3, head_a: Vector3, hand_b: Vector3, head_b: Vector3, t: float) -> Vector3:
+	if _probe_on:   # tools/_human_perf_probe.gd
+		var st: Array = get_stack()
+		var key := ""
+		for i in range(1, mini(st.size(), 14)): key += "%s:%d < " % [st[i].function, st[i].line]
+		_probe[key] = int(_probe.get(key, 0)) + 1
 	if not enabled or pose == null: return Vector3.ZERO
 	# Cheap exit (most blends): the straight path and the paddle stay far from the torso axis.
 	if _far(hand_a.lerp(head_a, 0.5), hand_b.lerp(head_b, 0.5)) and _far(hand, head): return Vector3.ZERO

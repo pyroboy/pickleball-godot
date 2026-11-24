@@ -15,7 +15,7 @@ class_name CardReactions
 ## same one twice in a row, with this player's own RNG (the bench-seeded global RNG is untouched).
 ## Plays only while the ball is dead; fades out at once when the next rally starts.
 
-const CHANNELS: = ["arm", "elbow", "torso", "head", "bob", "spin"]
+const CHANNELS: = ["arm", "elbow", "torso", "head", "bob", "spin", "look", "shrug", "squat", "turn"]
 const FADE_OUT: = 0.15
 # name -> [[t, {channel: value}], ...]; missing channels are 0 at that key.
 const REACTIONS: = {
@@ -31,6 +31,28 @@ const REACTIONS: = {
 		[1.45, {}]],
 	"head_drop_small": [[0.0, {}], [0.30, {"head": 18.0, "torso": 6.0, "arm": -8.0}], [0.80, {"head": 20.0, "torso": 6.0, "arm": -8.0}],
 		[1.10, {}]],
+	# Hype: three loaded hops with the paddle arm pumping.
+	"hype_hops": [[0.0, {}], [0.10, {"squat": 0.4, "arm": 20.0, "elbow": 40.0}], [0.22, {"bob": 0.05, "arm": 40.0, "elbow": 70.0}],
+		[0.34, {"squat": 0.4, "arm": 20.0, "elbow": 40.0}], [0.46, {"bob": 0.05, "arm": 40.0, "elbow": 70.0}],
+		[0.58, {"squat": 0.35, "arm": 20.0, "elbow": 40.0}], [0.70, {"bob": 0.045, "arm": 45.0, "elbow": 75.0}],
+		[0.85, {"squat": 0.2, "arm": 15.0}], [1.05, {}]],
+	# Paddle held up high, then a look across to the partner.
+	"paddle_up": [[0.0, {}], [0.25, {"arm": 75.0, "elbow": 25.0, "torso": -4.0, "shrug": 0.02}],
+		[0.90, {"arm": 80.0, "elbow": 20.0, "torso": -5.0, "shrug": 0.02, "look": 35.0}], [1.30, {}]],
+	# "Let's go": turns toward the partner and pumps twice.
+	"lets_go": [[0.0, {}], [0.20, {"turn": 20.0, "look": 30.0, "arm": 30.0, "elbow": 60.0}],
+		[0.34, {"turn": 20.0, "look": 30.0, "arm": 50.0, "elbow": 85.0, "bob": 0.02}], [0.48, {"turn": 20.0, "look": 30.0, "arm": 28.0, "elbow": 55.0}],
+		[0.62, {"turn": 20.0, "look": 30.0, "arm": 50.0, "elbow": 85.0, "bob": 0.02}], [0.90, {"turn": 12.0, "look": 20.0, "arm": 20.0, "elbow": 30.0}],
+		[1.25, {}]],
+	# Shake it off: a quick shake of the head, then the shoulders roll up and drop.
+	"shake_off": [[0.0, {}], [0.15, {"look": 25.0}], [0.30, {"look": -25.0}], [0.45, {"look": 25.0}], [0.60, {"look": -18.0, "shrug": 0.02}],
+		[0.85, {"shrug": 0.03, "torso": -3.0}], [1.10, {"shrug": -0.01, "arm": -6.0}], [1.40, {}]],
+	# Reset: a deep breath in (shoulders up, chin up), held, then out with soft knees.
+	"reset_breath": [[0.0, {}], [0.50, {"shrug": 0.035, "torso": -4.0, "head": -8.0}], [1.00, {"shrug": 0.035, "torso": -4.0, "head": -8.0}],
+		[1.50, {"shrug": -0.012, "head": 4.0, "squat": 0.15}], [1.90, {}]],
+	# Turns away from the net for a moment after their own error.
+	"turn_away": [[0.0, {}], [0.40, {"turn": -25.0, "look": -30.0, "head": 8.0}], [1.20, {"turn": -25.0, "look": -30.0, "head": 8.0, "arm": -10.0}],
+		[1.70, {}]],
 }
 
 static var _streaks: Dictionary = {}   # game instance id -> [last winning team, count]
@@ -109,11 +131,12 @@ func _choose(won: bool, erred: bool, streak: int, margin: int) -> String:
 	var cands: Dictionary = {}
 	if won:
 		cands = {"fist_pump": 1.0 + (1.5 if streak >= 2 else 0.0) + (1.0 if margin >= 3 else 0.0),
-			"bounce": 1.2, "paddle_twirl": 0.8, "": 0.6}
+			"bounce": 1.0, "paddle_twirl": 0.8, "hype_hops": 1.0 + (1.0 if streak >= 2 else 0.0),
+			"paddle_up": 0.7, "lets_go": 1.0, "": 0.4}
 	elif erred:
-		cands = {"head_drop": 2.0 + (1.0 if margin <= -3 else 0.0), "head_drop_small": 1.0}
+		cands = {"head_drop": 2.0 + (1.0 if margin <= -3 else 0.0), "head_drop_small": 1.0, "turn_away": 1.2, "shake_off": 1.2}
 	else:
-		cands = {"head_drop_small": 1.0, "": 1.5}
+		cands = {"head_drop_small": 1.0, "shake_off": 1.0, "reset_breath": 1.2, "": 1.0}
 	cands.erase(_last)
 	var total: = 0.0
 	for k in cands: total += float(cands[k])

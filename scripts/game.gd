@@ -28,6 +28,10 @@ var serve_is_charging: = false
 var selected_spin_mode: int = 0
 var selected_shot_intent: String = "AUTO"
 var selected_movement_intent: String = "AUTO"
+## True while the special-shot marker shows an Erne chance for the human (special_moments.gd).
+var erne_chance_live: bool = false
+## Extra on-screen buttons the touch controls hand taps to (e.g. the TIPS button).
+var extra_touch_buttons: Array = []
 var dive_actions_enabled := false
 var _execution_commits: Dictionary = {}
 var _frozen_shot_intent: String = ""
@@ -56,6 +60,10 @@ const SERVE_ZONE_CENTER_TOLERANCE: = 0.2
 
 
 const _RallyScorer = preload("res://scripts/rally_scorer.gd")
+## How each point ended (one definition: bench, phone log, stamp).
+var point_ending = preload("res://scripts/point_ending.gd").new()
+var last_point_ending: Dictionary = {}
+var _rally_start_stamina: Array = [0.0, 0.0, 0.0, 0.0]
 const _ShotPhysics = preload("res://scripts/shot_physics.gd")
 const _ShotProfile = preload("res://scripts/shot_profile.gd")
 const _HumanShotChoice = preload("res://scripts/human_shot_choice.gd")
@@ -419,6 +427,9 @@ func _setup_game() -> void :
 	var stamina_display = preload("res://scripts/ui/stamina_display.gd").new()
 	stamina_display.game = self
 	add_child(stamina_display)
+	var stamina_tips = preload("res://scripts/ui/stamina_tips.gd").new()
+	stamina_tips.game = self
+	add_child(stamina_tips)
 
 	_wire_settings()
 
@@ -509,9 +520,15 @@ func _setup_subsystems() -> void :
 	var match_feel = preload("res://scripts/fx/match_feel.gd").new()
 	add_child(match_feel)
 	match_feel.setup(self)
+	var rally_moments = preload("res://scripts/fx/rally_moments.gd").new()
+	add_child(rally_moments)
+	rally_moments.setup(self)
 	var body_hit_fx = preload("res://scripts/fx/body_hit_fx.gd").new()
 	add_child(body_hit_fx)
 	body_hit_fx.setup(self)
+	var special_moments = preload("res://scripts/fx/special_moments.gd").new()
+	add_child(special_moments)
+	special_moments.setup(self)
 
 
 	game_shots = _GameShots.new()
@@ -565,9 +582,29 @@ func _wire_settings() -> void :
 		_apply_setting(style_key, s.call("get_value", style_key))
 	_apply_setting("gameplay.difficulty", s.call("get_value", "gameplay.difficulty", 0))
 	_apply_setting("gameplay.reaction_delay", s.call("get_value", "gameplay.reaction_delay", 0.0))
+	if RuntimePolicy.autoplay: _note_bench_settings(s)
 	_apply_setting("video.shadow_quality", s.call("get_value", "video.shadow_quality", 1))
 	if s.has_signal("settings_changed") and not s.settings_changed.is_connected(_apply_setting):
 		s.settings_changed.connect(_apply_setting)
+
+## Bench only: actor 0 (the human's slot, AI-driven under --autoplay) gets a style from
+## "gameplay.ai_style_self" (default All-Rounder, as before), and the pinned settings go
+## to the perf log so the bench summary can print them.
+func _note_bench_settings(s: Node) -> void:
+	var styles = preload("res://scripts/ai_playing_styles.gd")
+	var self_style: int = styles.valid_id(int(s.call("get_value", "gameplay.ai_style_self", 0)))
+	var p0 = get_player_by_actor_id(0)
+	if p0 != null and p0.is_ai and p0.ai_brain != null: p0.ai_brain.set_playing_style(self_style)
+	var note: Dictionary = {"difficulty": ai_difficulty, "styles": [styles.NAMES[self_style]]}
+	for actor_id in [1, 2, 3]:
+		note.styles.append(styles.NAMES[styles.valid_id(int(s.call("get_value", styles.SETTINGS[actor_id])))])
+	for key in ["gameplay.execution_accuracy", "gameplay.reaction_delay"]: note[key.trim_prefix("gameplay.")] = s.call("get_value", key)
+	var pins: Dictionary = RuntimePolicy.stamina_pins()
+	for actor_id in pins:
+		var pp = get_player_by_actor_id(int(actor_id))
+		if pp != null: pp.stamina.pinned = float(pins[actor_id]); pp.stamina._pin()
+	note["stamina_pins"] = pins
+	PerfMonitor.note("bench_settings", note)
 
 func _apply_setting(key: String, value: Variant) -> void :
 	var styles = preload("res://scripts/ai_playing_styles.gd")
@@ -590,6 +627,8 @@ func _apply_setting(key: String, value: Variant) -> void :
 					scoreboard_ui.update_difficulty(ai_difficulty)
 			for actor in get_players():
 				if actor.is_ai and actor.ai_brain != null: actor.ai_brain.ai_difficulty = ai_difficulty
+			for actor in get_players():
+				actor.stamina.penalty_scale = float(preload("res://scripts/gameplay_tuning.gd").STAMINA_PENALTY_SCALE[ai_difficulty])
 		"gameplay.reaction_delay":
 			for actor in get_players():
 				if actor.is_ai and actor.ai_brain != null: actor.ai_brain.extra_reaction_delay = clampf(float(value), 0.0, 0.5)
@@ -882,6 +921,13 @@ func _update_charge_ui(charge_ratio: float, pose_already_presented: bool = false
 
 func _perform_player_swing(charge_ratio: float) -> void :
 	if _point_transition_blocks_attempt(): return
+	# Rally hold: power grows with the hold up to RALLY_FULL_HOLD (1 s); a tap is a touch shot.
+	var hold_seconds: float = charge_ratio * PickleballConstants.RALLY_FULL_HOLD
+	var rally_hold: Dictionary = _HumanShotChoice.rally_hold(hold_seconds,
+		mobile_controls.last_flick if mobile_controls != null and "last_flick" in mobile_controls else {})
+	charge_ratio = float(rally_hold.charge)
+	if not rally_hold.touch:
+		charge_ratio = minf(charge_ratio, 1.0 - preload("res://scripts/gameplay_tuning.gd").TIRED_CHARGE_CAP * player_left.stamina.tiredness())
 	var driver = player_left.special_reach_driver
 	if driver != null and driver.owns_presentation(): return
 	if selected_movement_intent == "DIVE" and not dive_actions_enabled:
@@ -919,16 +965,28 @@ func _perform_player_swing(charge_ratio: float) -> void :
 		var preparation: Dictionary = human.preparation_contact()
 		var root: Vector3 = preparation.get("target_root", player_left.global_position) if not preparation.is_empty() else player_left.global_position
 		var contact_height: float = Vector3(preparation.point).y if not preparation.is_empty() else ball.global_position.y
-		var choice: Dictionary = _HumanShotChoice.choose(charge_ratio, absf(root.z), contact_height, _pending_auto_shot_type == "SMASH", aim_controller.get_target(), aim_controller._end_sign)
+		var choice: Dictionary = _HumanShotChoice.choose(charge_ratio, absf(root.z), contact_height, _pending_auto_shot_type == "SMASH", aim_controller.get_target(), aim_controller._end_sign, 1 if rally_hold.touch else 0,
+			mobile_controls.last_flick if mobile_controls != null and "last_flick" in mobile_controls else {},
+			preload("res://scripts/shot_names.gd").swing_room(preparation.get("def")) if not preparation.is_empty() else INF)
 		restore_choice = [selected_shot_intent, selected_spin_mode]
 		selected_shot_intent = choice.intent
 		selected_spin_mode = choice.spin
 		aim_controller.get_target()   # sync the aim context to the new intent first
 		aim_controller.target = choice.target
 		if _pending_auto_shot_type != "RETURN": _pending_shot_type = choice.shot_type
+		if mobile_controls != null and mobile_controls.has_method("show_shot_feedback"):
+			var fl: Dictionary = mobile_controls.last_flick if "last_flick" in mobile_controls else {}
+			var shown: String = "FAST DINK" if choice.touch and choice.name in ["DINK", "RESET"] and absf(float(choice.target.z)) >= _HumanShotChoice.FAST_DINK_DEPTH - 0.01 else str(choice.name)
+			mobile_controls.show_shot_feedback(shown, Vector2(fl.get("dir", Vector2.ZERO)) if choice.touch else Vector2.ZERO, choice.touch)
 		PerfMonitor.note("human_input", {"touch": choice.touch, "name": choice.name, "zone": choice.zone, "charge": snappedf(charge_ratio, 0.01),
-			"hold_s": snappedf(charge_ratio * PickleballConstants.MAX_SERVE_CHARGE_TIME, 0.01), "h": snappedf(contact_height, 0.01), "target": [snappedf(choice.target.x, 0.01), snappedf(choice.target.z, 0.01)]})
+			"hold_s": snappedf(hold_seconds, 0.01), "flick": [snappedf(Vector2(mobile_controls.last_flick.get("dir", Vector2.ZERO)).x, 0.01), snappedf(Vector2(mobile_controls.last_flick.get("dir", Vector2.ZERO)).y, 0.01)] if mobile_controls != null and "last_flick" in mobile_controls else [], "h": snappedf(contact_height, 0.01), "target": [snappedf(choice.target.x, 0.01), snappedf(choice.target.z, 0.01)]})
 	var swing_ok: bool = human != null and human.request_swing(charge_ratio)
+	if swing_ok and mobile_controls != null and mobile_controls.has_method("show_timing_word"):
+		# Your release against the ring cue, shown at once (the same read the mishit score uses).
+		var tune = preload("res://scripts/gameplay_tuning.gd")
+		var read: Dictionary = preload("res://scripts/shot_execution_error.gd").timing_read(human.release_error, 99.0 if rally_hold.touch else tune.TIMING_GOOD_EARLY,
+			float(tune.TIMING_GOOD_LATE[clampi(ai_difficulty, 0, 2)]), tune.TIMING_OPENING_SCALE if not ball.both_bounces_complete else 1.0)
+		if tune.MISHIT_ON: mobile_controls.show_timing_word(str(read.word))
 	if not restore_choice.is_empty():
 		selected_shot_intent = restore_choice[0]; selected_spin_mode = restore_choice[1]
 	if not swing_ok:
@@ -946,7 +1004,8 @@ func commit_execution_settings(actor) -> void:
 	var difficulty: int = clampi(int(Settings.get_value("gameplay.difficulty", 0)), 0, 2)
 	_execution_commits[actor.get_actor_id()] = {"flight_id": ball.flight_id,
 		"perfect": int(Settings.get_value("gameplay.execution_accuracy", 1)) == 0,
-		"skill_scale": [1.25, 1.0, 0.75][difficulty] if actor.is_ai else 1.0}
+		"skill_scale": [1.25, 1.0, 0.75][difficulty] if actor.is_ai else 1.0,
+		"miss_scale": float(preload("res://scripts/gameplay_tuning.gd").MISS_AI_SCALE[difficulty]) if actor.is_ai else 1.0}
 
 func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_error_seconds: float = 0.0, serve: bool = false, certificate: Dictionary = {}) -> Dictionary:
 	if launch.is_empty(): return launch
@@ -954,6 +1013,31 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 	var model = preload("res://scripts/shot_execution_error.gd")
 	var context: Dictionary = quality.capture(actor, ball, charge, timing_error_seconds, serve)
 	var physical_paddle: Transform3D = actor.paddle_node.global_transform
+	var sq = preload("res://scripts/gameplay_tuning.gd")
+	var timing_word: String = ""
+	if not serve and sq.MISHIT_ON:
+		# Timing is the release against the ring cue (human_contact_controller.release_error):
+		# the swing times itself to the ball, so swing-vs-contact error is not the player's.
+		var widen: float = sq.TIMING_OPENING_SCALE if not ball.both_bounces_complete else 1.0
+		var read: Dictionary
+		if actor.is_ai:
+			# The AI's release error: one draw per ball, wider when the ball is hard to time.
+			var hard: float = float(quality.carry(actor, ball, point_ending.seconds_since_contact()).carry)
+			var rolls: Vector2 = _miss_rolls(actor)
+			var late: float = float(sq.AI_TIMING_SIGMA[clampi(ai_difficulty, 0, 2)]) * (1.0 + hard) * -log(maxf(1.0 - rolls.x, 0.0001))
+			read = model.timing_read(-late, sq.AI_TIMING_GOOD, sq.AI_TIMING_GOOD, widen)
+			if rolls.y >= 0.6 and str(read.word) == "LATE": read.word = "EARLY"; read.dir = 1.0
+			context["timing_error_seconds"] = -late
+		else:
+			var release: float = actor.posture.human_contact.release_error if actor.posture != null and actor.posture.get("human_contact") != null else NAN
+			# A touch shot (tap or flick) may be released as early as you like: the swing waits for
+			# the ball, so only a late tap is a mishit. Dinks must be easy to produce.
+			var soft_shot: bool = str(launch.get("tactic", launch.get("shot_type", ""))) in sq.DINK_TACTICS
+			read = model.timing_read(release, 99.0 if soft_shot else sq.TIMING_GOOD_EARLY, float(sq.TIMING_GOOD_LATE[clampi(ai_difficulty, 0, 2)]), widen)
+			context["timing_error_seconds"] = release if is_finite(release) else 0.0
+		context["timing"] = read.part
+		context["timing_dir"] = read.dir
+		timing_word = str(read.word)
 	if not certificate.is_empty():
 		if contact_authority == null or not contact_authority.validates_settlement(actor, certificate): return {}
 		physical_paddle = certificate.paddle
@@ -971,6 +1055,36 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 		commit = _execution_commits[actor.get_actor_id()]
 	context["perfect"] = commit.perfect
 	context["skill_scale"] = commit.skill_scale
+	context["miss_scale"] = commit.get("miss_scale", 1.0)
+	var carry: Dictionary = quality.carry(actor, ball, point_ending.seconds_since_contact() if not serve else -1.0)
+	var tuning = preload("res://scripts/gameplay_tuning.gd")
+	context["tired"] = actor.stamina.tiredness()
+	context["power_shot"] = str(launch.get("tactic", "")) in ["DRIVE", "SMASH", "SPEED_UP"] or launch.velocity.length() >= 12.0
+	# Float: ball facts + your timing + tiredness + (AI only) its loose roll, minus the brace
+	# of an AI that has read a run of power shots from the other team.
+	var brace: float = 0.0
+	if actor.is_ai and actor.team_id in [0, 1]:
+		brace = tuning.HABIT_BRACE_STEP * clampf(float(point_ending.power_streak[1 - actor.team_id]) - 1.0, 0.0, 2.0)
+	var fatigue: float = clampf(1.0 - float(actor.stamina.value) / tuning.BLOCK_TIRED_AT, 0.0, 1.0)
+	var block_float: float = float(carry.get("block", 0.0)) * lerpf(tuning.BLOCK_FRESH_SHARE, 1.0, fatigue)
+	var float_extra: float = tuning.TIMING_FLOAT * float(context.get("timing", 0.0)) + tuning.TIRED_FLOAT * float(context.tired) + block_float - brace
+	if tuning.MISHIT_ON: float_extra += tuning.UNSET_FLOAT * clampf((float(context.get("balance", 0.0)) - tuning.UNSET_FROM) / (tuning.UNSET_FULL - tuning.UNSET_FROM), 0.0, 1.0)
+	# A fresh blocker absorbs a fast ball (its pace goes back); a tired one floats it.
+	# (All of the float, loose roll and timing included: those are for dink rallies.)
+	var fast_scale: float = lerpf(tuning.FRESH_BLOCK_FLOAT_SCALE, 1.0, fatigue) if ball.linear_velocity.length() >= 12.0 else 1.0
+	context["carry"] = 0.0 if serve else clampf((float(carry.carry) + float_extra + _ai_loose_roll(actor)) * fast_scale, 0.0, 1.0)
+	context["carry_facts"] = 0.0 if serve else float(carry.carry)   # visible causes only
+	# Hitting hard from below the tape: its own large-miss risk (the hitter's choice).
+	var below: float = clampf(((PickleballConstants.FLOOR_Y + PickleballConstants.NET_HEIGHT) - ball.global_position.y) / 0.4, 0.0, 1.0)
+	# Only close to the net (hitting hard up into it), fading out by LOW_DRIVE_FAR m; never the
+	# return of serve or the third shot (both bounces not done): a deep drive off the bounce is normal.
+	var near_net: float = clampf((tuning.LOW_DRIVE_FAR - absf(ball.global_position.z)) / 1.5, 0.0, 1.0)
+	var opening: bool = not ball.both_bounces_complete
+	context["low_drive"] = below * clampf(charge, 0.0, 1.0) * near_net if bool(context.power_shot) and not serve and not opening else 0.0
+	if not serve: actor.stamina.note_contact(bool(context.power_shot), ball.linear_velocity.length())
+	var miss_rolls: Vector2 = Vector2(1.0, 0.5) if serve else _miss_rolls(actor)
+	context["miss_roll"] = miss_rolls.x; context["miss_dir"] = miss_rolls.y
+	context["origin"] = ball.global_position   # a too-low drive may go up as a lob from here
 	var intended_velocity: Vector3 = launch.velocity
 	var intended_omega: Vector3 = launch.omega
 	var contact_quality := 1.0
@@ -980,6 +1094,15 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 		contact_quality = shot_physics.compute_sweet_spot_speed(context.surface_point, head, intended_velocity)
 		intended_velocity *= contact_quality
 		intended_omega += shot_physics.compute_sweet_spot_spin(context.surface_point, head, intended_velocity)
+	# Dink fit: a soft shot to the kitchen crosses the net by the hitter's margin (dink_solver.gd).
+	var soft_fit: bool = false
+	if tuning.DINK_FIT_ON and not serve and not peripheral and str(launch.get("tactic", launch.get("shot_type", ""))) in tuning.DINK_TACTICS:
+		var margin: float = float(tuning.DINK_MARGIN_AI[clampi(ai_difficulty, 0, 2)])
+		if not actor.is_ai: margin = tuning.DINK_MARGIN_PERFECT if timing_word == "PERFECT" else (tuning.DINK_MARGIN_GOOD if timing_word in ["GOOD", ""] else tuning.DINK_MARGIN_OFF)
+		var fitted: Vector3 = preload("res://scripts/dink_solver.gd").fit(ball.global_position, intended_velocity, intended_omega, margin)
+		soft_fit = not fitted.is_equal_approx(intended_velocity)
+		intended_velocity = fitted
+		if soft_fit: context["carry"] = clampf(float(context.carry) - (1.0 - tuning.SOFT_FACTS_FLOAT) * float(context.carry_facts), 0.0, 1.0)
 	var rng_before: int = shot_physics.accuracy.rng.state
 	var result: Dictionary = model.apply(intended_velocity, intended_omega, context, shot_physics.accuracy.rng)
 	shot_physics.accuracy.samples += 1
@@ -1004,7 +1127,36 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 	PerfMonitor.note("execution", {"actor": actor.get_actor_id(), "ai": actor.is_ai, "peripheral": peripheral,
 		"quality": snappedf(contact_quality, 0.01), "pitch": snappedf(float(result.pitch_deg), 0.01),
 		"speed": snappedf(float(result.speed_fraction), 0.001), "difficulty": snappedf(float(result.envelope.difficulty), 0.01),
-		"vy_plan": snappedf(launch.velocity.y, 0.01), "vy_out": snappedf(result.velocity.y, 0.01)})
+		"vy_plan": snappedf(launch.velocity.y, 0.01), "vy_out": snappedf(result.velocity.y, 0.01),
+		"stamina": snappedf(float(actor.stamina.value), 0.1), "serve": serve, "carry": snappedf(float(context.carry), 0.01),
+		"timing_s": snappedf(float(context.get("timing_error_seconds", timing_error_seconds)), 0.001), "timing_word": timing_word,
+		"mishit": snappedf(float(result.get("mishit", 0.0)), 0.01), "parts": result.get("mishit_parts", []), "balance": snappedf(float(context.get("balance", 0.0)), 0.01),
+		"low_drive": snappedf(float(context.get("low_drive", 0.0)), 0.01), "soft_fit": soft_fit, "tired": snappedf(float(context.tired), 0.01),
+		"cost": [snappedf(float(actor.stamina.last_cost.streak), 0.1), snappedf(float(actor.stamina.last_cost.block), 0.1)],
+		"players": _player_snapshot(),
+		"since_hit": snappedf(point_ending.seconds_since_contact(), 0.01), "pressure": snappedf(model.pressure(result.context), 0.01),
+		"large_miss": bool(result.get("large_miss", false)), "low_lob": bool(result.get("low_lob", false)), "miss_cause": str(result.get("miss_cause", ""))})
+	if serve:
+		_rally_start_stamina = [0.0, 0.0, 0.0, 0.0]
+		for p in get_players():
+			var aid: int = p.get_actor_id()
+			if aid >= 0 and aid < 4: _rally_start_stamina[aid] = snappedf(float(p.stamina.value), 0.1)
+	point_ending.record_contact(actor.get_actor_id(), actor.team_id, model.pressure(result.context),
+		str(launch.get("tactic", launch.get("shot_type", ""))), result.velocity.length(), serve, str(result.get("miss_cause", "")))
+	actual.profile["timing_word"] = timing_word
+	# Swing room of the stroke pose at contact: the shot name reads it (a compact pose cannot drive).
+	var stroke_pose = actor.posture.transition_pose_blend if actor.posture != null else null
+	if stroke_pose == null: stroke_pose = actor.get_runtime_posture_def()
+	actual.profile["swing_room"] = preload("res://scripts/shot_names.gd").swing_room(stroke_pose)
+	# Flight quality as it leaves the paddle (flight_grade.gd): trail colour, AI reply, data.
+	var flight_grade: Dictionary = preload("res://scripts/flight_grade.gd").grade(ball.global_position, actual.velocity, actual.omega)
+	flight_grade["team"] = actor.team_id; flight_grade["tick"] = Engine.get_physics_frames(); flight_grade["serve"] = serve
+	ball.set_meta("flight_grade", flight_grade)
+	PerfMonitor.note("flight", {"actor": actor.get_actor_id(), "ai": actor.is_ai, "serve": serve, "grade": flight_grade.grade,
+		"tactic": str(launch.get("tactic", launch.get("shot_type", ""))), "clearance": snappedf(float(flight_grade.clearance), 0.01),
+		"apex_past": snappedf(float(flight_grade.apex_past), 0.01), "apex_h": snappedf(float(flight_grade.apex_h), 0.01),
+		"depth": snappedf(float(flight_grade.depth), 0.01), "arrive": snappedf(float(flight_grade.arrive), 0.01), "speed": snappedf(float(flight_grade.speed), 0.1), "from_net": snappedf(absf(ball.global_position.z), 0.01),
+		"h": snappedf(ball.global_position.y - PickleballConstants.FLOOR_Y, 0.01)})
 	actual["intended_landing"] = launch.get("landing", launch.get("target", Vector3.ZERO))
 	# The old solver landing no longer predicts this perturbed launch. Keep it
 	# explicitly intended; actual ball/net/floor integration decides the result.
@@ -1012,6 +1164,59 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 	actual["intended_net_clear"] = launch.get("net_clear", false)
 	for key in ["landing", "feasible", "net_clear", "net_y"]: actual.erase(key)
 	return actual
+
+## The word flashed at your contact: the release timing (PERFECT / GOOD / EARLY / LATE), or the
+## old paddle-to-ball grade when there is none (practice walls, perfect training).
+func _timing_grade(launch: Dictionary, fallback: String) -> String:
+	var word: String = str(launch.get("profile", {}).get("timing_word", ""))
+	return word if word != "" else fallback
+
+## AI loose dinks: one roll per incoming flight on the actor's own stream (plan ground
+## rules 2 and 3). Zero spread means no draw at all, so the dial at off changes nothing.
+var _loose_rngs: Dictionary = {}
+var _loose_rolls: Dictionary = {}
+func _ai_loose_roll(actor) -> float:
+	if not actor.is_ai: return 0.0
+	var spread: float = float(preload("res://scripts/gameplay_tuning.gd").AI_LOOSE_SPREAD[clampi(ai_difficulty, 0, 2)])
+	if preload("res://scripts/gameplay_tuning.gd").DINK_FIT_ON and preload("res://scripts/gameplay_tuning.gd").MISHIT_ON: spread = 0.0   # floats come from timing and footing
+	if spread <= 0.0: return 0.0
+	var id: int = actor.get_actor_id()
+	var key: Array = [id, ball.flight_id]
+	if not _loose_rolls.has(key):
+		if not _loose_rngs.has(id):
+			var rng := RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(rng, preload("res://scripts/gameplay_tuning.gd").SALT_FLOAT + id)
+			_loose_rngs[id] = rng
+		if _loose_rolls.size() > 64: _loose_rolls.clear()
+		var r: float = _loose_rngs[id].randf()
+		_loose_rolls[key] = spread * r * r   # mostly small, sometimes a real pop-up
+	return float(_loose_rolls[key])
+
+## Large-miss rolls: own stream per actor, one pair per flight. Nothing drawn when off.
+var _miss_rngs: Dictionary = {}
+var _miss_cache: Dictionary = {}
+func _miss_rolls(actor) -> Vector2:
+	if not preload("res://scripts/gameplay_tuning.gd").MISS_ON: return Vector2(1.0, 0.5)
+	var id: int = actor.get_actor_id()
+	var key: Array = [id, ball.flight_id]
+	if not _miss_cache.has(key):
+		if not _miss_rngs.has(id):
+			var rng := RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(rng, preload("res://scripts/gameplay_tuning.gd").SALT_MISS + id)
+			_miss_rngs[id] = rng
+		if _miss_cache.size() > 64: _miss_cache.clear()
+		_miss_cache[key] = Vector2(_miss_rngs[id].randf(), _miss_rngs[id].randf())
+	return _miss_cache[key]
+
+## Data: every player's court position and velocity (actor order 0..3), x/z only.
+func _player_snapshot() -> Array:
+	var out: Array = [[], [], [], []]
+	for p in get_players():
+		var aid: int = p.get_actor_id()
+		if aid < 0 or aid > 3: continue
+		var g: Vector3 = p.global_position; var v: Vector3 = p.current_velocity
+		out[aid] = [snappedf(g.x, 0.01), snappedf(g.z, 0.01), snappedf(v.x, 0.1), snappedf(v.z, 0.1)]
+	return out
 
 func execution_preview_context(charge: float, serve: bool = false) -> Dictionary:
 	var context: Dictionary = preload("res://scripts/shot_contact_quality.gd").capture(player_left, ball, charge, 0.0, serve)
@@ -1146,7 +1351,7 @@ func _apply_player_contact_hit(charge_ratio: float, _contact_posture: int, spin_
 	_pending_shot_type = ""
 	_pending_auto_shot_type = ""
 	scoreboard_ui.set_state_text(practice_launcher.status_text if practice_launcher and practice_launcher.is_active else "Rally!")
-	player_left.posture.grade_flashed.emit(player_left.posture._commit_selector.grade_ball_to_ghost(contact_error))
+	player_left.posture.grade_flashed.emit(_timing_grade(launch, player_left.posture._commit_selector.grade_ball_to_ghost(contact_error)))
 	return ball.paddle_contact_is_current(event)
 
 func settle_human_contact_intent(actor, intent: Dictionary, certificate: Dictionary) -> bool:
@@ -1223,7 +1428,7 @@ func settle_human_contact_intent(actor, intent: Dictionary, certificate: Diction
 	_pending_shot_type = ""
 	_pending_auto_shot_type = ""
 	scoreboard_ui.set_state_text(practice_launcher.status_text if practice_launcher and practice_launcher.is_active else "Rally!")
-	actor.posture.grade_flashed.emit(actor.posture._commit_selector.grade_ball_to_ghost(contact_error))
+	actor.posture.grade_flashed.emit(_timing_grade(launch, actor.posture._commit_selector.grade_ball_to_ghost(contact_error)))
 	return ball.paddle_contact_is_current(event)
 
 
@@ -1256,7 +1461,34 @@ func _on_rally_ended(winner: int, reason: String, detail: String) -> void :
 		return
 	if game_state == GameState.POINT_SCORED or match_over:
 		return
-
+	for p in get_players():
+		if p.is_ai and p.ai_brain != null: p.ai_brain.flush_miss_note()
+	var last_flight = ball.get_meta("flight_grade", null) if ball != null else null
+	var ending: Dictionary = point_ending.classify(winner, reason, ball.global_position if ball != null else Vector3.INF,
+		float(last_flight.get("clearance", -1.0)) if last_flight is Dictionary else -1.0)
+	ending["winner"] = winner
+	# Stamina per actor (0..3) at the serve and at the end of the rally (stamina analysis).
+	var st_end: Array = [0.0, 0.0, 0.0, 0.0]
+	for p in get_players():
+		var aid: int = p.get_actor_id()
+		if aid >= 0 and aid < 4: st_end[aid] = snappedf(float(p.stamina.value), 0.1)
+	ending["stamina_start"] = _rally_start_stamina.duplicate()
+	ending["stamina_end"] = st_end
+	var low_s: Array = [0.0, 0.0, 0.0, 0.0]
+	for p in get_players():
+		var aid2: int = p.get_actor_id()
+		if aid2 >= 0 and aid2 < 4: low_s[aid2] = snappedf(float(p.stamina.seconds_low), 0.1)
+	ending["seconds_low"] = low_s
+	ending["players"] = _player_snapshot()
+	ending["human_touched"] = point_ending.human_team_touched
+	PerfMonitor.note("point_ending", ending)
+	last_point_ending = ending
+	point_ending.reset()
+	var tuning = preload("res://scripts/gameplay_tuning.gd")
+	if tuning.LONG_RALLY_REFILL_ON and int(ending.shots) >= tuning.LONG_RALLY:
+		# Long-rally reward: the winning team gets a small refill (loser none).
+		for p in get_players():
+			if p.team_id == winner: p.stamina.refill(tuning.LONG_RALLY_REFILL)
 
 	var line_call: bool = reason == RallyScorer.FAULT_OUT_OF_BOUNDS and ball.last_hit_by in [0, 1] and ball.bounces_since_last_hit <= 1 and winner == 1 - ball.last_hit_by
 	var human_actor = get_human_actor()
@@ -1337,6 +1569,9 @@ func _on_point_scored(winning_team: int) -> void :
 		ball.angular_velocity = Vector3.ZERO
 		match_over = true
 		match_winner = 0 if score_left > score_right else 1
+		var low_m: Array = []
+		for p in get_players(): low_m.append([p.get_actor_id(), snappedf(float(p.stamina.seconds_low), 0.1)])
+		PerfMonitor.note("match_summary", {"score": [score_left, score_right], "winner": match_winner, "difficulty": ai_difficulty, "seconds_low": low_m})
 		_clear_finished_match_controls(presentations)
 		scoreboard_ui.show_rally_result(winning_team, side_out, true)
 		if court_audio: court_audio.play_point_cue(winning_team, side_out, true)

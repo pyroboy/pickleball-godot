@@ -43,6 +43,9 @@ var _controls_blocked_action: Button
 func _ready() -> void :
  get_tree().paused = false
  Engine.time_scale = 1.0
+ # Menus don't need 60 fps: cap the title at 30 on the phone to save battery and heat
+ # (the match sets 60 again in mobile_controls.gd setup; pause drops to 5).
+ if OS.has_feature("mobile"): Engine.max_fps = 30
  theme = UiTheme.create()
  UiTheme.crisp(self)
  _panel = PanelContainer.new()

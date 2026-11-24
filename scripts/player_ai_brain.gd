@@ -7,6 +7,7 @@ const DriveMotion = preload("res://scripts/drive_serve_motion.gd")
 const Movement = preload("res://scripts/ai_match_movement.gd")
 const MatchTactics = preload("res://scripts/ai_match_tactics.gd")
 const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
+const _EarlyTuning = preload("res://scripts/gameplay_tuning.gd")
 
 
 const _PC = preload("res://scripts/player.gd")
@@ -187,6 +188,7 @@ const RUN_SLACK := 0.6           # m of spare run a contact should leave
 const RUN_SLACK_WEIGHT := 1.2    # score (~seconds) per metre short of that
 const OVERHEAD_PREFERENCE := 1.0     # score bonus (~seconds): a reachable high ball beats letting it drop
 
+const SIDE_SWITCH_WEIGHT := 0.45   # score (~seconds) per metre the contact moves across the body vs the running plan
 const LUNGE_ALLOWANCE := 0.45   # m of the final approach a lunge / reach covers
 const LUNGE_WINDOW_SECONDS := 0.4   # fast ball: lunge over the last 0.4 s before contact
 
@@ -235,14 +237,23 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 		ai_selected_contact_reachable = false
 		ai_selected_contact_time = -1.0
 		var coordination = _team_coordination()
+		var brace: float = maxf(_brace_depth(ball), _drive_guard_depth(ball))
 		if coordination != null:
-			return coordination.cover_input(self, coordination.advise(self, {}, delta))
+			var decision: Dictionary = coordination.advise(self, {}, delta)
+			if brace > 0.0:
+				# Smash coming: give ground to block it (POSITION_PLAN.md, bracing).
+				var t: Vector3 = decision.get("target", _player.global_position)
+				var own_sign: float = -1.0 if _player.court_side == 1 else 1.0
+				if absf(t.z) < brace: t.z = own_sign * brace
+				decision = decision.duplicate(); decision["target"] = t
+			return coordination.cover_input(self, decision)
 		var ready_z: float = (_player.min_z + _player.max_z) * 0.6
 		# Follow a soft ball/return toward a legal kitchen-line position. Keep the
 		# server back until the compulsory return bounce has happened.
 		if ball.both_bounces_complete or ball.serve_team != _player.player_num:
 			var recovery_depth: float = 4.4 if last_match_tactic == "DRIVE" else PickleballConstants.NON_VOLLEY_ZONE + 0.75
 			ready_z = (-1.0 if _player.court_side == 1 else 1.0) * recovery_depth
+		if brace > 0.0: ready_z = (-1.0 if _player.court_side == 1 else 1.0) * maxf(absf(ready_z), brace)
 		var ready_x: float = 0.0
 		var practice = _exchange_practice()
 		if practice:
@@ -315,7 +326,14 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 		if not decision.pursue:
 			ai_selected_contact_reachable = false
 			ai_selected_contact_time = -1.0
-			return coordination.cover_input(self, decision)
+			var cover_dir: Vector3 = coordination.cover_input(self, decision)
+			var cover_key: Array = [ball.flight_id, "cover", ai_is_charging, snappedf(ai_target_position.x, 0.2), snappedf(ai_target_position.z, 0.2)]
+			if cover_key != _move_note_key:
+				_move_note_key = cover_key
+				PerfMonitor.note("ai_move", {"actor": _player.get_actor_id(), "flight": ball.flight_id, "cover": true, "charging": ai_is_charging, "reason": str(decision.get("reason", "")),
+					"owner": int(decision.get("owner", -1)), "target": [snappedf(ai_target_position.x, 0.01), snappedf(ai_target_position.z, 0.01)],
+					"root": [snappedf(_player.global_position.x, 0.01), snappedf(_player.global_position.z, 0.01)]})
+			return cover_dir
 	var intercept_target: Vector3 = intercept_solution["target"] as Vector3
 	ai_desired_posture = int(intercept_solution["posture"])
 	ai_reach_pose = intercept_solution.get("def")
@@ -338,10 +356,19 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 
 	# Ordinary prediction and its movement/contact policy have priority. Special
 	# actions see the same real flight only when that ordinary route is absent.
-	if not ai_selected_contact_reachable and PickleballConstants.MATCH_SPECIAL_ACTIONS:
+	# The Erne has its own switch (gameplay_tuning ERNE_ON); MATCH_SPECIAL_ACTIONS also
+	# enables the grounded reach below.
+	if not ai_selected_contact_reachable and (PickleballConstants.MATCH_SPECIAL_ACTIONS or _EarlyTuning.ERNE_ON):
 		if _player.erne_action != null and _player.erne_action.maybe_start_ai(ball, _get_predicted_flight(ball), {"normal_reachable": false, "flight_id": ball.flight_id}):
 			PerfMonitor.note("special_action", {"kind": "ERNE", "actor": _player.player_num})
 			return Vector3.ZERO
+	# Erne as an attack (chance rule): a reachable wide ball with room beside the post.
+	if _EarlyTuning.ERNE_ON and ai_selected_contact_reachable and _player.erne_action != null and not _player.erne_action.active \
+			and absf(_player.global_position.x) >= PickleballConstants.COURT_WIDTH * 0.5 - 0.85 and _special_roll(ball) < float(_EarlyTuning.ERNE_CHANCE[clampi(ai_difficulty, 0, 2)]):
+		if _player.erne_action.maybe_start_ai(ball, _get_predicted_flight(ball), {"normal_reachable": false, "flight_id": ball.flight_id}):
+			PerfMonitor.note("special_action", {"kind": "ERNE", "actor": _player.player_num, "attack": true})
+			return Vector3.ZERO
+	if not ai_selected_contact_reachable and PickleballConstants.MATCH_SPECIAL_ACTIONS:
 		# The reach driver refuses a call without the AI's delayed view of the
 		# ball; it was called with none, so the AI never lunged for a ball it
 		# could not walk to.
@@ -386,6 +413,7 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 	ai_target_position = ai_committed_target_position
 	ai_predicted_bounce_position = predicted_landing
 	ai_predicted_contact_position = selected_contact
+	_note_move_plan(ball, selected_contact)
 
 
 	var x_tol: float = AI_RECEIVE_X_TOLERANCE
@@ -406,6 +434,21 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 
 	return input_dir
 
+
+# Bench diagnostic: one "ai_move" note each time the standing target, contact pose or
+# charge state of the pursued ball changes (not per tick).
+var _move_note_key: Array = []
+func _note_move_plan(ball, contact: Vector3) -> void:
+	if not MISS_TRACKING: return   # bench diagnostic
+	var key: Array = [ball.flight_id, ai_desired_posture, ai_is_charging, ai_selected_contact_reachable, snappedf(ai_target_position.x, 0.2), snappedf(ai_target_position.z, 0.2)]
+	if key == _move_note_key: return
+	_move_note_key = key
+	PerfMonitor.note("ai_move", {"actor": _player.get_actor_id(), "flight": ball.flight_id, "posture": ai_desired_posture, "charging": ai_is_charging,
+		"reachable": ai_selected_contact_reachable, "in": snappedf(ai_selected_contact_time, 0.01),
+		"target": [snappedf(ai_target_position.x, 0.01), snappedf(ai_target_position.z, 0.01)],
+		"contact": [snappedf(contact.x, 0.01), snappedf(contact.y, 0.01), snappedf(contact.z, 0.01)],
+		"root": [snappedf(_player.global_position.x, 0.01), snappedf(_player.global_position.z, 0.01)],
+		"vel": [snappedf(_player.current_velocity.x, 0.1), snappedf(_player.current_velocity.z, 0.1)]})
 
 func _get_posture_for_height(rel_height: float) -> Array[int]:
 
@@ -458,6 +501,12 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 				legal_after = bounce["time"]
 				break
 
+	var fast_at_line: bool = _EarlyTuning.FAST_LINE_REACH_ON and ball.linear_velocity.length() >= _EarlyTuning.FAST_BALL_SPEED \
+		and absf(_player.global_position.z) <= _EarlyTuning.FAST_LINE_DEPTH and ball.both_bounces_complete
+	# Hitting side of the plan already being run for this flight (contact left / right of the
+	# standing spot, m along the forehand axis).
+	var keep_side: bool = not _movement_plan.is_empty() and bool(_movement_plan.get("reachable", false)) and int(_movement_plan.get("flight_id", -1)) == ball.flight_id
+	var kept_lateral: float = (Vector3(_movement_plan.contact) - Vector3(_movement_plan.target)).dot(forehand_axis) if keep_side else 0.0
 	for sample_index in range(1, samples.size(), 3):
 		var sample: Dictionary = samples[sample_index]
 		var contact_point: Vector3 = sample["pos"]
@@ -472,6 +521,11 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 		if contact_point.x < _player.min_x or contact_point.x > _player.max_x:
 			continue
 		if contact_point.y < _Flight.FLOOR_REST_Y + 0.12:
+			continue
+		# Kitchen guard: a rally volley met far inside the kitchen plane carried the
+		# AI over the line (momentum / kitchen-volley faults). Let that ball bounce.
+		if _EarlyTuning.KITCHEN_GUARD_ON and total_bounces == 0 and ball.both_bounces_complete \
+				and absf(contact_point.z) < PickleballConstants.NON_VOLLEY_ZONE - _EarlyTuning.KITCHEN_GUARD_REACH:
 			continue
 		var rel_height: float = contact_point.y - COURT_FLOOR_Y
 		var height_postures: Array[int] = _get_posture_for_height(rel_height)
@@ -501,6 +555,9 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			var run_bound: float = Movement.travel_distance(_player.current_velocity, travel_direction, contact_time, ai_difficulty)
 			if travel_distance > run_bound + LUNGE_ALLOWANCE:
 				continue
+			# Fast ball at the kitchen line: only what comes at the body is blocked there.
+			if fast_at_line and travel_distance > _EarlyTuning.FAST_LINE_REACH:
+				continue
 			var local: Vector3 = contact_point - candidate_target
 			var lateral: float = local.dot(forehand_axis)
 			var forward: float = local.dot(forward_axis)
@@ -520,6 +577,10 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			# between running forward and backward on successive observations.
 			if not _movement_plan.is_empty():
 				score += candidate_target.distance_to(_movement_plan.target) * 0.18
+			# Stay on the side already chosen: each replan flipped forehand / backhand for the
+			# same contact, moving the standing spot ~1 m across the ball, and the player
+			# arrived 0.4-0.85 m off (bench hitH_d2: 3 of 7 misses, spot moved 1.1-1.7 m).
+			if keep_side: score += absf(lateral - kept_lateral) * SIDE_SWITCH_WEIGHT
 			if _player.current_velocity.length() > 1.0 and _player.current_velocity.dot(travel_direction) < -0.10:
 				score += 0.25
 
@@ -530,6 +591,9 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			# Without this the earliest-time score always let it drop low.
 			if total_bounces == 0 and ball.both_bounces_complete and rel_height >= OVERHEAD_PREFER_HEIGHT:
 				score -= OVERHEAD_PREFERENCE
+			if _EarlyTuning.EARLY_VOLLEY_ON and total_bounces == 0 and ball.both_bounces_complete and absf(contact_point.z) <= 3.4:
+				var over: float = contact_point.y - _Flight.net_clear_y_at(contact_point.x) + _EarlyTuning.EARLY_VOLLEY_BELOW
+				if over >= 0.0: score -= _EarlyTuning.EARLY_VOLLEY_BONUS * clampf(0.5 + over / 0.3, 0.5, 1.0)
 			# Let a bounced ball come up when there is time. The earliest reachable
 			# sample is right after the bounce, 0.2-0.3 m off the floor, below the
 			# tip of a hanging blade: the ball met the tip, the planned lift was
@@ -816,6 +880,11 @@ var _display_tick: int = -100
 var _align_desired: PostureDefinition = null   # last intended (pre wrist-correction) aligned pose
 var _align_desired_flight: int = -1
 var _align_desired_tick: int = -100
+const READY_LIMITER_SECONDS := 0.35
+const READY_SETTLED_SECONDS := 0.85
+var _wait_seconds := 0.0
+var _wait_tick := -100
+const RESTORE_LIGHT := true   # false: solve legs and arms on the restore too (as before)
 func align_paddle_to_contact(delta: float) -> void :
 	# Receipt describes this actual presentation call, never a prior flight.
 	coordination_forward_progress = 0.0
@@ -829,20 +898,42 @@ func align_paddle_to_contact(delta: float) -> void :
 		return
 	if _player.hitting.serving_visual_active: return
 	var previous_support: PostureDefinition = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
+	var coordination = _team_coordination()
+	var waits: bool = ball.get_last_hit_by() == _player.player_num or coordination != null and not coordination.may_begin_stroke(_player)
+	var holds: bool = _player.hitting.is_in_follow_through or _player.hitting.serving_visual_active
+	# Perf: a player who is not going for this ball applies one more pose right below (the
+	# Ready blend, or the same held pose). Its restore then only places the body and paddle;
+	# the leg and arm solve runs once, on that final pose, instead of twice per tick
+	# (phone: a tick cost 21-22 ms against a 16.6 ms frame and the phone throttled from heat).
+	var solves_below: bool = RESTORE_LIGHT and incoming_pose_override != null and (waits and not holds or not waits and not ai_selected_contact_reachable)
 	# Legacy paddle-only tracking ran earlier in Player.physics. Restore the
 	# actual owner before feet advance, so body fitting sees its seated grip.
-	var _al_restore := Time.get_ticks_usec()
-	_player.posture.transition_pose_blend = previous_support
-	_player.posture.force_posture_update(previous_support)
-	PerfMonitor.record("al.restore", Time.get_ticks_usec() - _al_restore)
-	var coordination = _team_coordination()
-	if ball.get_last_hit_by() == _player.player_num or coordination != null and not coordination.may_begin_stroke(_player):
-		if _player.hitting.is_in_follow_through or _player.hitting.serving_visual_active: return
+	# ... and when the very same pose object is applied again below (a settled Ready, or the
+	# held pose of a player with no reachable contact), the restore is skipped altogether.
+	var same_pose_below: bool = solves_below and (not waits or _wait_tick == Engine.get_physics_frames() - 1 and _wait_seconds + delta >= READY_SETTLED_SECONDS)
+	if not same_pose_below:
+		var _al_restore := Time.get_ticks_usec()
+		_player.posture.transition_pose_blend = previous_support
+		_player.posture.force_posture_update(previous_support, not solves_below)
+		PerfMonitor.record("al.restore", Time.get_ticks_usec() - _al_restore)
+	if waits:
+		if holds: return
 		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
 		var previous: PostureDefinition = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
 		var _al_ready := Time.get_ticks_usec()
-		ready = preload("res://scripts/incoming_ready_motion.gd").blend_pose(previous, ready, delta, .07)
-		ready = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, ready, previous, delta)
+		# A waiting player eases to Ready (half-life 0.07 s). The hand-turn limiter can only bite
+		# in the first moments (after READY_LIMITER_SECONDS under 3% of the turn is left), and
+		# after READY_SETTLED_SECONDS the pose is Ready to a tenth of a millimetre: stop
+		# re-blending and re-limiting a pose that no longer changes (was 9% of a physics tick).
+		var tick: int = Engine.get_physics_frames()
+		_wait_seconds = _wait_seconds + delta if _wait_tick == tick - 1 else 0.0
+		_wait_tick = tick
+		if _wait_seconds >= READY_SETTLED_SECONDS and incoming_pose_override != null:
+			ready = previous
+		else:
+			ready = preload("res://scripts/incoming_ready_motion.gd").blend_pose(previous, ready, delta, .07)
+			if _wait_seconds < READY_LIMITER_SECONDS:
+				ready = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, ready, previous, delta)
 		incoming_pose_override = ready
 		_player.posture.transition_pose_blend = ready
 		_player.posture.force_posture_update(ready)
@@ -1210,6 +1301,8 @@ func _try_swept_ai_contact(ball, delta: float, charge: float) -> bool:
 # Bench diagnostic: for each incoming flight this AI planned to play, the closest
 # its paddle head came to the ball. Written as an "ai_miss" note when the flight
 # ends without this AI hitting it (tools/shot_report.py reads it).
+## The miss tracker is a bench diagnostic: it runs under --autoplay only, not in real matches.
+static var MISS_TRACKING: bool = RuntimePolicy.autoplay and not OS.get_cmdline_user_args().has("--no-miss-tracking")
 var _miss_flight: int = -1
 var _miss_distance: float = INF
 var _miss_state: Dictionary = {}
@@ -1218,7 +1311,7 @@ var _miss_peak_speed: float = 0.0
 var _miss_flight_tick: int = 0
 
 func _track_miss(ball) -> void:
-	if ball == null: return
+	if ball == null or not MISS_TRACKING: return
 	if ball.flight_id != _miss_flight or not ball.is_in_play:
 		if _miss_flight >= 0 and not _miss_state.is_empty() and is_finite(_miss_distance):
 			_miss_state["closest"] = snappedf(_miss_distance, 0.01)
@@ -1255,6 +1348,17 @@ func _track_miss(ball) -> void:
 		"peak_speed": snappedf(_miss_peak_speed, 0.1), "move_speed": snappedf(_player.move_speed, 0.1), "state": ai_state,
 		"speed": snappedf(ball.linear_velocity.length(), 0.1), "follow_through": _player.hitting.is_in_follow_through,
 		"feet_ok": _feet_established_outside_kitchen(), "bounced_on_side": ai_ball_bounced_on_side}
+
+## Rally over: write the pending miss note now (the tracker stops once play stops, so
+## the ball that ended the rally was never noted). Bench diagnostic only.
+func flush_miss_note() -> void:
+	if _miss_flight >= 0 and not _miss_state.is_empty() and is_finite(_miss_distance):
+		_miss_state["closest"] = snappedf(_miss_distance, 0.01)
+		_miss_state["flight"] = _miss_flight
+		_miss_state["rally_end"] = true
+		PerfMonitor.note("ai_miss", _miss_state)
+	_miss_flight = -1
+	_miss_state = {}
 
 func _try_ai_hit_ball_owned() -> void :
 	_track_miss(_player._get_ball_ref())
@@ -1634,6 +1738,13 @@ func _style_for_incoming_flight(ball) -> int:
 		return int(_planned_shot.get("style_id", playing_style_id))
 	return playing_style_id
 
+## Flight grade of the ball the other team just hit (flight_grade.gd), or "".
+func _incoming_grade(ball) -> String:
+	if ball == null: return ""
+	var graded = ball.get_meta("flight_grade", null)
+	if not (graded is Dictionary) or int(graded.get("team", -1)) == _player.team_id or bool(graded.get("serve", false)): return ""
+	return str(graded.get("grade", ""))
+
 func match_context(ball_pos: Vector3) -> Dictionary:
 	var ball = _player._get_ball_ref()
 	var balanced: bool = _game_node.rally_scorer._has_regained_balance(_player) if _game_node else true
@@ -1644,7 +1755,147 @@ func match_context(ball_pos: Vector3) -> Dictionary:
 		"incoming_speed": ball.linear_velocity.length() if ball else 0.0, "time_to_contact": ai_selected_contact_time, "movement_speed": _player.current_velocity.length(),
 		"opening_return": ball != null and not ball.both_bounces_complete, "balanced": balanced,
 		"near_kitchen": absf(ball_pos.z) <= 3.4, "legal_volley": ball != null and ball.both_bounces_complete and _feet_established_outside_kitchen(),
-		"reachable": ai_selected_contact_reachable, "reaction_ready": _perception_ready}
+		"reachable": ai_selected_contact_reachable, "reaction_ready": _perception_ready, "opponents": _opponent_positions(),
+		"soft_run": int(_game_node.point_ending.soft_run) if _game_node != null and "point_ending" in _game_node else 0,
+		"patience_roll": _patience_roll(ball), "risk_roll": _risk_roll(ball),
+		"stamina": float(_player.stamina.value), "position_roll": _position_roll(ball), "opponents_vel": _opponent_velocities(), "opponents_stamina": _opponent_stamina(),
+		"bounced": ball != null and ball.both_bounces_complete and ball.bounces_since_last_hit >= 1,
+		"incoming_grade": _incoming_grade(ball),
+		"opp_power_streak": int(_game_node.point_ending.power_streak[1 - _player.team_id]) if _game_node != null and "point_ending" in _game_node and _player.team_id in [0, 1] else 0}
+
+## Smash bracing (POSITION_PLAN.md): our ball will reach the other team high enough to be
+## smashed. Returns the depth to back off to (m from the net) once this AI has read it, else
+## -1. One trace and one read roll per flight.
+var _brace_flight := -1
+var _brace_info: Dictionary = {}
+var _brace_rng: RandomNumberGenerator = null
+func _brace_depth(ball) -> float:
+	if not _EarlyTuning.BRACE_ON or ball == null or not ball.is_in_play or _exchange_practice(): return -1.0
+	if not RuntimePolicy.position_rules_for(_player.team_id): return -1.0
+	if _brace_flight != ball.flight_id:
+		_brace_flight = ball.flight_id
+		_brace_info = {}
+		var fl: Dictionary = _Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity, 3.0, 1, false)
+		var own_sign: float = -1.0 if _player.court_side == 1 else 1.0
+		for smp in fl.get("samples", []):
+			var p: Vector3 = smp.pos
+			if p.z * own_sign >= 0.0 or int(smp.get("bounces", 0)) > 0: continue   # still our side / bounced
+			var depth: float = absf(p.z)
+			if depth >= 1.6 and depth <= 6.0 and p.y >= _Flight.net_clear_y_at(p.x) + _EarlyTuning.BRACE_MIN_OVER and p.y <= 2.7:
+				# A smash needs a smasher: an opponent within reach of that point, with
+				# volleys legal (both bounces done).
+				var smasher := false
+				for o in _opponent_positions():
+					if Vector2(o.x - p.x, o.z - p.z).length() <= _EarlyTuning.BRACE_REACH: smasher = true
+				if smasher and ball.both_bounces_complete:
+					_brace_info = {"at": float(smp.time)}
+					break
+		if not _brace_info.is_empty():
+			if _brace_rng == null:
+				_brace_rng = RandomNumberGenerator.new()
+				RuntimePolicy.seed_rng(_brace_rng, _EarlyTuning.SALT_BRACE + _player.get_actor_id())
+			var reads: bool = ai_difficulty > 0 or _brace_rng.randf() < _EarlyTuning.BRACE_EASY_READS
+			_brace_info["reads"] = reads
+			_brace_info["since_tick"] = Engine.get_physics_frames()
+			PerfMonitor.note("brace_seen", {"actor": _player.get_actor_id(), "flight": ball.flight_id, "reads": reads, "smash_in": snappedf(float(_brace_info.at), 0.01)})
+	if _brace_info.is_empty() or not bool(_brace_info.reads): return -1.0
+	var elapsed: float = float(Engine.get_physics_frames() - int(_brace_info.since_tick)) / float(Engine.physics_ticks_per_second)
+	if elapsed < float(_EarlyTuning.BRACE_READ_AT[clampi(ai_difficulty, 0, 2)]) * float(_brace_info.at): return -1.0
+	return _EarlyTuning.BRACE_DEPTH
+
+## Drive read (POSITION_PLAN.md): the other team keeps driving, so recover deeper. One read
+## roll per flight on the brace stream; -1 = no.
+var _guard_flight := -1
+var _guard_reads := false
+func _drive_guard_depth(ball) -> float:
+	if not _EarlyTuning.DRIVE_READ_ON or ball == null or _game_node == null or not ("point_ending" in _game_node): return -1.0
+	if not RuntimePolicy.position_rules_for(_player.team_id) or _player.team_id not in [0, 1]: return -1.0
+	var share: float = _game_node.point_ending.power_share(1 - _player.team_id, _EarlyTuning.DRIVE_READ_WINDOW)
+	if share < _EarlyTuning.DRIVE_READ_SHARE: return -1.0
+	if _guard_flight != ball.flight_id:
+		_guard_flight = ball.flight_id
+		if _brace_rng == null:
+			_brace_rng = RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(_brace_rng, _EarlyTuning.SALT_BRACE + _player.get_actor_id())
+		_guard_reads = _brace_rng.randf() < float(_EarlyTuning.DRIVE_READ_CHANCE[clampi(ai_difficulty, 0, 2)])
+		if _guard_reads: PerfMonitor.note("drive_guard", {"actor": _player.get_actor_id(), "share": snappedf(share, 0.01)})
+	return _EarlyTuning.DRIVE_GUARD_DEPTH if _guard_reads else -1.0
+
+var _special_rng: RandomNumberGenerator = null
+var _special_flight: int = -1
+var _special_value: float = 1.0
+func _special_roll(ball) -> float:
+	if ball == null: return 1.0
+	if _special_flight != ball.flight_id:
+		if _special_rng == null:
+			_special_rng = RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(_special_rng, preload("res://scripts/gameplay_tuning.gd").SALT_SPECIAL + _player.get_actor_id())
+		_special_flight = ball.flight_id
+		_special_value = _special_rng.randf()
+	return _special_value
+
+func _opponent_velocities() -> Array:
+	var out: Array = []
+	if _game_node == null or not _game_node.has_method("get_players"): return out
+	for p in _game_node.get_players():
+		if p.team_id != _player.team_id: out.append(p.current_velocity)
+	return out
+
+func _opponent_stamina() -> Array:
+	var out: Array = []
+	if _game_node == null or not _game_node.has_method("get_players"): return out
+	for p in _game_node.get_players():
+		if p.team_id != _player.team_id: out.append(float(p.stamina.value))
+	return out
+
+var _position_rng: RandomNumberGenerator = null
+var _position_flight: int = -1
+var _position_value: float = 1.0
+func _position_roll(ball) -> float:
+	if ball == null: return 1.0
+	if _position_flight != ball.flight_id:
+		if _position_rng == null:
+			_position_rng = RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(_position_rng, preload("res://scripts/gameplay_tuning.gd").SALT_POSITION + _player.get_actor_id())
+		_position_flight = ball.flight_id
+		_position_value = _position_rng.randf()
+	return _position_value
+
+var _risk_rng: RandomNumberGenerator = null
+var _risk_flight: int = -1
+var _risk_value: float = 0.5
+func _risk_roll(ball) -> float:
+	if not preload("res://scripts/gameplay_tuning.gd").RISK_ON or ball == null: return 0.5
+	if _risk_flight != ball.flight_id:
+		if _risk_rng == null:
+			_risk_rng = RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(_risk_rng, preload("res://scripts/gameplay_tuning.gd").SALT_RISK + _player.get_actor_id())
+		_risk_flight = ball.flight_id
+		_risk_value = _risk_rng.randf()
+	return _risk_value
+
+## Patience: one roll per incoming flight on this AI's own stream (ground rules 2, 3).
+## With the dial off nothing is drawn.
+var _patience_rng: RandomNumberGenerator = null
+var _patience_flight: int = -1
+var _patience_value: float = 1.0
+func _patience_roll(ball) -> float:
+	if not preload("res://scripts/gameplay_tuning.gd").PATIENCE_ON or ball == null: return 1.0
+	if _patience_flight != ball.flight_id:
+		if _patience_rng == null:
+			_patience_rng = RandomNumberGenerator.new()
+			RuntimePolicy.seed_rng(_patience_rng, preload("res://scripts/gameplay_tuning.gd").SALT_PATIENCE + _player.get_actor_id())
+		_patience_flight = ball.flight_id
+		_patience_value = _patience_rng.randf()
+	return _patience_value
+
+## Both opponents' true positions, for the plan note (gap share) and the middle target.
+func _opponent_positions() -> Array:
+	var out: Array = []
+	if _game_node == null or not _game_node.has_method("get_players"): return out
+	for p in _game_node.get_players():
+		if p.team_id != _player.team_id: out.append(p.global_position)
+	return out
 
 var _rethought_flight := -1
 func solve_match_launch(ball_pos: Vector3) -> Dictionary:

@@ -305,6 +305,3 @@ func compute_contact_at_player_z(ball_pos: Vector3, ball_vel: Vector3, player_z:
 		ball_pos.x + ball_vel.x * t, 
 		ball_pos.y + ball_vel.y * t - 0.5 * g * t * t, 
 		player_z)
-
-
-

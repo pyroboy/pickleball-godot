@@ -57,6 +57,11 @@ func _set_pause_state() -> void :
 	var tree: SceneTree = get_tree()
 	if tree != null:
 		tree.paused = _manual_paused or _focus_paused or not _overlay_pauses.is_empty() or contact_reset_required()
+		# Paused by the menu or by leaving the app: stop drawing and ticking (settings.gd). Pose
+		# editors and other tool overlays pause the match too, but stay live to work in.
+		var settings: Node = tree.root.get_node_or_null("Settings")
+		if settings != null and settings.has_method("set_pause_idle"):
+			settings.set_pause_idle(tree.paused and (_manual_paused or _focus_paused) and _overlay_pauses.is_empty())
 
 func hold_overlay(owner: Node) -> void:
 	_overlay_pauses[owner.get_instance_id()] = weakref(owner)

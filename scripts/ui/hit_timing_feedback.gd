@@ -52,6 +52,9 @@ func update(state: Dictionary, held: bool, vibration_enabled: bool) -> void :
 
 			_flash_started_usec = Time.get_ticks_usec()
 			if vibration_enabled: _vibration_dispatch.call(PULSE_DURATION_MS, PULSE_AMPLITUDE)
+			var tree: = Engine.get_main_loop() as SceneTree
+			var ui_sounds: Node = tree.root.get_node_or_null("Settings/UiSounds") if tree != null else null
+			if ui_sounds != null: ui_sounds.ready_tick()
 	else:
 		caption = "MOVE CLOSER" if preparation_only and held else "HOLD" if held else "HOLD HIT"
 

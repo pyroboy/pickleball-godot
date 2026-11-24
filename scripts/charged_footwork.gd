@@ -26,6 +26,11 @@ const ARRIVAL_DISTANCE: = 0.025
 const LOB_TURN_ALLOWANCE := 0.55
 const LOB_REPLANT_DISTANCE := 0.58
 const MAX_BACKWARD_TRAVEL := 2.10
+## Side bands (preparation_superblocks.gd): a ball passing beside you while HIT is held.
+## Out of reach in time, you edge NUDGE_MAX m toward its side so the next ball is closer.
+const NUDGE_MAX := 0.6
+const NUDGE_SPEED := 1.2
+const Superblocks = preload("res://scripts/preparation_superblocks.gd")
 # Smash: an overhead contact at least this high above the floor (the AI's rule:
 # 0.6 m over the net). The held-HIT footwork steps under such a ball instead of
 # letting it drop, and the court marker shows the spot.
@@ -56,6 +61,7 @@ var cancel_reason: = ""
 var state_history: Array[String] = []
 var _travel_visual_weight := 0.0
 var _latched_support: Dictionary = {}
+var _nudge_origin := Vector3.INF
 
 func _init(owner, controller) -> void :
 	player = owner
@@ -111,7 +117,9 @@ func movement(delta: float, manual: Vector3) -> Vector3:
 	var target_weight:float=1.0 if moving_charge else 0.0
 	_travel_visual_weight=move_toward(_travel_visual_weight,target_weight,(3.0 if moving_charge else 1.75)*maxf(delta,0.0))
 	var held: = Input.is_action_pressed("ui_accept")
-	if not held: suppressed = false
+	if not held:
+		suppressed = false
+		_nudge_origin = Vector3.INF
 	var fresh: = held and not _held_last
 	_held_last = held
 	var ball = player._get_ball_ref()
@@ -154,20 +162,23 @@ func movement(delta: float, manual: Vector3) -> Vector3:
 		# turns the shot into a smash.
 		if not human.contact.is_empty() and not bool(human.anticipated_contact.get("smash", false)): return Vector3.ZERO
 		if suppressed or not held or not player.hitting.charge_visual_active: return Vector3.ZERO
+		# Until a plan starts, a ball beside you (a lit side band) edges you toward it.
+		var nudge: Vector3 = _nudge(delta)
 		_search_clock -= delta
-		if _search_clock > 0.0: return Vector3.ZERO
+		if _search_clock > 0.0: return nudge
 		_search_clock = 0.1
 		var candidate: Dictionary = human.anticipated_contact.duplicate()
 		if candidate.is_empty():
 
 
-			if human.prediction_flight_id == ball.flight_id: return Vector3.ZERO
+			if human.prediction_flight_id == ball.flight_id: return nudge
 			var flight: Dictionary = Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity, MAX_HORIZON)
 			candidate = select_plan(player, ball, flight)
-		if candidate.is_empty(): return Vector3.ZERO
+		if candidate.is_empty(): return nudge
 
-		if float(candidate.distance) < 0.06: return Vector3.ZERO
-		if not activate_plan(candidate, ball): return Vector3.ZERO
+		if float(candidate.distance) < 0.06: return nudge
+		if not activate_plan(candidate, ball): return nudge
+		_nudge_origin = Vector3.INF
 	if not held and human.phase < 0:
 		cancel("released without queued shot", false)
 		return Vector3.ZERO
@@ -224,7 +235,7 @@ func activate_plan(candidate: Dictionary, ball) -> bool:
 	if not candidate.get("target_root", Vector3.INF).is_finite(): return false
 	if candidate.target_root.distance_to(player.global_position) > MAX_TRAVEL: return false
 	var shift: Vector3 = candidate.target_root - player.global_position
-	if not route_is_safe(player, shift, candidate.get("target_root"), bool(candidate.get("lob_retrieval", false)), int(candidate.get("bounces", 0)) + ball.bounces_since_last_hit, Planner.wall_mode(ball)): return false
+	if not bool(candidate.get("band_plan", false)) and not route_is_safe(player, shift, candidate.get("target_root"), bool(candidate.get("lob_retrieval", false)), int(candidate.get("bounces", 0)) + ball.bounces_since_last_hit, Planner.wall_mode(ball)): return false
 	var lob: bool = bool(candidate.get("lob_retrieval", false))
 	if lob and float(candidate.get("time", 0.0)) < travel_time(shift.length(), minf(player.move_speed, MAX_SPEED)) + LOB_TURN_ALLOWANCE + float(candidate.def.ft_duration_strike): return false
 	plan = candidate.duplicate()
@@ -266,7 +277,7 @@ func refresh_prediction(ball, flight: Dictionary) -> void :
 		if lerpf(a.time, b.time, fraction) >= fault_time: continue
 		var bounces: int = int(b.bounces) + ball.bounces_since_last_hit
 		if bounces >= 2 or bounces == 0 and not ball.both_bounces_complete: continue
-		if bounces == 0 and ( not Planner.wall_mode(ball) and absf(plan.target_root.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.55 or not Planner.legal_ball(player, ball)): continue
+		if bounces == 0 and ( not Planner.wall_mode(ball) and not bool(plan.get("band_plan", false)) and absf(plan.target_root.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.55 or not Planner.legal_ball(player, ball)): continue
 		if not Planner.point_fits(player, base, point - shift): continue
 		plan.point = point
 		plan.time = lerpf(a.time, b.time, fraction)
@@ -278,6 +289,9 @@ func refresh_prediction(ball, flight: Dictionary) -> void :
 
 	if state not in ["plant", "load"] and float(plan.time) > 0.5:
 		var revised: Dictionary = select_plan(player, ball, flight)
+		if revised.is_empty() and bool(plan.get("band_plan", false)):
+			revised = band_plan(player, ball, flight)
+			if not bool(revised.get("reachable", false)): revised = {}
 		if not revised.is_empty() and revised.target_root.distance_to(_start_root) <= MAX_TRAVEL:
 			# Replanning may refine geometry, never erase the selected shot intent.
 			if plan.has("motion_context"): revised["motion_context"] = plan.motion_context.duplicate(true)
@@ -429,6 +443,68 @@ static func select_plan(owner, ball, flight: Dictionary, smash_only: bool = fals
 			var pose: PostureDefinition = Planner.pose_at(owner, base, relative_point)
 			best = {"flight_id": ball.flight_id, "point": point, "target_root": target, "time": time, "bounces": int(sample.bounces), "posture": base.posture_id, "def": pose, "distance": distance, "score": score, "neutral": forward_travel > absf(shift.dot(fh)) * 1.3, "lunge": wide, "lob_retrieval": lob, "smash": smash}
 	return best
+
+## A side band starts real footwork: a sideways-only step that puts the ball, where it crosses
+## the band, into that band's pose; then the usual split, shuffle, plant and swing. Sideways
+## only, so the distance to the net (and the kitchen line) does not change. "reachable" is
+## false when the step cannot be made before the ball arrives.
+static func band_plan(owner, ball, flight: Dictionary) -> Dictionary:
+	var geometry: Dictionary = Superblocks.layout()
+	var prediction: Dictionary = Superblocks.crossing(owner, ball, flight, geometry)
+	if prediction.is_empty(): return {}
+	var local: Vector3 = Superblocks.local_point(owner, prediction.point)
+	var selected: Dictionary = Superblocks.classify(local, geometry, {}, float(prediction.time))
+	if selected.is_empty(): return {}
+	var side: int = int(selected.side)
+	var band: int = int(selected.band)
+	var wall: bool = Planner.wall_mode(ball)
+	# Overheads only as a smash; a lower overhead-band ball is taken with the high pose.
+	if band == 3 and (local.y < SMASH_MIN_HEIGHT or wall): band = 2
+	var id: int = ([7, 2, 2, 4] if side < 0 else [5, 0, 0, 4])[band]
+	if band == 0 and local.y >= float(geometry.low_pose_seam): id = 14 if side < 0 else 13
+	var base: PostureDefinition = PostureLibrary.instance().get_def(id)
+	if base == null or not base.has_zone: return {}
+	var bounces: int = int(prediction.bounces) + ball.bounces_since_last_hit
+	# A volley from inside the kitchen is never planned.
+	if bounces == 0 and not wall and absf(owner.global_position.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.05: return {}
+	var fh: Vector3 = owner._get_forehand_axis()
+	fh.y = 0.0
+	fh = fh.normalized()
+	var shift: Vector3 = fh * (local.x - base.paddle_forehand_mul)
+	var distance: float = shift.length()
+	if distance > MAX_TRAVEL: return {}
+	var target: Vector3 = owner.global_position + shift
+	target.y = owner.ground_y
+	if absf(target.x) > PickleballConstants.COURT_WIDTH * 0.5 + 0.6: return {}
+	if owner.bounds_ready and (target.x < owner.min_x or target.x > owner.max_x or target.z < owner.min_z or target.z > owner.max_z): return {}
+	var relative_point: Vector3 = Vector3(prediction.point) - shift
+	if not Planner.point_fits(owner, base, relative_point): return {}
+	var near: bool = absf(owner.global_position.z) < PickleballConstants.NON_VOLLEY_ZONE + 0.85
+	var speed: float = minf(owner.move_speed, MAX_SPEED if distance > 0.85 and not near else SHUFFLE_SPEED)
+	var reachable: bool = travel_time(distance, speed) + base.ft_duration_strike <= float(prediction.time)
+	return {"flight_id": ball.flight_id, "point": prediction.point, "target_root": target, "time": prediction.time,
+		"bounces": int(prediction.bounces), "posture": base.posture_id, "def": Planner.pose_at(owner, base, relative_point),
+		"distance": distance, "score": 0.0, "neutral": false, "lunge": false, "lob_retrieval": false,
+		"smash": base.family == 3, "band_plan": true, "reachable": reachable, "side": side, "band": band}
+
+## Edge toward the side of a lit band, at most NUDGE_MAX m from where it started, never past
+## the player's bounds. Brakes when there is no band.
+func _nudge(delta: float) -> Vector3:
+	var hint: Dictionary = human.superblock_hint
+	if hint.is_empty() or not hint.has("side"):
+		velocity = velocity.move_toward(Vector3.ZERO, BRAKE * delta)
+		return velocity
+	if not _nudge_origin.is_finite(): _nudge_origin = player.global_position
+	var dir: Vector3 = player._get_forehand_axis() * float(hint.side)
+	dir.y = 0.0
+	dir = dir.normalized()
+	var left: float = NUDGE_MAX - (player.global_position - _nudge_origin).dot(dir)
+	var ahead: Vector3 = player.global_position + dir * 0.1
+	if left <= 0.02 or player.bounds_ready and (ahead.x < player.min_x or ahead.x > player.max_x):
+		velocity = velocity.move_toward(Vector3.ZERO, BRAKE * delta)
+		return velocity
+	velocity = velocity.move_toward(dir * minf(NUDGE_SPEED, sqrt(2.0 * BRAKE * left)), ACCEL * delta)
+	return velocity
 
 static func route_is_safe(owner, shift: Vector3, target: Vector3, lob: bool, bounces: int, wall: bool = false) -> bool:
 	if not shift.is_finite() or not target.is_finite() or shift.length() > MAX_TRAVEL: return false

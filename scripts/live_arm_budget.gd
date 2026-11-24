@@ -21,6 +21,7 @@ const EXT_LIMIT: float = Anatomy.EXTENSION_BUDGET_DEG
 const RADIAL_LIMIT: float = Anatomy.RADIAL_BUDGET_DEG
 const ULNAR_LIMIT: float = Anatomy.ULNAR_BUDGET_DEG
 const AXIAL_LIMIT: float = Anatomy.AXIAL_BUDGET_DEG
+const ELBOW_LIMIT_IN_PLAY := false
 const CACHE_LIMIT := 512
 const CACHE_LIFETIME_TICKS := 60
 static var _accept_cache := {}
@@ -195,6 +196,7 @@ static func apply(player, pose, hands) -> void:
 static func _perf_apply(player, pose, hands) -> void:
 	if not load("res://scripts/live_transition_arm_reach.gd").enabled(player, pose): return
 	var reports: Array = []
+	var rally: bool = load("res://scripts/live_transition_arm_reach.gd").in_rally(player)
 	for side in range(2):
 		var arm = player.right_arm_node if side == 0 else player.left_arm_node
 		var model = arm.articulated_hand
@@ -232,8 +234,12 @@ static func _perf_apply(player, pose, hands) -> void:
 
 			reports.append({"feasible": true, "released_support": true, "clearance": separation, "continuity": continuity})
 			continue
-		var result := solve(arm.upper_pivot.global_position, wrist, arm.forearm_pivot.global_position,
-			mount.basis * model.anatomical_basis, arm.upper_arm_length, arm.forearm_length, side == 1)
+		# The elbow stays where the pose and the arm IK put it (user's call, 2026-11-23: solvers
+		# belong in Pose Studio). Re-picking the elbow plane for wrist limits every tick cost 7% of
+		# a physics tick and added elbow / hand shake. ELBOW_LIMIT_IN_PLAY = true restores it.
+		var result: Dictionary = solve(arm.upper_pivot.global_position, wrist, arm.forearm_pivot.global_position,
+			mount.basis * model.anatomical_basis, arm.upper_arm_length, arm.forearm_length, side == 1) if ELBOW_LIMIT_IN_PLAY or not rally \
+			else {"feasible": true, "changed": false, "elbow": arm.forearm_pivot.global_position, "angle": 0.0, "cost": 0.0}
 		reports.append(result)
 		if not main:
 			_remember_support(player, arm, mount)

@@ -125,7 +125,7 @@ func _build_video_tab() -> ScrollContainer:
 	var v: VBoxContainer = _inner_vbox()
 	scroll.add_child(v)
 
-	_option_row(v, "Camera perspective", "video.camera_mode", ["Center + serve", "Third person", "POV: ball lock"])
+	_option_row(v, "Camera perspective", "video.camera_mode", ["Center + serve", "Third person", "POV: ball lock", "First person"])
 	var camera_note: = Label.new()
 	camera_note.text = "Center + serve: behind Blue for your serve until contact, then back to center. Stays centered on Blue’s side when Red serves. Third person follows Blue throughout play. POV uses Blue’s eyes and keeps the ball centered; the local body is hidden for a clear view. Shake applies to the center view only."
 	camera_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -140,6 +140,7 @@ func _build_video_tab() -> ScrollContainer:
 		["Off", "Low", "Medium", "High"])
 	_option_row(v, "Shadow Quality", "video.shadow_quality", 
 		["Off", "Low", "High"])
+	_option_row(v, "Frame rate", "video.fps_mode", ["60 fps", "Adaptive: 60 when it can", "30 fps (cooler)"])
 	return scroll
 
 func _build_focus_visuals(parent: VBoxContainer) -> void:
@@ -182,7 +183,9 @@ func _build_gameplay_tab() -> ScrollContainer:
 	scroll.add_child(v)
 
 	var stamina_note := Label.new()
-	stamina_note.text = "Stamina · Standard gameplay\nBoth players: 100 stamina. Drives and fast travel cost more; soft resets create time to recover. Rest recovers 7/s after a short breathing delay (0.8 s hard shots, 0.2 s soft shots). Below 25, running gradually slows by up to 15%. Contact timing, aim accuracy and shot power stay unchanged. Prototype tuning."
+	stamina_note.text = ("Stamina · Standard gameplay\nEveryone starts at 100. Drives, smashes, speed-ups and sprinting drain it; dinks and resets are rest. Between points it refills only part of the way, so hard rallies add up. Below 50, you move slower (up to a quarter slower when empty), your drives come off weaker and less accurate, and your blocks pop up more; dinks and resets are unaffected, so they are how you rest. The penalty is light on Easy and full on Hard. Winning a rally of 15+ shots gives your team a small refill."
+		if preload("res://scripts/gameplay_tuning.gd").STAMINA_ON else
+		"Stamina · Standard gameplay\nBoth players: 100 stamina. Drives and fast travel cost more; soft resets create time to recover. Rest recovers 7/s after a short breathing delay (0.8 s hard shots, 0.2 s soft shots). Below 25, running gradually slows by up to 15%. Contact timing, aim accuracy and shot power stay unchanged. Prototype tuning.")
 	stamina_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stamina_note.add_theme_font_size_override("font_size", 16)
 	v.add_child(stamina_note)
@@ -210,6 +213,8 @@ func _build_gameplay_tab() -> ScrollContainer:
 	_checkbox_row(v, "Vibrate when release is ready", "gameplay.timing_vibration")
 	_slider_row(v, "Rally aim window (real seconds)", "gameplay.aim_focus_seconds", 1.0, 5.0, 0.5)
 	_checkbox_row(v, "Incoming movement guide", "gameplay.movement_guide")
+	_checkbox_row(v, "Tips", "gameplay.stamina_tips")
+	_checkbox_row(v, "Stamina bars", "gameplay.stamina_bars")
 	_option_row(v, "Between points (next finalized point)", "gameplay.point_transition", ["Physical pickup", "Quick reset"])
 	var movement_note := Label.new()
 	movement_note.text = "MOVE marks a legal target with time to move. TIGHT means little or uncertain time. NO TIME means the predicted legal flight cannot be reached in time. The guide never moves your player."
@@ -236,6 +241,7 @@ func _build_audio_tab() -> ScrollContainer:
 
 	_slider_row(v, "Master Volume", "audio.master", 0.0, 1.0, 0.01)
 	_slider_row(v, "Ball & Point Cues", "audio.sfx", 0.0, 1.0, 0.01)
+	_slider_row(v, "Music", "audio.music", 0.0, 1.0, 0.01)
 	_slider_row(v, "Court Ambience", "audio.ambience", 0.0, 1.0, 0.01)
 	_slider_row(v, "Footsteps & Squeaks", "audio.footsteps", 0.0, 1.0, 0.01)
 	var note: = Label.new()

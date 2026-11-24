@@ -22,6 +22,7 @@ uniform float snap = 1.0;
 uniform float accent_mix = 0.0;
 uniform vec3 accent_color : source_color = vec3(1.0);
 uniform float team_ref_lum = 0.2;
+uniform float flash = 0.0;   // 1 = card drawn white (hit flash, rally_moments.gd)
 
 void fragment() {
 	vec2 uv = UV;
@@ -40,5 +41,5 @@ void fragment() {
 			rgb = accent_color * clamp(shade, 0.25, 1.0);
 		}
 	}
-	ALBEDO = rgb * gain;
+	ALBEDO = mix(rgb * gain, vec3(1.0), flash);
 }

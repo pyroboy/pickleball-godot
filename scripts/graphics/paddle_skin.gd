@@ -24,7 +24,9 @@ const LAG_ZETA_FIRM: = 0.9    # damping ratio, firm wrist: no wobble on quick po
 const LAG_ZETA_LOOSE: = 0.5   # relaxed wrist: whips past the face after contact
 const LAG_GRAVITY: = 45.0     # m/s2 on the head at full relax (~12 degree drop when held flat)
 const LAG_MAX_DEG: = 40.0     # largest bend shown at the wrist
-const LAG_SUBSTEPS: = 3
+const LAG_SUBSTEPS: = 3       # fewest substeps per frame (60 / 120 fps)
+const LAG_MAX_STEP: = 1.0 / 180.0  # longest substep: the firm 18 Hz spring is unstable past
+                                   # ~1/90 s, so 30 fps (iPhone Low Power Mode) fluttered
 const RELEASE_NEAR: = 0.45    # m, incoming ball to paddle head: lag fully released (true face)
 const RELEASE_FAR: = 1.4      # m, incoming ball further than this: full lag
 const LAG_RESET_M: = 0.5      # head jumped this far in one frame (reset / teleport): no lag
@@ -227,11 +229,12 @@ func _wrist_lag(xf: Transform3D, delta: float) -> Transform3D:
 	var g: = Vector3.DOWN * LAG_GRAVITY * loose
 	var radius: float = (tip - grip).length()
 	var limit: float = deg_to_rad(LAG_MAX_DEG)
-	var h: float = delta / LAG_SUBSTEPS
+	var steps: int = maxi(LAG_SUBSTEPS, ceili(delta / LAG_MAX_STEP - 0.01))
+	var h: float = delta / steps
 	var pre: Vector4 = _prelag(tip + body, tip - grip)   # axis xyz, angle w
 	var pre_axis: = Vector3(pre.x, pre.y, pre.z)
-	for i in LAG_SUBSTEPS:
-		var f: float = float(i + 1) / LAG_SUBSTEPS   # real head and grip move through the frame
+	for i in steps:
+		var f: float = float(i + 1) / steps   # real head and grip move through the frame
 		var t_i: Vector3 = _prev_tip.lerp(tip, f)
 		var g_i: Vector3 = grip - (tip - t_i)
 		var aim: Vector3 = t_i if pre.w <= 0.0 else g_i + (t_i - g_i).rotated(pre_axis, pre.w)

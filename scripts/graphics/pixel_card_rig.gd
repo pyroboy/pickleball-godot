@@ -47,12 +47,61 @@ const LUT_PATH: = "res://assets/pixel_cards/card_tonemap_lut.json"
 const HAND_OPEN: = 0
 const HAND_GRIP: = 1
 const HAND_REACH: = 2
+const HAND_CUP: = 3                   # holding the ball (baked row only; without it the grip hand is shown)
+# Which hand drawing (tools/bake_pixel_cards.py hand_part):
+#   grip  - a hand on the paddle: the paddle hand, and the support hand whenever it is on the
+#           handle or throat (two-handed ready and backhands), and any hand in a swing;
+#   cup   - a hand holding the ball (the ball within CUP_ON metres of it, not in play);
+#   reach - a free arm at full stretch;
+#   open  - otherwise: ready for the ball.
+const CUP_ON: = 0.13
+const CUP_OFF: = 0.18
+const HOLD_GRIP_W: = 0.5              # card_motion_layer free weight below this = on the paddle
+const REACH_HANG_Y: = -0.78           # arm direction (shoulder to hand) pointing down more than this = hanging
+const CUP_AIM: = 0.75                 # how far the cupping hand turns from the forearm's line toward the ball
 const EXTRA_ROWS: = 2                 # atlas rows appended at load: grip hand, reach hand
 const REACH_ON: = 0.90                # arm extension (shoulder-hand / arm length) that shows the reach hand
 const REACH_OFF: = 0.82
 const FAR_DIST: = 16.0                # metres from the camera (camera ~ (0,10.5,11): far-court players are 17-21 m, near-court 10-14 m)
 const FAR_HYST: = 1.5
 const LIMB_OVERLAP: = 1.04            # limb cards run 4% long so joints never open a gap
+# A limb seen nearly end-on (your own thigh from above, an arm pointing at the camera) used to
+# squash to a sliver. It is never drawn shorter than this share of its real length, centred on
+# where it really is, so it reads as a foreshortened limb.
+const LIMB_MIN_SHOWN: = 0.34
+# ... and which way it points on screen is held while it is nearly end-on: that direction comes
+# from a few millimetres of sideways offset there and spun round with every small move.
+const LIMB_DIR_HOLD: = 0.10           # share of the limb's length seen sideways: below this the last direction is kept
+const LIMB_DIR_FREE: = 0.28           # from here the real direction is used
+# Limbs and hands seen along their length have their own drawings (tools/bake_pixel_cards.py
+# LIMB_AXIAL / HAND_AXIAL: the part tilted toward the camera, from its root end or its far
+# end). The one nearest to how end-on the limb really is gets drawn, so a foreshortened limb
+# keeps square pixels and shows its end, not a side view squashed into a block.
+const AXIAL_HYST_DEG: = 10.0          # a drawing is kept until another is this much nearer
+const LIMB_AXIAL_MIN: = 0.7           # a tilted drawing is never drawn shorter than this share of its own length
+# Other view heights of head / torso / shorts / shoe (tools/bake_pixel_cards.py VIEW_ELEV):
+# "low" rows when the camera is about level with the part (first person looking at another
+# player), "top" rows from nearly overhead (your own body when you look down, top cameras).
+# The match camera (28-65 degrees up) stays on the normal rows.
+const VIEW_LOW_ON: = 16.0             # degrees the camera is above the part
+const VIEW_LOW_OFF: = 22.0
+const VIEW_TOP_ON: = 73.0
+const VIEW_TOP_OFF: = 67.0
+const VIEW_TOP_ON_OWN: = 60.0          # first person, your own body: the from-above rows come in sooner and stay,
+const VIEW_TOP_OFF_OWN: = 48.0         # so a step forward does not flip your shoe between two drawings
+# First person: the eye is inside the body, so each of your own cards is turned for where the
+# eye really is from that part (your chest is seen from the front, your shoes from behind and
+# above), not one shared turn for the whole body as from a far camera. A part almost straight
+# below the eye keeps its last turn (the direction there flips with every small head move).
+const FIRST_PERSON_HOLD_M: = 0.08
+# ... and your own torso is seen almost along its length, which a flat card cannot show: the
+# card is drawn as tall as the torso really looks from the eye (the sine of the angle between
+# the spine and the line of sight), relative to the height its art was drawn for. Without this
+# the chest lay across the view like a cut-out and hid the legs and feet behind it.
+const ART_ELEV_DEG: = {"head": 30.0, "torso": 40.0, "shorts": 44.0, "shoe": 44.0}   # tools/bake_pixel_cards.py PART_ELEV
+const ART_LOW_DEG: = 8.0
+const ART_TOP_DEG: = 78.0
+const FIRST_PERSON_MIN_TALL: = 0.3
 const PART_BIAS: = {"head": 0.02, "torso": 0.0, "shorts": -0.01, "upper_arm": 0.03, "forearm": 0.035,
 	"hand": 0.04, "thigh": 0.012, "shin": 0.016, "shoe": 0.02}   # metres toward the camera (near side; negated far side)
 const BIAS_BLEND: = 0.04              # metres of side offset over which near/far bias eases
@@ -62,6 +111,29 @@ const ACCENT_DISPLAY: = [Color(0.13, 0.78, 0.72), Color(0.95, 0.58, 0.16)]   # o
 
 # Debug toggles (off by default except cards). Env var or set_debug().
 static var show_cards: bool = true
+## First-person camera (gameplay_camera.gd FIRST_PERSON): this player's own cards stay drawn
+## from inside the head (the user wants the pixel-card look there too), except the head and
+## shorts. Visual only.
+var first_person := false
+const FIRST_PERSON_HIDDEN := ["head", "shorts"]
+## A card this close to the eye would fill the screen as a flat sprite: it shrinks from
+## FIRST_PERSON_NEAR_FADE m and is not drawn under FIRST_PERSON_NEAR_HIDE m.
+const FIRST_PERSON_NEAR_HIDE := 0.28
+const FIRST_PERSON_NEAR_FADE := 0.40
+const FIRST_PERSON_LIMB_HIDE := 0.13       # a limb whose drawn part is centred closer than this is not drawn
+const FIRST_PERSON_TOP_NEAR_HIDE := 0.14   # ... the from-above torso is meant to be seen close: it stays until here
+const FIRST_PERSON_TOP_NEAR_FADE := 0.22
+const FIRST_PERSON_UPPER_ARM_FROM := 0.55   # the upper arm is drawn from this far down toward the elbow: the shoulder end sits next to the eye and would fill the screen
+## In first person the camera rides the DRAWN head (with the visual-only walk, lean and stance
+## motion), not the gameplay head: set every frame before the cards are placed, then
+## `on_drawn_head` lets the camera move there so the cards face this frame's eye.
+var drawn_head_xf := Transform3D.IDENTITY
+var drawn_body_basis := Basis.IDENTITY
+var drawn_head_frame := -10
+var on_drawn_head: Callable
+## Where the first-person head points (world, level; ZERO for none). A big look turns the drawn
+## chest, arms and hips with it (card_motion_layer.gd _look_turn). Visual only.
+var look_dir := Vector3.ZERO
 static var show_bones: bool = false
 static var show_axes: bool = false
 static var accents_enabled: bool = true
@@ -100,6 +172,7 @@ var _cards: Array = []
 var _cells: Dictionary = {}
 var _hide_timer: float = 0.0
 var _culled_cam: Camera3D = null
+var _flash_left: float = 0.0   # real seconds of white hit flash left (flash_white)
 
 var _mat: ShaderMaterial
 var _mesh_inst: MeshInstance3D
@@ -217,7 +290,29 @@ func _pick_profile(meta: Dictionary) -> String:
 func _add(part: String, a: Node3D, b: Node3D, mirror: bool, meta: Dictionary, facing: String, prev: Node3D = null, root: Node3D = null, arm = null) -> void:
 	if a == null or not meta.parts.has(part): return
 	var info: Dictionary = meta.parts[part]
+	var extra: = func(suffix: String) -> int:
+		return int(meta.parts[part + suffix].row) if meta.parts.has(part + suffix) else -1
+	# Drawings of this part seen along its length: limbs [tilt deg, row, texels from joint to
+	# joint]; hands, per hand row (open, grip, reach, cup), [tilt deg, row].
+	var variants: Array = []
+	var hand_variants: Dictionary = {}
+	if info.has("end") and b != null:
+		variants.append([0.0, int(info.row), maxf(float(info.end[1]) - float(info.anchor[1]), 1.0)])
+		for key in meta.parts:
+			var q: Dictionary = meta.parts[key]
+			if q.has("axial") and str(q.get("of", "")) == part:
+				variants.append([float(q.axial), int(q.row), maxf(float(q.end[1]) - float(q.anchor[1]), 1.0)])
+	elif part == "hand":
+		for key in meta.parts:
+			var q: Dictionary = meta.parts[key]
+			if not q.has("axial") or not meta.parts.has(str(q.get("of", ""))) or not str(q.of).begins_with("hand"): continue
+			var base_row: int = int(meta.parts[str(q.of)].row)
+			if not hand_variants.has(base_row): hand_variants[base_row] = [[0.0, base_row]]
+			hand_variants[base_row].append([float(q.axial), int(q.row)])
 	_cards.append({"part": part, "a": a, "b": b, "prev": prev, "mirror": mirror, "row": int(info.row),
+		"low_row": extra.call("_low"), "top_row": extra.call("_top"), "view": 0,
+		"variants": variants, "hand_variants": hand_variants, "axial": 0.0,
+		"grip_row": extra.call("_grip"), "reach_row": extra.call("_reach"), "cup_row": extra.call("_cup"), "detail": float(info.get("detail", 1.0)),
 		"root": root, "arm": arm, "side": 1 if root != null else 0, "hand_state": HAND_OPEN,
 		"anchor": Vector2(info.anchor[0], info.anchor[1]), "end": Vector2(info.end[0], info.end[1]) if info.has("end") else Vector2.ZERO,
 		"limb": info.has("end") and b != null, "facing": facing})
@@ -362,6 +457,17 @@ static func _display_to_atlas(display: Color) -> Color:
 		out.append(float(_lut.atlas[i]) / 255.0)
 	return Color(out[0], out[1], out[2])
 
+## Draw every card white for a moment (visual only; rally_moments.gd on a PERFECT hit).
+func flash_white(seconds: float) -> void:
+	if _mat == null: return
+	_flash_left = maxf(_flash_left, seconds)
+	_mat.set_shader_parameter("flash", 0.85)
+
+func _update_flash(delta: float) -> void:
+	if _flash_left <= 0.0: return
+	_flash_left -= delta / maxf(Engine.time_scale, 0.05)
+	if _flash_left <= 0.0: _mat.set_shader_parameter("flash", 0.0)
+
 func apply_accent(display_color: Color) -> void:
 	if _mat == null or not _has_other: return
 	_mat.set_shader_parameter("accent_color", _display_to_atlas(display_color))
@@ -462,17 +568,33 @@ func _update_far(dist: float) -> void:
 func _hand_row(c: Dictionary, a: Vector3) -> int:
 	var arm = c.arm
 	var state: int = HAND_OPEN
-	if arm == _paddle_arm and _paddle_arm != null:
+	var was: int = int(c.hand_state)
+	var on_paddle: bool = (arm == _paddle_arm and _paddle_arm != null) or (_motion != null and _motion._free_w(arm) < HOLD_GRIP_W)
+	if on_paddle:
 		state = HAND_GRIP
 	else:
-		var reach_len: float = float(arm.get("upper_arm_length")) + float(arm.get("forearm_length"))
-		var ext: float = (a - _xf(c.root).origin).length() / maxf(reach_len, 0.01)
-		var was: bool = int(c.hand_state) == HAND_REACH
-		if ext > (REACH_OFF if was else REACH_ON): state = HAND_REACH
-		elif _swing_active: state = HAND_GRIP
+		var ball = _player._get_ball_ref() if _player.has_method("_get_ball_ref") else null
+		var holding: bool = false
+		if ball != null and is_instance_valid(ball) and not bool(ball.get("is_in_play")):
+			holding = a.distance_to(_xf(ball).origin) < (CUP_OFF if was == HAND_CUP else CUP_ON)
+		if holding:
+			state = HAND_CUP
+		else:
+			var reach_len: float = float(arm.get("upper_arm_length")) + float(arm.get("forearm_length"))
+			var along: Vector3 = a - _xf(c.root).origin
+			var ext: float = along.length() / maxf(reach_len, 0.01)
+			# A straight arm hanging at the side is relaxed, not reaching: the spread hand is
+			# only for an arm stretched out (not pointing down).
+			var hanging: bool = along.normalized().y < REACH_HANG_Y
+			if ext > (REACH_OFF if was == HAND_REACH else REACH_ON) and not hanging: state = HAND_REACH
+			elif _swing_active: state = HAND_GRIP
 	c.hand_state = state
 	if state == HAND_OPEN: return int(c.row)
-	return _base_rows + state - 1
+	# Baked hand rows (fingers, tools/bake_pixel_cards.py) when the atlas has them; else the
+	# two rows painted at load (grip, reach), with the grip standing in for the cup.
+	var baked: int = int(c.grip_row) if state == HAND_GRIP else (int(c.reach_row) if state == HAND_REACH else int(c.cup_row))
+	if baked >= 0: return baked
+	return _base_rows + (HAND_GRIP if state == HAND_CUP else state) - 1
 
 func _update_paddle_arm() -> void:
 	_paddle_arm = null
@@ -488,6 +610,11 @@ func _update_paddle_arm() -> void:
 			_paddle_arm = c.arm
 
 func _process(delta: float) -> void:
+	var _rt: = Time.get_ticks_usec()
+	_draw_cards(delta)
+	PerfMonitor.record("card.rig", Time.get_ticks_usec() - _rt)   # the whole rig for this player, card.motion included
+
+func _draw_cards(delta: float) -> void:
 	if not is_instance_valid(_player) or not is_instance_valid(_player.body_pivot):
 		queue_free()
 		return
@@ -495,7 +622,7 @@ func _process(delta: float) -> void:
 	if cam == null or _cards.is_empty() or _amesh == null: return
 	# Follow the player's visibility, and hide our own body in first-person view.
 	var head_pos: Vector3 = _player.body_pivot.global_position + Vector3.UP * 1.5
-	visible = _player.is_visible_in_tree() and cam.global_position.distance_to(head_pos) > 0.6
+	visible = _player.is_visible_in_tree() and (first_person or cam.global_position.distance_to(head_pos) > 0.6)
 	if not visible: return
 	if cam != _culled_cam:
 		cam.set_cull_mask_value(CLASSIC_LAYER, false)
@@ -507,6 +634,7 @@ func _process(delta: float) -> void:
 		_hide_timer = 2.0
 		_hide_classic()
 	_mesh_inst.visible = show_cards
+	_update_flash(delta)
 	var meta: = _grid
 	var s: float = float(meta.meters_per_texel)
 	var cell: Vector2 = Vector2(meta.cell[0], meta.cell[1])
@@ -524,12 +652,25 @@ func _process(delta: float) -> void:
 	_update_paddle_arm()
 	var _mt: = Time.get_ticks_usec()
 	_motion.update(delta, _swing_active, _paddle_arm)
+	if first_person:
+		var head_mesh: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh/HeadMesh")
+		if head_mesh != null:
+			drawn_head_xf = _xf(head_mesh)
+			drawn_body_basis = _xf(_player.body_pivot).basis
+			drawn_head_frame = Engine.get_process_frames()
+			if on_drawn_head.is_valid():
+				on_drawn_head.call()
+				cam_pos = cam.global_position
+	if record_drawn: drawn["grip_slip"] = Vector3(_motion.grip_slip, _motion._stand_w, 0.0)   # bench: paddle off the hand before the reseat
+	if record_drawn: drawn["flow"] = _motion.flow   # bench: split hop m, gravity drop m, diagonal turn deg
+	if record_drawn: drawn["arm_state"] = _motion.arm_state(_paddle_arm)   # bench: paddle arm relax, free arm relax, why not relaxed
 	PerfMonitor.record("card.motion", Time.get_ticks_usec() - _mt)
-	var body_cell: int = _cell_for("body", _player.body_pivot, cam_pos)
+	var face_cam: Vector3 = cam_pos
+	var body_cell: int = _cell_for("body", _player.body_pivot, face_cam)
 	var torso_node: Node3D = _player.body_pivot.get_node_or_null("TorsoMesh")
-	var torso_cell: int = _cell_for("torso", torso_node, cam_pos) if torso_node else body_cell
+	var torso_cell: int = _cell_for("torso", torso_node, face_cam) if torso_node else body_cell
 	var head_node: Node3D = torso_node.get_node_or_null("HeadMesh") if torso_node else null
-	var head_cell: int = _cell_for("head", head_node, cam_pos) if head_node else torso_cell
+	var head_cell: int = _cell_for("head", head_node, face_cam) if head_node else torso_cell
 	var torso_pos: Vector3 = _xf(torso_node if torso_node else _player.body_pivot).origin
 	_update_far(cam_pos.distance_to(torso_pos))
 	var want_dbg: bool = show_bones or show_axes
@@ -542,31 +683,84 @@ func _process(delta: float) -> void:
 	for c in _cards:
 		var a: Vector3 = _pos(c.a)
 		if record_drawn: drawn["%s%d" % [c.part, 1 if c.mirror else 0]] = a
+		if first_person and c.part in FIRST_PERSON_HIDDEN:
+			# Collapsed to a point: nothing drawn, the vertex layout stays the same.
+			var hidden_v: int = i * 4
+			for corner in 4: _verts[hidden_v + corner] = a
+			i += 1
+			continue
 		var b: Vector3
 		if c.limb: b = _pos(c.b)
-		elif c.prev != null: b = a + (a - _pos(c.prev)).normalized() * 0.06
+		elif c.prev != null:
+			var along: Vector3 = (a - _pos(c.prev)).normalized()
+			# A hand cupping the ball points at the ball, so the ball sits in the palm and fingers
+			# (on the forearm's line it sat on the wrist).
+			if int(c.hand_state) == HAND_CUP:
+				var held_ball = _player._get_ball_ref() if _player.has_method("_get_ball_ref") else null
+				if held_ball != null and is_instance_valid(held_ball):
+					var to_ball: Vector3 = _xf(held_ball).origin - a
+					if to_ball.length() > 0.02 and to_ball.length() < CUP_OFF * 1.5: along = along.lerp(to_ball.normalized(), CUP_AIM).normalized()
+			b = a + along * 0.06
 		else: b = a
-		var mid: Vector3 = (a + b) * 0.5
+		# First person: only the elbow end of your upper arm is drawn (its shoulder end is beside
+		# the eye). The drawing is cropped there, not squeezed into the part that is left.
+		var crop: float = FIRST_PERSON_UPPER_ARM_FROM if (first_person and c.part == "upper_arm" and c.limb) else 0.0
+		var mid: Vector3 = (a.lerp(b, crop) + b) * 0.5
 		var z: Vector3 = (cam_pos - mid).normalized()
 		var up_dir: Vector3
 		var sy: float = s
+		var limb_shift: Vector3 = Vector3.ZERO
+		var limb_row: int = -1
+		var limb_texels: float = 0.0
+		var tilt: float = 0.0
 		if c.limb or c.prev != null:
 			var d: Vector3 = b - a
 			var dp: Vector3 = d - z * d.dot(z)
 			var texel_len: float = maxf(c.end.y - c.anchor.y, 1.0) if c.limb else 1.2
 			if dp.length() < 0.0001: dp = -(Vector3.UP - z * z.y)
 			up_dir = -dp.normalized()
-			if c.limb: sy = dp.length() / texel_len
+			# How end-on it is seen: + from its root end, - from its far end.
+			tilt = rad_to_deg(asin(clampf(z.dot(-d.normalized()), -1.0, 1.0)))
+			var side_share: float = dp.length() / maxf(d.length(), 0.001)
+			var held = c.get("dir")
+			if held is Vector3 and side_share < LIMB_DIR_FREE:
+				var kept: Vector3 = Vector3(held) - z * Vector3(held).dot(z)   # last direction, laid in today's plane
+				if kept.length_squared() > 1e-6:
+					up_dir = kept.normalized().slerp(up_dir, smoothstep(LIMB_DIR_HOLD, LIMB_DIR_FREE, side_share)).normalized() if kept.normalized().dot(up_dir) > -0.999 else kept.normalized()
+			c["dir"] = up_dir
+			if c.limb:
+				var pick: Array = _pick_axial(c, tilt)
+				limb_row = int(pick[1])
+				texel_len = float(pick[2])
+				limb_texels = texel_len
+				# Never shorter than a share of the drawing's own length, centred on where it is.
+				var least: float = LIMB_MIN_SHOWN if is_zero_approx(float(pick[0])) else cos(deg_to_rad(absf(float(pick[0])))) * LIMB_AXIAL_MIN
+				var shown: float = maxf(dp.length(), d.length() * least)
+				sy = shown / texel_len
+				limb_shift = up_dir * (shown - dp.length()) * 0.5
 		else:
+			# Screen-up of the sprite: the part's own up (so a lean shows) while that is well
+			# seen; from steep above or below it is the level direction away from the camera,
+			# which is the same line on screen and does not vanish when you look straight down.
+			var away: Vector3 = mid - face_cam
+			away.y = 0.0
+			var steep: float = smoothstep(0.55, 0.85, absf(z.y))
 			var up_hint: Vector3 = _xf(c.a).basis.y if c.facing != "body" else Vector3.UP
-			up_dir = (up_hint - z * up_hint.dot(z)).normalized()
+			var plain: Vector3 = up_hint - z * up_hint.dot(z)
+			var level: Vector3 = Vector3.ZERO
+			if away.length_squared() > 1e-6:
+				level = away.normalized() * signf(z.y)
+				level = level - z * level.dot(z)
+			var mixed: Vector3 = plain.normalized() * (1.0 - steep) + (level.normalized() if level.length_squared() > 1e-8 else plain.normalized()) * steep
+			up_dir = (mixed if mixed.length_squared() > 1e-8 else plain).normalized()
 		var x: Vector3 = up_dir.cross(z).normalized()
 		var k: int = head_cell if c.facing == "head" else (torso_cell if c.facing == "torso" else body_cell)
+		if first_person: k = _own_cell(c, head_node if c.facing == "head" else (torso_node if c.facing == "torso" else _player.body_pivot), mid, cam_pos)
 		if c.mirror:
 			x = -x
 			k = (cols - k) % cols
 		var anchor: Vector2 = c.anchor
-		var origin_a: Vector3 = a + z * (mid - a).dot(z)
+		var origin_a: Vector3 = a + z * (mid - a).dot(z) + limb_shift
 		# Draw order by camera side: the limb chain nearer the camera than the torso draws in
 		# front of it, the far one behind (small metre bias along the view ray, eased).
 		var bias: float = float(PART_BIAS.get(c.part, 0.0))
@@ -579,13 +773,47 @@ func _process(delta: float) -> void:
 		if c.part != "hand":
 			lsc *= 1.0 + squash
 			wsc = 1.0 - 0.7 * squash
-		var xs: float = s * wsc
-		var ys: float = sy * lsc
+		var xs: float = s * wsc / float(c.detail)
+		var ys: float = sy * lsc / float(c.detail)
+		# Which view height: low / normal / top, by how far above the part the camera is.
+		var row: int = int(c.row)
+		if limb_row >= 0: row = limb_row
+		if c.part == "hand":
+			row = _hand_row(c, a)
+			var tilted = c.hand_variants.get(row)
+			if tilted != null: row = _pick_hand_axial(c, tilted, tilt)
+		elif int(c.low_row) >= 0 or int(c.top_row) >= 0:
+			var elev: float = rad_to_deg(asin(clampf(z.y, -1.0, 1.0)))
+			var view: int = int(c.view)
+			if view > 0: view = 1 if elev > (VIEW_TOP_OFF_OWN if first_person else VIEW_TOP_OFF) else 0
+			elif view < 0: view = -1 if elev < VIEW_LOW_OFF else 0
+			if view == 0:
+				if elev > (VIEW_TOP_ON_OWN if first_person else VIEW_TOP_ON) and int(c.top_row) >= 0: view = 1
+				elif elev < VIEW_LOW_ON and int(c.low_row) >= 0: view = -1
+			c.view = view
+			if view > 0 and int(c.top_row) >= 0: row = int(c.top_row)
+			elif view < 0 and int(c.low_row) >= 0: row = int(c.low_row)
+		if first_person and not c.limb and c.prev == null:
+			var art_deg: float = ART_TOP_DEG if int(c.view) > 0 else (ART_LOW_DEG if int(c.view) < 0 else float(ART_ELEV_DEG.get(c.part, 40.0)))
+			var axis: Vector3 = (_xf(c.a).basis.y if c.facing != "body" else Vector3.UP).normalized()
+			var seen: float = sqrt(maxf(0.0, 1.0 - pow(axis.dot(z), 2.0)))
+			ys *= clampf(seen / cos(deg_to_rad(art_deg)), FIRST_PERSON_MIN_TALL, 1.0)
+		if first_person:
+			var from_above: bool = int(c.view) > 0
+			var hide_at: float = FIRST_PERSON_TOP_NEAR_HIDE if from_above else FIRST_PERSON_NEAR_HIDE
+			var fade_at: float = FIRST_PERSON_TOP_NEAR_FADE if from_above else FIRST_PERSON_NEAR_FADE
+			var near: float = clampf((cam_pos.distance_to(mid) - hide_at) / (fade_at - hide_at), 0.0, 1.0)
+			# Limbs are not shrunk: a card shrinks toward its own joint, which pulled the upper
+			# arm and forearm apart at the elbow (two floating blocks). They are only dropped
+			# when right at the eye.
+			if c.limb: near = 1.0 if cam_pos.distance_to(mid) > FIRST_PERSON_LIMB_HIDE else 0.0
+			xs *= near
+			ys *= near
 		var x0: float = -anchor.x * xs
 		var x1: float = (cell.x - anchor.x) * xs
-		var y0: float = -anchor.y * ys
+		var top_texel: float = anchor.y + crop * limb_texels if crop > 0.0 else 0.0
+		var y0: float = (top_texel - anchor.y) * ys
 		var y1: float = (cell.y - anchor.y) * ys
-		var row: int = _hand_row(c, a) if c.part == "hand" else int(c.row)
 		var v: int = i * 4
 		_verts[v] = origin_a + x * x0 - up_dir * y0
 		_verts[v + 1] = origin_a + x * x1 - up_dir * y0
@@ -593,7 +821,7 @@ func _process(delta: float) -> void:
 		_verts[v + 3] = origin_a + x * x0 - up_dir * y1
 		var u0: float = float(k) * cell.x / tex_w
 		var u1: float = (float(k) + 1.0) * cell.x / tex_w
-		var v0: float = float(row) * cell.y / tex_h
+		var v0: float = (float(row) * cell.y + top_texel) / tex_h
 		var v1: float = (float(row) + 1.0) * cell.y / tex_h
 		_uvs[v] = Vector2(u0, v0)
 		_uvs[v + 1] = Vector2(u1, v0)
@@ -661,6 +889,57 @@ func _cell_for(key: String, node: Node3D, cam_pos: Vector3) -> int:
 		if absf(diff) <= CELL_DEG * 0.5 + HYSTERESIS_DEG: return cur
 	cur = posmod(roundi(rel / CELL_DEG), 16)
 	_cells[key] = cur
+	return cur
+
+## The limb drawing for how end-on it is seen (tilt, degrees): [tilt, row, texels joint to joint].
+func _pick_axial(c: Dictionary, tilt: float) -> Array:
+	var variants: Array = c.variants
+	if variants.is_empty(): return [0.0, int(c.row), maxf(c.end.y - c.anchor.y, 1.0)]
+	var current: float = float(c.axial)
+	var best: Array = variants[0]
+	var best_off: float = INF
+	var kept: Array = []
+	for v in variants:
+		var off: float = absf(tilt - float(v[0]))
+		if off < best_off:
+			best_off = off
+			best = v
+		if is_equal_approx(float(v[0]), current): kept = v
+	if not kept.is_empty() and absf(tilt - current) <= best_off + AXIAL_HYST_DEG: best = kept
+	c["axial"] = float(best[0])
+	return best
+
+## The same for a hand row: `tilted` is [[tilt, row], ...] with the side view first.
+func _pick_hand_axial(c: Dictionary, tilted: Array, tilt: float) -> int:
+	var current: float = float(c.axial)
+	var best: Array = tilted[0]
+	var best_off: float = INF
+	var kept: Array = []
+	for v in tilted:
+		var off: float = absf(tilt - float(v[0]))
+		if off < best_off:
+			best_off = off
+			best = v
+		if is_equal_approx(float(v[0]), current): kept = v
+	if not kept.is_empty() and absf(tilt - current) <= best_off + AXIAL_HYST_DEG: best = kept
+	c["axial"] = float(best[0])
+	return int(best[1])
+
+## First person: the sprite turn for one of your own cards, from where the eye is from that card.
+func _own_cell(c: Dictionary, node: Node3D, at: Vector3, cam_pos: Vector3) -> int:
+	var cur: int = int(c.get("cell", -1))
+	if node == null: return maxi(cur, 0)
+	var basis: Basis = node.global_basis
+	if _motion != null and _motion.has_motion(): basis = _motion.apply(node, Transform3D(basis, Vector3.ZERO)).basis
+	var fwd: Vector3 = basis * _player._get_forward_axis()
+	fwd.y = 0.0
+	var to_cam: Vector3 = cam_pos - at
+	to_cam.y = 0.0
+	if fwd.length() < 0.001 or to_cam.length() < FIRST_PERSON_HOLD_M: return maxi(cur, 0)
+	var rel: float = rad_to_deg(to_cam.normalized().signed_angle_to(fwd.normalized(), Vector3.UP))
+	if cur >= 0 and absf(wrapf(rel - cur * CELL_DEG, -180.0, 180.0)) <= CELL_DEG * 0.5 + HYSTERESIS_DEG * 2.0: return cur
+	cur = posmod(roundi(rel / CELL_DEG), 16)
+	c["cell"] = cur
 	return cur
 
 func _on_node_added(node: Node) -> void:
