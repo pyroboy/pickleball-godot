@@ -9,6 +9,7 @@ they face the camera, quantises to 3 tones plus a selective outline, pre-compens
 colours for the game's Filmic tonemap and writes one atlas per team:
 
   assets/pixel_cards/profiles/<id>_blue.png, <id>_red.png
+  assets/pixel_cards/profiles/<id>_blue_far.png, <id>_red_far.png  (far tier: half size, 20 degrees)
   assets/pixel_cards/cards_meta.json  ("profiles" entry with its own grid)
 
 Profiles use a finer grid than the original cards (TEXEL m per texel, CELL px cells):
@@ -59,6 +60,14 @@ VIEW_ELEV = {"low": 8.0, "top": 78.0}
 VIEW_PARTS = ["head", "torso", "shorts", "shoe"]
 LIGHT = np.array([-0.45, 0.75, 0.55]); LIGHT /= np.linalg.norm(LIGHT)
 OUTLINE = 0.62          # silhouette texels: colour x this
+# Far tier (players across the net): the same rows at half the texel density, with the match
+# rows seen from the lower angle the camera has on the far court. Baked next to the near set
+# as <id>_<team>_far.png; its grid is the near grid at exactly half size, so the card rig only
+# swaps the texture (scripts/graphics/pixel_card_rig.gd).
+FAR_TEXEL = 0.056
+FAR_CELL = 20
+FAR_ELEV = 20.0
+FAR_PART_ELEV = {"head": 20.0, "torso": 20.0, "shorts": 20.0, "shoe": 20.0}
 
 TEAMS = {
     "blue": {"T": (83, 152, 236), "T_light": (168, 208, 236), "T_dark": (35, 85, 182)},
@@ -687,7 +696,17 @@ def build_parts(pr, grid):
     for state in HAND_STATES[1:]: built["hand_" + state] = hand_part(pr, state)
     return built
 
-def bake(pid, meta):
+def bake_far(pid, meta):
+    """The far-tier set of one profile: {"textures", "grid"} for its "far" meta entry."""
+    global TEXEL, CELL, PART_ELEV
+    keep = (TEXEL, CELL, PART_ELEV)
+    TEXEL, CELL, PART_ELEV = FAR_TEXEL, FAR_CELL, FAR_PART_ELEV
+    try: out = bake(pid, meta, "_far")
+    finally: TEXEL, CELL, PART_ELEV = keep
+    out["grid"]["elevation_deg"] = FAR_ELEV
+    return {"textures": out["textures"], "grid": out["grid"]}
+
+def bake(pid, meta, suffix=""):
     with open(os.path.join(PROFILES, pid + ".json")) as f: pr = json.load(f)
     comp = make_compensator(float(meta.get("gain", 1.0)))
     grid = grid_for(meta)
@@ -714,7 +733,7 @@ def bake(pid, meta):
                 atlas[info["row"] * CELL:(info["row"] + 1) * CELL, k * CELL:(k + 1) * CELL] = colourise(out, keys, edge, team, comp)
     paths = {}
     for team, atlas in atlases.items():
-        rel = "profiles/%s_%s.png" % (pid, team)
+        rel = "profiles/%s_%s%s.png" % (pid, team, suffix)
         Image.fromarray(atlas).save(os.path.join(ROOT, "assets/pixel_cards", rel))
         paths[team] = "res://assets/pixel_cards/" + rel
     return {"name": pr.get("name", pid), "sex": pr.get("sex", ""), "paddle": pr.get("paddle", ""),
@@ -800,6 +819,7 @@ if __name__ == "__main__":
     profiles = meta.setdefault("profiles", {})
     for pid in ids:
         profiles[pid] = bake(pid, meta)
+        profiles[pid]["far"] = bake_far(pid, meta)
         print("baked", pid)
     with open(META, "w") as f: json.dump(meta, f, indent=1); f.write("\n")
     if "--sheet" in sys.argv:

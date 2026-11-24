@@ -27,9 +27,11 @@ class_name PixelCardRig
 ##   opponent get an accent
 ## - anticipation hold + contact pop (squash and stretch of the cards, about their
 ##   joint anchors, so hands stay on the paddle), driven by player.hitting
-## - far tier: players beyond FAR_DIST sample the atlas at reduced texel density.
-##   TODO(art): when a dedicated half-size far atlas is baked, add a "far" entry to
-##   cards_meta.json and swap `atlas` in _set_far() instead of the shader snap.
+## - far tier: players across the net draw from their profile's far set (half the texel
+##   density, match rows baked at the 20 degree angle the camera has on the far court; the
+##   "far" entry in cards_meta.json, tools/bake_pixel_cards.py). One far texel is about one
+##   pixel of the pixel viewport there, so far players stop dropping texels. The far grid is
+##   the near grid at exactly half size, so only the material's textures change (_apply_set).
 ## - visual-only body motion (arm swing, shoulder counter-turn): CardMotionLayer deltas,
 ##   applied in _xf() after the interpolated read; the paddle skin reads paddle_delta()
 ## Debug: PICKLEBALL_CARD_DEBUG=nocards,bones,axes (comma list) or PixelCardRig.set_debug().
@@ -62,8 +64,12 @@ const CUP_AIM: = 0.75                 # how far the cupping hand turns from the 
 const EXTRA_ROWS: = 2                 # atlas rows appended at load: grip hand, reach hand
 const REACH_ON: = 0.90                # arm extension (shoulder-hand / arm length) that shows the reach hand
 const REACH_OFF: = 0.82
-const FAR_DIST: = 16.0                # metres from the camera (camera ~ (0,10.5,11): far-court players are 17-21 m, near-court 10-14 m)
-const FAR_HYST: = 1.5
+# Far tier by distance to the camera, measured against the net line at the player's own x
+# (the camera sits lower and further back in portrait, so one fixed distance would split
+# a team): far when this much beyond the net, near again when closer than FAR_EXIT.
+const FAR_ENTER: = 1.2
+const FAR_EXIT: = 0.2
+const FAR_MIN_DIST: = 15.0            # never far closer than this (first-person and close cameras)
 const LIMB_OVERLAP: = 1.04            # limb cards run 4% long so joints never open a gap
 # A limb seen nearly end-on (your own thigh from above, an arm pointing at the camera) used to
 # squash to a sliver. It is never drawn shorter than this share of its real length, centred on
@@ -182,6 +188,8 @@ var _uvs: PackedVector2Array = PackedVector2Array()
 var _atlas_px: Vector2 = Vector2(640, 440)
 var _base_rows: int = 9
 var _far: bool = false
+var _near_set: Dictionary = {}   # what _apply_set swaps: textures, atlas size, team luminance
+var _far_set: Dictionary = {}    # empty when the profile has no usable far atlas (the near set is kept)
 var _team_ref_lum: float = 0.2
 var _has_other: bool = false
 var _paddle_arm = null
@@ -265,6 +273,8 @@ func _ready() -> void:
 			_add("shin", leg.shin_pivot, leg.foot_pivot, side[1], meta, "body", null, leg.thigh_pivot)
 			_add("shoe", leg.foot_pivot, null, side[1], meta, "body", null, leg.thigh_pivot)
 	_build_mesh(tex_path, other_path, meta)
+	if profile_id != "" and other_path != "" and meta.profiles[profile_id].has("far"):
+		_build_far(meta.profiles[profile_id].far, team, meta)
 	_hide_classic()
 	get_tree().node_added.connect(_on_node_added)
 	if accents_enabled and (_accents_force or _accent_rank() > 0): apply_accent(ACCENT_DISPLAY[team])
@@ -324,7 +334,7 @@ static var _lut: Dictionary = {}
 
 ## The team atlas plus two extra rows (grip hand, reach hand) painted from its own skin
 ## colour. Cached per texture path; the original atlas is copied unchanged above them.
-static func _extended_atlas(path: String, grid: Dictionary) -> Dictionary:
+static func _extended_atlas(path: String, grid: Dictionary, paint: bool = true) -> Dictionary:
 	if _atlas_cache.has(path): return _atlas_cache[path]
 	var base: Texture2D = load(path)
 	var src: Image = base.get_image()
@@ -335,7 +345,12 @@ static func _extended_atlas(path: String, grid: Dictionary) -> Dictionary:
 	var rows: int = int(grid.rows)
 	var out: = Image.create_empty(src.get_width(), (rows + EXTRA_ROWS) * cell.y, false, Image.FORMAT_RGBA8)
 	out.blit_rect(src, Rect2i(Vector2i.ZERO, src.get_size()), Vector2i.ZERO)
-	_paint_hands(out, grid, cols, rows, cell)
+	if paint: _paint_hands(out, grid, cols, rows, cell)
+	elif grid.parts.has("hand"):
+		# Far set: its texels are too coarse for the painted fallback hands; the extra rows
+		# repeat the open hand so those rows still exist.
+		var hand_row: = Rect2i(0, int(grid.parts.hand.row) * cell.y, cols * cell.x, cell.y)
+		for extra in range(EXTRA_ROWS): out.blit_rect(src, hand_row, Vector2i(0, (rows + extra) * cell.y))
 	var entry: = {"tex": ImageTexture.create_from_image(out), "img": out}
 	_atlas_cache[path] = entry
 	return entry
@@ -388,6 +403,7 @@ func _build_mesh(tex_path: String, other_path: String, meta: Dictionary) -> void
 		_mat.set_shader_parameter("team_ref_lum", _team_ref_lum)
 	else:
 		_mat.set_shader_parameter("atlas_other", own.tex)
+	_near_set = {"tex": own.tex, "other": _mat.get_shader_parameter("atlas_other"), "px": _atlas_px, "lum": _team_ref_lum}
 	var n: int = _cards.size()
 	_verts.resize(n * 4)
 	_uvs.resize(n * 4)
@@ -554,14 +570,42 @@ func _squash(delta: float) -> float:
 	_pop = clampf(_pop, -POP_AMOUNT, POP_AMOUNT)
 	return clampf(_pop - ANTICIPATION_AMOUNT * _ant, -0.15, 0.15)
 
-func _update_far(dist: float) -> void:
+## The far set is used only when its grid is the near grid at exactly half size (same rows,
+## half the cell, anchors and ends, twice the metres per texel): the card quads and UVs then
+## stay as they are and only the textures change.
+func _build_far(far: Dictionary, team: int, near: Dictionary) -> void:
+	var paths: Array = [str(far.textures.get(["blue", "red"][team], "")), str(far.textures.get(["blue", "red"][1 - team], ""))]
+	if not (ResourceLoader.exists(paths[0]) and ResourceLoader.exists(paths[1])): return
+	var grid: Dictionary = near.duplicate()
+	grid.merge(far.grid, true)
+	if int(grid.rows) != int(near.rows) or int(grid.cols) != int(near.cols) or int(grid.cell[0]) * 2 != int(near.cell[0]) \
+			or int(grid.cell[1]) * 2 != int(near.cell[1]) or not is_equal_approx(float(grid.meters_per_texel), 2.0 * float(near.meters_per_texel)): return
+	for part in near.parts:
+		if not grid.parts.has(part): return
+		var a: Dictionary = near.parts[part]
+		var b: Dictionary = grid.parts[part]
+		if int(a.row) != int(b.row) or not Vector2(a.anchor[0], a.anchor[1]).is_equal_approx(2.0 * Vector2(b.anchor[0], b.anchor[1])): return
+		if a.has("end") and not Vector2(a.end[0], a.end[1]).is_equal_approx(2.0 * Vector2(b.end[0], b.end[1])): return
+	var own: Dictionary = _extended_atlas(paths[0], grid, false)
+	var other: Dictionary = _extended_atlas(paths[1], grid, false)
+	_far_set = {"tex": own.tex, "other": other.tex, "px": Vector2(own.img.get_width(), own.img.get_height()),
+		"lum": _team_reference_luminance(own.img, other.img, grid)}
+
+func _apply_set(card_set: Dictionary) -> void:
+	_mat.set_shader_parameter("atlas", card_set.tex)
+	_mat.set_shader_parameter("atlas_other", card_set.other)
+	_mat.set_shader_parameter("atlas_px", card_set.px)
+	_mat.set_shader_parameter("team_ref_lum", float(card_set.lum))
+
+func _update_far(dist: float, net_dist: float) -> void:
+	if _far_set.is_empty(): return
 	var want: bool = _far
 	if _far_force >= 0: want = _far_force == 1
-	elif _far and dist < FAR_DIST - FAR_HYST: want = false
-	elif not _far and dist > FAR_DIST + FAR_HYST: want = true
+	elif _far and dist < maxf(net_dist + FAR_EXIT, FAR_MIN_DIST - 1.0): want = false
+	elif not _far and dist > maxf(net_dist + FAR_ENTER, FAR_MIN_DIST): want = true
 	if want != _far:
 		_far = want
-		_mat.set_shader_parameter("snap", 2.0 if _far else 1.0)
+		_apply_set(_far_set if _far else _near_set)
 
 ## The hand nearest the paddle holds it (grip). The other hand is open, a fist while swinging,
 ## and reaches when the arm is nearly fully extended.
@@ -672,7 +716,7 @@ func _draw_cards(delta: float) -> void:
 	var head_node: Node3D = torso_node.get_node_or_null("HeadMesh") if torso_node else null
 	var head_cell: int = _cell_for("head", head_node, face_cam) if head_node else torso_cell
 	var torso_pos: Vector3 = _xf(torso_node if torso_node else _player.body_pivot).origin
-	_update_far(cam_pos.distance_to(torso_pos))
+	_update_far(cam_pos.distance_to(torso_pos), cam_pos.distance_to(Vector3(torso_pos.x, torso_pos.y, 0.0)))
 	var want_dbg: bool = show_bones or show_axes
 	if want_dbg:
 		_dbg_pts.clear()

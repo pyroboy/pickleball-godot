@@ -7,6 +7,7 @@ extends SceneTree
 ##   colours        distinct colours in the frame
 ##   camera         position, rotation, fov, keep_aspect (must not depend on the pixel scale)
 ##   ball_render_px ball diameter in 3D render pixels at the near and far baseline
+##   cards          each player's court z, distance to the camera and whether the far card set is in use
 ## With --headless --fixed-fps 60 --viewport=720x1280 only the camera numbers print, and they repeat
 ## exactly, so two scales can be compared.
 ## PICKLEBALL_PIXEL_SCALE=0.5 runs the same check at another scale.
@@ -56,6 +57,13 @@ func _tick() -> void:
 			var b := cam.unproject_position(c + cam.global_basis.x * 0.0375)
 			px["z%+.1f" % z] = snappedf(a.distance_to(b) * 2.0 * scale * float(size.x) / root.get_visible_rect().size.x, 0.01)
 		out["ball_render_px"] = px
+	if cam != null:
+		var cards: Array = []
+		for rig in root.find_children("PixelCards_*", "Node3D", true, false):
+			var pl = rig.get("_player")
+			if pl == null or not is_instance_valid(pl): continue
+			cards.append({"z": snappedf(pl.global_position.z, 0.1), "dist": snappedf(cam.global_position.distance_to(pl.global_position + Vector3.UP), 0.1), "far": bool(rig.get("_far"))})
+		out["cards"] = cards
 	print("PIXEL_GRID " + JSON.stringify(out))
 	quit()
 
