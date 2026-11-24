@@ -1,0 +1,189 @@
+[gd_resource type="Resource" script_class="PostureDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://dcwratt6mjxjp" path="res://scripts/stroke_body_keyframe.gd" id="1"]
+[ext_resource type="Script" uid="uid://c4e2paj0madt2" path="res://scripts/posture_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_xfnpl"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.12,
+"body_pitch_deg": -0.626079678,
+"body_roll_deg": 6.46430795,
+"body_yaw_deg": -9.0,
+"crouch_amount": 0.06,
+"front_foot_forward": 0.16,
+"head_pitch_deg": -0.213973087,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 85.0,
+"hip_yaw_deg": -35.2081518,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(-0.06, -0.02, -0.3),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.30203643, -0.19960627, 0.29927677),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0, 0, 0),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(0.04036782, -8.0, 0.0),
+"spine_curve_deg": -0.9000691,
+"stance_width": 0.48,
+"torso_pitch_deg": -8.69271858,
+"torso_roll_deg": -0.12218942,
+"torso_yaw_deg": -15.73917425,
+"weight_shift": 0.737030802,
+"body_position_offset": Vector3(-0.11408969, 0.0, 0.055533033),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -34.2737825,
+"right_foot_pitch_deg": 0.0,
+"left_foot_pitch_deg": 0.0,
+"shoulder_protraction_m": 0.000183757,
+"main_grip_rotation_deg": 0.0,
+"paddle_in_hand_rotation_deg": 43.8659439,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.0,
+"support_index_closure": 1.0,
+"support_grip_style": 0.0,
+"left_elbow_swivel_deg": 0.0
+}
+
+[sub_resource type="Resource" id="Resource_cagah"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.12,
+"body_pitch_deg": -12.6915134,
+"body_roll_deg": -4.12031066,
+"body_yaw_deg": 15.0,
+"crouch_amount": 0.113400525,
+"front_foot_forward": 0.16,
+"head_pitch_deg": -10.3889502,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": -68.122811,
+"hip_yaw_deg": 18.19943703,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.4798853, -0.35134974, -0.21849394),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(-0.06438925, 0.75, -0.08655377),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0.060630836, 7.9421234, -0.056788266),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": 0.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.5573255, 0.60686934, -0.14252517),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0, 0, 0),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(0.2899394, -7.7066994, 0.27575096),
+"spine_curve_deg": 8.83632742,
+"stance_width": 0.48,
+"torso_pitch_deg": -25.69465193,
+"torso_roll_deg": 15.7712623,
+"torso_yaw_deg": 28.27581886,
+"weight_shift": -0.37266925,
+"body_position_offset": Vector3(-0.016823577, 0.048073858, -0.053367596),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -19.34904427,
+"right_foot_pitch_deg": 0.0,
+"left_foot_pitch_deg": 0.0,
+"shoulder_protraction_m": 0.000516762,
+"main_grip_rotation_deg": 0.0,
+"paddle_in_hand_rotation_deg": 0.0,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.0,
+"support_index_closure": 1.0,
+"support_grip_style": 0.0,
+"left_elbow_swivel_deg": 0.0
+}
+
+[resource]
+script = ExtResource("2")
+posture_id = 3
+display_name = "Medium Overhead"
+family = 3
+height_tier = 3
+paddle_forehand_mul = 0.3
+paddle_forward_mul = 0.8
+paddle_y_offset = 0.62
+paddle_pitch_sign_source = 1
+paddle_yaw_sign_source = 1
+paddle_roll_sign_source = 1
+has_zone = true
+zone_x_min = 0.05
+zone_x_max = 0.55
+zone_y_min = 1.2425
+zone_y_max = 1.85
+zone_forward_offset = 0.8
+right_elbow_path = null
+left_elbow_path = null
+right_elbow_pole = Vector3(0.35, 0.9, 0.2)
+right_shoulder_rotation_deg = Vector3(0, -8, 0)
+left_hand_mode = 4
+left_hand_offset = Vector3(-0.05, 0.6, -0.4)
+left_elbow_pole = Vector3(-0.48, -0.35, -0.22)
+left_shoulder_rotation_deg = Vector3(0, 8, 0)
+stance_width = 0.48
+front_foot_forward = 0.16
+back_foot_back = -0.12
+right_foot_yaw_deg = 5.0
+left_foot_yaw_deg = 5.0
+lead_foot = 1
+weight_shift = 0.4
+hip_yaw_deg = -10
+torso_pitch_deg = -10.0
+head_yaw_deg = 2.0
+head_pitch_deg = 8.0
+head_track_ball_weight = 0.8
+charge_paddle_offset = Vector3(-0.0130233, 0.018386526, -1.4942008)
+charge_paddle_rotation_deg = Vector3(28.96871, -7.0309944, 15.0)
+charge_body_rotation_deg = 12.0
+charge_hip_coil_deg = 10.0
+charge_back_foot_load = 0.65
+ft_paddle_offset = Vector3(-0.790381, -0.7862073, -0.28031257)
+ft_paddle_rotation_deg = Vector3(-73.405075, -12.546754, -45.0)
+ft_hip_uncoil_deg = -8.0
+ft_front_foot_load = 0.8
+ft_duration_strike = 0.12
+ft_duration_sweep = 0.28
+ft_duration_settle = 0.18
+ft_duration_hold = 0.06
+ft_ease_curve = 2
+windup_body = SubResource("Resource_cagah")
+follow_through_body = SubResource("Resource_xfnpl")
+charge_duration = 0.32
+notes = "Right-dominant overhead with continuous free support-hand target. Wide high shoulder load and descending finish clear the raised torso/head while retaining the original contact head anchor and timing."
+last_tuned_by = "Codex"
+last_tuned_at = "2026-09-30"
+body_yaw_deg = 0
+crouch_amount = 0.06
+body_position_offset = Vector3(0, 0, 0.08)
+right_elbow_swivel_deg = -31.3331001
+elbow_swivel_weight = 1.0
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 0.0
+speed_finish_end = 0.0
+paddle_path_times = PackedFloat32Array(0.25)
+paddle_path_offsets = PackedVector3Array(-0.031076878, 0.34290278, -0.001196742)
+paddle_path_tangents = PackedVector3Array(-0.15063821, 0.015588522, 0.5235734)
+ready_path_times = PackedFloat32Array(0.5)
+ready_path_offsets = PackedVector3Array(-0.081465274, 0.20501518, 0.09534486)
+ready_path_tangents = PackedVector3Array(0, 0, 0)
+speed_finish_points = PackedVector3Array(0.376, 0.99, 1)
+speed_lead_start = 0.0
+speed_lead_end = 1.95

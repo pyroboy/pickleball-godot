@@ -108,5 +108,38 @@
   "time": "2026-11-22T17:09:56",
   "notes": [],
   "comment": ""
+ },
+ {
+  "pose": "s03",
+  "version": 10,
+  "stars": 3,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-25T07:41:22",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s04",
+  "version": 7,
+  "stars": 3,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-25T07:41:22",
+  "notes": [],
+  "comment": ""
+ },
+ {
+  "pose": "s06",
+  "version": 7,
+  "stars": 2,
+  "aspects": {},
+  "by": "user",
+  "source": "phone",
+  "time": "2026-11-25T07:41:22",
+  "notes": [],
+  "comment": ""
  }
 ]

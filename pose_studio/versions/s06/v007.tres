@@ -1,0 +1,178 @@
+[gd_resource type="Resource" script_class="PostureDefinition" format=3]
+
+[ext_resource type="Script" uid="uid://dcwratt6mjxjp" path="res://scripts/stroke_body_keyframe.gd" id="1"]
+[ext_resource type="Script" uid="uid://c4e2paj0madt2" path="res://scripts/posture_definition.gd" id="2"]
+
+[sub_resource type="Resource" id="Resource_mbc52"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.12,
+"body_pitch_deg": 0.423730791,
+"body_roll_deg": 0.23041902,
+"body_yaw_deg": -6.0,
+"crouch_amount": 0.22240167,
+"front_foot_forward": 0.16,
+"head_pitch_deg": -3.55136049,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": 21.4999448,
+"hip_yaw_deg": -2.697203347,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(-0.15, 0, -0.22),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": -8.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.46711576, -0.3264321, -0.2646794),
+"right_foot_offset": Vector3(0, 0, 0),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0, 0, 0),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(2.9629974, -5.0452504, 0.0028284937),
+"spine_curve_deg": -1.57379025,
+"stance_width": 0.48,
+"torso_pitch_deg": 4.75945508,
+"torso_roll_deg": 4.98053742,
+"torso_yaw_deg": -11.2560544,
+"weight_shift": 0.174473792,
+"body_position_offset": Vector3(-0.00786285, 0.0069582933, 0.02761858),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": -21.77418057,
+"right_foot_pitch_deg": 0.0,
+"left_foot_pitch_deg": 0.0,
+"shoulder_protraction_m": 0.000879004,
+"main_grip_rotation_deg": 0.0,
+"paddle_in_hand_rotation_deg": 0.0,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.0,
+"support_index_closure": 1.0,
+"support_grip_style": 0.0,
+"left_elbow_swivel_deg": 0.0
+}
+
+[sub_resource type="Resource" id="Resource_8stg2"]
+script = ExtResource("1")
+values = {
+"back_foot_back": -0.12,
+"body_pitch_deg": 20.7704274,
+"body_roll_deg": 1.902839024,
+"body_yaw_deg": 8.0,
+"crouch_amount": 0.246064697,
+"front_foot_forward": 0.16,
+"head_pitch_deg": -35.7408147,
+"head_track_ball_weight": 0.8,
+"head_yaw_deg": -26.28863826,
+"hip_yaw_deg": -0.786596671,
+"lead_foot": 1,
+"left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
+"left_foot_offset": Vector3(0, 0, 0),
+"left_foot_yaw_deg": 5.0,
+"left_hand_mode": 4,
+"left_hand_offset": Vector3(-0.15, 0, -0.22),
+"left_knee_pole": Vector3(0, 0, 0),
+"left_shoulder_rotation_deg": Vector3(0, 8, 0),
+"paddle_pitch_sign_source": 1,
+"paddle_pitch_signed_deg": -8.0,
+"paddle_roll_sign_source": 1,
+"paddle_roll_signed_deg": 0.0,
+"paddle_yaw_sign_source": 1,
+"paddle_yaw_signed_deg": 0.0,
+"right_elbow_pole": Vector3(0.47775218, -0.35177144, -0.21950494),
+"right_foot_offset": Vector3(-0.13486083, 0.0, -0.3088385),
+"right_foot_yaw_deg": 5.0,
+"right_hand_offset": Vector3(0, 0, 0),
+"right_knee_pole": Vector3(0, 0, 0),
+"right_shoulder_rotation_deg": Vector3(-0.30100444, -8.110718, -0.12648469),
+"spine_curve_deg": -0.169923412,
+"stance_width": 0.48,
+"torso_pitch_deg": 6.25580792,
+"torso_roll_deg": -0.741534587,
+"torso_yaw_deg": 11.923898,
+"weight_shift": -0.247968324,
+"body_position_offset": Vector3(-0.016114581, 0.019556692, -0.1271362),
+"elbow_swivel_weight": 1.0,
+"right_elbow_swivel_deg": 9.4432647,
+"right_foot_pitch_deg": 0.0,
+"left_foot_pitch_deg": 0.0,
+"shoulder_protraction_m": 0.0,
+"main_grip_rotation_deg": 0.0,
+"paddle_in_hand_rotation_deg": 0.0,
+"support_grip_rotation_deg": 0.0,
+"support_grip_slide_m": 0.0,
+"support_index_closure": 1.0,
+"support_grip_style": 0.0,
+"left_elbow_swivel_deg": 0.0
+}
+
+[resource]
+script = ExtResource("2")
+posture_id = 6
+display_name = "Low Forward"
+height_tier = 0
+paddle_forward_mul = 0.5507679
+paddle_y_offset = -0.6142143
+paddle_pitch_signed_deg = -8.0
+paddle_pitch_sign_source = 1
+paddle_yaw_sign_source = 1
+paddle_roll_base_deg = 180.0
+paddle_roll_sign_source = 1
+paddle_floor_clearance = 0.3
+has_zone = true
+zone_x_min = -0.18
+zone_x_max = 0.18
+zone_y_min = 0.3
+zone_y_max = 0.4708
+zone_forward_offset = 0.5508
+right_elbow_path = null
+left_elbow_path = null
+right_elbow_pole = Vector3(0.48, -0.35, -0.22)
+right_shoulder_rotation_deg = Vector3(0, -8, 0)
+left_hand_mode = 4
+left_hand_offset = Vector3(-0.15, 0, -0.22)
+left_elbow_pole = Vector3(-0.48, -0.35, -0.22)
+left_shoulder_rotation_deg = Vector3(0, 8, 0)
+stance_width = 0.48
+front_foot_forward = 0.16
+back_foot_back = -0.12
+right_foot_yaw_deg = 5.0
+left_foot_yaw_deg = 5.0
+lead_foot = 1
+crouch_amount = 0.23
+weight_shift = 0.2
+hip_yaw_deg = -2.0
+torso_pitch_deg = 6.0
+head_yaw_deg = 2.0
+head_pitch_deg = -38.0
+head_track_ball_weight = 0.8
+charge_paddle_offset = Vector3(0.029899191, -0.065, -0.2631476)
+charge_hip_coil_deg = 2.0
+charge_back_foot_load = 0.45
+ft_paddle_offset = Vector3(-1.2056632e-05, 0.460871, 0.26059115)
+ft_hip_uncoil_deg = 2.0
+ft_front_foot_load = 0.65
+ft_duration_strike = 0.1
+ft_duration_sweep = 0.2
+ft_duration_settle = 0.18
+ft_duration_hold = 0.06
+ft_ease_curve = 2
+windup_body = SubResource("Resource_8stg2")
+follow_through_body = SubResource("Resource_mbc52")
+charge_duration = 0.24
+notes = "Three body/paddle keyframes tuned for shared trajectory contact. Backhand uses left paddle hand; support hand is released. Low strokes lift, center volleys block, overheads finish downward."
+last_tuned_by = "Codex"
+last_tuned_at = "2026-09-30"
+right_elbow_swivel_deg = -8.40205646
+elbow_swivel_weight = 1.0
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0
+charge_paddle_rotation_deg = Vector3(-21.353222, -50.916157, 0.0)
+ft_paddle_rotation_deg = Vector3(49.276405, 33.26922, 0.0)
