@@ -22,8 +22,8 @@ physics and timing stay locked until a deliberate "Gameplay v2".
    (`python3 tools/perf_report.py`). Nothing on device has been measured yet.
 2. ~~Expose Classic / Pixel in the Settings panel~~: dropped 2026-11-21, pixel cards are the only
    look (classic 3D meshes stay hidden because gameplay reads them).
-3. **Far-court card tier:** bake a 20 degree, half-size card set and pick the tier by distance
-   to the camera (far players currently reuse the near set).
+3. ~~Far-court card tier~~: done 2026-11-24 (half-size, 20 degree set per profile, picked by
+   distance to the camera). Look at it on the phone with the 1/3 pixel viewport.
 
 ## Phases
 
@@ -49,15 +49,21 @@ Status: done, in progress, next, later.
 - [x] Fog-free card shader, tonemap-compensated colours: `shaders/pixel_card.gdshader`
 - [x] Gameplay identical with cards on and off (seeded bench, pose diff)
 - [x] ~~Classic / Pixel toggle in the Settings UI~~: dropped 2026-11-21, pixel cards are the only look
-- [ ] Far-court card tier (20 degrees, half size)
+- [x] Far-court card tier (20 degrees, half size): `<id>_<team>_far.png` from
+      `tools/bake_pixel_cards.py`, swapped in by `pixel_card_rig.gd` for players beyond the net
 - [ ] Hand states (open / grip / reach) from the articulated hand mode
 - [ ] Joint seams (elbow, knee) and draw-order polish
 - [ ] iPhone check
 
 ### Phase 2: Pixel viewport and camera (next)
-- [ ] Render 3D into a 1/3-resolution SubViewport with nearest upscale (one pixel grid
-      for court, players and effects); UI stays full resolution on top
-- [ ] Verify portrait framing and ball-on-screen logic with the SubViewport size
+- [x] Render 3D at 1/3 resolution with nearest upscale (one pixel grid for court, players
+      and effects); UI stays full resolution on top. Done 2026-11-24 with the root viewport's
+      own 3D scale (`scripts/graphics/pixel_post.gd`), not a SubViewport, so the camera and
+      every screen-position test keep the full-size viewport
+- [x] Portrait framing and ball-on-screen logic: camera identical at 1/2 and 1/3
+      (`tools/pixel_grid_check.gd`); the ball cue is sized in screen pixels and carries a
+      2-pixel dot when the ball is under 2 render pixels (far baseline: about 1.2)
+- [ ] iPhone check of the 1/3 look and its frame time
 - [ ] Optional: steeper 3/4 camera as an A/B option (keep the current camera by default)
 
 ### Phase 3: Art pass (later)

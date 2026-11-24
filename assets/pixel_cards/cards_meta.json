@@ -621,6 +621,533 @@
      "top": 78.0,
      "mid": 44.0
     }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/ace_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/ace_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
+    }
    }
   },
   "bruiser": {
@@ -1149,6 +1676,533 @@
      "low": 8.0,
      "top": 78.0,
      "mid": 44.0
+    }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/bruiser_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/bruiser_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
     }
    }
   },
@@ -1679,6 +2733,533 @@
      "top": 78.0,
      "mid": 44.0
     }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/power_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/power_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
+    }
    }
   },
   "rookie": {
@@ -2207,6 +3788,533 @@
      "low": 8.0,
      "top": 78.0,
      "mid": 44.0
+    }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/rookie_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/rookie_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
     }
    }
   },
@@ -2737,6 +4845,533 @@
      "top": 78.0,
      "mid": 44.0
     }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/speedster_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/speedster_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
+    }
    }
   },
   "veteran": {
@@ -3265,6 +5900,533 @@
      "low": 8.0,
      "top": 78.0,
      "mid": 44.0
+    }
+   },
+   "far": {
+    "textures": {
+     "blue": "res://assets/pixel_cards/profiles/veteran_blue_far.png",
+     "red": "res://assets/pixel_cards/profiles/veteran_red_far.png"
+    },
+    "grid": {
+     "cell": [
+      20,
+      20
+     ],
+     "cols": 16,
+     "rows": 44,
+     "meters_per_texel": 0.056,
+     "parts": {
+      "head": {
+       "row": 0,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "torso": {
+       "row": 1,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "shorts": {
+       "row": 2,
+       "anchor": [
+        10.0,
+        10.0
+       ]
+      },
+      "upper_arm": {
+       "row": 3,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "forearm": {
+       "row": 4,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.495
+       ]
+      },
+      "hand": {
+       "row": 5,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "thigh": {
+       "row": 6,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.525
+       ]
+      },
+      "shin": {
+       "row": 7,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        9.265
+       ]
+      },
+      "shoe": {
+       "row": 8,
+       "anchor": [
+        10.0,
+        7.0
+       ]
+      },
+      "hand_grip": {
+       "row": 9,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_reach": {
+       "row": 10,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "hand_cup": {
+       "row": 11,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.58
+       ],
+       "detail": 2.0
+      },
+      "head_low": {
+       "row": 12,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "torso_low": {
+       "row": 13,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shorts_low": {
+       "row": 14,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 8.0
+      },
+      "shoe_low": {
+       "row": 15,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 8.0
+      },
+      "head_top": {
+       "row": 16,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "torso_top": {
+       "row": 17,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shorts_top": {
+       "row": 18,
+       "anchor": [
+        10.0,
+        10.0
+       ],
+       "elev": 78.0
+      },
+      "shoe_top": {
+       "row": 19,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "elev": 78.0
+      },
+      "upper_arm_a42": {
+       "row": 20,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b42": {
+       "row": 21,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_a70": {
+       "row": 22,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "upper_arm"
+      },
+      "upper_arm_b70": {
+       "row": 23,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "upper_arm"
+      },
+      "forearm_a42": {
+       "row": 24,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": 42.0,
+       "of": "forearm"
+      },
+      "forearm_b42": {
+       "row": 25,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.340435990520886
+       ],
+       "axial": -42.0,
+       "of": "forearm"
+      },
+      "forearm_a70": {
+       "row": 26,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": 70.0,
+       "of": "forearm"
+      },
+      "forearm_b70": {
+       "row": 27,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.537380544248881
+       ],
+       "axial": -70.0,
+       "of": "forearm"
+      },
+      "thigh_a42": {
+       "row": 28,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": 42.0,
+       "of": "thigh"
+      },
+      "thigh_b42": {
+       "row": 29,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        8.105875160762604
+       ],
+       "axial": -42.0,
+       "of": "thigh"
+      },
+      "thigh_a70": {
+       "row": 30,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": 70.0,
+       "of": "thigh"
+      },
+      "thigh_b70": {
+       "row": 31,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.8896612918743205
+       ],
+       "axial": -70.0,
+       "of": "thigh"
+      },
+      "shin_a42": {
+       "row": 32,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": 42.0,
+       "of": "shin"
+      },
+      "shin_b42": {
+       "row": 33,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        7.912657506138482
+       ],
+       "axial": -42.0,
+       "of": "shin"
+      },
+      "shin_a70": {
+       "row": 34,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": 70.0,
+       "of": "shin"
+      },
+      "shin_b70": {
+       "row": 35,
+       "anchor": [
+        10.0,
+        4.0
+       ],
+       "end": [
+        10.0,
+        5.800736054609646
+       ],
+       "axial": -70.0,
+       "of": "shin"
+      },
+      "hand_a50": {
+       "row": 36,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand"
+      },
+      "hand_b50": {
+       "row": 37,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand"
+      },
+      "hand_grip_a50": {
+       "row": 38,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_grip"
+      },
+      "hand_grip_b50": {
+       "row": 39,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_grip"
+      },
+      "hand_reach_a50": {
+       "row": 40,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_reach"
+      },
+      "hand_reach_b50": {
+       "row": 41,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_reach"
+      },
+      "hand_cup_a50": {
+       "row": 42,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": 50.0,
+       "of": "hand_cup"
+      },
+      "hand_cup_b50": {
+       "row": 43,
+       "anchor": [
+        10.0,
+        7.0
+       ],
+       "end": [
+        10.0,
+        7.372816813618193
+       ],
+       "detail": 2.0,
+       "axial": -50.0,
+       "of": "hand_cup"
+      }
+     },
+     "view_elev": {
+      "low": 8.0,
+      "top": 78.0,
+      "mid": 44.0
+     },
+     "elevation_deg": 20.0
     }
    }
   }

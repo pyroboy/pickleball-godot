@@ -9,8 +9,8 @@
 // re-tinted with `accent_color` keeping its shade, so one set of art gives partner
 // and opponents their own look. accent_mix = 0 keeps the authored art untouched.
 //
-// Far tier: `snap` > 1 quantises sampling to snap x snap texel blocks, i.e. the same
-// atlas at reduced texel density (stands in for a half-size far atlas).
+// Far tier: pixel_card_rig.gd swaps `atlas` / `atlas_other` / `atlas_px` to the profile's
+// half-size far set; nothing changes here.
 shader_type spatial;
 render_mode unshaded, cull_disabled, fog_disabled, depth_draw_opaque;
 
@@ -18,7 +18,6 @@ uniform sampler2D atlas : source_color, filter_nearest;
 uniform sampler2D atlas_other : source_color, filter_nearest;
 uniform vec2 atlas_px = vec2(640.0, 440.0);
 uniform float gain = 1.0;
-uniform float snap = 1.0;
 uniform float accent_mix = 0.0;
 uniform vec3 accent_color : source_color = vec3(1.0);
 uniform float team_ref_lum = 0.2;
@@ -26,11 +25,6 @@ uniform float flash = 0.0;   // 1 = card drawn white (hit flash, rally_moments.g
 
 void fragment() {
 	vec2 uv = UV;
-	if (snap > 1.5) {
-		vec2 p = UV * atlas_px;
-		p = (floor(p / snap) + 0.5) * snap;
-		uv = p / atlas_px;
-	}
 	vec4 c = texture(atlas, uv);
 	if (c.a < 0.5) discard;
 	vec3 rgb = c.rgb;
