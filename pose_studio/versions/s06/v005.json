@@ -1,0 +1,19 @@
+{
+ "n": 5,
+ "author": "claude",
+ "message": "Small wind-up turn and weight 0.46 > 0.57 > 0.61 (was one frozen body)",
+ "time": "2026-11-24T21:21:41",
+ "notes": [],
+ "score": 61,
+ "flags": [
+  "B_wrist_finish",
+  "B_transfer",
+  "C_no_swing",
+  "C_clip_ready",
+  "C_clip_swing",
+  "A_near_body",
+  "A_timing",
+  "C_elbow_in"
+ ],
+ "approved": false
+}

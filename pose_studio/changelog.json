@@ -1,6 +1,442 @@
 {
  "versions": [
   {
+   "pose": "s17",
+   "n": 4,
+   "time": "2026-11-24T21:21:41",
+   "author": "claude",
+   "message": "Lunge toward the ball: left foot out, right foot in, body 13 cm toward the ball, side lean 24 -> 18 deg, elbow 12 -> 52 deg, balanced",
+   "approved": false,
+   "notes": [],
+   "score": 70,
+   "flags": [
+    "B_transfer",
+    "C_no_swing",
+    "C_clip_ready",
+    "C_clip_swing",
+    "A_timing",
+    "B_lean_side_windup"
+   ],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_roll_deg",
+     "a": "14",
+     "b": "6.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-30.0",
+     "b": "-40.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.445",
+     "b": "0.4"
+    },
+    {
+     "stage": "windup",
+     "field": "left_foot_offset",
+     "a": "Vector3(0.02, 0, 0.1)",
+     "b": "Vector3(-0.24, 0, 0.2)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_foot_offset",
+     "a": "Vector3(0.36, 0, -0.1)",
+     "b": "Vector3(0.08, 0, -0.1)"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-18.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(-0.06, 0.0, -0.1)"
+    },
+    {
+     "stage": "contact",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.38"
+    },
+    {
+     "stage": "contact",
+     "field": "right_foot_offset",
+     "a": "Vector3(0.36, 0, -0.1)",
+     "b": "Vector3(0.08, 0, -0.1)"
+    },
+    {
+     "stage": "contact",
+     "field": "left_foot_offset",
+     "a": "Vector3(0.02, 0, 0.1)",
+     "b": "Vector3(-0.24, 0, 0.2)"
+    },
+    {
+     "stage": "contact",
+     "field": "body_roll_deg",
+     "a": "14",
+     "b": "6.0"
+    },
+    {
+     "stage": "contact",
+     "field": "body_position_offset",
+     "a": null,
+     "b": "Vector3(-0.13, 0.0, -0.02)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_roll_deg",
+     "a": "14",
+     "b": "6.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-30.0",
+     "b": "-20.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.42",
+     "b": "0.36"
+    },
+    {
+     "stage": "finish",
+     "field": "left_foot_offset",
+     "a": "Vector3(0.02, 0, 0.1)",
+     "b": "Vector3(-0.24, 0, 0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_foot_offset",
+     "a": "Vector3(0.36, 0, -0.1)",
+     "b": "Vector3(0.08, 0, -0.1)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(-0.09, 0.0, -0.01)"
+    }
+   ]
+  },
+  {
+   "pose": "s15",
+   "n": 5,
+   "time": "2026-11-24T21:21:41",
+   "author": "claude",
+   "message": "Lower hips (0.76 -> 0.64 m), small wind-up turn, weight 0.47 > 0.57 > 0.61, wind-up paddle 7 cm closer so the arm is not locked",
+   "approved": false,
+   "notes": [],
+   "score": 52,
+   "flags": [
+    "B_wrist_finish",
+    "B_transfer",
+    "C_pop",
+    "C_clip_ready",
+    "C_clip_swing",
+    "C_elbow_flip",
+    "A_near_body",
+    "A_timing",
+    "B_coil",
+    "C_elbow_up"
+   ],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "6.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.125",
+     "b": "0.25"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-2.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, -0.06)"
+    },
+    {
+     "stage": "contact",
+     "field": "crouch_amount",
+     "a": "0.1",
+     "b": "0.22"
+    },
+    {
+     "stage": "contact",
+     "field": "charge_paddle_offset",
+     "a": "Vector3(0.0, -0.065, -0.13)",
+     "b": "Vector3(0.0, -0.065, -0.2)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-5.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.1",
+     "b": "0.19"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-6.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, 0.04)"
+    }
+   ]
+  },
+  {
+   "pose": "s14",
+   "n": 5,
+   "time": "2026-11-24T21:21:41",
+   "author": "claude",
+   "message": "Lower hips (0.76 -> 0.64 m), wind-up coil 34/54 deg, weight 0.39 > 0.52 > 0.58, elbow swivel 115 -> 98 so the elbow stays below the shoulder",
+   "approved": false,
+   "notes": [],
+   "score": 55,
+   "flags": [
+    "B_wrist_finish",
+    "B_transfer",
+    "C_no_swing",
+    "C_clip_ready",
+    "C_clip_swing",
+    "C_elbow_flip",
+    "A_near_body",
+    "A_timing",
+    "C_elbow_in"
+   ],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-18.0",
+     "b": "-30.0"
+    },
+    {
+     "stage": "windup",
+     "field": "crouch_amount",
+     "a": "0.125",
+     "b": "0.25"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-20.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, -0.09)"
+    },
+    {
+     "stage": "windup",
+     "field": "right_elbow_swivel_deg",
+     "a": "115.2226958",
+     "b": "98.0"
+    },
+    {
+     "stage": "contact",
+     "field": "crouch_amount",
+     "a": "0.1",
+     "b": "0.22"
+    },
+    {
+     "stage": "contact",
+     "field": "right_elbow_swivel_deg",
+     "a": "115.2226958",
+     "b": "98.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-18.0",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "crouch_amount",
+     "a": "0.1",
+     "b": "0.2"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, 0.05)"
+    },
+    {
+     "stage": "finish",
+     "field": "right_elbow_swivel_deg",
+     "a": "115.2226958",
+     "b": "92.0"
+    }
+   ]
+  },
+  {
+   "pose": "s07",
+   "n": 5,
+   "time": "2026-11-24T21:21:41",
+   "author": "claude",
+   "message": "Wind-up coil 32/50 deg and weight 0.41 > 0.53 > 0.56 (was one frozen body)",
+   "approved": false,
+   "notes": [],
+   "score": 58,
+   "flags": [
+    "B_wrist_finish",
+    "B_transfer",
+    "C_no_swing",
+    "C_clip_ready",
+    "C_clip_swing",
+    "A_near_body",
+    "A_timing",
+    "C_corner",
+    "C_elbow_in"
+   ],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "-18.0",
+     "b": "-28.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-18.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, -0.08)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "-18.0",
+     "b": "-10.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "-8.0",
+     "b": "-4.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, 0.02)"
+    }
+   ]
+  },
+  {
+   "pose": "s06",
+   "n": 5,
+   "time": "2026-11-24T21:21:41",
+   "author": "claude",
+   "message": "Small wind-up turn and weight 0.46 > 0.57 > 0.61 (was one frozen body)",
+   "approved": false,
+   "notes": [],
+   "score": 61,
+   "flags": [
+    "B_wrist_finish",
+    "B_transfer",
+    "C_no_swing",
+    "C_clip_ready",
+    "C_clip_swing",
+    "A_near_body",
+    "A_timing",
+    "C_elbow_in"
+   ],
+   "changes": [
+    {
+     "stage": "windup",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "8.0"
+    },
+    {
+     "stage": "windup",
+     "field": "hip_yaw_deg",
+     "a": "-2.0",
+     "b": "2.0"
+    },
+    {
+     "stage": "windup",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "10.0"
+    },
+    {
+     "stage": "windup",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, -0.07)"
+    },
+    {
+     "stage": "finish",
+     "field": "body_yaw_deg",
+     "a": "0.0",
+     "b": "-6.0"
+    },
+    {
+     "stage": "finish",
+     "field": "torso_yaw_deg",
+     "a": "0.0",
+     "b": "-8.0"
+    },
+    {
+     "stage": "finish",
+     "field": "body_position_offset",
+     "a": "Vector3(0.0, 0.0, 0.0)",
+     "b": "Vector3(0.0, 0.0, 0.03)"
+    }
+   ]
+  },
+  {
    "pose": "s19",
    "n": 7,
    "time": "2026-11-22T17:09:56",

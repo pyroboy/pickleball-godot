@@ -1,0 +1,20 @@
+{
+ "n": 5,
+ "author": "claude",
+ "message": "Lower hips (0.76 -> 0.64 m), wind-up coil 34/54 deg, weight 0.39 > 0.52 > 0.58, elbow swivel 115 -> 98 so the elbow stays below the shoulder",
+ "time": "2026-11-24T21:21:41",
+ "notes": [],
+ "score": 55,
+ "flags": [
+  "B_wrist_finish",
+  "B_transfer",
+  "C_no_swing",
+  "C_clip_ready",
+  "C_clip_swing",
+  "C_elbow_flip",
+  "A_near_body",
+  "A_timing",
+  "C_elbow_in"
+ ],
+ "approved": false
+}

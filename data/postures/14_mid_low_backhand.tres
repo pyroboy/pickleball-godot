@@ -9,8 +9,8 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": -18.0,
-"crouch_amount": 0.1,
+"body_yaw_deg": -8.0,
+"crouch_amount": 0.2,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -32.0,
 "head_track_ball_weight": 0.8,
@@ -40,11 +40,11 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": -8.0,
+"torso_yaw_deg": -4.0,
 "weight_shift": 0.18,
-"body_position_offset": Vector3(0.0, 0.0, 0.0),
+"body_position_offset": Vector3(0.0, 0.0, 0.05),
 "elbow_swivel_weight": 1.0,
-"right_elbow_swivel_deg": 115.2226958,
+"right_elbow_swivel_deg": 92.0,
 "right_foot_pitch_deg": 0.0,
 "left_foot_pitch_deg": 0.0,
 "shoulder_protraction_m": 0.0,
@@ -63,8 +63,8 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": -18.0,
-"crouch_amount": 0.125,
+"body_yaw_deg": -30.0,
+"crouch_amount": 0.25,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -32.0,
 "head_track_ball_weight": 0.8,
@@ -94,11 +94,11 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": -8.0,
+"torso_yaw_deg": -20.0,
 "weight_shift": -0.1,
-"body_position_offset": Vector3(0.0, 0.0, 0.0),
+"body_position_offset": Vector3(0.0, 0.0, -0.09),
 "elbow_swivel_weight": 1.0,
-"right_elbow_swivel_deg": 115.2226958,
+"right_elbow_swivel_deg": 98.0,
 "right_foot_pitch_deg": 0.0,
 "left_foot_pitch_deg": 0.0,
 "shoulder_protraction_m": 0.0,
@@ -143,7 +143,7 @@ front_foot_forward = 0.16
 back_foot_back = -0.12
 right_foot_yaw_deg = -5.0
 left_foot_yaw_deg = -5.0
-crouch_amount = 0.1
+crouch_amount = 0.22
 weight_shift = 0.2
 hip_yaw_deg = -4.0
 torso_yaw_deg = -8.0
@@ -170,5 +170,5 @@ charge_duration = 0.24
 notes = "Right-dominant one-handed backhand; left hand counterbalances. Unit turn and diagonal shaft keep the original contact center reachable. Low strokes retain an open face and head below hand; normal strokes retain their shot-specific face."
 last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
-right_elbow_swivel_deg = 115.2226958
+right_elbow_swivel_deg = 98.0
 elbow_swivel_weight = 1.0
