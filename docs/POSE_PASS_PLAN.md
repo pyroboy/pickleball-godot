@@ -179,3 +179,43 @@ contact near full extension in front of the hitting shoulder, follow-through dow
 - Reach-up (request from the AI/smash work): High Overhead contact raised to ~2.44 m standing
   (arm straight, slight rise; was 2.04 m), zone_y_max 2.11 -> 2.5 (jump adds 0.24 m), Medium
   Overhead top 1.70 -> 1.85 to meet it. point_fits now accepts Medium 1.6-1.8 m, High 1.8-2.4 m standing.
+
+### Refinement loop, batch 1: frozen compact poses (14, 15, 17, 07, 06) — 2026-11-24
+Picked by the checker (`pose_check.py --solve`) among poses the user has not rated or edited. All five
+held one body through wind-up, contact and finish. Checked by data only (no bench, no screenshots, look
+not seen by the user). No field on the checker's gameplay list changed (contact paddle point, zones,
+timing). Contact body fields did change on 14, 15 and 17 (crouch; on 17 also feet, body offset, roll),
+so the gameplay skeleton moves there. 07 and 06: wind-up and finish keys only. Checker total 186 -> 168 flags.
+
+| pose (score) | metric | wind-up | contact | finish |
+|---|---|---|---|---|
+| 14 Mid-Low Backhand (22 -> 55) | weight back→front (was) | 0.39 (0.49) | 0.52 (0.52) | 0.58 (0.51) |
+| | hip / shoulder turn ° | 34 / 54 (22 / 30) | 22 / 30 | 12 / 16 (22 / 30) |
+| | hip height m | 0.60 (0.73) | 0.64 (0.76) | 0.66 (0.76) |
+| | elbow vs shoulder m | −0.03 | −0.01 | 0.00 (+0.05) |
+| 15 Mid-Low Forward (37 -> 52) | weight | 0.47 (0.53) | 0.57 (0.56) | 0.61 (0.56) |
+| | hip / shoulder turn ° | −8 / −16 (2 / 2) | 2 / 2 | 7 / 13 (2 / 2) |
+| | hip height m | 0.60 (0.73) | 0.64 (0.76) | 0.67 (0.76) |
+| | elbow bend ° | 48 (33) | 59 (9, locked) | 84 (47) |
+| 17 Mid-Low Wide Backhand (22 -> 70) | CoG off the feet m | 0.07 (0.13) | 0.05 (0.15) | 0.06 (0.15) |
+| | side lean ° | −21 (−24) | −18 (−24) | −16 (−24) |
+| | hip / shoulder turn ° | 44 / 62 (34 / 42) | 34 / 42 | 24 / 32 (34 / 42) |
+| | elbow bend ° | 58 (20) | 52 (12, locked) | 59 (47) |
+| | feet x (left, right) m | −0.58, 0.42 (−0.32, 0.70) | same | same |
+| 07 Low Backhand (49 -> 58) | weight | 0.41 (0.50) | 0.53 | 0.56 (0.53) |
+| | hip / shoulder turn ° | 32 / 50 (22 / 30) | 22 / 30 | 14 / 18 (22 / 30) |
+| 06 Low Forward (52 -> 61) | weight | 0.46 (0.55) | 0.57 | 0.61 (0.57) |
+| | hip / shoulder turn ° | −10 / −20 (2 / 2) | 2 / 2 | 8 / 16 (2 / 2) |
+
+- 14: elbow swivel 115 -> 98 (finish 92): the elbow no longer points up for the whole swing and the
+  0.41 m elbow jump entering the wind-up is gone. Cost: finish wrist flex 63° (limit 55).
+- 15: wind-up paddle 7 cm closer (`charge_paddle_offset` z −0.13 -> −0.2) so the arm stays bent after
+  the body moves back. The 0.47 m elbow flip entering the wind-up remains (was 0.42 m).
+- 17: was a wide straddle with the right foot 0.70 m out on the far side from the ball. Now a lunge
+  toward the ball: left foot out, right foot in, body 13 cm toward the ball, crouch 0.42 -> 0.38
+  (hips 0.45 -> 0.48 m, still below Wide Backhand 0.51 m).
+- Still flagged on all five: sleeve through the body from Ready into the wind-up, shared timing set
+  (timing is gameplay), finish wrist flex on 14 / 15 / 07 / 06.
+- Open: poses the user rated low have no notes saying what is wrong, and the user edited them on the
+  phone: 10 Wide Forehand 1★, 12 Volley Ready 1★ (no checker flags that explain it), 19 Low Wide Backhand
+  1★, 13 Mid-Low Forehand 2★, 16 Mid-Low Wide Forehand 2★. Not touched until the user says what to fix.

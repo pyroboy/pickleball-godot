@@ -1,0 +1,21 @@
+{
+ "n": 5,
+ "author": "claude",
+ "message": "Lower hips (0.76 -> 0.64 m), small wind-up turn, weight 0.47 > 0.57 > 0.61, wind-up paddle 7 cm closer so the arm is not locked",
+ "time": "2026-11-24T21:21:41",
+ "notes": [],
+ "score": 52,
+ "flags": [
+  "B_wrist_finish",
+  "B_transfer",
+  "C_pop",
+  "C_clip_ready",
+  "C_clip_swing",
+  "C_elbow_flip",
+  "A_near_body",
+  "A_timing",
+  "B_coil",
+  "C_elbow_up"
+ ],
+ "approved": false
+}

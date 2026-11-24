@@ -1,0 +1,17 @@
+{
+ "n": 4,
+ "author": "claude",
+ "message": "Lunge toward the ball: left foot out, right foot in, body 13 cm toward the ball, side lean 24 -> 18 deg, elbow 12 -> 52 deg, balanced",
+ "time": "2026-11-24T21:21:41",
+ "notes": [],
+ "score": 70,
+ "flags": [
+  "B_transfer",
+  "C_no_swing",
+  "C_clip_ready",
+  "C_clip_swing",
+  "A_timing",
+  "B_lean_side_windup"
+ ],
+ "approved": false
+}

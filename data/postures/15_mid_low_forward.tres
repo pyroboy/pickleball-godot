@@ -9,8 +9,8 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": 0.0,
-"crouch_amount": 0.1,
+"body_yaw_deg": -5.0,
+"crouch_amount": 0.19,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -32.0,
 "head_track_ball_weight": 0.8,
@@ -40,9 +40,9 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": 0.0,
+"torso_yaw_deg": -6.0,
 "weight_shift": 0.18,
-"body_position_offset": Vector3(0.0, 0.0, 0.0),
+"body_position_offset": Vector3(0.0, 0.0, 0.04),
 "main_grip_rotation_deg": 0,
 "elbow_swivel_weight": 1.0,
 "right_elbow_swivel_deg": 82.9614174,
@@ -63,13 +63,13 @@ values = {
 "back_foot_back": -0.12,
 "body_pitch_deg": 0.0,
 "body_roll_deg": 0.0,
-"body_yaw_deg": 0.0,
-"crouch_amount": 0.125,
+"body_yaw_deg": 6.0,
+"crouch_amount": 0.25,
 "front_foot_forward": 0.16,
 "head_pitch_deg": -32.0,
 "head_track_ball_weight": 0.8,
 "head_yaw_deg": 2.0,
-"hip_yaw_deg": -2.0,
+"hip_yaw_deg": 2.0,
 "lead_foot": 1,
 "left_elbow_pole": Vector3(-0.48, -0.35, -0.22),
 "left_foot_offset": Vector3(0, 0, 0),
@@ -94,9 +94,9 @@ values = {
 "stance_width": 0.48,
 "torso_pitch_deg": 3.0,
 "torso_roll_deg": 0.0,
-"torso_yaw_deg": 0.0,
+"torso_yaw_deg": 8.0,
 "weight_shift": -0.1,
-"body_position_offset": Vector3(0.0, 0.0, 0.0),
+"body_position_offset": Vector3(0.0, 0.0, -0.06),
 "main_grip_rotation_deg": 0,
 "elbow_swivel_weight": 1.0,
 "right_elbow_swivel_deg": 82.9614174,
@@ -143,14 +143,14 @@ back_foot_back = -0.12
 right_foot_yaw_deg = 5.0
 left_foot_yaw_deg = 5.0
 lead_foot = 1
-crouch_amount = 0.1
+crouch_amount = 0.22
 weight_shift = 0.2
 hip_yaw_deg = -2.0
 torso_pitch_deg = 3.0
 head_yaw_deg = 2.0
 head_pitch_deg = -32.0
 head_track_ball_weight = 0.8
-charge_paddle_offset = Vector3(0.0, -0.065, -0.13)
+charge_paddle_offset = Vector3(0.0, -0.065, -0.2)
 charge_hip_coil_deg = 2.0
 charge_back_foot_load = 0.45
 ft_paddle_offset = Vector3(0.0, 0.13, 0.052)
