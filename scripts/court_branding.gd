@@ -1,6 +1,6 @@
 extends Node3D
 
-const Logo = preload("res://assets/branding/barangay-pickleball.png")
+const Logo = preload("res://assets/branding/pixel-pickleball.png")
 const BrandShader = preload("res://shaders/court_brand.gdshader")
 const SurfaceShader = preload("res://shaders/court_surface.gdshader")
 const NetProfile = preload("res://scripts/net_profile.gd")

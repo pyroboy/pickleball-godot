@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Bake Barangay Pickleball branding (visual only).
+"""Bake Pixel Pickleball branding (visual only).
 
   assets/branding/app-icon.png         1024 px app icon: a pixelated neon yellow-green pickleball
                                        (a real sphere with 40 drilled holes, ray-cast on a
                                        64 px grid, three tones, no glow) on court blue
   assets/branding/title-logo.png       main-menu title art (bunting, ribbon, chunky letters)
-  assets/branding/barangay-pickleball.png   court floor wordmark (alpha mask, 3:1) in the
+  assets/branding/pixel-pickleball.png   court floor wordmark (alpha mask, 3:1) in the
                                        game's own pixel font (assets/fonts/arjo_pixel.*)
 
 Usage: python3 tools/bake_branding.py [--preview]
@@ -122,7 +122,7 @@ def text_mask(chars, text, spacing=1):
 
 def bake_wordmark():
     chars = load_font()
-    top = text_mask(chars, "BARANGAY", 2)
+    top = text_mask(chars, "PIXEL", 2)
     big = text_mask(chars, "PICKLEBALL", 1)
     big = big.repeat(2, 0).repeat(2, 1)
     w = max(top.shape[1], big.shape[1]) + 8
@@ -139,17 +139,17 @@ def bake_wordmark():
     rgba = np.zeros((H, W, 4), np.uint8)
     rgba[..., :3] = 255
     rgba[..., 3] = m * 255
-    Image.fromarray(rgba).resize((W * s, H * s), Image.NEAREST).save(os.path.join(OUT, "barangay-pickleball.png"))
+    Image.fromarray(rgba).resize((W * s, H * s), Image.NEAREST).save(os.path.join(OUT, "pixel-pickleball.png"))
 
 
 def bake_title_logo(scale=8):
-    """Main-menu title art: a string of banderitas, BARANGAY in cream on a red ribbon
+    """Main-menu title art: a string of banderitas, PIXEL in cream on a red ribbon
     (the colour of the court curb) with a tiny ball, and PICKLEBALL in big chunky
     yellow-green letters with a pixel highlight, a blocky 3D extrusion and a dark
     outline. Flat colours only (no glow). Transparent background."""
     chars = load_font()
     big = text_mask(chars, "PICKLEBALL", 1).repeat(2, 0).repeat(2, 1)
-    small = text_mask(chars, "BARANGAY", 2)
+    small = text_mask(chars, "PIXEL", 2)
     bw = big.shape[1]
     H = 6 + small.shape[0] + 6 + 3 + big.shape[0] + 4
     W = bw + 6
@@ -166,7 +166,7 @@ def bake_title_logo(scale=8):
             for dy in range(3):
                 for dx in range(-(2 - dy), 3 - dy):
                     put(y + 1 + dy, x + 1 + dx, c)
-    # red ribbon with notched ends and BARANGAY in cream
+    # red ribbon with notched ends and PIXEL in cream
     ry = 6
     rh = small.shape[0] + 4
     rw = small.shape[1] + 8
@@ -229,4 +229,4 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(ROOT, "logs"), exist_ok=True)
         icon.resize((256, 256), Image.NEAREST).save(os.path.join(ROOT, "logs/app_icon_preview.png"))
         bg = Image.new("RGBA", logo.size, (40, 60, 80, 255)); bg.alpha_composite(logo); bg.save(os.path.join(ROOT, "logs/title_logo_preview.png"))
-    print("baked app-icon.png and barangay-pickleball.png")
+    print("baked app-icon.png, title-logo.png and pixel-pickleball.png")

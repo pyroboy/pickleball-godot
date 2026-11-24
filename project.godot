@@ -14,8 +14,8 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 [application]
 
-config/name="Barangay Pickleball"
-config/name.ios="Barangay Pickleball"
+config/name="Pixel Pickleball"
+config/name.ios="Pixel Pickleball"
 run/main_scene="res://scenes/title.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.6", "GL Compatibility")

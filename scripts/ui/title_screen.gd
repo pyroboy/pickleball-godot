@@ -14,7 +14,7 @@ const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const MenuBallScene = preload("res://scripts/ui/menu_ball_scene.gd")
-const NEON := Color("d2ee2c")          # Barangay Pickleball neon yellow-green (the ball)
+const NEON := Color("d2ee2c")          # Pixel Pickleball neon yellow-green (the ball)
 const CREAM := Color("f3ead2")
 var _word2: Label
 var _shade: TextureRect
@@ -89,7 +89,7 @@ func _ready() -> void :
  margin.add_child(_content)
  var word: = Label.new()
  _word = word
- word.text = "BARANGAY"
+ word.text = "PIXEL"
  word.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
  word.add_theme_color_override("font_color", CREAM)
  UiTheme.use_pixel(word, 18)

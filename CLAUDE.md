@@ -1,4 +1,4 @@
-# Arjostyle Pickleball (iPhone, doubles)
+# Pixel Pickleball (iPhone, doubles)
 
 Pickleball game in Godot 4.6.3 (GDScript), shipped to iPhone. Version 0.3.28 build 31.
 Moving to a 2.5D pixel-art look with gameplay locked: north star, phases and next steps
