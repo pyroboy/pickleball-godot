@@ -9,7 +9,34 @@ extends RefCounted
 ## like scripts/graphics/pixel_card_rig.gd (same anchors, limb stretch, mirroring and
 ## near/far draw bias), for every person in one dynamic mesh: one draw call.
 
-const CARD_SHADER := preload("res://shaders/pixel_card.gdshader")
+## The crowd's own card shader: shaders/pixel_card.gdshader's atlas draw (hard alpha cut,
+## unshaded, atlas pre-compensated, `gain`) plus the environment's background push
+## (shaders/env_toon.gdshader `push`): by distance outside the court lines the cards lean
+## toward the same light grey as the buildings, so the crowd sits behind the players.
+## Set per vertex: a card is small, its corners are all about as far out.
+const CROWD_SHADER_CODE := """
+shader_type spatial;
+render_mode unshaded, cull_disabled, fog_disabled, depth_draw_opaque;
+uniform sampler2D atlas : source_color, filter_nearest;
+uniform float gain = 1.0;
+uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
+uniform vec2 court_half = vec2(3.05, 6.705);
+uniform vec3 push = vec3(2.0, 7.0, 0.24);
+uniform float push_desat = 0.4;
+varying float k;
+void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	k = push.z * smoothstep(push.x, push.y, length(max(abs(wp.xz) - court_half, vec2(0.0))));
+}
+void fragment() {
+	vec4 c = texture(atlas, UV);
+	if (c.a < 0.5) discard;
+	vec3 s = sqrt(c.rgb);
+	s = mix(s, vec3(dot(s, vec3(0.299, 0.587, 0.114))), k * push_desat);
+	s = mix(s, sqrt(push_col), k);
+	ALBEDO = s * s * gain;
+}
+"""
 const META_PATH := "res://assets/crowd_cards/crowd_meta.json"
 const ATLAS := preload("res://assets/crowd_cards/crowd_atlas.png")
 const CARDS_PER_PERSON := 15
@@ -234,10 +261,10 @@ class CardBatch:
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE)
 		mesh.custom_aabb = AABB(Vector3(-80, -5, -80), Vector3(160, 30, 160))
 		var mat := ShaderMaterial.new()
-		mat.shader = CARD_SHADER
+		var shader := Shader.new()
+		shader.code = CROWD_SHADER_CODE
+		mat.shader = shader
 		mat.set_shader_parameter("atlas", ATLAS)
-		mat.set_shader_parameter("atlas_other", ATLAS)
-		mat.set_shader_parameter("atlas_px", tex)
 		mat.set_shader_parameter("gain", float(meta.get("gain", 1.0)))
 		instance = MeshInstance3D.new()
 		instance.name = "CrowdCards"

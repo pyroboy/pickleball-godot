@@ -39,15 +39,12 @@ func _draw() -> void :
 	match kind:
 		Kind.SCOREBOARD: _draw_scoreboard()
 		Kind.GUIDANCE: _draw_guidance()
-		Kind.GUIDE:
-			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
-			_draw_book()
+		Kind.GUIDE: _draw_book_pixels()
 		Kind.PAUSE:
-			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
-			# Pixel pause bars: square blocks with a darker bottom step.
-			for bx in [-10.0, 4.0]:
-				draw_rect(Rect2(bx, -14, 6, 28), ICE)
-				draw_rect(Rect2(bx, 11, 6, 3), Color(ICE.darkened(0.35)))
+			# Pixel pause bars on the 18-UI-pixel icon grid, darker bottom step.
+			for bx in [5, 10]:
+				_cell(bx, 3, 3, 11, ICE)
+				_cell(bx, 13, 3, 1, ICE.darkened(0.35))
 		Kind.PILL: _draw_pill()
 		Kind.SKIP:
 			draw_set_transform(size * 0.5, 0.0, Vector2.ONE * minf(size.x, size.y) / 42.0)
@@ -153,6 +150,27 @@ func _draw_aim() -> void :
 	draw_arc(Vector2.ZERO, 14, 0, TAU, 32, ICE, 2.5, true)
 	for direction in [Vector2.UP, Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT]:
 		draw_line(direction * 10, direction * 20, ICE, 2.5, true)
+
+## Icon grid: 18x18 UI pixels centred in the control (54 px = 3 px per UI pixel on the phone).
+func _cell(x: int, y: int, w: int, h: int, color: Color) -> void:
+	var u: float = maxf(1.0, floorf(minf(size.x, size.y) / 18.0))
+	var origin: = ((size - Vector2.ONE * 18.0 * u) * 0.5).round()
+	draw_rect(Rect2(origin + Vector2(x, y) * u, Vector2(w, h) * u), color)
+
+## Open book (Guide), whole UI pixels: two pages, darker spine and binding, text lines.
+func _draw_book_pixels() -> void:
+	var shade: = ICE.darkened(0.35)
+	var ink: = Color("0f2230")
+	_cell(2, 5, 6, 9, ICE)       # left page
+	_cell(3, 4, 5, 1, ICE)       # page tops curl in at the outer corner
+	_cell(10, 5, 6, 9, ICE)      # right page
+	_cell(10, 4, 5, 1, ICE)
+	_cell(8, 5, 2, 10, shade)    # spine
+	_cell(2, 14, 6, 1, shade)    # binding under the pages
+	_cell(10, 14, 6, 1, shade)
+	for row in [7, 9, 11]:       # text lines
+		_cell(3, row, 4, 1, ink)
+		_cell(11, row, 4, 1, ink)
 
 func _draw_book() -> void :
 	draw_polyline(PackedVector2Array([

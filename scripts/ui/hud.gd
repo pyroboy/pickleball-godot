@@ -11,6 +11,8 @@ const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HudChrome = preload("res://scripts/ui/hud_chrome.gd")
 const PixelBanner = preload("res://scripts/ui/pixel_banner.gd")
+const PixelStyle = preload("res://scripts/ui/pixel_style_box.gd")
+const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
 const AI_DIFFICULTY_COLORS: Array[Color] = [UiTheme.ACCENT, Color("f5d38b"), UiTheme.RED]
 const DEMO_CUES: = {"SOFT": "Soft dink · watch the angle", "POPUP": "Loose dink · attack chance", 
 	"HIGH_POPUP": "High popup · overhead chance", "SMASH": "Smash · block and reset", 
@@ -87,12 +89,17 @@ var _practice_exchange_context: = false
 var _wall_context: = false
 var _demo_guidance_active: = false
 var _font_bold: SystemFont
+## Pill labels (serve line, shot name, speed, locked shot): each sits on a dark pixel pill
+## sized to its text and aligned (by its horizontal_alignment) inside this region.
+var _pill_regions: Dictionary = {}
+const TOOLBAR_STYLE_KEYS: = ["normal", "hover", "pressed", "hover_pressed", "disabled"]
 
 class HittabilityDot extends Control:
 	var hittable := false
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 		process_mode = Node.PROCESS_MODE_ALWAYS
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		resized.connect(queue_redraw)
 	func _process(delta: float) -> void:
 		get_parent()._sync_hittability(delta)
@@ -101,9 +108,10 @@ class HittabilityDot extends Control:
 		hittable = value
 		queue_redraw()
 	func _draw() -> void:
+		# Pixel dot (UI kit): whole UI pixels, dark rim, no anti-aliasing.
 		var radius := minf(size.x, size.y) * 0.5
-		draw_circle(size * 0.5, radius, Color("07131f"), true, -1, true)
-		draw_circle(size * 0.5, maxf(0.0, radius - 1.0), Color("55dc80") if hittable else Color("7d8994"), true, -1, true)
+		var u: float = maxf(1.0, roundf(radius / 2.0))
+		PixelDraw.disc(self, size * 0.5, radius, u, Color("55dc80") if hittable else Color("7d8994"), Color("07131f"), 1, false)
 
 # Prediction is independent of charge, human-contact preparation and slow motion.
 # The horizon is the existing aim controller's plant lead; proximity is the
@@ -220,6 +228,45 @@ func _ready() -> void :
 	get_viewport().size_changed.connect(_layout_desktop)
 	_layout_desktop()
 	set_match_context(0, false)
+	if OS.get_cmdline_user_args().has("--ui-rects"):
+		# Debug only: once a second (pausable timer), log HUD rects for the overlap check.
+		var timer: = Timer.new()
+		timer.wait_time = 1.0
+		timer.autostart = true
+		timer.timeout.connect(_note_ui_rects)
+		add_child(timer)
+
+## --ui-rects: screen rects of the HUD pieces that must not overlap, to perf.jsonl
+## (note "ui_rects"). Only what is drawn: visible and not faded out.
+func _note_ui_rects() -> void:
+	var rects: = {}
+	var named: Array = [["serve", _serve_label], ["shot", shot_type], ["speed", speed], ["locked", _locked_spin_label], ["board", _board], ["dot", hittable_dot]]
+	var toolbar_names: = ["debug", "skip", "guide", "pause"]
+	for i in _toolbar.get_child_count(): named.append([toolbar_names[i] if i < toolbar_names.size() else "tool%d" % i, _toolbar.get_child(i)])
+	var game: = get_parent()
+	for extra in game.get("extra_touch_buttons") if game != null and game.get("extra_touch_buttons") != null else []:
+		if is_instance_valid(extra): named.append(["tips", extra])
+	for pair in named:
+		var c: Control = pair[1]
+		if is_instance_valid(c) and c.is_visible_in_tree() and c.modulate.a > 0.01 and c.self_modulate.a > 0.01:
+			var r: Rect2 = c.get_global_rect()
+			rects[pair[0]] = [roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y)]
+	var controls = game.get("mobile_controls") if game != null else null
+	if controls != null and controls.enabled and controls.visible:
+		for key in ["stick_zone", "hit_zone"]:
+			var r: Rect2 = controls.get(key)
+			rects[key] = [roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y)]
+	var cues = game.get_node_or_null("DoublesIdentityCues") if game != null else null
+	if cues != null and cues.has_method("screen_rects"):
+		var labels: Dictionary = cues.screen_rects()
+		for key in labels:
+			var r: Rect2 = labels[key]
+			rects[key] = [roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y)]
+	var branding = game.get_node_or_null("CourtBranding") if game != null else null
+	PerfMonitor.note("ui_rects", {"rects": rects, "view": [get_viewport().get_visible_rect().size.x, get_viewport().get_visible_rect().size.y],
+		"logo_fade": snappedf(float(branding.get("_fade")), 0.01) if branding != null else -1.0, "between": _between_point_active,
+		"serve": _serve_label.text, "speed": speed.text if speed.modulate.a > 0.01 else "", "shot": shot_type.text if shot_type.modulate.a > 0.01 else "",
+		"state": int(game.get("game_state")) if game != null and game.get("game_state") != null else -1})
 
 func _label(text: String, font_size: int, color: Color = UiTheme.INK, bold: bool = false) -> Label:
 	var label: = Label.new()
@@ -331,9 +378,17 @@ func _build_labels() -> void :
 		label.add_theme_constant_override("shadow_offset_y", 2)
 	# Semi pixel art HUD: scores and call-outs in the pixel display font (hard shadow),
 	# body/status text stays in the clean sans.
-	for label in [score, _pill_label, fault, out_text, shot_type, speed, _serve_label]:
+	for label in [score, _pill_label, fault, out_text, shot_type, speed, _serve_label, _locked_spin_label]:
 		label.add_theme_font_override("font", UiTheme.pixel_font())
 		UiTheme.crisp(label)
+	# Legibility over any backdrop (light cement, the crowd, the shop sign): the floating
+	# lines sit on dark pixel pills like the scoreboard, sized to their text.
+	for label in [_serve_label, shot_type, speed, _locked_spin_label]:
+		label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		label.add_theme_color_override("font_shadow_color", PixelDraw.SHADOW)
+		label.add_theme_constant_override("shadow_offset_x", 0)
+		label.add_theme_constant_override("shadow_offset_y", 2)
 	fault.hide()
 	out_text.hide()
 	zone.hide()
@@ -631,8 +686,13 @@ func _refresh_shot_label() -> void :
 	_spin_label.visible = _gameplay_visible and not _portrait
 	_locked_spin_label.text = "THIS SHOT · %s" % _locked_display if _spin_locked else ""
 	_locked_spin_label.visible = _gameplay_visible and _spin_locked
+	_fit_pill(_locked_spin_label)
 
 func set_match_context(server: int, rally_active: bool) -> void :
+	_apply_match_context(server, rally_active)
+	_fit_pill(_serve_label)
+
+func _apply_match_context(server: int, rally_active: bool) -> void :
 	var game: = get_parent()
 	var practice: bool = game != null and game.has_method("_is_practice") and game._is_practice()
 	_match_label.text = "PRACTICE %s · NO SCORE" % game.practice_launcher.drill_mode if practice else "SINGLES  /  FIRST TO 11"
@@ -812,6 +872,47 @@ func _place(control: Control, rect: Rect2) -> void :
 	control.position = rect.position
 	control.size = rect.size
 
+## A pill label's region (layout only); the pill is fitted to the current text inside it.
+func _set_pill_region(label: Label, region: Rect2) -> void:
+	_pill_regions[label] = region
+	_fit_pill(label)
+
+## Sets a pill label's text and refits its pill; nothing happens when the text is unchanged.
+func set_pill_text(label: Label, text: String) -> void:
+	if label.text == text: return
+	label.text = text
+	_fit_pill(label)
+
+## Size the pill to its text (never wider than its region) and align it in the region.
+## Runs on text or layout changes only, never per frame.
+func _fit_pill(label: Label) -> void:
+	if not _pill_regions.has(label): return
+	var region: Rect2 = _pill_regions[label]
+	var style: StyleBox = label.get_theme_stylebox("normal")
+	var font: Font = label.get_theme_font("font")
+	var font_size: int = label.get_theme_font_size("font_size")
+	var margins: Vector2 = style.get_minimum_size()
+	var width: float = minf(ceilf(font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + margins.x), region.size.x)
+	var left: float = region.position.x
+	if label.horizontal_alignment == HORIZONTAL_ALIGNMENT_RIGHT: left = region.end.x - width
+	elif label.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER: left = region.position.x + (region.size.x - width) * 0.5
+	_place(label, Rect2(Vector2(left, region.position.y).round(), Vector2(width, font.get_height(font_size) + margins.y)))
+
+## Pills scale with the layout: margins and pixel unit follow the mobile scale. Landscape
+## keeps the serve line inside its dark score panel (no pill of its own).
+var _pill_scale: = -1.0
+var _serve_pill: = false
+func _style_pills(s: float, serve_pill: bool) -> void:
+	var rescale: bool = not is_equal_approx(s, _pill_scale)
+	if rescale:
+		_pill_scale = s
+		for label in [shot_type, speed, _locked_spin_label]:
+			label.add_theme_stylebox_override("normal", PixelStyle.label_pill(s))
+	if rescale or serve_pill != _serve_pill:
+		_serve_pill = serve_pill
+		_serve_label.add_theme_stylebox_override("normal", PixelStyle.label_pill(s) if serve_pill else StyleBoxEmpty.new())
+		if not serve_pill: _pill_regions.erase(_serve_label)
+
 func _layout_desktop() -> void :
 	if not is_instance_valid(_toolbar): return
 	var viewport_size: = get_viewport().get_visible_rect().size
@@ -833,21 +934,23 @@ func _layout_desktop() -> void :
 	_place(_red_label, Rect2(margin + score_width - 160, margin + 38, 138, 22))
 	_place(score, Rect2(margin + 20, margin + 55, score_width - 40, 55))
 	if is_instance_valid(_board): _place(_board, Rect2(margin + 20, margin + 58, score_width - 40, 54))
+	_style_pills(1.0, false)
 	_place(_serve_label, Rect2(margin + 16, margin + 113, score_width - 32, 20))
 	_place(difficulty, Rect2(margin + 4, margin + 150, 270, 26))
 	_place(_spin_label, Rect2(margin + 4, margin + 179, 300, 26))
-	_place(_locked_spin_label, Rect2(margin + 4, margin + 206, 300, 20))
+	_locked_spin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_set_pill_region(_locked_spin_label, Rect2(margin + 4, margin + 206, 300, 36))
 	var toolbar_width: = 440.0 if _between_point_active else 330.0
 	_place(_toolbar, Rect2(width - margin - toolbar_width, margin, toolbar_width, 44))
 	_place(_debug_toolbar, Rect2(width - margin - 430, margin + 56, 430, 104))
-	_place(speed, Rect2(width - margin - 260, margin + 58, 260, 32))
-	_place(hittable_dot, Rect2(width - margin - 12, margin + 92, 12, 12))
+	_set_pill_region(speed, Rect2(width - margin - 260, margin + 58, 260, 36))
+	_place(hittable_dot, Rect2(width - margin - 12, margin + 98, 12, 12))
 	if width < 1100:
-		_place(shot_type, Rect2(width - margin - 320, margin + 108, 320, 32))
 		shot_type.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_set_pill_region(shot_type, Rect2(width - margin - 320, margin + 114, 320, 36))
 	else:
-		_place(shot_type, Rect2(width * 0.5 - 160, margin + 70, 320, 32))
 		shot_type.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_set_pill_region(shot_type, Rect2(width * 0.5 - 160, margin + 70, 320, 36))
 	_place(freeze_indicator, Rect2(margin + 4, margin + (231 if _spin_enabled else 185), 280, 28))
 	var status_width: = minf(720.0, width - margin * 2.0 - 265.0)
 	status_width = maxf(status_width, 300.0)
@@ -931,7 +1034,7 @@ func _run_debug_tool(caption: String) -> void :
 func _restore_desktop_fonts() -> void :
 	_toolbar.add_theme_constant_override("separation", 8)
 	_skip_button.clip_text = false
-	for key in ["normal", "hover", "pressed"]: _skip_button.remove_theme_stylebox_override(key)
+	for key in TOOLBAR_STYLE_KEYS: _skip_button.remove_theme_stylebox_override(key)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]: _skip_button.remove_theme_color_override(state)
 	_score_panel.modulate.a = 1.0
 	_score_panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
@@ -957,18 +1060,45 @@ func _restore_desktop_fonts() -> void :
 	difficulty.visible = _gameplay_visible
 	_spin_label.visible = _gameplay_visible and _spin_enabled
 	for button in _toolbar.get_children():
-		for style in ["normal", "hover", "pressed"]: button.remove_theme_stylebox_override(style)
+		for style in TOOLBAR_STYLE_KEYS: button.remove_theme_stylebox_override(style)
+	_toolbar_pixel_scale = -1.0
 	_guide_instructions.add_theme_font_size_override("font_size", 18)
 	var guide_content: VBoxContainer = _guide_scroll.get_child(0)
 	guide_content.get_child(0).add_theme_font_size_override("font_size", 26)
 	var guide_close: Button = guide_content.get_child(guide_content.get_child_count() - 1)
 	guide_close.custom_minimum_size.y = 44
 	guide_close.add_theme_font_size_override("font_size", 20)
-	for pair in [[score, 40], [_match_label, 13], [_blue_label, 14], [_red_label, 14], [_serve_label, 13], [difficulty, 16], [_spin_label, 16], [_locked_spin_label, 12], [_charge_label, 12], [fault, 34], [out_text, 58], [speed, 20], [shot_type, 19]]:
+	for pair in [[score, 40], [_match_label, 13], [_blue_label, 14], [_red_label, 14], [_serve_label, 13], [difficulty, 16], [_spin_label, 16], [_locked_spin_label, 18], [_charge_label, 12], [fault, 34], [out_text, 58], [speed, 18], [shot_type, 18]]:
 		pair[0].add_theme_font_size_override("font_size", pair[1])
 	for button in _toolbar.get_children():
 		button.custom_minimum_size = Vector2(0, 44)
 		button.add_theme_font_size_override("font_size", 16)
+
+## Portrait toolbar in the kit's pixel style, like the on-screen pads: Guide / Pause are
+## pixel discs (navy, bevel, one-UI-pixel rim; blue rim when touched, face sinks one UI
+## pixel), Skip a lime stair-cornered plate. Only the drawing: the content margins are the
+## old ones, so every button keeps its size, place and touch rect. Built once per scale.
+var _toolbar_pixel_scale: = -1.0
+func _style_toolbar_pixels(s: float) -> void:
+	if is_equal_approx(s, _toolbar_pixel_scale): return
+	_toolbar_pixel_scale = s
+	var u: float = PixelDraw.unit(s)
+	for button in _toolbar.get_children():
+		UiTheme.crisp(button)
+		for key in TOOLBAR_STYLE_KEYS:
+			var touched: bool = key != "normal" and key != "disabled"
+			var style   # pixel_style_box.gd
+			if button == _skip_button:
+				# Skip is the one action on this row and only shows between points: lime
+				# with dark ink and larger text, so it reads at a glance.
+				var lime: Color = UiTheme.ACCENT if key == "normal" else (UiTheme.ACCENT_HOVER if key == "hover" else UiTheme.ACCENT.darkened(0.08))
+				style = PixelStyle.plate(UiTheme.SURFACE_PRESSED if key == "disabled" else lime, s, 2)
+			else:
+				style = PixelStyle.round_button(Color(UiTheme.PANEL, 1.0 if touched else 0.94), s, UiTheme.BLUE if touched else UiTheme.BORDER)
+			style.inset = Vector2(4 * s, 0)
+			style.drop = u if key in ["pressed", "hover_pressed"] else 0.0
+			PixelStyle.set_margins(style, 16 * s, 10 * s, 16 * s, 10 * s)
+			button.add_theme_stylebox_override(key, style)
 
 func _layout_portrait(viewport_size: Vector2) -> void :
 	var safe: = MobileLayout.safe_rect(get_viewport())
@@ -1002,41 +1132,14 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_place(_blue_label, Rect2(x + 86 * s, y + 29 * s, 100 * s, 58 * s))
 	_place(_red_label, Rect2(x + w - 220 * s, y + 29 * s, 134 * s, 58 * s))
 	_place(score, Rect2(x + w * 0.28, y + 27 * s, w * 0.44, 50 * s))
-	_place(_serve_label, Rect2(x + 4 * s, y + pill_h + 8 * s, w * 0.7, 26 * s))
 	_serve_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_serve_label.add_theme_color_override("font_shadow_color", Color(0.04, 0.08, 0.14, 0.9))
-	_serve_label.add_theme_constant_override("shadow_offset_y", 2)
 	_toolbar.add_theme_constant_override("separation", maxi(1, roundi(8 * s)))
 	for button in _toolbar.get_children():
 		button.custom_minimum_size = Vector2(ceilf(100 * s), ceilf(92 * s))
 		button.add_theme_font_size_override("font_size", roundi(21 * s))
-		for key in ["normal", "hover", "pressed"]:
-			var style: = UiTheme.button_style(Color(UiTheme.PANEL, 0.94 if key == "normal" else 1.0))
-			# Round icon button, pixel style: same touch rect, drawn as a chunky
-			# few-sided "pixel circle" (stadium for the wider Skip), no anti-aliasing.
-			style.set_corner_radius_all(roundi(46 * s))
-			style.corner_detail = 3
-			style.shadow_color = Color(0, 0, 0, 0)
-			style.expand_margin_left = - 4 * s
-			style.expand_margin_right = - 4 * s
-			style.border_width_bottom = maxi(2, roundi(4 * s))
-			style.content_margin_left = 16 * s
-			style.content_margin_right = 16 * s
-			style.content_margin_top = 10 * s
-			style.content_margin_bottom = 10 * s
-			style.border_color = UiTheme.BORDER if key == "normal" else UiTheme.BLUE
-			style.set_border_width_all(maxi(2, roundi(3 * s)))
-			style.border_width_bottom = maxi(3, roundi(6 * s))
-			button.add_theme_stylebox_override(key, style)
+	_style_toolbar_pixels(s)
 	_guide_button.text = ""
 	_pause_button.text = ""
-	# Skip is the one action on this row and only shows between points: lime with dark ink
-	# and larger text, so it reads at a glance (it was the same dark pill as the icon buttons).
-	for key in ["normal", "hover", "pressed"]:
-		var skip_style: StyleBoxFlat = _skip_button.get_theme_stylebox(key).duplicate()
-		skip_style.bg_color = UiTheme.ACCENT if key == "normal" else (UiTheme.ACCENT_HOVER if key == "hover" else UiTheme.ACCENT.darkened(0.08))
-		skip_style.border_color = UiTheme.ACCENT.darkened(0.42)
-		_skip_button.add_theme_stylebox_override(key, skip_style)
 	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		_skip_button.add_theme_color_override(state, UiTheme.PANEL)
 	_skip_button.add_theme_font_size_override("font_size", roundi(27 * s))
@@ -1082,7 +1185,6 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_place(_charge_label, Rect2(x + 64 * s, y + 164 * s, caption_width, 38 * s))
 	_place(_charge_bar, Rect2(x + 64 * s, y + 205 * s, caption_width, 3 * s))
 	_place(_controls_hint, Rect2(x + 64 * s, y + 215 * s, caption_width, 38 * s))
-	_place(_locked_spin_label, Rect2(x + w - toolbar_width, y + pill_h + 36 * s, toolbar_width, 38 * s))
 	state.add_theme_font_size_override("font_size", roundi(21 * s))
 	state.max_lines_visible = 1   # one-line state text
 	state.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
@@ -1092,19 +1194,33 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 		label.max_lines_visible = 2
 		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	for label in [state, _controls_hint, _charge_label, _locked_spin_label]:
+	for label in [state, _controls_hint, _charge_label]:
 		label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.85))
 		label.add_theme_constant_override("shadow_offset_y", 2)
 	var team_label_size:int=18 if get_parent()!=null and get_parent().get("doubles_mode")==true else 21
-	for pair in [[score, 43], [_match_label, 17], [_blue_label, team_label_size], [_red_label, team_label_size], [_serve_label, 17], [_locked_spin_label, 18], [_charge_label, 18], [fault, 32], [out_text, 52], [speed, 22], [shot_type, 23]]:
+	for pair in [[score, 43], [_match_label, 17], [_blue_label, team_label_size], [_red_label, team_label_size], [_charge_label, 18], [fault, 32], [out_text, 52]]:
 		pair[0].add_theme_font_size_override("font_size", maxi(10, roundi(float(pair[1]) * s)))
 	_place(fault, Rect2(x + 8 * s, safe.position.y + safe.size.y * 0.35, w - 16 * s, 110 * s))
 	_place(out_text, Rect2(x, safe.position.y + safe.size.y * 0.28, w, 72 * s))
 	_place(zone, Rect2(x, y + 268 * s, w, 28 * s))
-	_place(speed, Rect2(x + w - 230 * s, y + 270 * s, 230 * s, 30 * s))
-	_place(hittable_dot, Rect2(x + w - 12 * s, y + 303 * s, 12 * s, 12 * s))
-	_place(shot_type, Rect2(x, y + 270 * s, w - 240 * s, 30 * s))
-	shot_type.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	# HUD band under the top row, on dark pills: the serve line under the LED board (left),
+	# shot name and speed under Guide / Pause (right). Clear of the board, the toolbar and
+	# the bottom controls; each pill is sized to its text when the text changes.
+	_style_pills(s, true)
+	for label in [_serve_label, _locked_spin_label, speed, shot_type]:
+		label.add_theme_font_size_override("font_size", UiTheme.pixel_size(18 * s))
+	var line_h: float = UiTheme.pixel_font().get_height(UiTheme.pixel_size(18 * s)) + speed.get_theme_stylebox("normal").get_minimum_size().y
+	var row_y: float = y + pill_h + 10 * s
+	var gap_y: float = 6 * s
+	var right_w: float = 220 * s
+	_set_pill_region(_serve_label, Rect2(x, row_y, w - right_w - 12 * s, line_h))
+	shot_type.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_set_pill_region(shot_type, Rect2(x + w - right_w, row_y, right_w, line_h))
+	_set_pill_region(speed, Rect2(x + w - right_w, row_y + line_h + gap_y, right_w, line_h))
+	var dot_y: float = row_y + 2.0 * (line_h + gap_y)
+	_place(hittable_dot, Rect2(x + w - 12 * s, dot_y, 12 * s, 12 * s))
+	_locked_spin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_set_pill_region(_locked_spin_label, Rect2(x + w - right_w, dot_y + 12 * s + gap_y, right_w, line_h))
 	_place(debug, Rect2(x, y + 310 * s, w, 100 * s))
 	_place(posture_debug, Rect2(x, y + 414 * s, w, 120 * s))
 	_place(freeze_indicator, Rect2(x, y + 284 * s, w, 26 * s))

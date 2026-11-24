@@ -146,24 +146,61 @@ func _setup_ball() -> void :
 	col.shape = shape
 	add_child(col)
 
-	var mesh_inst: MeshInstance3D = MeshInstance3D.new()
-	var mesh: SphereMesh = SphereMesh.new()
-	mesh.radius = BALL_RADIUS
-	mesh.height = BALL_RADIUS * 2
-	# A few pixels on the phone: 12x8 keeps a round silhouette at ~220 triangles (default 64x32 is ~4.2k).
-	mesh.radial_segments = 12
-	mesh.rings = 8
-	mesh_inst.mesh = mesh
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(1, 1, 0)
-	mat.roughness = 0.3
-	mesh_inst.material_override = mat
-	add_child(mesh_inst)
+	add_child(_build_visual())
 
 	if spin_debug_visible:
 		_setup_spin_debug_visuals()
 
 	reset()
+
+
+## Visual only. The drawn ball is VISUAL_SCALE times the physics ball: at 1/3 render
+## resolution a real-size ball is ~5 render pixels near the camera and ~1.5 at the far
+## baseline, too small to read on the court. 1.5x makes it ~7.5 px near (about half a
+## player's head, still a ball) and ~2.3 px far, where the shader's 3 px floor takes
+## over. Nothing in gameplay reads this mesh: contacts, reach, aero and the floor use
+## BALL_RADIUS and the collision sphere above, which stay real size.
+const VISUAL_SCALE: = 1.5
+const BodyShader = preload("res://shaders/ball_body.gdshader")
+const OutlineShader = preload("res://shaders/ball_readability.gdshader")
+## On-screen colours (measured through the game's chain: unshaded x 2.2, the 3D buffer's
+## clamp, Filmic, PixelPost; vignette off) and the stored values that produce them.
+## The chain tops out near 218 per channel, so #d2ee2c itself can't be shown; mid keeps
+## its hue (OKLab h 117) at the brightest reachable lightness (L 0.85).
+const BALL_MID: = Color("#5d7117")      # shows #c5db22
+const BALL_DARK: = Color("#3d4b0f")     # shows #91ac0b, lower-right crescent
+const BALL_LIGHT: = Color("#65712c")    # shows #cfda60, small upper-left spot (paler, not brighter)
+const BALL_OUTLINE: = Color("#14150c")  # shows #23270a, near-black olive
+const VISUAL_GAIN: = 2.2
+
+func _build_visual() -> MeshInstance3D:
+	var mesh_inst: MeshInstance3D = MeshInstance3D.new()
+	var mesh: SphereMesh = SphereMesh.new()
+	mesh.radius = BALL_RADIUS * VISUAL_SCALE
+	mesh.height = BALL_RADIUS * VISUAL_SCALE * 2.0
+	# A few pixels on the phone: 12x8 keeps a round silhouette at ~220 triangles (default 64x32 is ~4.2k).
+	mesh.radial_segments = 12
+	mesh.rings = 8
+	mesh_inst.mesh = mesh
+	# The round blob under the ball (fx/ground_shadows.gd) is its shadow and height cue;
+	# a sun shadow would be a second one, offset by the low sun.
+	mesh_inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var body: = ShaderMaterial.new()
+	body.shader = BodyShader
+	body.set_shader_parameter("dark", BALL_DARK)
+	body.set_shader_parameter("mid", BALL_MID)
+	body.set_shader_parameter("light", BALL_LIGHT)
+	var outline: = ShaderMaterial.new()
+	outline.shader = OutlineShader
+	outline.set_shader_parameter("outline_color", BALL_OUTLINE)
+	for m: ShaderMaterial in [body, outline]:
+		m.set_shader_parameter("gain", VISUAL_GAIN)
+		m.set_shader_parameter("radius", mesh.radius)
+		# just above the ball's blob shadow (fx/ground_shadows.gd FLOOR_Y)
+		m.set_shader_parameter("floor_y", FLOOR_Y + 0.006)
+	body.next_pass = outline
+	mesh_inst.material_override = body
+	return mesh_inst
 
 
 

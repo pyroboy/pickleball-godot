@@ -6,11 +6,23 @@ shader_type canvas_item;
 // the result is a true nearest-neighbour upscale: court, players and effects share
 // one hard pixel grid. Then a subtle grade and vignette, both per low-res pixel so
 // they stay on the grid. UI layers sit above this at full resolution.
+//
+// Late-afternoon grade: near-neutral colours (cement, sky, haze, whites) warm up;
+// saturated ones (the ball's yellow-green, the team kits) are left alone, by their
+// chroma. `warm` keeps the channel mean, so the grey ramp tools/calibrate_cards.gd
+// measures (its average of r, g, b) is unchanged. The vignette darkens the corners a
+// little more in blue than in red, so they fall off warm, not grey.
+// Contrast and saturation are baked into the card and environment colour compensation
+// (tools/bake_pixel_cards.py, scripts/environment/env_palette.gd POST_SATURATION):
+// change them only together with those.
 uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
 uniform float scale = 0.3333333;    // root scaling_3d_scale
 uniform float contrast = 1.06;
 uniform float saturation = 1.08;
-uniform float vignette = 0.22;      // 0 = off
+uniform vec3 warm = vec3(1.05, 1.0, 0.95);
+uniform vec2 warm_chroma = vec2(0.06, 0.24);   // full grade below, none above (max - min of rgb)
+uniform float vignette = 0.2;       // 0 = off
+uniform vec3 vignette_tint = vec3(0.8, 1.0, 1.25);
 
 void fragment() {
 	// Low-res buffer size as the engine computes it (truncated), so the grid also
@@ -18,10 +30,12 @@ void fragment() {
 	vec2 lo = max(floor((1.0 / SCREEN_PIXEL_SIZE) * scale + 0.001), vec2(1.0));
 	vec2 uv = (floor(SCREEN_UV * lo) + 0.5) / lo;
 	vec3 c = texture(screen_tex, uv).rgb;
+	float chroma = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+	c = mix(c * warm, c, smoothstep(warm_chroma.x, warm_chroma.y, chroma));
 	float l = dot(c, vec3(0.299, 0.587, 0.114));
 	c = mix(vec3(l), c, saturation);
 	c = (c - 0.5) * contrast + 0.5;
 	vec2 d = uv - 0.5;
-	c *= 1.0 - vignette * smoothstep(0.35, 0.85, length(d * vec2(1.0, 0.75)));
+	c *= 1.0 - vignette * vignette_tint * smoothstep(0.35, 0.85, length(d * vec2(1.0, 0.75)));
 	COLOR = vec4(clamp(c, 0.0, 1.0), 1.0);
 }

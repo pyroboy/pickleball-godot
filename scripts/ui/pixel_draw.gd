@@ -41,14 +41,54 @@ static func _disc_rect(center: Vector2, r: int, u: float) -> Rect2:
 ## Filled pixel disc with a lighter top edge and a darker bottom bevel; optional rim.
 static func disc(ci: CanvasItem, center: Vector2, radius: float, u: float, fill: Color,
 		rim: Color = Color(0, 0, 0, 0), rim_width: int = 1, bevel: bool = true) -> void:
+	disc_rid(ci.get_canvas_item(), center, radius, u, fill, rim, rim_width, bevel)
+
+## disc() for callers that only have the canvas item RID (StyleBox._draw).
+static func disc_rid(ci: RID, center: Vector2, radius: float, u: float, fill: Color,
+		rim: Color = Color(0, 0, 0, 0), rim_width: int = 1, bevel: bool = true) -> void:
 	var r: int = maxi(2, roundi(radius / u))
 	var rect: = _disc_rect(center, r, u)
-	ci.draw_texture_rect(_mask("disc", r, 0), rect, false, fill)
+	RenderingServer.canvas_item_add_texture_rect(ci, rect, _mask("disc", r, 0).get_rid(), false, fill)
 	if bevel:
-		ci.draw_texture_rect(_mask("low", r, 1), rect, false, Color(fill.darkened(0.45), fill.a))
-		ci.draw_texture_rect(_mask("high", r, 1), rect, false, Color(fill.lightened(0.28), fill.a))
+		RenderingServer.canvas_item_add_texture_rect(ci, rect, _mask("low", r, 1).get_rid(), false, Color(fill.darkened(0.45), fill.a))
+		RenderingServer.canvas_item_add_texture_rect(ci, rect, _mask("high", r, 1).get_rid(), false, Color(fill.lightened(0.28), fill.a))
 	if rim.a > 0.0:
-		ci.draw_texture_rect(_mask("ring", r, rim_width), rect, false, rim)
+		RenderingServer.canvas_item_add_texture_rect(ci, rect, _mask("ring", r, rim_width).get_rid(), false, rim)
+
+## Stepped pixel plate (the HUD pills, TIPS, Skip, the LED board frame): corners cut in
+## two whole-UI-pixel stairs, one UI pixel lighter lip on top, `bevel` darker UI-pixel rows
+## at the bottom, optional one-UI-pixel rim that follows the stairs. Drawn as
+## non-overlapping rects, so a translucent fill stays even and nothing is anti-aliased.
+static func plate_rid(ci: RID, rect: Rect2, fill: Color, u: float, bevel: int = 2, lip: bool = true,
+		rim: Color = Color(0, 0, 0, 0)) -> void:
+	var p: = rect.position.round()
+	var w: = roundf(rect.size.x)
+	var h: = roundf(rect.size.y)
+	if w <= 0.0 or h <= 0.0: return
+	if w < 5.0 * u or h < 5.0 * u:
+		RenderingServer.canvas_item_add_rect(ci, Rect2(p, Vector2(w, h)), fill)
+		return
+	var dark: = Color(fill.darkened(0.45), fill.a)
+	var light: = Color(fill.lightened(0.3), fill.a)
+	var split: = h - float(bevel) * u   # rows at or below this are the bevel
+	# Rows top to bottom: [from, to, inset]. Stairs: 2u, u, body, u, 2u.
+	_band(ci, p, w, 0.0, u, 2.0 * u, split, light if lip else fill, dark)
+	_band(ci, p, w, u, 2.0 * u, u, split, fill, dark)
+	_band(ci, p, w, 2.0 * u, h - 2.0 * u, 0.0, split, fill, dark)
+	_band(ci, p, w, h - 2.0 * u, h - u, u, split, fill, dark)
+	_band(ci, p, w, h - u, h, 2.0 * u, split, fill, dark)
+	if rim.a > 0.0:
+		for r in [Rect2(p.x + 2.0 * u, p.y, w - 4.0 * u, u), Rect2(p.x + 2.0 * u, p.y + h - u, w - 4.0 * u, u),
+				Rect2(p.x, p.y + 2.0 * u, u, h - 4.0 * u), Rect2(p.x + w - u, p.y + 2.0 * u, u, h - 4.0 * u),
+				Rect2(p.x + u, p.y + u, u, u), Rect2(p.x + w - 2.0 * u, p.y + u, u, u),
+				Rect2(p.x + u, p.y + h - 2.0 * u, u, u), Rect2(p.x + w - 2.0 * u, p.y + h - 2.0 * u, u, u)]:
+			RenderingServer.canvas_item_add_rect(ci, r, rim)
+
+static func _band(ci: RID, p: Vector2, w: float, from: float, to: float, inset: float, split: float, top_color: Color, bevel_color: Color) -> void:
+	if to <= from or w - 2.0 * inset <= 0.0: return
+	var cut: = clampf(split, from, to)
+	if cut > from: RenderingServer.canvas_item_add_rect(ci, Rect2(p.x + inset, p.y + from, w - 2.0 * inset, cut - from), top_color)
+	if to > cut: RenderingServer.canvas_item_add_rect(ci, Rect2(p.x + inset, p.y + cut, w - 2.0 * inset, to - cut), bevel_color)
 
 ## Full pixel ring (outline only).
 static func ring(ci: CanvasItem, center: Vector2, radius: float, u: float, color: Color, width: int = 1) -> void:

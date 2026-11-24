@@ -1,39 +1,34 @@
 extends Node3D
 class_name BounceDecal
+## Landing ring at a bounce (visual only; pooled by fx_pool.gd, played by hit_feedback.gd
+## in the zone tint). A flat ring on the court (shaders/bounce_ring.gdshader) that opens
+## from just round the ball's footprint, holds, then fades: crisp pixel line with a dark
+## edge so it reads on any court colour. The old thin 3D torus went sub-pixel at a
+## distance and flickered. Pauses with the game (its tween is bound to this node).
 
-
-
-
-const DURATION: float = 0.7
-const RADIUS: float = 0.1
-const HEIGHT: float = 0.004
+const DURATION: float = 0.8
+const RADIUS: float = 0.35    # plane half size: the ring runs 0.11 -> 0.16 m (shader radii 0.31 -> 0.46)
+const HEIGHT: float = 0.006   # above the court and the ball's blob shadow
+const RingShader = preload("res://shaders/bounce_ring.gdshader")
 
 var _mesh: MeshInstance3D
-var _material: StandardMaterial3D
+var _material: ShaderMaterial
 var _active: bool = false
 var _tween: Tween
 
 func _ready() -> void :
 	name = "BounceDecal"
+	# FXPool runs always; a landing ring must stop with the paused game.
+	if process_mode == Node.PROCESS_MODE_INHERIT:
+		process_mode = Node.PROCESS_MODE_PAUSABLE
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "M"
-	# A thin landing ring, not a filled disc: the filled disc read as a coloured blob
-	# beside the ball from the gameplay camera.
-	var ring: TorusMesh = TorusMesh.new()
-	ring.inner_radius = RADIUS * 0.78
-	ring.outer_radius = RADIUS
-	ring.rings = 16
-	ring.ring_segments = 3
-	_mesh.mesh = ring
+	var plane: = PlaneMesh.new()
+	plane.size = Vector2.ONE * RADIUS * 2.0
+	_mesh.mesh = plane
 	_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-
-	_material = StandardMaterial3D.new()
-	_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	_material.blend_mode = BaseMaterial3D.BLEND_MODE_MIX
-	_material.albedo_color = Color(1, 1, 1, 1)
-	_material.disable_receive_shadows = true
-	_material.no_depth_test = false
+	_material = ShaderMaterial.new()
+	_material.shader = RingShader
 	_mesh.material_override = _material
 	add_child(_mesh)
 	visible = false
@@ -41,17 +36,15 @@ func _ready() -> void :
 func play(pos: Vector3, color: Color) -> void :
 	if _tween != null and _tween.is_valid():
 		_tween.kill()
-	global_position = Vector3(pos.x, maxf(pos.y, 0.08), pos.z)
-	_material.albedo_color = Color(color.r, color.g, color.b, 0.85)
-	_mesh.scale = Vector3(0.5, 0.15, 0.5)   # flattened onto the court
+	global_position = Vector3(pos.x, maxf(pos.y, Ball.FLOOR_Y) + HEIGHT, pos.z)
+	_material.set_shader_parameter("tint", Color(color.r, color.g, color.b, 0.9))
+	_material.set_shader_parameter("progress", 0.0)
 	visible = true
 	_active = true
 
 	_tween = create_tween()
-	_tween.set_parallel(true)
-	_tween.tween_property(_mesh, "scale", Vector3(1.5, 0.15, 1.5), DURATION).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-	_tween.tween_property(_material, "albedo_color:a", 0.0, DURATION).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	_tween.chain().tween_callback(Callable(self, "_on_fade_done"))
+	_tween.tween_property(_material, "shader_parameter/progress", 1.0, DURATION)
+	_tween.tween_callback(Callable(self, "_on_fade_done"))
 
 func _on_fade_done() -> void :
 	_active = false

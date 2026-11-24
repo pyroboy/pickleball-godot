@@ -1,10 +1,13 @@
 shader_type spatial;
 // Barangay court floor (visual only), used by the big ground plane and by CourtSurface so
 // the two meet without a seam: a gray cement slab (15 x 28 m) with hairline cracks,
-// darker patched squares and old water stains near the edges; faded yellow basketball
-// lines under everything; the kitchen tinted faded green; a drainage gutter along one
-// side; packed dirt with weeds beyond. The bright pickleball lines are their own mesh on
-// top (court.gd CourtLines) and stay the clearest thing on the floor.
+// darker patched squares and old water stains near the edges; the pickleball court
+// painted a worn slate blue-green so the play area reads apart from the bare cement, its
+// kitchen faded green; old basketball lines, mostly worn away, ghosting under everything;
+// a drainage gutter along one side; packed dirt with weeds beyond. The bright pickleball
+// lines are their own mesh on top (court.gd CourtLines) and stay the clearest thing on
+// the floor. Outside the court lines the floor leans toward the same light grey as the
+// props (env_toon.gdshader `push`), so the background sits back.
 // Worked out on a 5 cm world grid so the pattern matches the pixel look. `flip` follows
 // the camera's half turn after a change of ends so the far end always looks the same.
 // Colours are tonemap-compensated (scripts/environment/env_palette.gd).
@@ -18,6 +21,12 @@ uniform vec3 crack : source_color;
 uniform vec3 stain : source_color;
 uniform vec3 bball : source_color;
 uniform vec3 kitchen : source_color;
+uniform vec3 court_paint : source_color;
+uniform float bball_mix = 0.3;          // old basketball lines on bare cement
+uniform float bball_mix_paint = 0.16;   // and where the court paint covers them
+uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
+uniform vec3 push = vec3(2.0, 7.0, 0.24);   // env_toon.gdshader: start m, full m, amount
+uniform float push_desat = 0.4;
 uniform vec3 gutter : source_color;
 uniform vec3 grate : source_color;
 uniform vec3 dirt : source_color;
@@ -31,6 +40,7 @@ uniform float grid = 20.0;
 uniform vec2 slab_half = vec2(7.5, 14.0);
 uniform vec2 pattern_offset = vec2(0.0);   // the menu slides the floor under its ball
 uniform vec2 kitchen_half = vec2(3.05, 2.134);
+uniform vec2 court_half = vec2(3.05, 6.705);
 uniform vec2 gutter_x = vec2(7.78, 8.14);
 
 varying vec3 world_pos;
@@ -125,13 +135,18 @@ void fragment() {
 			if (s > 0.55) c = mix(c, stain, 0.7);
 			else if (s > 0.52) c = mix(c, cement_lt, 0.5);
 		}
-		// kitchen: faded green, worn in spots
+		// court paint: kitchen faded green, the rest worn slate blue-green; both rubbed
+		// thin in spots so the cement shows through
+		bool painted = a.x < court_half.x && a.y < court_half.y;
 		if (a.x < kitchen_half.x && a.y < kitchen_half.y) {
 			float wear = vnoise(p * 1.7 + 11.0);
 			c = mix(c, kitchen, wear > 0.25 ? 0.75 : 0.35);
+		} else if (painted) {
+			float wear = vnoise(p * 1.3 + 23.0) + 0.3 * vnoise(p * 4.1 + 5.0);
+			c = mix(c, court_paint, wear > 0.4 ? 0.84 : 0.55);
 		}
-		// faded basketball lines with worn gaps
-		if (bball_lines(p) > 0.5 && vnoise(p * 3.1) > 0.28 && n > 0.12) c = mix(c, bball, 0.7);
+		// old basketball lines, mostly worn away, with gaps
+		if (bball_lines(p) > 0.5 && vnoise(p * 3.1) > 0.28 && n > 0.12) c = mix(c, bball, painted ? bball_mix_paint : bball_mix);
 		// hairline cracks: a few long runs where a low-frequency mask allows, thinned so
 		// they read as hairlines, kept faint inside the pickleball court
 		float in_court = step(a.x, 3.4) * step(a.y, 7.0);
@@ -147,5 +162,9 @@ void fragment() {
 		float near = max(a.x - slab_half.x, a.y - slab_half.y);
 		if (g > 1.0 - clamp(near * 0.04, 0.0, 0.25)) c = n > 0.5 ? grass : grass_dk;
 	}
-	ALBEDO = c * gain;
+	float k = push.z * smoothstep(push.x, push.y, length(max(a - court_half, vec2(0.0))));
+	vec3 s = sqrt(c);
+	s = mix(s, vec3(dot(s, vec3(0.299, 0.587, 0.114))), k * push_desat);
+	s = mix(s, sqrt(push_col), k);
+	ALBEDO = s * s * gain;
 }

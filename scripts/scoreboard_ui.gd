@@ -181,14 +181,18 @@ func show_zone(zone_name: String) -> void :
 
 func show_speed(speed_mph: float) -> void :
 	if _hud and _hud.get("speed"):
-		_hud.speed.text = "%.1f mph" % speed_mph
+		# Pixel readout on its HUD pill (the pill is refitted only when the text changes).
+		var text: String = "%.1f MPH" % speed_mph
+		if _hud.has_method("set_pill_text"): _hud.set_pill_text(_hud.speed, text)
+		else: _hud.speed.text = text
 		_hud.speed.modulate.a = 1.0
 		_speed_visible_timer = 3.5
 
 func show_shot_type(shot_name: String) -> void :
 	if _hud and _hud.get("shot_type"):
 		var label: Label = _hud.shot_type
-		label.text = shot_name
+		if _hud.has_method("set_pill_text"): _hud.set_pill_text(label, shot_name.to_upper())
+		else: label.text = shot_name
 		_apply_shot_type_color(label, shot_name)
 		label.modulate.a = 1.0
 		_shot_type_timer = 2.5

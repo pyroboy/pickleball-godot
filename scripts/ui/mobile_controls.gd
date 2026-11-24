@@ -5,6 +5,7 @@ const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HitTiming = preload("res://scripts/ui/hit_timing_feedback.gd")
 const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
+const PixelStyle = preload("res://scripts/ui/pixel_style_box.gd")
 const HumanShots = preload("res://scripts/human_shot_choice.gd")
 const TIMING_RING_WIDTH_FRACTION: = 0.54
 const TIMING_RING_MIN_GAP_FRACTION: = 0.16
@@ -63,7 +64,7 @@ var _guide_flat: = Vector2.ZERO
 var _guide_show: = 0.0
 var _guide_phase: = 0.0
 var _guide_caption_rects: Array[Rect2] = []
-var _guide_caption_backing: StyleBoxFlat
+var _guide_caption_backing: StyleBox
 
 func setup(p_game: Node) -> void :
 	game = p_game
@@ -95,8 +96,15 @@ func _layout() -> void :
 	_timing_caption_center = _charge_center + Vector2(-100, -246) * _s
 	_serve_selector_center = Vector2((_stick_center.x + _charge_center.x) * 0.5, _stick_center.y)
 	_serve_selector_radius = 56 * _s
+	# Drawn areas of the move stick (with its MOVE caption) and the HIT pad (with its footer):
+	# other HUD (the PARTNER / YOU name tags) keeps out of these. Layout-time only.
+	stick_zone = Rect2(_stick_center - Vector2.ONE * _stick_radius, Vector2(_stick_radius * 2.0, _stick_radius + 128 * _s)).grow(6 * _s)
+	hit_zone = Rect2(_charge_center - Vector2.ONE * _charge_radius, Vector2(_charge_radius * 2.0, _charge_radius + 112 * _s)).grow(6 * _s)
 	_cache_hit_guide()
 	queue_redraw()
+
+var stick_zone: = Rect2()
+var hit_zone: = Rect2()
 
 func _blocked() -> bool:
 	if game != null and game._point_transition_blocks_attempt(): return true
@@ -778,7 +786,8 @@ func _cache_hit_guide() -> void :
 	var safe: Rect2 = Layout.safe_rect(get_viewport())
 
 
-	_guide_caption_backing = UiTheme.button_style(Color(UiTheme.PANEL, 0.93))
+	# Same stair-cornered pixel plate as the HUD pills (no margins: drawn into a given rect).
+	_guide_caption_backing = PixelStyle.plate(Color(UiTheme.PANEL, 0.93), _s, 1)
 	_guide_caption_backing.set_content_margin_all(0)
 	var status_font: Font = PixelDraw.font()
 	var status_size: int = _caption_size(16, 19)

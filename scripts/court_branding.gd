@@ -4,8 +4,33 @@ const Logo = preload("res://assets/branding/pixel-pickleball.png")
 const BrandShader = preload("res://shaders/court_brand.gdshader")
 const SurfaceShader = preload("res://shaders/court_surface.gdshader")
 const NetProfile = preload("res://scripts/net_profile.gd")
+## The baseline logos sit under the bottom HUD (name tags, move stick): while a point is
+## set up or played they fade to a faint watermark; between points, in menus and with the
+## HUD hidden (photo mode, tools) they show in full. Pausable; no work once settled.
+const PLAY_FADE := 0.25
+const FADE_PER_SECOND := 2.5
+var _game: Node
+var _materials: Array[ShaderMaterial] = []
+var _fade := 1.0
+
+func _process(delta: float) -> void:
+ var target: float = PLAY_FADE if _point_on() else 1.0
+ if _fade == target: return
+ _fade = move_toward(_fade, target, FADE_PER_SECOND * delta)
+ for material in _materials: material.set_shader_parameter("fade", _fade)
+
+func _point_on() -> bool:
+ var hud = _game.get("hud")
+ if hud == null or not hud._gameplay_visible or hud._between_point_active: return false
+ if _game.get("match_over") == true or _game._tool_state_active(): return false
+ return int(_game.game_state) != 3   # GameState.POINT_SCORED
+
 func setup(game: Node3D) -> void :
  name = "CourtBranding"
+ _game = game
+ process_mode = Node.PROCESS_MODE_PAUSABLE
+ # Menu courts (menu_ball_scene) have no match state: the logo stays full there.
+ set_process("game_state" in game and game.has_method("_tool_state_active"))
  preload("res://scripts/court_arena_visual.gd").new().setup(game)
  var surface = game.find_child("CourtSurface", true, false)
  if surface is MeshInstance3D:
@@ -26,6 +51,7 @@ func setup(game: Node3D) -> void :
   mat.set_shader_parameter("logo_texture", Logo)
   mat.set_shader_parameter("ink", Color(0.72, 0.82, 0.84, 0.8))
   mark.material_override = mat
+  _materials.append(mat)
   add_child(mark)
 
 

@@ -6,6 +6,8 @@ extends RefCounted
 ## store so that it shows on screen as `display`, using the same in-engine measurement as
 ## the cards (assets/pixel_cards/card_tonemap_lut.json, from tools/calibrate_cards.gd).
 ## The chain tops out near 218/255, so brighter colours are scaled down keeping their hue.
+## PixelPost's late-afternoon `warm` grade is left in on purpose: near-neutral colours
+## (chroma below ~0.24) show a little warmer than `display`; saturated ones are exact.
 
 const LUT_PATH := "res://assets/pixel_cards/card_tonemap_lut.json"
 const GAIN := 2.2

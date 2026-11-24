@@ -5,6 +5,11 @@ class_name DigitalScoreboard
 ## dot and server-number LED. A changed score rolls its digits (old slides out
 ## up, new drops in), flickers, and flashes the team box. Redraws only while
 ## something animates.
+## Drawn in the UI kit's pixel style like the rest of the HUD: kit navy plate with stair
+## corners and bevel, team boxes with one-UI-pixel rims, names in the pixel font, square
+## LEDs, whole-pixel segments, no glow.
+const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 
 const BLUE := Color("4eb8ff")
 const RED := Color("ff6278")
@@ -30,6 +35,7 @@ var server_number := 0                # 1 or 2 in doubles, 0 hides the LED
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # pixel font and pixel dots
 	set_process(false)
 
 func set_scores(left: int, right: int, animate: bool = true) -> void:
@@ -69,47 +75,55 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	if not _animating(): set_process(false)
 
+## Screen pixels per UI pixel at this board size (3 on the 92-tall phone board).
+func _unit() -> float:
+	return maxf(1.0, roundf(size.y / 30.0))
+
 func _draw() -> void:
 	var w := size.x
 	var h := size.y
 	if w < 4.0 or h < 4.0: return
-	var r := h * 0.16
-	_box(Rect2(Vector2.ZERO, size), FACE, BEZEL, r, maxf(1.5, h * 0.035))
-	var pad := h * 0.1
-	var mid := w * 0.5
-	var box_w := (w - pad * 3.0) * 0.5
+	var u := _unit()
+	PixelDraw.plate_rid(get_canvas_item(), Rect2(Vector2.ZERO, size), UiTheme.PANEL, u, 2, true)
+	var pad := roundf(h * 0.1 / u) * u
+	var mid := roundf(w * 0.5)
+	var box_w := roundf((w - pad * 3.0) * 0.5)
 	for team in 2:
-		var x := pad if team == 0 else mid + pad * 0.5
-		_team_box(team, Rect2(x, pad, box_w, h - pad * 2.0))
-	# Centre colon LEDs
-	var dot := h * 0.05
-	draw_circle(Vector2(mid, h * 0.42), dot, LED * Color(1, 1, 1, 0.8))
-	draw_circle(Vector2(mid, h * 0.62), dot, LED * Color(1, 1, 1, 0.8))
+		var x := pad if team == 0 else mid + roundf(pad * 0.5)
+		_team_box(team, Rect2(x, pad, box_w, h - pad * 2.0), u)
+	# Centre colon LEDs: square pixels.
+	for y in [h * 0.42, h * 0.62]:
+		draw_rect(Rect2(Vector2(mid - u, roundf(y) - u), Vector2(u, u) * 2.0), LED * Color(1, 1, 1, 0.8))
 
-func _team_box(team: int, rect: Rect2) -> void:
+func _team_box(team: int, rect: Rect2, u: float) -> void:
 	var color := BLUE if team == 0 else RED
 	var flash: float = _flash[team] / FLASH_SECONDS
 	var face := Color("06090d").lerp(color.darkened(0.55), 0.55 * flash)
-	_box(rect, face, color.darkened(0.25).lerp(color.lightened(0.4), flash), rect.size.y * 0.14, maxf(1.0, rect.size.y * 0.04))
-	# Team name strip on the outer side, server dot on the inner side.
-	var font := get_theme_default_font()
-	var name_size := int(maxf(8.0, rect.size.y * 0.2))
+	PixelDraw.plate_rid(get_canvas_item(), rect, face, u, 0, false, color.darkened(0.25).lerp(color.lightened(0.4), flash))
+	# Team name strip on the outer side, server dot on the inner side (pixel font, 2x on the phone).
+	var font := UiTheme.pixel_font()
+	var name_size := UiTheme.pixel_size(rect.size.y * 0.22)
+	var k := float(name_size) / UiTheme.PIXEL_UNIT   # font pixels per glyph pixel (5x7 capitals)
+	var caps_top := rect.position.y + u * 2.0        # inside the rim, one UI pixel gap
+	var baseline := roundf(caps_top + font.get_ascent(name_size) - k)
 	var label: String = left_name if team == 0 else right_name
-	var label_x := rect.position.x + rect.size.y * 0.12 if team == 0 else rect.end.x - rect.size.y * 0.12 - font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x
-	draw_string(font, Vector2(label_x, rect.position.y + name_size * 1.05), label, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, color.lightened(0.15))
+	var label_x := rect.position.x + u * 3.0 if team == 0 else rect.end.x - u * 3.0 - font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x
+	draw_string(font, Vector2(roundf(label_x), baseline), label, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, color.lightened(0.15))
 	if serving_team == team:
 		var dot_c := Vector2(rect.end.x - rect.size.y * 0.16 if team == 0 else rect.position.x + rect.size.y * 0.16, rect.position.y + rect.size.y * 0.2)
-		draw_circle(dot_c, rect.size.y * 0.075, Color("d8ff5a"))
+		PixelDraw.disc(self, dot_c, maxf(2.0 * u, rect.size.y * 0.075), u, Color("d8ff5a"), Color(0, 0, 0, 0), 1, false)
 		if server_number > 0:
 			var n := str(server_number)
-			var nx := dot_c.x - rect.size.y * 0.32 if team == 0 else dot_c.x + rect.size.y * 0.14
-			draw_string(font, Vector2(nx, rect.position.y + name_size * 1.05), n, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color("d8ff5a"))
-	# Two digits, bottom part of the box; digits roll vertically on change.
-	var digit_h := rect.size.y * 0.62
+			var nx := dot_c.x - rect.size.y * 0.16 - u - font.get_string_size(n, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x if team == 0 else dot_c.x + rect.size.y * 0.14
+			draw_string(font, Vector2(roundf(nx), baseline), n, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size, Color("d8ff5a"))
+	# Two digits under the name row (one UI pixel gap) down to two UI pixels above the
+	# box bottom; digits roll vertically on change.
+	var digit_top := roundf(caps_top + 7.0 * k + u)
+	var digit_h := maxf(4.0, rect.end.y - u * 2.0 - digit_top)
 	var digit_w := digit_h * 0.55
 	var gap := digit_w * 0.28
 	var total := digit_w * 2.0 + gap
-	var origin := Vector2(rect.position.x + (rect.size.x - total) * 0.5, rect.end.y - digit_h - rect.size.y * 0.09)
+	var origin := Vector2(rect.position.x + (rect.size.x - total) * 0.5, digit_top)
 	var clip := Rect2(origin - Vector2(2, 2), Vector2(total + 4, digit_h + 4))
 	var t: float = _roll[team]
 	var ease_t: float = 1.0 - pow(1.0 - t, 3.0)
@@ -152,15 +166,7 @@ func _digit(at: Vector2, w: float, h: float, value: int, alpha: float, clip: Rec
 		var top := maxf(seg.position.y, clip.position.y)
 		var bottom := minf(seg.end.y, clip.end.y)
 		if bottom <= top: continue
-		var visible_seg := Rect2(seg.position.x, top, seg.size.x, bottom - top)
-		if value >= 0 and alpha > 0.5:   # soft glow
-			draw_rect(visible_seg.grow(t * 0.35), Color(color.r, color.g, color.b, 0.18 * alpha))
-		draw_rect(visible_seg, color)
-
-func _box(rect: Rect2, fill: Color, edge: Color, radius: float, width: float) -> void:
-	var style := StyleBoxFlat.new()
-	style.bg_color = fill
-	style.border_color = edge
-	style.set_border_width_all(int(maxf(1.0, width)))
-	style.set_corner_radius_all(int(radius))
-	draw_style_box(style, rect)
+		# Whole-pixel segments, hard edges (no glow halo).
+		var x0 := roundf(seg.position.x)
+		var y0 := roundf(top)
+		draw_rect(Rect2(x0, y0, maxf(1.0, roundf(seg.end.x) - x0), maxf(1.0, roundf(bottom) - y0)), color)

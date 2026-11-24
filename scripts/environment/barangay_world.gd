@@ -37,6 +37,13 @@ const GROUND_Y := 0.066          # just under the court surface (top 0.075)
 const SLAB := Vector2(7.5, 14.0)
 const TICK := 1.0 / 12.0         # figures move in 12 Hz steps (pixel-art timing, no crawl)
 const LIGHT := Vector3(-0.4, 0.7, 0.6)
+## Background push (env_toon.gdshader `push`): outside the court lines everything leans
+## toward this light grey (the PixelPost grade warms it), from 2 m out to the full share
+## 7 m out (plus a little desaturation, `push_desat` in the shaders), so play reads
+## first. Props, floor, crowd cards and signs all use it; players, ball and net do not.
+const PUSH_COL := "#c4c2bd"
+const PUSH := Vector3(2.0, 7.0, 0.24)
+const COURT_HALF := Vector2(3.05, 6.705)
 const PLAYING := 2               # game.gd GameState.PLAYING
 const NET_REASONS := ["BALL_IN_NET", "NET_POST", "NET_TOUCH", "NET_PLANE"]
 
@@ -98,6 +105,7 @@ func setup(game: Node, parent: Node3D) -> void:
 	_toon.set_shader_parameter("gain", Pal.GAIN)
 	_toon.set_shader_parameter("light_dir", LIGHT)
 	_toon.set_shader_parameter("haze", Pal.hex("#c9d9e2"))
+	_set_push(_toon)
 	var apron := game.find_child("CourtApron", true, false)
 	if apron is Node3D: apron.visible = false       # the floor shader draws slab and dirt
 	_build_floor(game)
@@ -155,6 +163,18 @@ func _c(code: String) -> Color:
 	return Pal.hex(code)
 
 
+func _set_push(m: ShaderMaterial) -> void:
+	m.set_shader_parameter("push_col", Pal.hex(PUSH_COL))
+	m.set_shader_parameter("push", PUSH)
+	m.set_shader_parameter("court_half", COURT_HALF)
+
+
+## The background push share at a point (this node's space; symmetric, so either end).
+func _push_at(pos: Vector3) -> float:
+	var out := Vector2(maxf(absf(pos.x) - COURT_HALF.x, 0.0), maxf(absf(pos.z) - COURT_HALF.y, 0.0)).length()
+	return PUSH.z * smoothstep(PUSH.x, PUSH.y, out)
+
+
 func _add_mesh(label: String, st: SurfaceTool, material: Material = null, parent: Node3D = null) -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = label
@@ -181,7 +201,7 @@ func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0)
 	l.font = PixelFont
 	l.font_size = 9        # the bitmap font's own size (arjo_pixel.fnt), so it is not rescaled
 	l.pixel_size = height / 9.0
-	l.modulate = color
+	l.modulate = color.lerp(Color(PUSH_COL), _push_at(pos))   # signs sit back with their walls
 	l.outline_size = 0
 	l.shaded = false
 	l.double_sided = false
@@ -201,10 +221,15 @@ func _build_floor(game: Node) -> void:
 	var cols := {"cement": "#a3a19a", "cement_dk": "#96948d", "cement_lt": "#b0aea6", "patch_col": "#85837c",
 		"crack": "#66635e", "stain": "#8d877b", "bball": "#d6bb5e", "kitchen": "#7fa07c", "gutter": "#3b3936",
 		"grate": "#6c6a66", "dirt": "#a88a68", "dirt_dk": "#957857", "dirt_lt": "#b89a78", "grass": "#7fa356",
-		"grass_dk": "#668c47"}
+		"grass_dk": "#668c47",
+		# worn slate blue-green court paint: darker than the cement and the kitchen, low in
+		# chroma, away in hue from the ball (yellow-green) and from both teams' kits
+		"court_paint": "#345f6c"}
 	for k in cols: _floor.set_shader_parameter(k, _c(cols[k]))
 	_floor.set_shader_parameter("gain", Pal.GAIN)
 	_floor.set_shader_parameter("slab_half", SLAB)
+	_floor.set_shader_parameter("court_half", COURT_HALF)
+	_set_push(_floor)
 	var ground := MeshInstance3D.new()
 	ground.name = "BarangayGround"
 	var plane := PlaneMesh.new()
@@ -1008,6 +1033,7 @@ func _build_figures() -> void:
 	_dog.yaw = -1.2
 	# people: pixel cards (one mesh); props and animals: one MultiMesh of unit cubes
 	_cards = People.CardBatch.new(self, _people.size())
+	_set_push(_cards.instance.material_override)
 	var count := _people.size() * PROP_SLOTS + _chickens.size() * Fig.CHICKEN_PARTS + Fig.DOG_PARTS + _chicks.size() * Fig.CHICK_PARTS + _cats.size() * CAT_PARTS
 	var cube := Kit.begin()
 	Kit.box(cube, Vector3.ZERO, Vector3.ONE, Color.WHITE, Basis.IDENTITY, false)
@@ -1066,6 +1092,8 @@ func _build_shadows() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = ShadowShader
 	mat.set_shader_parameter("shadow_col", Color(0.16, 0.13, 0.24))
+	_set_push(mat)
+	mat.set_shader_parameter("push_gain", Pal.GAIN)
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "BarangayShadows"
 	mmi.multimesh = _mm_shadow
@@ -1079,10 +1107,13 @@ func _write_shadow(i: int) -> void:
 	var spec: Array = _shadow_specs[i]
 	var p: Vector2 = spec[0]
 	var s: Vector2 = spec[1]
-	# the sun is behind the camera, up and to the left: shadows fall a little right and back
+	var rect: bool = float(spec[2]) > 0.5
+	# Late-afternoon sun: env_shadow.gdshader sweeps the footprint this far along its world
+	# sun direction (figures and chairs by their size, building and table blocks shorter).
+	var sweep := clampf(0.5 * minf(s.x, s.y), 0.1, 1.2) if rect else clampf(0.9 * maxf(s.x, s.y), 0.15, 1.6)
 	var flat := Basis(Vector3(s.x, 0, 0), Vector3(0, 0, -s.y), Vector3(0, 1, 0))
-	_mm_shadow.set_instance_transform(i, Transform3D(flat, Vector3(p.x + s.x * 0.08, GROUND_Y + 0.012 + i * 0.00002, p.y - s.y * 0.12)))
-	_mm_shadow.set_instance_custom_data(i, Color(float(spec[2]), 0, 0, 0))
+	_mm_shadow.set_instance_transform(i, Transform3D(flat, Vector3(p.x, GROUND_Y + 0.012 + i * 0.00002, p.y)))
+	_mm_shadow.set_instance_custom_data(i, Color(float(spec[2]), sweep, 0, 0))
 
 
 func _move_shadow(i: int, pos: Vector3, hidden := false) -> void:

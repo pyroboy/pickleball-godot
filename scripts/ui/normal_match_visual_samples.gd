@@ -46,8 +46,8 @@ static func create(host: Node, viewport: SubViewport, world: Node3D) -> Dictiona
  viewport.add_child(hud)
  hud.show_rally_result("FAULT · SIDE OUT", "NEXT SERVE · SECOND BOUNCE")
  hud.fault.text="FAULT";hud.fault.show();hud.out_text.show()
- hud.speed.text="36 km/h";hud.speed.modulate.a=1
- hud.shot_type.text="PERFECT · GREAT · GOOD";hud.shot_type.modulate.a=1
+ hud.set_pill_text(hud.speed,"36 km/h");hud.speed.modulate.a=1
+ hud.set_pill_text(hud.shot_type,"PERFECT · GREAT · GOOD");hud.shot_type.modulate.a=1
  var cue:=Readability.new();world.add_child(cue);cue.position=Vector3(-.35,.45,-4)
  var ball_target:=Node3D.new();world.add_child(ball_target);ball_target.position=Vector3(-.35,.45,0)
  var actor_target:=Node3D.new();world.add_child(actor_target);actor_target.position=Vector3(.35,1,0)

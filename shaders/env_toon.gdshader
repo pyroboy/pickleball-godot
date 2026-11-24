@@ -14,6 +14,18 @@ uniform vec3 light_dir = vec3(-0.45, 0.8, 0.4);   // toward the sun, world space
 uniform vec3 mid_band = vec3(0.82, 0.8, 0.88);
 uniform vec3 dark_band = vec3(0.6, 0.56, 0.74);
 uniform float sway_amount = 0.12;
+// Background push (aerial perspective, so play reads first): by distance outward from the
+// pickleball court lines (both ends and the sides alike, whichever end the camera faces),
+// everything leans toward a light grey (warmed on screen by the PixelPost grade): from
+// push.x metres outside the lines, full push.z by push.y metres. Mixing toward one colour
+// cuts chroma and value contrast by the same share, and push_desat takes a little more
+// colour out. The mix runs on square roots (about perceptual), so dark windows and doors
+// are not lifted more than the rest. Players, ball, net and the court itself use other
+// shaders and stay as they are. Same values: env_floor, env_shadow, env_people.gd crowd.
+uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
+uniform vec2 court_half = vec2(3.05, 6.705);
+uniform vec3 push = vec3(2.0, 7.0, 0.24);
+uniform float push_desat = 0.4;
 // distance haze: far houses and trees fade toward a pale sky tone so the court reads first
 uniform vec3 haze : source_color = vec3(0.8, 0.85, 0.88);
 uniform vec2 haze_range = vec2(26.0, 150.0);
@@ -102,6 +114,11 @@ void fragment() {
 	else if (d > 0.0) c = base * mid_band;
 	else c = base * dark_band;
 	if (grime > 0.5 && dot(base, vec3(0.333)) > 0.03) c = weather(c, n, world_pos);   // not on dark glass
+	float k = push.z * smoothstep(push.x, push.y, length(max(abs(world_pos.xz) - court_half, vec2(0.0))));
+	vec3 s = sqrt(max(c, vec3(0.0)));
+	s = mix(s, vec3(dot(s, vec3(0.299, 0.587, 0.114))), k * push_desat);
+	s = mix(s, sqrt(push_col), k);
+	c = s * s;
 	c = mix(c, haze, haze_max * smoothstep(haze_range.x, haze_range.y, length(world_pos.xz)));
 	ALBEDO = c * gain;
 }
