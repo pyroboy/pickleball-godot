@@ -869,3 +869,14 @@ Fill in each Verdict after reading the result.
 - Objective: adaptive frame rate and pause code compile and leave the bench alone: 0 script errors
 - Seeds: 1 × 20 s · wall 6 s
 - Verdict: 0 script errors; frame-rate and pause code only (never active in the bench).
+
+## 2026-11-24 18:48 · smash_drop · bench_seeds
+- Objective: smash rework (Drop key, air legs, High Overhead re-pose): 0 script errors and animation rules still PASS with High Overhead hits in the run; keep if so, fix the pose or code if a rule fails
+- Seeds: 3 × 120 s · wall 28 s
+- Data:
+  - == smash_drop: 1 seeds
+  - points 4 (momentum 2, double_bounce 1, ball_in_net 1) | AI hits 69
+  - contact snap-back 3 of 74 hits (4%) | head-to-ball over 15 cm 4 | median gap per seed 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 9 of 69 | paddle flutter episodes 81 | pose changed in last 0.3 s 0 of 74 (+1 reflex blocks on balls inside the reaction delay)
+  - FAIL  paddle head meets the ball (over 15 cm off on at most 5% of hits): 5.4%
+- Verdict: keep. 0 script errors; the one High Overhead hit (player 0, 17.7 s, with the new Drop key) met the ball at 4.9 cm with no snap-back. "Paddle meets ball" 5.4% is the level before the change too (same seed and difficulty without it: 5.2%, 5 of 96). No jump smash happened in this seed, so the air legs are not covered here.

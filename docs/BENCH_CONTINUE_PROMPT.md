@@ -1,0 +1,20 @@
+Continue the Gameplay v2 benching in /Users/arjomagno/Documents/github-repos/pickleball-godot (branch visual-pass, shared checkout: other sessions have uncommitted work here; stage nothing, commit nothing unless I ask; touch only gameplay/tooling files listed below).
+
+Read first: CLAUDE.md, docs/GAME_MECHANICS_PLAN.md (Status sections), docs/PLAYER_FEEL_PLAN.md, docs/POSITION_PLAN.md, docs/STAMINA_UX_PLAN.md. All gameplay dials are in scripts/gameplay_tuning.gd. Godot binary and test commands: see memory godot-binary-path; phone build recipe: memory iphone-build-install (build = court-environment + `git diff HEAD -- scripts shaders` + untracked scripts; one known pause_menu.gd conflict: replace the `_eyebrow`/`_title` vars with `var _banner: Control`; bump application/version; phone has build 39).
+
+Where things stand (2026-11-23):
+- Just added, NOT yet benched: the drive read (DRIVE_READ_*: a team whose opponents' last 6 shots are >= 50% power recovers to 4.8 m) and fast-ball reach at the kitchen line (FAST_LINE_*: within 3.0 m of the net, the AI does not chase a >= 12 m/s ball needing more than 0.55 m of movement). Code: point_ending.gd (recent_power, power_share), player_ai_brain.gd (_drive_guard_depth, fast_at_line in the intercept solution). A bench I started for it was interrupted; check `pgrep -fl Godot` and stray scratchpad snapshots before starting new runs.
+- scripts/debug/perf_monitor.gd changed on disk from another session; check it still parses and the bench still writes notes.
+
+Bench tools (all in tools/):
+- bench.sh: DIFF=0|1|2, STYLES=a,b,c,d, PRESSURE=team, STAMINA_PIN=actor:value[,..], POSITION_TEAM=n (only team n uses position rules, 9 = none), SMART_TEAM=n (only team n uses the stamina strategy, 9 = none), BASE=name for pose IDENTICAL checks.
+- bench_seeds.sh (animation rules PASS/FAIL), drive_bench.sh (team 0 drives every ball) + drive_report.py, shot_report.py --targets (targets table with halves = noise floor) / --human (phone log rows), stamina_report.py (per player), position_report.py (per aim: pop-ups won, points won/lost within 2 shots; smashes returned), special_chances.py, miss_model.gd.
+- Run benches from a frozen copy of the tree (rsync to the scratchpad excluding logs/.git/.venv/.claude/node_modules, symlink logs back), several seeds in parallel (xargs -P 3-5), KEEP=400, so edits during a run don't leak in. 300 s per seed; Medium/Hard rallies are long, so use 8-12 seeds per side and compare same seeds.
+
+Objectives, in order:
+1. Validate the drive read + fast-ball line reach: drive_bench (team 0 drives every ball) before/after on Easy and Medium (drive outcomes, defender replies, drive_guard notes, uncovered balls must not rise), then all three levels (median rally Easy <= Medium <= Hard, body hits, rule faults, uncovered per 100 shots). Dial back off if a guard row breaks.
+2. Make stamina decide outcomes and prove it: today pinning one player at 0 only costs ~5 points of win share, a team at 40 costs ~13, and the "smart" team (POSITION_TEAM + SMART_TEAM, stamina strategy: spend on real pop-ups/drives when fresh, conserve when tired, power at the tired opponent) wins only ~+2 points over a 50/50 same-seed baseline on Medium (position read alone gave +10 on Hard). Goal: a stamina-and-position-smart team clearly beats a plain one (target 60%+ over 12 seeds, both mirror sides), and an exhausted player clearly loses. Levers: stamina drain that makes spending matter, conservation that actually recovers, read shares by level. Report every A/B as a small table with points per side.
+3. Keep the gates: targets table per level, animation rules (one rare real late pose switch on a serve return keeps appearing: 1 in ~550 hits, AI partner's planned contact jumps from 0.56 m to 1.36 m 0.1 s before contact; investigate), snap-back near its 6% limit, Easy rule faults noisy at 10-28%, tool tests (fault/flight/rule/human_shot_choice) unchanged.
+4. When results hold: phone build 40 and a short status section in docs/POSITION_PLAN.md and docs/STAMINA_UX_PLAN.md.
+
+Keep output small (flags and tables, worst first), no per-frame prints, and ask before anything outward-facing.
