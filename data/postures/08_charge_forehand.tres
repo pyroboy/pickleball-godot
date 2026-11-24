@@ -166,3 +166,7 @@ charge_paddle_offset = Vector3(-1.9371509e-09, 0.12, 8.34465e-09)
 charge_paddle_rotation_deg = Vector3(-138.74725, -45.7935, 136.3081)
 ft_paddle_offset = Vector3(-0.68, 0.34000003, 0.62)
 ft_paddle_rotation_deg = Vector3(0.0, 0.0, -52.0)
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

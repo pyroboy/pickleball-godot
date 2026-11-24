@@ -174,3 +174,7 @@ crouch_amount = 0.06
 body_position_offset = Vector3(0, 0, 0.08)
 right_elbow_swivel_deg = -31.3331001
 elbow_swivel_weight = 1.0
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

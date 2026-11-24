@@ -214,3 +214,5 @@ speed_finish_start = 3.0
 speed_finish_end = 0.0
 speed_lead_points = PackedVector3Array()
 speed_finish_points = PackedVector3Array()
+speed_strike_start = 0.5
+speed_strike_end = 1.5

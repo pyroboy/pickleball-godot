@@ -186,3 +186,7 @@ ft_paddle_rotation_deg = Vector3(7.560217, -15.221414, 0.0)
 paddle_path_times = PackedFloat32Array(0.75)
 paddle_path_offsets = PackedVector3Array(-0.052437067, -0.077509165, 0.3104825)
 paddle_path_tangents = PackedVector3Array(0, 0, 0)
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

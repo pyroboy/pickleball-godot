@@ -157,3 +157,7 @@ shoulder_protraction_m = 0.000253989
 body_position_offset = Vector3(0.0144611625, -0.048250925, -0.04004935)
 body_pitch_deg = 8.99590583
 body_roll_deg = 5.07023873
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

@@ -172,3 +172,7 @@ last_tuned_by = "Codex"
 last_tuned_at = "2026-09-30"
 right_elbow_swivel_deg = 98.0
 elbow_swivel_weight = 1.0
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

@@ -175,3 +175,7 @@ left_foot_offset = Vector3(-0.24, 0, 0.2)
 body_roll_deg = 6.0
 elbow_swivel_weight = 1.0
 body_position_offset = Vector3(-0.13, 0.0, -0.02)
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0

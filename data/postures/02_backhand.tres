@@ -196,3 +196,7 @@ follow_through_body = SubResource("Resource_od0sf")
 notes = "Right-dominant groundstroke; contact shaft below wrist, broad face through ball. Raised natural standing rig. Contact head coordinates unchanged."
 right_elbow_swivel_deg = -41.0669427
 elbow_swivel_weight = 1.0
+speed_strike_start = 0.5
+speed_strike_end = 1.5
+speed_finish_start = 3.0
+speed_finish_end = 0.0
