@@ -52,6 +52,9 @@ var _rng := RandomNumberGenerator.new()
 var _t := 0.0
 var _tick_t := 0.0
 var _flipped := false
+const SWAY_HZ := 8.0             # the sway moves in steps so its pixels jump cleanly
+var _sway_clock := 0.0
+var _sway_shown := -1.0
 var _toon: ShaderMaterial
 var _grimy: ShaderMaterial
 var _toon_n: ShaderMaterial      # the pandesal end's copies, lit for that end's facing
@@ -1136,6 +1139,15 @@ func _apply_view() -> void:
 	for p in _people: p.erase("sig")  # redraw everyone once
 
 func _process(delta: float) -> void:
+	# Sway clock for the flags and laundry (env_toon.gdshader sway_time), stepped at SWAY_HZ.
+	# Fed from here so it stops with the pause and the paused screen is not redrawn.
+	if _toon != null:
+		_sway_clock += delta
+		var sway: float = floorf(_sway_clock * SWAY_HZ) / SWAY_HZ
+		if sway != _sway_shown:
+			_sway_shown = sway
+			for m in [_toon, _grimy, _toon_n, _grimy_n]:
+				if m != null: m.set_shader_parameter("sway_time", sway)
 	if _mm_fig == null: return
 	var t0 := Time.get_ticks_usec()
 	_t += delta

@@ -6,6 +6,8 @@ shader_type spatial;
 // half-resolution PixelPost turns the edges into hard pixels.
 // Vertex alpha < 1 marks swaying parts (flag, banderitas, laundry): 1 - alpha is the sway
 // weight. The sway steps at 8 Hz so its pixels change in clean jumps instead of crawling.
+// Its clock is `sway_time`, fed by barangay_world.gd, not the built-in TIME: a shader that
+// reads TIME makes the engine redraw every frame, which kept the screen drawing while paused.
 render_mode unshaded, fog_disabled, shadows_disabled, cull_disabled;
 
 uniform float gain = 2.2;
@@ -30,7 +32,7 @@ uniform float push_desat = 0.4;
 uniform vec3 haze : source_color = vec3(0.8, 0.85, 0.88);
 uniform vec2 haze_range = vec2(26.0, 150.0);
 uniform float haze_max = 0.6;
-uniform float sway_hz = 8.0;
+uniform float sway_time = 0.0;                    // s, already stepped (barangay_world.gd SWAY_HZ)
 // Weathering (buildings only, 0 elsewhere): mottled paint, dirt splashed up the base of
 // the walls, rain streaks running down, peeling paint showing bare concrete, rust on the
 // roofs. Worked out on a 5 cm world grid so it reads as pixels, like the floor.
@@ -91,7 +93,7 @@ void vertex() {
 	float sway = 1.0 - COLOR.a;
 	if (sway > 0.001) {
 		vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-		float t = floor(TIME * sway_hz) / sway_hz;
+		float t = sway_time;
 		float w = sin(t * 2.3 + wp.x * 0.9 + wp.z * 0.4) + 0.5 * sin(t * 4.1 + wp.x * 2.1);
 		VERTEX.x += w * sway * sway_amount;
 		VERTEX.z += w * sway * sway_amount * 0.5;
