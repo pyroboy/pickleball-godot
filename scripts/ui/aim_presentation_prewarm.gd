@@ -6,7 +6,7 @@ const Trail = preload("res://scripts/fx/ball_trail.gd")
 const Trajectory = preload("res://scripts/game_trajectory.gd")
 const Arc = preload("res://scripts/ui/aim_arc_style.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
-const BlurShader = preload("res://shaders/solo_aim_focus.gdshader")
+const BlurShader = preload("res://shaders/slowmo_lens.gdshader")
 const DimShader = preload("res://shaders/solo_aim_focus_dim.gdshader")
 static var _completed: Dictionary = {}
 static var _inflight: Dictionary = {}
@@ -169,7 +169,13 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  trajectory._cursor_material.albedo_color=Color("5ff0ff");trajectory._cursor_material.emission=Color("5ff0ff")
  var layer := CanvasLayer.new();layer.layer=-1;viewport.add_child(layer)
  var dim := ColorRect.new();dim.size=Vector2(extent);dim.mouse_filter=Control.MOUSE_FILTER_IGNORE
- var material := ShaderMaterial.new();material.shader=BlurShader;dim.material=material;layer.add_child(dim)
+ var material := ShaderMaterial.new();material.shader=DimShader;dim.material=material;layer.add_child(dim)
+ # Slow-mo lens: a full-screen quad in the 3D pass (same setup as SoloAimFocus).
+ var lens_material := ShaderMaterial.new();lens_material.shader=BlurShader;lens_material.render_priority=Material.RENDER_PRIORITY_MIN
+ var lens_quad := QuadMesh.new();lens_quad.size=Vector2(2,2)
+ var lens := MeshInstance3D.new();lens.mesh=lens_quad;lens.material_override=lens_material
+ lens.extra_cull_margin=16384.0;lens.custom_aabb=AABB(Vector3(-1e5,-1e5,-1e5),Vector3(2e5,2e5,2e5));world.add_child(lens)
+ lens_material.set_shader_parameter("focus_depth",6.0);lens_material.set_shader_parameter("ball_uv",Vector2(.5,.4))
  var drawing := ArcDrawing.new();drawing.size=Vector2(extent);drawing.arc_style=int(options.get("arc_style",0));layer.add_child(drawing)
  var scale: float = Layout.scale_for(Vector2(extent))
  var uniforms := {"viewport_size":Vector2(extent),"target_uv":Vector2(.75,.27),"blue_uv":Vector2(.3,.75),"blue_head_uv":Vector2(.3,.4),"red_uv":Vector2(.7,.35),"red_head_uv":Vector2(.7,.2),"ball_uv":Vector2(.5,.4),"radius":70.0*scale,"strength":float(options.get("dim",.14)),"blur_radius":maxf(.65,float(options.get("blur",.65)))*2.0*scale,"effect_mix":1.0}
@@ -177,9 +183,9 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  for variant in ["blur","dim"]:
   if session.cancelled:break
   session.phase="draw_"+variant
-  material.shader=BlurShader if variant=="blur" else DimShader
+  lens.visible=variant=="blur";dim.visible=variant=="dim"
   for name in uniforms:
-   if variant=="dim" and name in ["blur_radius","effect_mix"]: continue
+   if name in ["blur_radius","effect_mix"]: continue
    material.set_shader_parameter(name,uniforms[name])
   trajectory.landing_label.text="ESTIMATED SPREAD" if variant=="blur" else "CHECK ARC\nPERFECT TRAINING\nAIM"
   drawing.queue_redraw()
@@ -187,7 +193,7 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
   for index in 2:
    if not await _wait_draw(tree,session):break
   if session.cancelled:break
-  stages.append({"variant":variant,"wall_usec":Time.get_ticks_usec()-variant_start,"private_cpu_ms":RenderingServer.viewport_get_measured_render_time_cpu(viewport.get_viewport_rid()),"private_gpu_ms":RenderingServer.viewport_get_measured_render_time_gpu(viewport.get_viewport_rid()),"shader":material.shader.resource_path,"size":viewport.size,"visible_draw_calls":viewport.get_render_info(Viewport.RENDER_INFO_TYPE_VISIBLE,Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME),"canvas_draw_calls":viewport.get_render_info(Viewport.RENDER_INFO_TYPE_CANVAS,Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME)})
+  stages.append({"variant":variant,"wall_usec":Time.get_ticks_usec()-variant_start,"private_cpu_ms":RenderingServer.viewport_get_measured_render_time_cpu(viewport.get_viewport_rid()),"private_gpu_ms":RenderingServer.viewport_get_measured_render_time_gpu(viewport.get_viewport_rid()),"shader":BlurShader.resource_path if variant=="blur" else DimShader.resource_path,"size":viewport.size,"visible_draw_calls":viewport.get_render_info(Viewport.RENDER_INFO_TYPE_VISIBLE,Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME),"canvas_draw_calls":viewport.get_render_info(Viewport.RENDER_INFO_TYPE_CANVAS,Viewport.RENDER_INFO_DRAW_CALLS_IN_FRAME)})
  var rendered := stages.size()==2
  for stage in stages: rendered=rendered and int(stage.visible_draw_calls)>0 and int(stage.canvas_draw_calls)>0
  var warm_finished_usec := Time.get_ticks_usec()
@@ -197,7 +203,7 @@ static func prepare(host: Node, extent: Vector2i, options: Dictionary = {}) -> D
  var viewport_freed: bool = weak_view.get_ref()==null
  # These resources are private. Release local references before returning to
  # a queued quit; never clear or mutate the shared canonical shader resources.
- material=null;env=null;sky=null;sky_material=null
+ material=null;lens_material=null;env=null;sky=null;sky_material=null
  session.phase="cleanup_resources"
  if is_instance_valid(loading): loading.queue_free()
  for index in 2: await tree.process_frame

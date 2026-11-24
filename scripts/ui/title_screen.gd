@@ -13,6 +13,11 @@ const GAME_PATH: = "res://scenes/game.tscn"
 const SettingsPanel = preload("res://scripts/ui/settings_panel.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+const MenuBallScene = preload("res://scripts/ui/menu_ball_scene.gd")
+const NEON := Color("d2ee2c")          # Pixel Pickleball neon yellow-green (the ball)
+const CREAM := Color("f3ead2")
+var _word2: Label
+var _shade: TextureRect
 var _panel: PanelContainer
 var _margin: MarginContainer
 var _scroll: ScrollContainer
@@ -48,8 +53,29 @@ func _ready() -> void :
  if OS.has_feature("mobile"): Engine.max_fps = 30
  theme = UiTheme.create()
  UiTheme.crisp(self)
+ # 3D backdrop: the neon ball in the lower-right corner, tilt-shifted (menu_ball_scene)
+ add_child(MenuBallScene.new())
+ # darken the left side so the borderless menu reads over the scene
+ _shade = TextureRect.new()
+ var grad := Gradient.new()
+ grad.set_color(0, Color(0.03, 0.05, 0.07, 0.72))
+ grad.set_color(1, Color(0.03, 0.05, 0.07, 0.0))
+ grad.set_offset(1, 1.0)
+ var gt := GradientTexture2D.new()
+ gt.gradient = grad
+ gt.fill_from = Vector2(0.0, 0.5)
+ gt.fill_to = Vector2(0.78, 0.5)
+ gt.width = 64
+ gt.height = 8
+ _shade.texture = gt
+ _shade.stretch_mode = TextureRect.STRETCH_SCALE
+ _shade.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+ _shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+ _shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ add_child(_shade)
  _panel = PanelContainer.new()
- _panel.add_theme_stylebox_override("panel", UiTheme.panel_style())
+ _panel.add_theme_stylebox_override("panel", StyleBoxFlat.new())
+ (_panel.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = Color(0, 0, 0, 0)
  add_child(_panel)
  var margin: = MarginContainer.new()
  _margin = margin
@@ -66,45 +92,57 @@ func _ready() -> void :
  margin.add_child(_content)
  var word: = Label.new()
  _word = word
- word.text = "THE COURT IS YOURS"
- word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
- word.add_theme_color_override("font_color", UiTheme.ACCENT)
+ word.text = "PIXEL"
+ word.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+ word.add_theme_color_override("font_color", CREAM)
  UiTheme.use_pixel(word, 18)
  _content.add_child(word)
+ word.visible = false          # the title art below carries the name
+ _word2 = Label.new()
+ _word2.text = "PICKLEBALL"
+ _word2.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+ _word2.add_theme_color_override("font_color", NEON)
+ _word2.add_theme_color_override("font_shadow_color", Color(0.02, 0.2, 0.08, 0.9))
+ _word2.add_theme_constant_override("shadow_offset_x", 3)
+ _word2.add_theme_constant_override("shadow_offset_y", 3)
+ UiTheme.use_pixel(_word2, 36)
+ _content.add_child(_word2)
+ _word2.visible = false
  var logo_panel: = PanelContainer.new()
  _logo_panel = logo_panel
  var paper: = StyleBoxFlat.new()
- paper.bg_color = Color("f6f3ec")
+ paper.bg_color = Color(0, 0, 0, 0)
  paper.anti_aliasing = false
  paper.set_corner_radius_all(4)
- paper.border_color = Color("cfc8b6")   # paper bevel
- paper.border_width_bottom = 5
+ paper.border_width_bottom = 0
  paper.content_margin_left = 14
  paper.content_margin_right = 14
  paper.content_margin_top = 16
  paper.content_margin_bottom = 16
  logo_panel.add_theme_stylebox_override("panel", paper)
  _content.add_child(logo_panel)
+
  _logo = TextureRect.new()
- _logo.texture = load("res://assets/branding/arjostyle-pickleball.png")
+ _logo.texture = load("res://assets/branding/title-logo.png")   # tools/bake_branding.py
  _logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
- _logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+ _logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT
+ UiTheme.crisp(_logo)
  _logo.custom_minimum_size.y = 140
  logo_panel.add_child(_logo)
  _hint = Label.new()
- _hint.text = "A clean court. Your next point."
- _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+ _hint.text = ""
+ _hint.visible = false          # no tagline; only shows the Controls help
+ _hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
  _hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
  _hint.add_theme_color_override("font_color", UiTheme.MUTED)
  _content.add_child(_hint)
  _play = _button("Play doubles", _start_doubles)
- UiTheme.make_primary(_play)
  _button("Play singles", start_match)
  _button("Practice", _start_practice)
  _controls = _button("Controls", _toggle_controls)
  _settings = _button("Settings", _open_settings)
  _status = Label.new()
- _status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+ _status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
  _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
  _status.add_theme_font_size_override("font_size", 14)
  _status.add_theme_color_override("font_color", UiTheme.MUTED)
@@ -125,13 +163,38 @@ func _ready() -> void :
 
 func _button(caption: String, action: Callable) -> Button:
  var button: = Button.new()
- button.text = caption
+ button.text = "  " + caption
+ # Borderless, left-aligned menu entries in the pixel font; the focused / hovered one
+ # turns neon green with a ">" marker.
+ var empty := StyleBoxEmpty.new()
+ for state in ["normal", "hover", "pressed", "hover_pressed", "focus", "disabled"]:
+  button.add_theme_stylebox_override(state, empty)
+ button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+ button.add_theme_font_override("font", UiTheme.pixel_font())
+ button.add_theme_color_override("font_color", CREAM)
+ for state in ["font_hover_color", "font_focus_color", "font_hover_pressed_color"]:
+  button.add_theme_color_override(state, NEON)
+ button.add_theme_color_override("font_pressed_color", NEON.darkened(0.2))
+ button.add_theme_color_override("font_disabled_color", UiTheme.MUTED)
+ button.set_meta("caption", caption)
+ button.focus_entered.connect(_mark_button.bind(button, true))
+ button.focus_exited.connect(_mark_button.bind(button, false))
  button.custom_minimum_size.y = 58
  button.pressed.connect(_dispatch_title_action.bind(button, action))
  _content.add_child(button)
  _buttons.append(button)
  button.gui_input.connect(_guard_controls_reflow.bind(button))
  return button
+
+## Title art height for the menu column's width (keeps its pixel aspect).
+func _logo_height(width: float) -> float:
+ var tex: Texture2D = _logo.texture
+ if tex == null: return 0.0
+ # the art spans the full menu column width
+ return floorf(width * float(tex.get_height()) / float(tex.get_width()))
+
+func _mark_button(button: Button, on: bool) -> void:
+ button.text = ("> " if on else "  ") + str(button.get_meta("caption"))
 
 func _fit() -> void :
  if not is_instance_valid(_panel): return
@@ -142,12 +205,12 @@ func _fit() -> void :
  # back to canvas units so labels and touch targets do not shrink with it.
  var s: = Layout.scale_for(viewport_size) if portrait else viewport_size.y / maxf(1.0, get_window().size.y)
  _fit_content(portrait, s, safe)
- var width: = minf(safe.size.x - 36.0 * s, 610.0 * s)
+ var width: = minf(safe.size.x - 36.0 * s if portrait else safe.size.x * 0.5, 680.0 * s)
  var height: = minf(safe.size.y - 40.0 * s, 600.0 * s)
- _panel.position = safe.position + (safe.size - Vector2(width, height)) * 0.5
  _panel.size = Vector2(width, height)
+ _panel.position = _panel_origin(safe, _panel.size)
  if portrait:
-  _logo.custom_minimum_size.y = clampf(width * 0.27, 76.0 * s, 140.0 * s)
+  _logo.custom_minimum_size.y = _logo_height(width - 12.0 * s)
   _queue_portrait_fit()
  call_deferred("_center_panel")
  queue_redraw()
@@ -165,14 +228,16 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  _content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
  theme.default_font_size = roundi(32 * s) if portrait else ceili(20 * s)
  var panel_style: StyleBoxFlat = _panel.get_theme_stylebox("panel")
- panel_style.content_margin_left = 20.0 * s if portrait else 0.0
- panel_style.content_margin_right = 20.0 * s if portrait else 0.0
+ panel_style.content_margin_left = 0.0
+ panel_style.content_margin_right = 0.0
  panel_style.content_margin_top = 18.0 * s if portrait else 0.0
  panel_style.content_margin_bottom = 18.0 * s if portrait else 0.0
  for side in ["left", "right", "top", "bottom"]:
-  _margin.add_theme_constant_override("margin_" + side, roundi(26 * s) if portrait else roundi(20 * s))
+  var narrow: bool = side in ["left", "right"]
+  _margin.add_theme_constant_override("margin_" + side, roundi((6 if narrow else 26) * s) if portrait else roundi(20 * s))
  _content.add_theme_constant_override("separation", roundi(16 * s) if portrait else roundi(6 * s))
- _word.add_theme_font_size_override("font_size", UiTheme.pixel_size(27 * s) if portrait else UiTheme.pixel_size(18 * s))
+ _word.add_theme_font_size_override("font_size", UiTheme.pixel_size(36 * s) if portrait else UiTheme.pixel_size(18 * s))
+ _word2.add_theme_font_size_override("font_size", UiTheme.pixel_size(72 * s) if portrait else UiTheme.pixel_size(36 * s))
  _status.add_theme_font_size_override("font_size", roundi(26 * s) if portrait else ceili(16 * s))
  theme.set_font_size("font_size", "Button", UiTheme.pixel_size(36 * s) if portrait else UiTheme.pixel_size(18 * s))
  theme.set_font_size("font_size", "ProgressBar", UiTheme.pixel_size(18 * s))
@@ -182,15 +247,15 @@ func _fit_content(portrait: bool, s: float, safe: Rect2) -> void:
  else:
   _hint.add_theme_font_size_override("font_size", ceili(16 * s))
   _progress.add_theme_font_size_override("font_size", ceili(16 * s))
-  _logo.custom_minimum_size.y = clampf(safe.size.y * 0.1, 40 * s, 100 * s)
+  _logo.custom_minimum_size.y = _logo_height(minf(safe.size.x * 0.5, 610.0 * s))
  _progress.custom_minimum_size.y = 20 * s
  var paper: StyleBoxFlat = _logo_panel.get_theme_stylebox("panel")
- paper.content_margin_left = 14.0 * s if portrait else 8 * s
- paper.content_margin_right = 14.0 * s if portrait else 8 * s
- paper.content_margin_top = 16.0 * s if portrait else 8 * s
- paper.content_margin_bottom = 16.0 * s if portrait else 8 * s
+ paper.content_margin_left = 0.0
+ paper.content_margin_right = 0.0
+ paper.content_margin_top = 0.0
+ paper.content_margin_bottom = 8.0 * s
  for button in _buttons:
-  button.custom_minimum_size.y = ceili(100 * s) if portrait else ceili(44 * s)
+  button.custom_minimum_size.y = ceili(84 * s) if portrait else ceili(40 * s)
   button.remove_theme_font_size_override("font_size")
   # Let the scroll viewport cancel a pressed button when a finger starts a drag.
   button.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -257,7 +322,12 @@ func _dispatch_title_action(button: Button, action: Callable) -> void:
 func _center_panel() -> void :
  if not is_instance_valid(_panel) or not is_inside_tree(): return
  var safe: = Layout.safe_rect(get_viewport())
- _panel.position = safe.position + (safe.size - _panel.size) * 0.5
+ _panel.position = _panel_origin(safe, _panel.size)
+
+## The menu hugs the left edge, a little above centre (the ball owns the lower right).
+func _panel_origin(safe: Rect2, panel_size: Vector2) -> Vector2:
+ var s: = Layout.scale_for(get_viewport().get_visible_rect().size)
+ return Vector2(safe.position.x + 18.0 * s, safe.position.y + maxf(20.0 * s, (safe.size.y - panel_size.y) * 0.38))
 
 ## Pixel-art court backdrop: night court with kitchen zones, a dithered sky band and a
 ## ball bouncing across. Everything is drawn on a coarse pixel grid (PX) so it reads as
@@ -277,42 +347,6 @@ func _px_rect(x: float, y: float, w: float, h: float, color: Color) -> void:
 
 func _draw() -> void :
  draw_rect(Rect2(Vector2.ZERO, size), UiTheme.BACKDROP)
- # Stepped pixel gradient (four hard bands, no smooth blend) behind the court.
- for i in 4:
-  draw_rect(Rect2(0, size.y * (0.04 * i), size.x, size.y * 0.04), UiTheme.SURFACE.lerp(UiTheme.BACKDROP, 0.25 * i + 0.25))
- # Court: a tall trapezoid-free top-down court, centred, with kitchen bands and lines.
- var cw: = minf(size.x * 0.78, size.y * 0.44)
- var ch: = minf(size.y * 0.8, cw * 2.2)
- var cx: = (size.x - cw) * 0.5
- var cy: = size.y * 0.12
- _px_rect(cx - PX * 2, cy - PX * 2, cw + PX * 4, ch + PX * 4, COURT_DARK)
- _px_rect(cx, cy, cw, ch, COURT)
- var kitchen: = ch * 0.16
- _px_rect(cx, cy + ch * 0.5 - kitchen, cw, kitchen * 2, KITCHEN)
- for y in [cy, cy + ch * 0.5 - kitchen, cy + ch * 0.5 + kitchen, cy + ch - PX]:
-  _px_rect(cx, y, cw, PX * 0.5 if y != cy and y != cy + ch - PX else PX, LINE)
- _px_rect(cx, cy, PX, ch, LINE)
- _px_rect(cx + cw - PX, cy, PX, ch, LINE)
- _px_rect(cx + cw * 0.5 - PX * 0.5, cy, PX, ch * 0.5 - kitchen, LINE)
- _px_rect(cx + cw * 0.5 - PX * 0.5, cy + ch * 0.5 + kitchen, PX, ch * 0.5 - kitchen, LINE)
- # Net: a lighter band with post caps.
- _px_rect(cx - PX * 3, cy + ch * 0.5 - PX, cw + PX * 6, PX * 2, Color(0.92, 0.96, 0.9, 0.42))
- _px_rect(cx - PX * 4, cy + ch * 0.5 - PX * 2, PX * 2, PX * 4, Color(0.92, 0.96, 0.9, 0.6))
- _px_rect(cx + cw + PX * 2, cy + ch * 0.5 - PX * 2, PX * 2, PX * 4, Color(0.92, 0.96, 0.9, 0.6))
- # Ball rally: crosses the court in a bouncing arc, with a ground shadow.
- var phase: = fmod(_motion * 0.42, 2.0)
- var along: = phase if phase < 1.0 else 2.0 - phase
- var bx: = cx + cw * (0.22 + 0.56 * along)
- var by: = cy + ch * (0.12 + 0.76 * along)
- var hop: = absf(sin(along * PI * 2.0)) * ch * 0.06
- _px_rect(bx - PX, by - PX * 0.5, PX * 3, PX, Color(0, 0, 0, 0.28))
- _px_rect(bx - PX * 0.5, by - hop - PX * 2, PX * 2, PX * 2, BALL)
- _px_rect(bx - PX * 0.5, by - hop - PX * 2, PX, PX, Color(1, 1, 0.85))
- # Vignette corners in big pixel steps.
- for i in 4:
-  var a: = 0.12 * (4 - i) / 4.0
-  draw_rect(Rect2(0, i * PX * 3, size.x, PX * 3), Color(0, 0, 0, a * 0.6))
-  draw_rect(Rect2(0, size.y - (i + 1) * PX * 3, size.x, PX * 3), Color(0, 0, 0, a))
  if _loading:
   var x: = size.x * 0.5 + sin(_motion * 4.0) * 30.0
   _px_rect(x, minf(size.y - 24.0, _panel.position.y + _panel.size.y + 18.0), PX * 2, PX * 2, UiTheme.ACCENT)
@@ -466,8 +500,10 @@ func _fail(message: String) -> void :
 func _toggle_controls() -> void :
  if _loading: return
  if _hint.text.begins_with("MOVE"):
-  _hint.text = "A clean court. Your next point."
+  _hint.text = ""
+  _hint.visible = false
  else:
+  _hint.visible = true
   _hint.text = "MOVE with the left stick. Hold and drag HIT to aim with your right thumb. Hold and drag the outer buttons for Topspin, Slice or Drop. Release HIT to commit your swing.\nKeyboard: WASD/arrows + Space · Q Spin · E Drop"
  _fit()
 

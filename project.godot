@@ -19,7 +19,7 @@ config/name.ios="Pixel Pickleball"
 run/main_scene="res://scenes/title.tscn"
 config/quit_on_go_back=false
 config/features=PackedStringArray("4.6", "GL Compatibility")
-config/icon="res://icon.svg"
+config/icon="res://assets/branding/app-icon.png"
 
 [autoload]
 

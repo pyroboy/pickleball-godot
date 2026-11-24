@@ -71,6 +71,14 @@ Status: done, in progress, next, later.
 - [ ] Team palette-swap shader for skins and cosmetics
 - [ ] Six player sprite profiles (3 female, 3 male): `docs/CHARACTER_VARIANTS_PLAN.md`
 - [ ] Court / arena textures in pixel style, baked lighting
+- [x] Barangay court world (2026-11-22, branch `court-environment`, replaced a short-lived
+      beach): cement slab with cracks, patches, stains, faded basketball lines and a green
+      kitchen; red curb with chipped corners and a gutter; bamboo net poles in hollow blocks;
+      a two-storey house, barangay hall and flag, sari-sari store, tricycles, power poles with
+      banderitas, background houses; a crowd, queue, scorer and animals that react to the match
+      (paddle hits, bounces, rally end reasons, serve, post hits, score). All real low-poly 3D
+      with three-band toon shading, pixelated by PixelPost: `scripts/environment/`,
+      `shaders/env_*.gdshader`. Bench pose diff IDENTICAL; 0.02 ms/frame on the Mac
 
 ### Phase 4: Effects and feel (later)
 - [ ] Effects sprite sheet: impact burst, spark ring, bounce, dust, swing arc, speed lines,

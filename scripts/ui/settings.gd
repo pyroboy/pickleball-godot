@@ -29,6 +29,7 @@ const CONFIG_PATH: String = "user://settings.cfg"
 
 const DEFAULTS: Dictionary = {
 	"video.fov": 60.0,
+	"video.court_view_swapped": false,   # pause menu "Court view": which end's scenery faces the camera
 	"video.camera_mode": 0, 
 	"video.shake": 1.0, 
 	"video.hitstop": true, 

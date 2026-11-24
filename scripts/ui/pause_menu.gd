@@ -30,6 +30,7 @@ var _menu_button: Button
 var _photo_button: Button
 var _photo_mode: Node = null
 var _banner: Control   # pixel_banner.gd header: PAUSED + ribbon
+var _view_button: Button
 var _subtitle: Label
 var _score: Label
 
@@ -86,6 +87,7 @@ func _build() -> void :
 	_reset_button = _add_button(_main_list, _reset_caption(), _on_reset_requested)
 	_photo_button = _add_button(_main_list, "Photo mode", _on_photo_mode)
 	_add_button(_main_list, "Practice drills", _on_practice)
+	_view_button = _add_button(_main_list, _view_caption(), _on_court_view)
 	_settings_button = _add_button(_main_list, "Settings", _on_settings)
 	_pose_button = _add_button(_main_list, "Pose Studio", _on_pose_editor)
 	_menu_button = _add_button(_main_list, "Main menu", _confirm.bind("menu"))
@@ -124,6 +126,15 @@ func _add_button(parent: Node, text: String, callback: Callable) -> Button:
 	button.pressed.connect(callback)
 	parent.add_child(button)
 	return button
+
+## Court view: switch which end's scenery faces you (visual only, saved).
+func _view_caption() -> String:
+	var swapped := bool(Settings.get_value("video.court_view_swapped", false))
+	return "Court view: Pandesal corner" if swapped else "Court view: Barangay hall"
+
+func _on_court_view() -> void:
+	Settings.set_value("video.court_view_swapped", not bool(Settings.get_value("video.court_view_swapped", false)))
+	_view_button.text = _view_caption()
 
 func _subtitle_text() -> String:
 	if _is_wall(): return "Your wall court is right where you left it."
