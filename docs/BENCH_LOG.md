@@ -880,3 +880,70 @@ Fill in each Verdict after reading the result.
   - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 9 of 69 | paddle flutter episodes 81 | pose changed in last 0.3 s 0 of 74 (+1 reflex blocks on balls inside the reaction delay)
   - FAIL  paddle head meets the ball (over 15 cm off on at most 5% of hits): 5.4%
 - Verdict: keep. 0 script errors; the one High Overhead hit (player 0, 17.7 s, with the new Drop key) met the ball at 4.9 cm with no snap-back. "Paddle meets ball" 5.4% is the level before the change too (same seed and difficulty without it: 5.2%, 5 of 96). No jump smash happened in this seed, so the air legs are not covered here.
+
+## 2026-11-25 11:00 · hunt_base · bench_seeds
+- Objective: base for the hunt study (green light and Hunt Ready pose both off): kitchen plan mix, volley share, endings and animation rules to compare hunt_on against; keep each dial only if attacks rise or hold with no more faults or failed animation rules
+- Seeds: 1 × 120 s · wall 32 s
+- Needed data: ai_plan 188
+- Data:
+  - == hunt_base: 1 seeds
+  - points 1 (ball_in_net 1) | AI hits 101
+  - contact snap-back 1 of 103 hits (1%) | head-to-ball over 15 cm 0 | median gap per seed 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 17 of 101 | paddle flutter episodes 71 | pose changed in last 0.3 s 1 of 103 (+3 reflex blocks on balls inside the reaction delay)
+  - FAIL  pose never switches in the last 0.3 s before contact: 1
+- Verdict: base recorded. Kitchen hits 95, 12 in the air (13%), median contact 0.38 m under the tape; 4 attack plans of 178 kitchen plans; 90% of kitchen plans are for a ball more than 0.25 m under the tape. All animation rules pass but one late pose switch.
+
+## 2026-11-25 11:01 · hunt_on · bench_seeds
+- Objective: hunt study: with the green light and Hunt Ready pose on, do kitchen attacks rise or hold versus hunt_base with no more faults and the same animation rules? keep each dial if so, else switch off the one that fails
+- Seeds: 1 × 120 s · wall 32 s
+- Needed data: ai_plan 167
+- Base: hunt_base: s1 DIVERGED
+- Data:
+  - == hunt_on: 1 seeds
+  - points 2 (ball_in_net 1, double_bounce 1) | AI hits 89
+  - contact snap-back 2 of 92 hits (2%) | head-to-ball over 15 cm 1 | median gap per seed 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 12 of 89 | paddle flutter episodes 66 | pose changed in last 0.3 s 0 of 92 (+1 reflex blocks on balls inside the reaction delay)
+- Verdict: keep both dials. 0 script errors, all animation rules PASS (late pose switch 0, head-to-ball over 15 cm 1 of 92). Attack plans 3 of 149 against 4 of 178: no measurable change, because the green light only matters for the few balls near the tape (2 to 7 plans per seed sit in its window). Hunt Ready is live (poses diverge from tick 124). Look of the pose not checked by eye.
+
+## 2026-11-25 11:03 · hunt_vol · bench_seeds
+- Objective: line volley on top of hunt_on: does the share of kitchen hits taken in the air rise (base 13%) without new kitchen_volley / momentum faults, dropped shots or failed animation rules? keep if so, else switch LINE_VOLLEY_ON off
+- Seeds: 1 × 120 s · wall 32 s
+- Needed data: ai_plan 181
+- Base: hunt_on: s1 DIVERGED
+- Data:
+  - == hunt_vol: 1 seeds
+  - points 2 (momentum 1, ball_in_net 1) | AI hits 96
+  - contact snap-back 1 of 98 hits (1%) | head-to-ball over 15 cm 0 | median gap per seed 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 10 of 96 | paddle flutter episodes 58 | pose changed in last 0.3 s 0 of 98 (+1 reflex blocks on balls inside the reaction delay)
+- Verdict: LINE_VOLLEY_ON switched off. In the air 10 of 89 (11%), no gain, and one momentum fault that the other runs did not have. Cause: dinks land a median 1.32 m from the net (0.8 m inside the kitchen), so 0.25 m of reach over the line never meets them before the bounce. Next step if wanted: players stand at the line and lean in, which is a stance and fault-risk change.
+
+## 2026-11-25 11:04 · hunt_final · bench
+- Objective: final state check: LINE_VOLLEY_ON off must play IDENTICAL to hunt_on (green light and Hunt Ready on), 0 script errors
+- Seeds: 1 × 120 s · wall 31 s
+- Base: hunt_on_s1: IDENTICAL within 1.00 mm
+- Data:
+  - Points 2 (ball_in_net 1, double_bounce 1) | rally 35.3s, between 9.0s, serve wait 0.8s
+- Verdict: IDENTICAL to hunt_on, 0 script errors: the shipped state is green light on, Hunt Ready on, line volley off.
+
+## 2026-11-25 11:17 · hunt_lean · bench_seeds
+- Objective: lean-in volley (reach 0.45 m over the line, from 0.3 m up, with the AI momentum hold) on top of hunt_on: does the share of kitchen hits taken in the air rise from 11-13% without momentum / kitchen_volley faults, dropped shots or failed animation rules? keep if so, else switch LINE_VOLLEY_ON off
+- Seeds: 1 × 120 s · wall 32 s
+- Needed data: ai_plan 183
+- Base: hunt_on: s1 DIVERGED
+- Data:
+  - == hunt_lean: 1 seeds
+  - points 1 (ball_in_net 1) | AI hits 105
+  - contact snap-back 2 of 107 hits (2%) | head-to-ball over 15 cm 2 | median gap per seed 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 15 of 105 | paddle flutter episodes 84 | pose changed in last 0.3 s 0 of 107 (+8 reflex blocks on balls inside the reaction delay)
+- Verdict: keep, pending the fault check. Seed 1: kitchen hits in the air 25 of 99 (25%) against 9 of 79 (11%) in hunt_on; attack hits 8 against 3; no momentum or kitchen_volley fault; all animation rules PASS.
+
+## 2026-11-25 12:14 · hunt_lean · bench_seeds
+- Objective: lean-in volley: same question as seed 1 (in-air share up from 11-13% to 25%, attacks 3 -> 8), now checking the rare risk: do momentum / kitchen_volley faults appear once about 75 line volleys have been played? keep if none or one, else switch LINE_VOLLEY_ON off
+- Seeds: 1 2 3 × 120 s (why: faults are rare per-point events; seed 1 had 25 line volleys and 1 point, two more seeds triple the volleys watched (cap is 3 seeds)) · wall 32 s
+- Needed data: ai_plan 445
+- Data:
+  - == hunt_lean: 3 seeds
+  - points 10 (ball_in_net 5, double_bounce 4, out_of_bounds 1) | AI hits 243
+  - contact snap-back 3 of 255 hits (1%) | head-to-ball over 15 cm 7 | median gap per seed 4.6, 4.6, 4.6 cm
+  - wind-ups that wobble (reverse twice or more; one reversal is the backswing) 24 of 243 | paddle flutter episodes 185 | pose changed in last 0.3 s 0 of 255 (+15 reflex blocks on balls inside the reaction delay)
+- Verdict: keep LINE_VOLLEY_ON (reach 0.45, from 0.3 m, AI momentum hold). 3 seeds: 51 of 219 kitchen hits in the air (23%; base seed 1 was 13%), attack hits 20 of 219 (9%; base 4 of 95), 0 momentum and 0 kitchen_volley faults in 10 points, 0 dropped shots, all animation rules PASS. Watch: head-to-ball over 15 cm 7 of 255 (2.7%, limit 5%; base seed 1 had 0 of 103) and 15 reflex blocks. Seeds 2 and 3 have no base run, and 10 points cannot say how rallies end.

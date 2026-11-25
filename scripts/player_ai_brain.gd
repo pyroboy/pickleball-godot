@@ -8,6 +8,7 @@ const Movement = preload("res://scripts/ai_match_movement.gd")
 const MatchTactics = preload("res://scripts/ai_match_tactics.gd")
 const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 const _EarlyTuning = preload("res://scripts/gameplay_tuning.gd")
+const _HuntReady = preload("res://scripts/hunt_ready.gd")
 
 
 const _PC = preload("res://scripts/player.gd")
@@ -379,6 +380,10 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 				PerfMonitor.note("special_action", {"kind": "REACH", "actor": _player.player_num})
 				return Vector3.ZERO
 
+	# Momentum hold: after a volley the player stays behind the kitchen line until balanced
+	# (stepping in before that is a momentum fault). More volleys at the line need it.
+	if _EarlyTuning.LINE_VOLLEY_ON and _game_node != null and _game_node.rally_scorer.momentum_watched(_player.get_actor_id()):
+		intercept_target.z = _outside_kitchen_depth(intercept_target.z, PickleballConstants.NON_VOLLEY_ZONE + 0.42)
 	intercept_target.x = clamp(intercept_target.x, _player.min_x, _player.max_x)
 	intercept_target.z = clamp(intercept_target.z, _player.min_z, _player.max_z)
 
@@ -503,6 +508,7 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 
 	var fast_at_line: bool = _EarlyTuning.FAST_LINE_REACH_ON and ball.linear_velocity.length() >= _EarlyTuning.FAST_BALL_SPEED \
 		and absf(_player.global_position.z) <= _EarlyTuning.FAST_LINE_DEPTH and ball.both_bounces_complete
+	var soft_line_volley: bool = _EarlyTuning.LINE_VOLLEY_ON and ball.both_bounces_complete and ball.linear_velocity.length() < _EarlyTuning.HUNT_MAX_SPEED
 	# Hitting side of the plan already being run for this flight (contact left / right of the
 	# standing spot, m along the forehand axis).
 	var keep_side: bool = not _movement_plan.is_empty() and bool(_movement_plan.get("reachable", false)) and int(_movement_plan.get("flight_id", -1)) == ball.flight_id
@@ -524,8 +530,11 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			continue
 		# Kitchen guard: a rally volley met far inside the kitchen plane carried the
 		# AI over the line (momentum / kitchen-volley faults). Let that ball bounce.
+		# Line volley: a soft ball may be met a little inside the plane (arm over the line,
+		# feet behind it), so a dink can be taken out of the air.
+		var line_volley: bool = soft_line_volley and total_bounces == 0 and contact_point.y - COURT_FLOOR_Y >= _EarlyTuning.LINE_VOLLEY_MIN_HEIGHT
 		if _EarlyTuning.KITCHEN_GUARD_ON and total_bounces == 0 and ball.both_bounces_complete \
-				and absf(contact_point.z) < PickleballConstants.NON_VOLLEY_ZONE - _EarlyTuning.KITCHEN_GUARD_REACH:
+				and absf(contact_point.z) < PickleballConstants.NON_VOLLEY_ZONE - (_EarlyTuning.LINE_VOLLEY_REACH if line_volley else _EarlyTuning.KITCHEN_GUARD_REACH):
 			continue
 		var rel_height: float = contact_point.y - COURT_FLOOR_Y
 		var height_postures: Array[int] = _get_posture_for_height(rel_height)
@@ -594,6 +603,7 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 			if _EarlyTuning.EARLY_VOLLEY_ON and total_bounces == 0 and ball.both_bounces_complete and absf(contact_point.z) <= 3.4:
 				var over: float = contact_point.y - _Flight.net_clear_y_at(contact_point.x) + _EarlyTuning.EARLY_VOLLEY_BELOW
 				if over >= 0.0: score -= _EarlyTuning.EARLY_VOLLEY_BONUS * clampf(0.5 + over / 0.3, 0.5, 1.0)
+			if line_volley and absf(contact_point.z) <= 3.4: score -= _EarlyTuning.LINE_VOLLEY_BONUS
 			# Let a bounced ball come up when there is time. The earliest reachable
 			# sample is right after the bounce, 0.2-0.3 m off the floor, below the
 			# tip of a hanging blade: the ball met the tip, the planned lift was
@@ -723,7 +733,7 @@ func _perf_sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
 		_planned_flight = -1
 		_planned_contact_grip = null
 		MotionContext.clear_feet(_player)
-		incoming_pose_override = PostureLibrary.instance().get_def(PP_READY) if ball.is_in_play and ball.last_hit_by != _player.player_num else null
+		incoming_pose_override = _HuntReady.ready_for(_player, ball) if ball.is_in_play and ball.last_hit_by != _player.player_num else null
 		ai_reach_pose = null
 		_charge_reach_pose = null
 		_ball_history.clear()
@@ -884,6 +894,7 @@ const READY_LIMITER_SECONDS := 0.35
 const READY_SETTLED_SECONDS := 0.85
 var _wait_seconds := 0.0
 var _wait_tick := -100
+var _wait_hunt := false   # waiting pose target was Hunt Ready (hunt_ready.gd)
 const RESTORE_LIGHT := true   # false: solve legs and arms on the restore too (as before)
 func align_paddle_to_contact(delta: float) -> void :
 	# Receipt describes this actual presentation call, never a prior flight.
@@ -910,6 +921,11 @@ func align_paddle_to_contact(delta: float) -> void :
 	# actual owner before feet advance, so body fitting sees its seated grip.
 	# ... and when the very same pose object is applied again below (a settled Ready, or the
 	# held pose of a player with no reachable contact), the restore is skipped altogether.
+	# The waiting target switches between Ready and Hunt Ready: restart the settle clock.
+	var hunt_now: bool = waits and _HuntReady.hunting(_player, ball)
+	if hunt_now != _wait_hunt:
+		_wait_hunt = hunt_now
+		_wait_tick = -100
 	var same_pose_below: bool = solves_below and (not waits or _wait_tick == Engine.get_physics_frames() - 1 and _wait_seconds + delta >= READY_SETTLED_SECONDS)
 	if not same_pose_below:
 		var _al_restore := Time.get_ticks_usec()
@@ -918,7 +934,7 @@ func align_paddle_to_contact(delta: float) -> void :
 		PerfMonitor.record("al.restore", Time.get_ticks_usec() - _al_restore)
 	if waits:
 		if holds: return
-		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
+		var ready: PostureDefinition = _HuntReady.ready_for(_player, ball)
 		var previous: PostureDefinition = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
 		var _al_ready := Time.get_ticks_usec()
 		# A waiting player eases to Ready (half-life 0.07 s). The hand-turn limiter can only bite
@@ -993,7 +1009,7 @@ func align_paddle_to_contact(delta: float) -> void :
 	if ai_selected_contact_time > align_from and ball.global_position.distance_to(contact) > 0.75:
 
 
-		var ready: PostureDefinition = PostureLibrary.instance().get_def(PP_READY)
+		var ready: PostureDefinition = _HuntReady.ready_for(_player, ball)
 		# Prepare into the stroke's full (power-scaled) Wind-up key, reached by
 		# ALIGN_LEAD_SECONDS + AI_WINDUP_FULL_MARGIN; the rate-limited blend below
 		# leaves a partial wind-up when the reaction is too short (contact never waits).
@@ -1761,6 +1777,7 @@ func match_context(ball_pos: Vector3) -> Dictionary:
 		"stamina": float(_player.stamina.value), "position_roll": _position_roll(ball), "opponents_vel": _opponent_velocities(), "opponents_stamina": _opponent_stamina(),
 		"bounced": ball != null and ball.both_bounces_complete and ball.bounces_since_last_hit >= 1,
 		"incoming_grade": _incoming_grade(ball),
+		"opp_strain": float(_game_node.point_ending.opponent_strain(_player.team_id)) if _game_node != null and "point_ending" in _game_node else 0.0,
 		"opp_power_streak": int(_game_node.point_ending.power_streak[1 - _player.team_id]) if _game_node != null and "point_ending" in _game_node and _player.team_id in [0, 1] else 0}
 
 ## Smash bracing (POSITION_PLAN.md): our ball will reach the other team high enough to be

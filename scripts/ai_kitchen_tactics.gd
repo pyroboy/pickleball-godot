@@ -13,15 +13,23 @@ static func grade_factor(context: Dictionary) -> float:
 		"HIGH": return Tuning.GRADE_HIGH_ATTACK
 	return 1.0
 
+## Green light (0..1): how strained the opponent's last contact was, above the line.
+static func green_light(context: Dictionary) -> float:
+	if not Tuning.GREEN_LIGHT_ON: return 0.0
+	return clampf((float(context.get("opp_strain", 0.0)) - Tuning.GREEN_LIGHT_FROM) / (1.0 - Tuning.GREEN_LIGHT_FROM), 0.0, 1.0)
+
+static func green_boost(context: Dictionary) -> float:
+	return lerpf(1.0, Tuning.GREEN_LIGHT_BOOST, green_light(context))
+
 static func attack_probability(context: Dictionary) -> float:
 	if not context.get("near_kitchen", false) or not context.get("legal_volley", false): return 0.0
 	if not context.get("reachable", false) or not context.get("balanced", false): return 0.0
 	if not context.get("reaction_ready", false): return 0.0
 	var excess: float = float(context.get("ball_height", 0.0)) - float(context.get("net_height", 1.0))
-	if excess < 0.12: return 0.0
+	if excess < 0.12 - Tuning.GREEN_LIGHT_HEIGHT * green_light(context): return 0.0
 	var height_factor: float = clampf((excess - 0.05) / 0.65, 0.15, 1.0)
 	var difficulty: int = clampi(int(context.get("difficulty", 1)), 0, 2)
-	return minf(0.98, [0.32, 0.58, 0.82][difficulty] * height_factor * grade_factor(context))
+	return minf(0.98, [0.32, 0.58, 0.82][difficulty] * height_factor * grade_factor(context) * green_boost(context))
 
 static func choose(context: Dictionary, roll: float) -> String:
 	if not context.get("near_kitchen", false): return "NORMAL"
@@ -64,7 +72,7 @@ static func low_speedup_probability(context: Dictionary) -> float:
 	var p: float = float(Tuning.PATIENCE_BASE[d]) * clampf(run / float(Tuning.PATIENCE_RAMP[d]), 0.0, 1.0) * style_w
 	if excess > 0.0: p *= 1.5
 	# Tired: conserve (fewer risky low speed-ups); fresh: no extra (a low speed-up is a gamble).
-	return clampf(p * minf(1.0, stamina_aggression(context)) * grade_factor(context), 0.0, Tuning.PATIENCE_MAX)
+	return clampf(p * minf(1.0, stamina_aggression(context)) * grade_factor(context) * green_boost(context), 0.0, Tuning.PATIENCE_MAX)
 
 ## Firefight reply to a fast ball at the kitchen: counter if it is at or above the net.
 static func counter_probability(context: Dictionary) -> float:
@@ -88,7 +96,7 @@ static func popup_attack_probability(context: Dictionary) -> float:
 	var min_excess: float = float(Tuning.POPUP_MIN_EXCESS[clampi(int(context.get("difficulty", 1)), 0, 2)])
 	if excess < min_excess: return 0.0
 	var h: float = clampf((excess - min_excess) / maxf(0.01, Tuning.POPUP_FULL - min_excess), 0.0, 1.0)
-	return clampf(float(Tuning.POPUP_ATTACK_PROB[clampi(int(context.get("difficulty", 1)), 0, 2)]) * lerpf(0.6, 1.0, h) * stamina_aggression(context) * grade_factor(context), 0.0, 0.98)
+	return clampf(float(Tuning.POPUP_ATTACK_PROB[clampi(int(context.get("difficulty", 1)), 0, 2)]) * lerpf(0.6, 1.0, h) * stamina_aggression(context) * grade_factor(context) * green_boost(context), 0.0, 0.98)
 
 
 ## Stamina strategy: >1 when fresh (spend on attacks), <1 when tired (conserve).

@@ -51,9 +51,16 @@ func reset() -> void:
 	power_streak = [0, 0]
 	human_team_touched = false
 
+## Strain (0..1) of the last contact when the other team made it, else 0: how stretched,
+## off balance or rushed that hitter was. The kitchen AI reads it (green light).
+func opponent_strain(team: int) -> float:
+	if _last.is_empty() or int(_last.get("team", -1)) == team: return 0.0
+	return float(_last.get("strain", 0.0))
+
 ## Called once per contact, after the execution error is applied.
+## `strain`: the hitter's own visible strain at contact (stretch, balance, pressure).
 ## `cause`: the hitter's own mishit cause, as a stamp word ("" for a clean hit).
-func record_contact(actor_id: int, team: int, difficulty: float, tactic: String, speed: float, serve: bool, cause: String = "") -> void:
+func record_contact(actor_id: int, team: int, difficulty: float, tactic: String, speed: float, serve: bool, cause: String = "", strain: float = 0.0) -> void:
 	if serve: shots = 0; soft_run = 0
 	shots += 1
 	soft_run = soft_run + 1 if tactic in SOFT_TACTICS else 0
@@ -65,7 +72,7 @@ func record_contact(actor_id: int, team: int, difficulty: float, tactic: String,
 			recent_power[team].append(power)
 			if recent_power[team].size() > 12: recent_power[team].pop_front()
 	_last_tick = Engine.get_physics_frames()
-	_last = {"actor": actor_id, "team": team, "difficulty": difficulty, "tactic": tactic, "speed": speed, "why": cause}
+	_last = {"actor": actor_id, "team": team, "difficulty": difficulty, "tactic": tactic, "speed": speed, "why": cause, "strain": 0.0 if serve else strain}
 
 ## Name the ending. Returns {"ending", "cause", "actor", "difficulty", "shots", "where", "why"}.
 ## "where" and "why" are the two stamp lines (docs/SHOT_QUALITY_PLAN.md, proposal A): where the

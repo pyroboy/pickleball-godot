@@ -1142,7 +1142,8 @@ func apply_contact_execution(actor, launch: Dictionary, charge: float, timing_er
 			var aid: int = p.get_actor_id()
 			if aid >= 0 and aid < 4: _rally_start_stamina[aid] = snappedf(float(p.stamina.value), 0.1)
 	point_ending.record_contact(actor.get_actor_id(), actor.team_id, model.pressure(result.context),
-		str(launch.get("tactic", launch.get("shot_type", ""))), result.velocity.length(), serve, str(result.get("miss_cause", "")))
+		str(launch.get("tactic", launch.get("shot_type", ""))), result.velocity.length(), serve, str(result.get("miss_cause", "")),
+		maxf(model.pressure(result.context), maxf(float(result.context.get("extension", 0.0)), float(result.context.get("balance", 0.0)))))
 	actual.profile["timing_word"] = timing_word
 	# Swing room of the stroke pose at contact: the shot name reads it (a compact pose cannot drive).
 	var stroke_pose = actor.posture.transition_pose_blend if actor.posture != null else null

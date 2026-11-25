@@ -62,7 +62,7 @@ static func _choose_base(context: Dictionary, roll: float) -> String:
 	if height < net + 0.28 and rushed:
 		return "DROP" if depth > 4.5 else "RESET"
 	if depth <= 3.4:
-		if height >= net + 0.18 and balanced and not stretched and not moving_fast:
+		if height >= net + 0.18 - Tuning.GREEN_LIGHT_HEIGHT * Kitchen.green_light(context) and balanced and not stretched and not moving_fast:
 			var attack_context: Dictionary = context.duplicate()
 			attack_context["near_kitchen"] = true
 			if roll < Kitchen.attack_probability(attack_context):
@@ -285,7 +285,7 @@ static func plan(context: Dictionary, roll: float, placement: float) -> Dictiona
 		"balanced": bool(context.get("balanced", true)), "legal_volley": bool(context.get("legal_volley", false)), "opening": bool(context.get("opening_return", false)), "cross": cross_court, "from_x": snappedf(origin.x, 0.01), "to": [snappedf(lane, 0.01), snappedf(depth, 0.01)],
 		"roll": snappedf(roll, 0.01), "p_popup": snappedf(Kitchen.popup_attack_probability(context), 0.01), "p_counter": snappedf(Kitchen.counter_probability(context), 0.01),
 		"p_patience": snappedf(Kitchen.low_speedup_probability(context), 0.01), "patience_roll": snappedf(float(context.get("patience_roll", 1.0)), 0.01),
-		"risk": risk if Tuning.RISK_ON else "", "aim": aim, "soft_run": int(context.get("soft_run", 0)),
+		"risk": risk if Tuning.RISK_ON else "", "aim": aim, "soft_run": int(context.get("soft_run", 0)), "strain": snappedf(float(context.get("opp_strain", 0.0)), 0.01), "vol": not bool(context.get("bounced", false)),
 		"opp": context.get("opponents", []).map(func(o): return [snappedf(o.x, 0.01), snappedf(absf(o.z), 0.01)])})
 	return {"style_id": style, "kind": kind, "target": Vector3(lane, Flight.FLOOR_REST_Y, direction * depth),
 		"charge": charge, "shot_type": shot_type, "intent": intent, "arc": arc, "spin_mode": spin_mode,

@@ -874,7 +874,7 @@ func _near_kitchen_context() -> bool:
 	return _swing_near_kitchen if phase >= 0 else absf(player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65
 
 func _ready_pose(_delta: float = 1.0 / 60.0) -> PostureDefinition:
-	var ready: PostureDefinition = ReadyMotion.ready_pose(PostureLibrary.instance().get_def(player.PaddlePosture.READY))
+	var ready: PostureDefinition = ReadyMotion.ready_pose(preload("res://scripts/hunt_ready.gd").ready_for(player, player._get_ball_ref()))
 	if absf(player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65:
 		ready = DriveMotion.kitchen_ready(ready)
 	# Tracking is applied after ReadyMotion blending so its fast tip is not filtered twice.

@@ -539,6 +539,11 @@ func _has_regained_balance(player) -> bool:
 	return toward.length_squared() > 0.000001 and horizontal.dot(toward.normalized()) <= 0.01
 
 
+## True while this actor's last volley is still watched for momentum (not yet balanced):
+## stepping into the kitchen now is a fault. The AI reads it to hold behind the line.
+func momentum_watched(actor_id: int) -> bool:
+	return _volley_momentum_watches.has(actor_id) or _last_volley_player == actor_id
+
 func check_momentum_fault(delta: float = -1.0) -> Dictionary:
 
 	if _volley_momentum_watches.is_empty() and _last_volley_player >= 0:

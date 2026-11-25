@@ -380,3 +380,33 @@ const GRADE_LOW_ATTACK := 0.25
 const GRADE_HIGH_ATTACK := 1.3
 ## A clean drive is planned this far over the tape (was 0.08: normal error clipped it).
 const DRIVE_NET_MARGIN := 0.15
+
+## ---- Hunting at the kitchen line (pro "hunt" study, 2026-11-25) ----
+## Green light: the hitter across the net just played under strain (stretched arm, off
+## balance, rushed: point_ending.opponent_strain, 0..1), so they cannot counter. From
+## GREEN_LIGHT_FROM up, the kitchen AI attacks more often (x GREEN_LIGHT_BOOST at strain 1)
+## and from a ball up to GREEN_LIGHT_HEIGHT m lower. Off = IDENTICAL poses.
+const GREEN_LIGHT_ON := true
+const GREEN_LIGHT_FROM := 0.25
+const GREEN_LIGHT_BOOST := 1.6
+const GREEN_LIGHT_HEIGHT := 0.08
+## Hunting ready pose (data/ready_variants/hunt_ready.tres): paddle down and out in front
+## while a soft rally ball is coming and the player stands within HUNT_DEPTH m of the
+## kitchen line. Replaces Ready as the waiting / preparing pose there.
+const HUNT_POSE_ON := true
+const HUNT_MAX_SPEED := 9.0
+const HUNT_DEPTH := 0.9
+## Line volley: take a soft rally ball (under HUNT_MAX_SPEED) out of the air at the kitchen
+## line. The contact may sit up to LINE_VOLLEY_REACH m inside the kitchen plane (the kitchen
+## guard otherwise keeps volleys 0.05 m behind it; feet still stand 0.42 m behind the line),
+## from LINE_VOLLEY_MIN_HEIGHT m off the floor, and scores LINE_VOLLEY_BONUS (~seconds)
+## better than waiting for the bounce. Bench 2026-11-25 without it: 12 of 95 kitchen hits
+## in the air, median contact 0.38 m under the tape.
+## At 0.25 m reach from 0.4 m up it did nothing (bench hunt_vol): dinks land a median 1.5 m
+## from the net. At 0.45 m from 0.3 m up, with the AI momentum hold (player_ai_brain: no step
+## into the kitchen while rally_scorer still watches the volley), bench hunt_lean, 3 seeds:
+## 51 of 219 kitchen hits in the air (23%), attacks 4% -> 9%, no momentum / kitchen faults.
+const LINE_VOLLEY_ON := true
+const LINE_VOLLEY_REACH := 0.45
+const LINE_VOLLEY_MIN_HEIGHT := 0.3
+const LINE_VOLLEY_BONUS := 0.2
