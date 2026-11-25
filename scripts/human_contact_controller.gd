@@ -67,6 +67,37 @@ var _plan_tick: int = -1000
 var _plan_flight: int = -1
 var _swing_is_volley: bool = false
 var _released_joint_path := false
+## PerfToggles.human_plan_once (docs/PERFORMANCE_PLAN.md step 1): the contact is planned once per
+## flight and kept, its clock counted down, until something it was planned from changes: a new
+## flight (hit, serve, reset), a bounce, a sudden velocity change (net cord, wall, any outside
+## push) or the swing moving to a new phase, at once; the player standing somewhere else (the
+## planner measures the contact from the body) at most every PLAN_INTERVAL_SECONDS. With no
+## plan found it retries at PLAN_EMPTY_RETRY. The old way re-planned at PLAN_INTERVAL_SECONDS
+## always, and every tick in the last PLAN_EVERY_TICK_TIME and through the swing.
+const PLAN_MOVE_M := 0.08            # body moved this far since the plan: plan again
+const PLAN_VELOCITY_JUMP := 1.2      # m/s change in one tick beyond gravity: the flight was disturbed
+const PLAN_EMPTY_RETRY := 0.2        # s between retries while nothing is planned
+var _plan_bounces: int = -1
+var _plan_root: Vector3 = Vector3.INF
+var _plan_phase: int = -2
+var _plan_ball_velocity: Vector3 = Vector3.ZERO
+var _plan_velocity_tick: int = -1
+var _plan_gravity_step: float = NAN   # m/s gravity adds per tick, read once
+
+func _plan_stale(ball, now: int) -> bool:
+	var velocity: Vector3 = ball.linear_velocity
+	var disturbed: bool = false
+	if _plan_velocity_tick == now - 1:
+		if is_nan(_plan_gravity_step): _plan_gravity_step = float(ball.get_effective_gravity()) / float(Engine.physics_ticks_per_second)
+		disturbed = (velocity - _plan_ball_velocity + Vector3(0.0, _plan_gravity_step, 0.0)).length() > PLAN_VELOCITY_JUMP
+	_plan_ball_velocity = velocity
+	_plan_velocity_tick = now
+	if disturbed or _plan_flight != ball.flight_id or _plan_bounces != ball.bounces_since_last_hit or _plan_phase != phase: return true
+	# Moving: never more often than the old interval (a running player moved past PLAN_MOVE_M every tick).
+	var since: float = float(now - _plan_tick) / float(Engine.physics_ticks_per_second)
+	if since < PLAN_INTERVAL_SECONDS: return false
+	if player.global_position.distance_squared_to(_plan_root) > PLAN_MOVE_M * PLAN_MOVE_M: return true
+	return contact.is_empty() and since >= PLAN_EMPTY_RETRY
 
 
 var _distant_load_active: = false
@@ -144,9 +175,18 @@ func _perf_update(delta: float) -> void:
 		var flight: Dictionary = player.debug_visual._last_flight if player.debug_visual else {}
 		if flight.is_empty(): flight = Flight.trace(ball.global_position, ball.linear_velocity, ball.angular_velocity)
 		var now: int = Engine.get_physics_frames()
-		var near_contact: bool = not contact.is_empty() and float(contact.time) <= PLAN_EVERY_TICK_TIME
-		if near_contact or phase >= 1 or _plan_flight != ball.flight_id or float(now - _plan_tick) / float(Engine.physics_ticks_per_second) >= PLAN_INTERVAL_SECONDS:
+		var replan: bool
+		if PerfToggles.human_plan_once:
+			replan = _plan_stale(ball, now)
+		else:
+			var near_contact: bool = not contact.is_empty() and float(contact.time) <= PLAN_EVERY_TICK_TIME
+			replan = near_contact or phase >= 1 or _plan_flight != ball.flight_id or float(now - _plan_tick) / float(Engine.physics_ticks_per_second) >= PLAN_INTERVAL_SECONDS
+		if replan:
+			var _pp: int = Time.get_ticks_usec()
 			_plan_tick = now; _plan_flight = ball.flight_id
+			_plan_bounces = ball.bounces_since_last_hit
+			_plan_root = player.global_position
+			_plan_phase = phase
 			contact = Planner.select(player, ball, flight, old_id)
 			if not contact.is_empty():
 				if phase < 1:
@@ -155,27 +195,36 @@ func _perf_update(delta: float) -> void:
 					# The real released stroke owns its grip. A refreshed trajectory
 					# can move the contact point, never regrip at the impact frame.
 					contact.def.main_grip_rotation_deg = swing_def.main_grip_rotation_deg
+			PerfMonitor.record("human.plan", Time.get_ticks_usec() - _pp)
 		elif not contact.is_empty():
 			contact.time = maxf(0.0, float(contact.time) - delta)   # keep the reused plan's clock honest
+		var _ps: int = Time.get_ticks_usec()
 		_update_superblocks(delta, ball, flight)
+		var _pa: int = Time.get_ticks_usec()
+		PerfMonitor.record("human.superblocks", _pa - _ps)
 		_update_anticipation(delta, ball, flight)
+		PerfMonitor.record("human.anticipation", Time.get_ticks_usec() - _pa)
 	else:
+		# Not tracking: runs every tick between balls, so an empty plan is not reallocated.
 		_distant_load_active = false
-		contact = {}
-		anticipated_contact = {}
-		smash_spot = {}
-		superblock_hint = {}
+		if not contact.is_empty(): contact = {}
+		if not anticipated_contact.is_empty(): anticipated_contact = {}
+		if not smash_spot.is_empty(): smash_spot = {}
+		if not superblock_hint.is_empty(): superblock_hint = {}
 		_superblock_clock = 0.0
 		anticipation_path.clear()
 		if footwork.active and phase <= 0:
 			if phase == 0: cancel()
 			else: footwork.cancel("flight no longer incoming")
+	if _held_pose_pending: _flush_held_pose()
 	var preparation: Dictionary = preparation_contact()
 	posture._ball_incoming = not preparation.is_empty()
 	posture._committed_incoming_posture = preparation.get("posture", -1)
+	var _pw: int = Time.get_ticks_usec()
 	if phase >= 0:
 		var callback_epoch: int = ball.contact_callback_epoch()
 		_advance_swing(delta, ball)
+		PerfMonitor.record("human.swing", Time.get_ticks_usec() - _pw)
 		if callback_epoch != ball.contact_callback_epoch(): return
 	elif _charge_cancel_recovering:
 		var preceding_recovery: PostureDefinition = visual_pose
@@ -193,10 +242,14 @@ func _perf_update(delta: float) -> void:
 			_update_charge_pose(delta)
 		else:
 			var ready: PostureDefinition = _ready_pose(delta)
-			var prepared: PostureDefinition = BodyTurn.sample(DriveMotion.drive_definition(def, 0.0, _contact_is_volley(ball), _visual_spin_mode(), _near_kitchen_context(), _visual_shot_intent()))
-			var target: PostureDefinition = ReadyMotion.prepare(prepared, ready, preparation.time, _contact_is_volley(ball), _near_kitchen_context())
+			var volley: bool = _contact_is_volley(ball)
+			var near_kitchen: bool = _near_kitchen_context()
+			var spin: int = _visual_spin_mode()
+			var intent: String = _visual_shot_intent()
+			var prepared: PostureDefinition = BodyTurn.sample(DriveMotion.drive_definition_shared(def, 0.0, volley, spin, near_kitchen, intent))   # only read below
+			var target: PostureDefinition = ReadyMotion.prepare(prepared, ready, preparation.time, volley, near_kitchen)
 			if float(preparation.time) > ReadyMotion.PREP_START_TIME:
-				var early: PostureDefinition = BodyTurn.sample(DriveMotion.held_drive_pose(def, 0.18, _contact_is_volley(ball), _visual_spin_mode(), _near_kitchen_context(), _visual_shot_intent()))
+				var early: PostureDefinition = BodyTurn.sample(DriveMotion.held_drive_pose(def, 0.18, volley, spin, near_kitchen, intent))
 				target = Path.blend_pose(early, ready, 0.7)
 				if ReadyMotion.GripTransition.supports_both_joined(ready, early): target = early
 			visual_pose = ReadyMotion.blend_pose(ReadyTracking.untracked(visual_pose) if visual_pose != null else ready, target, delta)
@@ -213,8 +266,31 @@ func _perf_update(delta: float) -> void:
 			_apply_visual()
 		else:
 			visual_pose = null
+	var _pi: int = Time.get_ticks_usec()
+	if phase < 0: PerfMonitor.record("human.pose", _pi - _pw)
 	_update_indicators(ball)
 	_remember_sweep(ball)
+	PerfMonitor.record("human.indicators", Time.get_ticks_usec() - _pi)
+
+## Perf (PerfToggles.held_curve_prewarm): the held-HIT curve of a stroke was built the first
+## time that stroke was prepared, mid-rally: 129 pose samples, 13 ms on the Mac and over 20 ms
+## on the phone in one tick, once per stroke per match. They are now built ahead, one stroke
+## every other tick, while no rally is on (before the first serve and between points; called
+## from player.gd every tick). A stroke prepared before its turn still builds on demand.
+var _prewarm_ids: Array = []
+var _prewarm_listed := false
+func prewarm_held_curves() -> void:
+	if not PerfToggles.held_curve_prewarm or Engine.get_physics_frames() % 2 != 0: return
+	if _prewarm_listed and _prewarm_ids.is_empty(): return
+	var game = player.get_parent()
+	if game == null or not "game_state" in game or game.game_state == game.GameState.PLAYING: return
+	if not _prewarm_listed:
+		_prewarm_listed = true
+		for def in PostureLibrary.instance().all_definitions():
+			if def is PostureDefinition and def.has_zone and def.posture_id != 20: _prewarm_ids.append(def.posture_id)
+	if _prewarm_ids.is_empty(): return
+	var def: PostureDefinition = PostureLibrary.instance().get_def(int(_prewarm_ids.pop_back()))
+	if def != null: held_hit_motion.prewarm(def)
 
 func preparation_contact() -> Dictionary:
 	var ball = player._get_ball_ref()
@@ -265,7 +341,7 @@ func release_timing_state() -> Dictionary:
 func _update_superblocks(delta: float, ball, flight: Dictionary) -> void :
 	var held: bool = Input.is_action_pressed("ui_accept") and player.hitting.charge_visual_active and phase < 0 and not _preparation_hold_suppressed and footwork._eligible(ball)
 	if not held:
-		superblock_hint = {}
+		if not superblock_hint.is_empty(): superblock_hint = {}
 		_superblock_clock = 0.0
 		_superblock_held_last = false
 		return
@@ -453,11 +529,18 @@ func begin_held_hit() -> void:
 	_charge_control_clock = false
 	_charge_cancel_recovering = false
 	_charge_recovery_seconds = 0.0
+	_pending_held_delta = 0.0
+	_held_pose_pending = false
 	held_hit_motion.reset(false)
 	var preparation: Dictionary = preparation_contact()
 	if not preparation.is_empty(): held_hit_motion.prewarm(preparation.def, Callable(), "", true)
 
 func set_charge(ratio: float, control_delta: float = -1.0) -> void :
+	var _pt: int = Time.get_ticks_usec()
+	_set_charge(ratio, control_delta)
+	PerfMonitor.record("human.set_charge", Time.get_ticks_usec() - _pt)
+
+func _set_charge(ratio: float, control_delta: float) -> void:
 	if phase >= 1: return
 	charge_ratio = clampf(ratio, 0, 1)
 	_charge_cancel_recovering = false
@@ -479,6 +562,35 @@ func set_charge(ratio: float, control_delta: float = -1.0) -> void :
 
 			_prediction_clock = 0.0
 			_update_anticipation(0.0, ball, flight)
+	if phase < 0 and control_delta >= 0.0:
+		if PerfToggles.touch_on_change and _tick_writes_rig():
+			# The tick writes the rig, so the held pose is advanced there, once per tick, with the
+			# input time gathered since (at 60 fps one pose instead of two; the clock above, which
+			# the charge meter reads, still runs every frame).
+			_pending_held_delta += control_delta
+			_held_pose_pending = true
+			return
+		control_delta += _pending_held_delta
+		_pending_held_delta = 0.0
+		_held_pose_pending = false
+	_advance_held_pose(control_delta)
+
+## Input time gathered for the held pose until the next tick (PerfToggles.touch_on_change).
+var _pending_held_delta: float = 0.0
+var _held_pose_pending: bool = false
+
+func _flush_held_pose() -> void:
+	var gathered: float = _pending_held_delta
+	_pending_held_delta = 0.0
+	_held_pose_pending = false
+	if phase < 0 and _charge_control_clock: _advance_held_pose(gathered)
+
+func _advance_held_pose(control_delta: float) -> void:
+	var _pt: int = Time.get_ticks_usec()
+	_advance_held_pose_inner(control_delta)
+	PerfMonitor.record("human.held_pose", Time.get_ticks_usec() - _pt)
+
+func _advance_held_pose_inner(control_delta: float) -> void:
 	var preparation: Dictionary = _held_preparation(preparation_contact(), maxf(control_delta, 0.0))
 	if preparation.is_empty():
 		if visual_pose == null: visual_pose = _ready_pose(0.0)
@@ -642,6 +754,8 @@ func cancel(suppress_hold: bool = true) -> void :
 	_charge_recovery_seconds = 0.0
 	held_hit_seconds = 0.0
 	_charge_control_clock = false
+	_pending_held_delta = 0.0
+	_held_pose_pending = false
 	held_hit_motion.reset(false)
 	if not preserve_visual: visual_pose = null
 	else: posture.transition_pose_blend = visual_pose
@@ -795,7 +909,7 @@ func _advance_swing(delta: float, ball) -> void :
 	_apply_visual()
 
 func _remember_sweep(ball) -> void :
-	_sweep_valid = phase in [0, 1] and visual_pose != null and ball.flight_id == swing_flight_id
+	_sweep_valid = (phase == 0 or phase == 1) and visual_pose != null and ball.flight_id == swing_flight_id
 	if not _sweep_valid: return
 	_previous_ball = ball.global_position
 	_previous_paddle_transform = player.paddle_node.global_transform
@@ -969,6 +1083,8 @@ func _fit_planned_contact_grip(selected: Dictionary, ball, previous: PostureDefi
 	# grip back into the source stroke. Wind-up and strike blend toward that
 	# grip before impact; the phase-one latch below remains immutable.
 	var base: PostureDefinition = selected.def
+	# Simple hands (PerfToggles.simple_hands): the stroke keeps its posed grip.
+	if PerfToggles.simple_hands: return BodyTurn.sample(base).duplicate(false)
 	var game = player.get_parent()
 	var context: Dictionary = _capture_motion_context(selected, ball)
 	if phase < 0:

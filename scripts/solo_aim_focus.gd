@@ -20,10 +20,12 @@ const Estimate = preload("res://scripts/aim_preview_estimate.gd")
 const ContactPlanner = preload("res://scripts/incoming_contact_planner.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const LensShader = preload("res://shaders/slowmo_lens.gdshader")
+const GroundShadows = preload("res://scripts/fx/ground_shadows.gd")
 const FocusDimShader = preload("res://shaders/solo_aim_focus_dim.gdshader")
 const VISUAL_ENTER_USEC: = 120000
 const PreviewStabilizer = preload("res://scripts/ui/aim_preview_stabilizer.gd")
 const ArcStyle = preload("res://scripts/ui/aim_arc_style.gd")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
 var game
 var active: = false
 var holding: = false
@@ -292,6 +294,7 @@ func _hide_presentation() -> void :
 	_preview_stabilizer.reset()
 	if _dim: _dim.hide()
 	if _lens: _lens.hide()
+	GroundShadows.lens_soften = 0.0
 	if _drawing: _drawing.hide()
 
 func _update_presentation(now_usec: int) -> void :
@@ -364,6 +367,7 @@ func _update_presentation(now_usec: int) -> void :
 	_presentation = true
 	_dim.visible = dim_amount > 0.0 and blur_amount <= 0.0
 	_lens.visible = blur_amount > 0.0
+	if blur_amount <= 0.0: GroundShadows.lens_soften = 0.0
 	_drawing.visible = show_preview
 	if show_preview: _drawing.queue_redraw()
 
@@ -373,6 +377,7 @@ func _update_presentation(now_usec: int) -> void :
 func _set_lens(camera: Camera3D, size: Vector2, blur_amount: float, dim_amount: float, visual_mix: float, target: Vector3) -> void:
 	var scale: float = Layout.scale_for(size)
 	_lens_material.set_shader_parameter("effect_mix", visual_mix)
+	GroundShadows.lens_soften = blur_amount * visual_mix   # player shadows soften with the lens
 	_lens_material.set_shader_parameter("strength", dim_amount)
 	_lens_material.set_shader_parameter("max_blur", blur_amount * 9.0 * scale / size.x)
 	_lens_material.set_shader_parameter("focus_depth", _ground_range(camera, target))
@@ -429,12 +434,30 @@ func draw_preview(canvas: Control) -> void :
 	if not _presentation: return
 	var scale: float = Layout.scale_for(get_viewport().get_visible_rect().size)
 	var color: = Color(0.82, 1.0, 0.52, 0.92) if preview_hint == "ESTIMATED ARC" else Color(1.0, 0.66, 0.35, 0.95)
-	ArcStyle.draw(canvas, _screen_path, get_viewport().get_visible_rect(), color, scale, int(Settings.get_value("video.focus_arc_style", ArcStyle.DASHED)))
+	# The arc starts at the contact point beside your player: it begins past the sprite
+	# instead of crossing the body (presentation only; the path itself is unchanged).
+	var body: Rect2 = CuePriority.player_screen_rect(game, get_viewport().get_camera_3d())
+	var path: PackedVector2Array = _outside_rect(_screen_path, body.grow(6.0 * scale)) if body.has_area() else _screen_path
+	ArcStyle.draw(canvas, path, get_viewport().get_visible_rect(), color, scale, int(Settings.get_value("video.focus_arc_style", ArcStyle.DASHED)))
 	if not _accuracy_outline.is_empty():
 		canvas.draw_colored_polygon(_accuracy_outline, Color(color, 0.12))
 		canvas.draw_polyline(_accuracy_outline, color, 1.8 * scale, true)
 	else:
 		canvas.draw_arc(_target_screen, 8 * scale, 0, TAU, 24, color, 1.5 * scale, true)
+
+## The screen path with every stretch inside `rect` cut out (INF breaks the run, as
+## aim_arc_style.gd expects).
+static func _outside_rect(path: PackedVector2Array, rect: Rect2) -> PackedVector2Array:
+	var result := PackedVector2Array()
+	for index in path.size():
+		var point: Vector2 = path[index]
+		var inside: bool = point.is_finite() and rect.has_point(point)
+		if not inside and point.is_finite() and index > 0 and path[index - 1].is_finite() and rect.has_point((point + path[index - 1]) * 0.5): inside = true
+		if inside or not point.is_finite():
+			if result.is_empty() or result[-1].is_finite(): result.append(Vector2.INF)
+		else:
+			result.append(point)
+	return result
 
 func _notification(what: int) -> void :
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_WINDOW_FOCUS_OUT]: cancel()

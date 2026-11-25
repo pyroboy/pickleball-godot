@@ -553,7 +553,10 @@ func present_live_swing_physics(delta: float) -> bool:
 	# Consume this physics step against the previously owned physical anchors
 	# before forecasting a new hand frame. Subsequent solves use zero delta.
 	_player.posture.transition_pose_blend = _live_swing_presentation.presented
-	_player.posture.force_posture_update(_live_swing_presentation.presented)
+	# Perf (PerfToggles.swing_restore_light): the new pose is applied right below, so this restore
+	# only places the body and paddle; legs and arms are solved once, on the new pose, instead of
+	# twice a tick for the whole follow-through (like the AI brain's RESTORE_LIGHT).
+	_player.posture.force_posture_update(_live_swing_presentation.presented, not PerfToggles.swing_restore_light)
 	var pose: PostureDefinition = preload("res://scripts/live_joint_preparation_path.gd").sample(_player, _live_swing_presentation.desired, _live_swing_presentation.presented, delta)
 	_live_swing_presentation.presented = pose
 	_player.posture.transition_pose_blend = pose

@@ -4,6 +4,8 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 
 const _Flight = preload("res://scripts/ball_flight_predictor.gd")
 const ServeStyles = preload("res://scripts/serve_style.gd")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
+const LabelPill = preload("res://scripts/ui/label_pill_3d.gd")
 
 
 
@@ -44,6 +46,8 @@ var _smash_label: Label3D
 var _smash_material: StandardMaterial3D
 var _smash_key: String = ""
 var _execution_area_showing := false
+## The smash guide has something to show this frame (read by player_cue_priority.gd).
+var smash_wanted := false
 
 
 var _last_trajectory_key: String = ""
@@ -266,6 +270,7 @@ func _create_landing_cursor() -> void :
 	landing_label.no_depth_test = true
 	landing_label.visible = false
 	add_child(landing_label)
+	LabelPill.attach(landing_label)
 	_create_smash_marker()
 
 func _create_smash_marker() -> void :
@@ -307,6 +312,7 @@ func _create_smash_marker() -> void :
 	_smash_label.outline_size = 12
 	_smash_label.no_depth_test = true
 	_smash_root.add_child(_smash_label)
+	LabelPill.attach(_smash_label)
 
 func _update_smash_marker() -> void :
 	if _smash_root == null or _game == null: return
@@ -316,6 +322,9 @@ func _update_smash_marker() -> void :
 	var spot: Dictionary = human.smash_spot if state > 0 else {}
 	# In position the planned contact is the smash itself; show that point.
 	if state == 2: spot = {"point": human.preparation_contact().point, "target_root": actor.global_position, "path": spot.get("path", PackedVector3Array())}
+	smash_wanted = not spot.is_empty()
+	# One player cue at a time (player_cue_priority.gd).
+	if smash_wanted and CuePriority.current(_game) != CuePriority.SMASH: spot = {}
 	_smash_root.visible = not spot.is_empty()
 	if spot.is_empty():
 		_smash_key = ""
@@ -324,7 +333,10 @@ func _update_smash_marker() -> void :
 	var color: Color = SMASH_READY_COLOR if ready else SMASH_MOVE_COLOR
 	_smash_material.albedo_color = Color(color, 0.9)
 	_smash_label.modulate = color
-	_smash_label.text = "SMASH!" if ready else "SMASH HERE"
+	var smash_text: String = "SMASH!" if ready else "SMASH HERE"
+	if _smash_label.text != smash_text:
+		_smash_label.text = smash_text
+		LabelPill.fit(_smash_label)
 	var point: Vector3 = spot.point
 	var ground: = Vector3(spot.target_root.x, actor.COURT_FLOOR_Y + 0.02, spot.target_root.z)
 	_smash_ring.global_position = ground
@@ -388,4 +400,7 @@ func _update_player_cursor(delta: float = 1.0 / 60.0) -> void :
 	_cursor_material.albedo_color = color
 	_cursor_material.emission = color
 	landing_label.modulate = color
-	landing_label.text = "CHECK ARC" if estimated_warning else "AIM" if wall else "PERFECT TRAINING" if context.perfect else "ESTIMATED SPREAD"
+	var landing_text: String = "CHECK ARC" if estimated_warning else "AIM" if wall else "PERFECT TRAINING" if context.perfect else "ESTIMATED SPREAD"
+	if landing_label.text != landing_text:
+		landing_label.text = landing_text
+		LabelPill.fit(landing_label)

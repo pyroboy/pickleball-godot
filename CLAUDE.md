@@ -34,6 +34,26 @@ are in `docs/ROADMAP.md`. Read it before planning work.
   also sizes the seeds), start with one seed and justify more (`WHY="..."`, required), stop when
   the run can't change the decision, then recalibrate instead of re-running. Each run appends to
   `docs/BENCH_LOG.md`; fill in its Verdict, and check the log before a new bench.
+- Performance work follows `docs/PERFORMANCE_PLAN.md` (phone data, budgets, step order) and
+  section 6 of `docs/BENCH_RULES.md`:
+  - **The phone is the judge** for frame rate and heat. The M5 Mac runs the same work 2-3x
+    faster and barely throttles: a Mac number never signs off phone performance. Check on the
+    phone with a 3-10 minute match, then pull `Documents/perf.jsonl` (recipe in the plan).
+  - **Timing only from serial runs** (`tools/bench.sh` or `SERIAL=1`): side-by-side seeds
+    inflate ms/tick by 10-15%. Side-by-side is fine for gameplay results.
+  - **Results may change** in performance refactors, cleanups and native ports (user's call,
+    2026-11-25): no need for `IDENTICAL`, but the bench reports what moved (hits, misses,
+    stretched contacts, rally length, faults, pose rules) and the notes say why the new way is
+    better. Visual-only work still expects `IDENTICAL`.
+  - **Report the budget** with every gameplay-touching change: serial tick cost and worst
+    tick against the plan's budgets; say so when a change raises them.
+  - **Switches:** each optimisation that can change results has a switch in `scripts/debug/perf_toggles.gd`;
+    `TOGGLES=name=0,other=0` turns some off for one bench run (A/B on the same tree).
+  - **Native code:** `native/` is a C++ GDExtension (classes `PickleNative`; `PickleCards`: the card build, twin = the loop in `pixel_card_rig.gd` `_draw_cards`; `PickleReplay`: the rally recorder, twin = the script paths in `scripts/fx/photo_history.gd`) for pure-maths hot loops; rebuild with
+    `tools/build_native.sh` after editing `native/src`. Every native function keeps its GDScript twin
+    (`scripts/native_math.gd`, switch `native_math`): change both, and bench with the switch on and off.
+  - The all-AI bench cannot see the human seat (your player's planning, touch input): use the
+    scripted human-seat run (plan, working method) or the phone for those.
 - Gameplay or animation calls: `OBJ="..." tools/bench_seeds.sh <name> [secs=120] ["1"]` runs the bench
   per seed (low priority, about 30 s each), sums points, hits and the pose checks below, and prints the
   animation rules as PASS / FAIL (no late pose switch, paddle meets ball, no snap-back, wind-up wobble,

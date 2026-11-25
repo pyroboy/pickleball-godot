@@ -9,7 +9,8 @@ extends Node3D
 ## Everything is real low-poly 3D (scripts/environment/env_mesh_kit.gd, env_figures.gd)
 ## shaded in three flat bands (shaders/env_toon.gdshader) and pixelated by the
 ## half-resolution PixelPost. Static props are one merged mesh, swaying cloth another,
-## every figure part one MultiMesh, contact shadows one more.
+## every figure part one MultiMesh. Static shadows are one baked mask drawn by one ground
+## layer (see MASK_NEAR); the moving figures' ovals one more MultiMesh.
 ##
 ## Gameplay is untouched: nothing has collision, nothing goes under a player, nothing
 ## writes game state, and randomness uses this node's own seeded generator (the global
@@ -30,19 +31,43 @@ const ToonShader := preload("res://shaders/env_toon.gdshader")
 const FloorShader := preload("res://shaders/env_floor.gdshader")
 const ShadowShader := preload("res://shaders/env_shadow.gdshader")
 const NetProfile := preload("res://scripts/net_profile.gd")
+const Sun := preload("res://scripts/graphics/sun_light.gd")
+const ShadowMask := preload("res://scripts/graphics/shadow_mask.gd")
+const MaskShader := preload("res://shaders/shadow_ground.gdshader")
+const MaterialPrewarm := preload("res://scripts/graphics/material_prewarm.gd")
 const PixelFont := preload("res://assets/fonts/arjo_pixel.fnt")
 
 const SEED := 20261122
 const GROUND_Y := 0.066          # just under the court surface (top 0.075)
 const SLAB := Vector2(7.5, 14.0)
+const VIEW_CULL_UP := 0.9         # crowd cull sphere centre above the feet (m)
+const VIEW_CULL_R := 2.2          # and radius: a standing figure with props and its shadow
 const TICK := 1.0 / 12.0         # figures move in 12 Hz steps (pixel-art timing, no crawl)
-const LIGHT := Vector3(-0.4, 0.7, 0.6)
-## Background push (env_toon.gdshader `push`): outside the court lines everything leans
-## toward this light grey (the PixelPost grade warms it), from 2 m out to the full share
-## 7 m out (plus a little desaturation, `push_desat` in the shaders), so play reads
-## first. Props, floor, crowd cards and signs all use it; players, ball and net do not.
-const PUSH_COL := "#c4c2bd"
-const PUSH := Vector3(2.0, 7.0, 0.24)
+## Golden-hour distance fog (env_toon.gdshader `fog`): by distance outside the court lines
+## everything leans toward the warm peach horizon (Sun.HORIZON_COLOR, the sky's horizon
+## in game.gd): none for the first FOG.x metres, then 1 - exp(-FOG.y * metres) up to
+## FOG.z. The crowd, the near stalls and the hall front keep full colour (< 6 % at 13 m
+## out); the far rows of houses and trees recede (about 20 % at 25 m, 45 % at 60 m, 65 %
+## at the horizon rows). Props, floor, shadows, crowd cards and signs all use it; players,
+## ball, net and court do not.
+const PUSH_COL := "#f5c79e"      # Sun.HORIZON_COLOR as hex (signs, `_label`)
+const FOG := Vector3(8.0, 0.02, 0.7)
+## Static shadows (shadow rework 2026-11-25): every prop registers its caster shape
+## (`_shadow`, `_shadow_box`, `_shadow_points`: corner points, node space) and `_bake_mask`
+## projects them along the shared sun (Sun.project) into one L8 opacity mask over the
+## visible ground (scripts/graphics/shadow_mask.gd), unioned by max. Baked at build and
+## again on a change of ends or a court-view swap, never per frame. Drawn by one multiply
+## layer (shaders/shadow_ground.gdshader) just above the court lines, under the players'
+## shadows. Near mask: 4 cm texels (about a card-art pixel) around both ends of the slab,
+## published to ShadowMask; far mask: 15 cm texels for the house rows further out.
+const MASK_NEAR := Rect2(-20.0, -34.0, 40.0, 68.0)    # world x, z, size (m)
+const MASK_NEAR_TEXEL := 0.04
+const MASK_FAR := Rect2(-52.5, -76.5, 105.0, 153.0)
+const MASK_FAR_TEXEL := 0.15
+const MASK_Y := 0.078            # over the court lines (0.077), under the players' shadows
+## People, animals and the pandesal cart move, so theirs are small ovals that follow them
+## (env_shadow.gdshader): from the feet along the sun, half the full cast length.
+const FIG_REACH := 0.5
 const COURT_HALF := Vector2(3.05, 6.705)
 const PLAYING := 2               # game.gd GameState.PLAYING
 const NET_REASONS := ["BALL_IN_NET", "NET_POST", "NET_TOUCH", "NET_PLANE"]
@@ -64,6 +89,15 @@ var _build_end := 0              # 0: hall end (-z), 1: pandesal end (+z) while 
 var _live_end := 0               # the end the camera looks at
 var _near_state: Dictionary = {} # pandesal end runtime (vendor, queue, jeepney, ...)
 var _floor: ShaderMaterial
+var _shadow_mat: ShaderMaterial   # env_shadow: the moving figures' ovals
+var _mask_mat: ShaderMaterial     # shadow_ground: the baked static mask
+var _cloud_mat: ShaderMaterial
+var _mask_near: Image
+var _mask_far: Image
+var _tex_near: ImageTexture
+var _tex_far: ImageTexture
+var _casters: Array = []          # [PackedVector3Array points, opacity, banderita, world space, ground y]
+var _figs: Array = []             # moving shadows: [pos (node space), radius, height]
 
 var _mm_fig: MultiMesh
 var _mm_shadow: MultiMesh
@@ -87,7 +121,6 @@ var _hen_trail: Array = []       # the hen's recent positions, newest first
 var _dog: Dictionary = {}
 var _scorer: Dictionary = {}
 var _neighbour: Dictionary = {}
-var _shadow_specs: Array = []    # [pos2, size2, shape]
 
 var _ball: Node
 var _connected := {}
@@ -106,8 +139,10 @@ func setup(game: Node, parent: Node3D) -> void:
 	_toon = ShaderMaterial.new()
 	_toon.shader = ToonShader
 	_toon.set_shader_parameter("gain", Pal.GAIN)
-	_toon.set_shader_parameter("light_dir", LIGHT)
-	_toon.set_shader_parameter("haze", Pal.hex("#c9d9e2"))
+	Sun.set_flipped(false)   # a new match starts unflipped (static state outlives the scene)
+	_toon.set_shader_parameter("light_dir", Sun.to_sun())
+	# the side away from the sun is shaded exactly like the ground in a cast shadow
+	_toon.set_shader_parameter("dark_band", Vector3(1.07, 1.0, 0.88) * _shade_factor(Sun.SHADOW_OPACITY))
 	_set_push(_toon)
 	var apron := game.find_child("CourtApron", true, false)
 	if apron is Node3D: apron.visible = false       # the floor shader draws slab and dirt
@@ -143,7 +178,6 @@ func setup(game: Node, parent: Node3D) -> void:
 	add_child(_near)
 	_toon_n = _toon.duplicate()
 	_grimy_n = _grimy.duplicate()
-	for m in [_toon_n, _grimy_n]: m.set_shader_parameter("light_dir", _near.transform.basis * LIGHT)
 	_build_end = 1
 	var nb := Kit.begin()
 	var np := Kit.begin()
@@ -153,11 +187,15 @@ func setup(game: Node, parent: Node3D) -> void:
 	_add_mesh("PandesalProps", np, _toon_n, _near)
 	_add_mesh("PandesalCloth", nc, _toon_n, _near)
 	_build_end = 0
+	_build_clouds()
 	_build_figures()
 	_build_shadows()
 	# pause menu "Court view": which end's scenery faces the camera (saved setting)
 	Settings.settings_changed.connect(func(key: String, _v): if key == "video.court_view_swapped": _apply_view())
 	_apply_view()
+	# The match (not the title's quiet court): draw its materials once while it loads.
+	if game.get_script() != null and str(game.get_script().resource_path) == "res://scripts/game.gd":
+		MaterialPrewarm.run(game)
 
 
 # ------------------------------------------------------------------ helpers
@@ -166,16 +204,17 @@ func _c(code: String) -> Color:
 	return Pal.hex(code)
 
 
+## The distance fog on a material (env_toon, env_floor, env_shadow, crowd cards).
 func _set_push(m: ShaderMaterial) -> void:
-	m.set_shader_parameter("push_col", Pal.hex(PUSH_COL))
-	m.set_shader_parameter("push", PUSH)
+	m.set_shader_parameter("fog_col", Pal.comp(Sun.HORIZON_COLOR))
+	m.set_shader_parameter("fog", FOG)
 	m.set_shader_parameter("court_half", COURT_HALF)
 
 
-## The background push share at a point (this node's space; symmetric, so either end).
+## The fog share at a point (this node's space; symmetric, so either end).
 func _push_at(pos: Vector3) -> float:
 	var out := Vector2(maxf(absf(pos.x) - COURT_HALF.x, 0.0), maxf(absf(pos.z) - COURT_HALF.y, 0.0)).length()
-	return PUSH.z * smoothstep(PUSH.x, PUSH.y, out)
+	return FOG.z * (1.0 - exp(-FOG.y * maxf(out - FOG.x, 0.0)))
 
 
 func _add_mesh(label: String, st: SurfaceTool, material: Material = null, parent: Node3D = null) -> void:
@@ -192,10 +231,69 @@ func _end_pos(v: Vector3, end := -1) -> Vector3:
 	return Vector3(-v.x, v.y, -v.z) if (_build_end if end < 0 else end) == 1 else v
 
 
-func _shadow(pos: Vector3, size: Vector2, rect := false) -> int:
-	pos = _end_pos(pos)
-	_shadow_specs.append([Vector2(pos.x, pos.z), size, 1.0 if rect else 0.0])
-	return _shadow_specs.size() - 1
+## A static caster for the baked shadow mask: a prism with an ellipse (or rectangle)
+## footprint of `size` (x, z) at `pos`, from `lift` up to `lift + height` (end-local, like
+## every prop). Its shadow is the projection of the prism's corners along the sun.
+func _shadow(pos: Vector3, size: Vector2, rect := false, height := 0.0, lift := 0.0) -> void:
+	var ring := PackedVector2Array()
+	if rect:
+		for c in [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]: ring.append(c * size * 0.5)
+	else:
+		var n := 12 if maxf(size.x, size.y) > 0.8 else 8
+		for k in n: ring.append(Vector2(cos(TAU * k / n), sin(TAU * k / n)) * size * 0.5)
+	var pts: Array = []
+	for y: float in [lift, lift + maxf(height, 0.02)]:
+		for o in ring: pts.append(pos + Vector3(o.x, y, o.y))
+	_shadow_points(pts)
+
+
+## A static caster box (centre, size, turn), end-local.
+func _shadow_box(center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> void:
+	var pts: Array = []
+	for k in 8:
+		pts.append(center + basis * (Vector3(1 if k & 1 else -1, 1 if k & 2 else -1, 1 if k & 4 else -1) * size * 0.5))
+	_shadow_points(pts)
+
+
+## A static caster from its corner points (end-local); its shadow is their projection's
+## convex hull. `world`: the points are already world space (the net, built by net.gd).
+func _shadow_points(pts: Array, opacity := Sun.SHADOW_OPACITY, flag := false, world := false, ground := 0.0) -> void:
+	var out := PackedVector3Array()
+	for p: Vector3 in pts: out.append(p if world else _end_pos(p))
+	_casters.append([out, opacity, flag, world, ground])
+
+
+## A moving figure's shadow (person, animal, cart): a small oval from its feet along the
+## sun (radius m, height m). Returns its index for `_move_shadow`.
+func _figure_shadow(pos: Vector3, radius: float, height: float) -> int:
+	_figs.append([_end_pos(pos), radius, height, false])
+	return _figs.size() - 1
+
+
+## The toon shade band's linear factor for a shadow at `opacity`: what makes a lit face
+## show on screen as lit x mix(1, SHADOW_COLOR, opacity), like the ground in a cast shadow.
+## Opaque environment colours go through the tonemap, so the factor is found through the
+## same display -> stored LUT as every environment colour (env_palette.gd), on bare cement.
+## (The shadow layers themselves multiply what is already on screen: their factor is
+## mix(1, SHADOW_COLOR, opacity) as is; measured 2026-11-25, rendered ratio = factor^1.04.)
+func _shade_factor(opacity: float) -> Vector3:
+	var g := Color("#a3a19a")
+	var c := Sun.SHADOW_COLOR
+	var f := Vector3(lerpf(1.0, c.r, opacity), lerpf(1.0, c.g, opacity), lerpf(1.0, c.b, opacity))
+	var lit := Pal.comp(g).srgb_to_linear()
+	var dark := Pal.comp(Color(g.r * f.x, g.g * f.y, g.b * f.z)).srgb_to_linear()
+	return Vector3(dark.r / lit.r, dark.g / lit.g, dark.b / lit.b)
+
+
+## Banderitas from a to b (sag, count), flags and their shadows; shared by both ends.
+## Each flag's shadow is its own triangle projected along the sun (the rope is too thin).
+func _banderitas(cloth: SurfaceTool, a: Vector3, b: Vector3, sag: float, n: int, flags: Array) -> void:
+	Kit.rope(cloth, a, b, sag, 0.015, _c("#efe8d8"), 12, 0.0)
+	for i in n:
+		var p := Kit.rope_point(a, b, sag, (i + 0.5) / n)
+		var tri := [p + Vector3(-0.13, 0, 0), p + Vector3(0.0, -0.3, 0.01), p + Vector3(0.13, 0, 0)]
+		Kit.tri(cloth, tri[0], tri[1], tri[2], flags[i % flags.size()], 0.55, true)
+		_shadow_points(tri, Sun.SHADOW_OPACITY, true)
 
 
 func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0) -> Label3D:
@@ -204,7 +302,8 @@ func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0)
 	l.font = PixelFont
 	l.font_size = 9        # the bitmap font's own size (arjo_pixel.fnt), so it is not rescaled
 	l.pixel_size = height / 9.0
-	l.modulate = color.lerp(Color(PUSH_COL), _push_at(pos))   # signs sit back with their walls
+	l.modulate = color      # never greyed: thin 1-texel strokes need their full contrast
+	l.alpha_cut = Label3D.ALPHA_CUT_DISCARD   # hard glyph edges, opaque pass (no blending/sorting)
 	l.outline_size = 0
 	l.shaded = false
 	l.double_sided = false
@@ -221,13 +320,15 @@ func _label(text: String, pos: Vector3, height: float, color: Color, yaw := 0.0)
 func _build_floor(game: Node) -> void:
 	_floor = ShaderMaterial.new()
 	_floor.shader = FloorShader
-	var cols := {"cement": "#a3a19a", "cement_dk": "#96948d", "cement_lt": "#b0aea6", "patch_col": "#85837c",
-		"crack": "#66635e", "stain": "#8d877b", "bball": "#d6bb5e", "kitchen": "#7fa07c", "gutter": "#3b3936",
+	# cement tones kept close together (wear reads as texture, not as camouflage patches)
+	var cols := {"cement": "#a3a19a", "cement_dk": "#9a9891", "cement_lt": "#aba9a2", "patch_col": "#8f8d86",
+		"crack": "#6c6964", "stain": "#958f84", "bball": "#d6bb5e", "kitchen": "#7fa07c", "gutter": "#3b3936",
 		"grate": "#6c6a66", "dirt": "#a88a68", "dirt_dk": "#957857", "dirt_lt": "#b89a78", "grass": "#7fa356",
 		"grass_dk": "#668c47",
-		# worn slate blue-green court paint: darker than the cement and the kitchen, low in
-		# chroma, away in hue from the ball (yellow-green) and from both teams' kits
-		"court_paint": "#345f6c"}
+		# slate blue-green court paint: darker than the cement and the kitchen, a little
+		# richer than the old worn #345f6c (same hue), still away from the ball
+		# (yellow-green) and from both teams' kits (blue, red/orange)
+		"court_paint": "#2b5e6e"}
 	for k in cols: _floor.set_shader_parameter(k, _c(cols[k]))
 	_floor.set_shader_parameter("gain", Pal.GAIN)
 	_floor.set_shader_parameter("slab_half", SLAB)
@@ -335,6 +436,20 @@ func _build_net_poles(game: Node, st: SurfaceTool) -> void:
 			var hb := Basis(Vector3.UP, PI * 0.5 if bi == 0 else 0.25)
 			for hz: float in [-0.09, 0.09]:
 				Kit.box(st, c + hb * Vector3(hz, 0.1, 0), Vector3(0.12, 0.004, 0.12), hole, hb)
+			_shadow_box(c, Vector3(0.4, 0.2, 0.2), hb)
+		_shadow(base - Vector3(0, base.y, 0), Vector2(0.1, 0.1), false, base.y + h)   # bamboo pole
+	# The net's own shadow (world space, the net stands at z = 0 on the court): the open
+	# weave light (Sun.NET_OPACITY), the top tape full; same columns as scripts/net.gd.
+	var cols := 24
+	for i in cols:
+		var xa := lerpf(-NetProfile.HALF_SPAN, NetProfile.HALF_SPAN, float(i) / cols)
+		var xb := lerpf(-NetProfile.HALF_SPAN, NetProfile.HALF_SPAN, float(i + 1) / cols)
+		var fy: float = NetProfile.FLOOR_Y
+		var ta: float = fy + NetProfile.height_at(xa)
+		var tb: float = fy + NetProfile.height_at(xb)
+		var tape: float = NetProfile.TAPE_WIDTH
+		_shadow_points([Vector3(xa, fy, 0), Vector3(xb, fy, 0), Vector3(xb, tb - tape, 0), Vector3(xa, ta - tape, 0)], Sun.NET_OPACITY, false, true, fy)
+		_shadow_points([Vector3(xa, ta - tape, 0), Vector3(xb, tb - tape, 0), Vector3(xb, tb, 0), Vector3(xa, ta, 0)], Sun.SHADOW_OPACITY, false, true, fy)
 
 
 # ------------------------------------------------------------------ far buildings
@@ -419,8 +534,8 @@ func _build_house(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	_gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 0.5, zb - 0.3, 5.75, 5.15, true)
 	for tx: float in [-10.6, -7.8]:   # tyres on the roof
 		Kit.cylinder(st, Vector3(tx, 5.5, -19.6), 0.32, 0.32, 0.12, _c("#2f2c2e"), 8)
-	_shadow(Vector3(cx + 0.6, 0, zf - 0.6), Vector2(x1 - x0 + 1.0, 1.6), true)
-	_shadow(Vector3(x1 + 1.1, 0, (zf + zb) * 0.5), Vector2(2.2, zf - zb), true)
+	# cast shadow: the footprint (balcony included) swept along the sun by the roof height
+	_shadow(Vector3(cx, 0, (zf + 1.0 + zb) * 0.5), Vector2(x1 - x0 + 0.6, zf + 1.0 - zb), true, 5.6)
 
 
 const HALL := {"x0": -6.2, "x1": -0.6, "zf": -21.0, "zb": -27.0, "floor": 0.45, "porch": 1.6}
@@ -545,8 +660,7 @@ func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
 		Kit.cylinder(st, Vector3(px, 0, pf + 0.45), 0.2, 0.25, 0.4, _c("#b5603e"), 6)
 		for k in 3:
 			Kit.box(st, Vector3(px + (k - 1) * 0.1, 0.55 + (k % 2) * 0.12, pf + 0.45), Vector3(0.22, 0.32, 0.22), [_c("#5f9a55"), _c("#6fab5e"), _c("#4f8a49")][k], Basis(Vector3.UP, k * 0.7))
-	_shadow(Vector3(cx + 0.6, 0, pf + 0.3), Vector2(x1 - x0 + 1.0, 1.2), true)
-	_shadow(Vector3(x1 + 0.8, 0, (zf + zb) * 0.5), Vector2(1.6, zf - zb), true)
+	_shadow(Vector3(cx, 0, (pf + zb) * 0.5), Vector2(x1 - x0 + 0.4, pf - zb), true, 4.6)
 	# flagpole with a Philippine flag that waves (cloth mesh: sway grows along the flag)
 	var fx := 0.4
 	var fz := -19.0
@@ -554,7 +668,9 @@ func _build_hall(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	Kit.cylinder(st, Vector3(fx, 0.3, fz), 0.05, 0.035, 6.8, _c("#e8e6e0"), 6)
 	Kit.cylinder(st, Vector3(fx, 7.1, fz), 0.07, 0.07, 0.08, _c("#d8b84a"), 6)
 	_flag(cloth, Vector3(fx + 0.05, 7.0, fz))
-	_shadow(Vector3(fx, 0, fz), Vector2(0.8, 0.5))
+	_shadow(Vector3(fx, 0, fz), Vector2(0.6, 0.6), true, 0.3)            # plinth
+	_shadow(Vector3(fx, 0, fz), Vector2(0.12, 0.12), false, 7.15)       # flagpole
+	_shadow_box(Vector3(fx + 0.05 + 0.65, 6.675, fz), Vector3(1.3, 0.65, 0.02))   # the flag (hung flat)
 
 
 func _flag(cloth: SurfaceTool, hoist_top: Vector3) -> void:
@@ -640,18 +756,17 @@ func _build_store(st: SurfaceTool) -> void:
 	Kit.box(st, Vector3(3.25, 0.42, -18.05), Vector3(0.9, 0.84, 0.6), _c("#ecebe6"))
 	Kit.box(st, Vector3(3.25, 0.86, -18.05), Vector3(0.92, 0.05, 0.62), _c("#3e7fd0"))
 	Kit.box(st, Vector3(3.25, 0.6, -17.74), Vector3(0.5, 0.12, 0.01), _c("#d23b34"))
-	_shadow(Vector3(3.25, 0, -18.05), Vector2(1.0, 0.7), true)
+	_shadow(Vector3(3.25, 0, -18.05), Vector2(0.95, 0.65), true, 0.9)
 	Kit.box(st, Vector3(6.95, 0.38, -17.75), Vector3(0.9, 0.06, 0.32), _c("#9a7048"))
 	for lx: float in [6.6, 7.3]: Kit.box(st, Vector3(lx, 0.18, -17.75), Vector3(0.06, 0.36, 0.28), _c("#7d5638"))
-	_shadow(Vector3(6.95, 0, -17.75), Vector2(1.0, 0.4), true)
+	_shadow(Vector3(6.95, 0, -17.75), Vector2(0.95, 0.36), true, 0.4)
 	Kit.cylinder(st, Vector3(8.55, 0, -18.8), 0.17, 0.17, 0.6, _c("#c9332c"), 8)
 	Kit.cylinder(st, Vector3(8.55, 0.6, -18.8), 0.07, 0.07, 0.08, _c("#b9bcc0"), 6)
 	Kit.box(st, Vector3(8.2, 2.1, zf + 0.06), Vector3(0.22, 0.3, 0.1), _c("#b9bcc0"))
 	Kit.beam(st, Vector3(8.2, 2.25, zf + 0.06), Vector3(8.2, 3.3, zf + 0.06), 0.025, _c("#2e2c30"))
 	# a blue tarp patched over a leaky part of the awning
 	Kit.quad(st, Vector3(4.0, 2.53, zf + 0.75), Vector3(4.0, 2.66, zf + 0.15), Vector3(5.4, 2.66, zf + 0.15), Vector3(5.4, 2.53, zf + 0.75), _c("#3e7fd0"))
-	_shadow(Vector3(cx + 0.5, 0, zf - 0.2), Vector2(x1 - x0 + 0.8, 1.0), true)
-	_shadow(Vector3(x1 + 0.6, 0, (zf + zb) * 0.5), Vector2(1.2, zf - zb), true)
+	_shadow(Vector3(cx, 0, (zf + 0.8 + zb) * 0.5), Vector2(x1 - x0 + 0.4, zf + 0.8 - zb), true, 3.4)
 
 
 func _build_poles(st: SurfaceTool, cloth: SurfaceTool) -> void:
@@ -666,7 +781,9 @@ func _build_poles(st: SurfaceTool, cloth: SurfaceTool) -> void:
 		for ix: float in [-0.65, 0.0, 0.65]:
 			Kit.cylinder(st, Vector3(x + ix, 7.1, z), 0.04, 0.03, 0.12, _c("#e8e6e0"), 5)
 		tops.append(Vector3(x, 7.2, z))
-		_shadow(Vector3(x, 0, z), Vector2(0.4, 0.3))
+		_shadow(Vector3(x, 0, z), Vector2(0.24, 0.24), false, 7.6)
+		_shadow_box(Vector3(x, 7.05, z), Vector3(1.6, 0.1, 0.1))           # crossarm
+	_shadow(Vector3(9.55, 0, z), Vector2(0.44, 0.44), false, 0.6, 5.6)     # transformer
 	Kit.cylinder(st, Vector3(9.55, 5.6, z), 0.22, 0.22, 0.6, _c("#7f868a"), 8)                   # transformer
 	# wires: across, off to both sides, and a few strays toward the houses behind
 	for ix: float in [-0.65, 0.0, 0.65]:
@@ -678,16 +795,8 @@ func _build_poles(st: SurfaceTool, cloth: SurfaceTool) -> void:
 	Kit.rope(st, Vector3(9.3, 6.0, z), Vector3(4.0, 3.6, -22.0), 0.5, 0.022, wire, 6)
 	# banderitas between the poles, never over the court
 	# high enough to hang above the rooflines on screen, not across the hall sign
-	var a := Vector3(-9.3, 6.3, z + 0.05)
-	var b := Vector3(9.3, 6.3, z + 0.05)
-	Kit.rope(cloth, a, b, 0.65, 0.015, _c("#efe8d8"), 12, 0.0)
 	var flags := [_c("#e0473b"), _c("#f2c84b"), _c("#3e7fd0"), _c("#f2f0ea"), _c("#7cc490"), _c("#f29ac0")]
-	var n := 46
-	for i in n:
-		var t := (i + 0.5) / n
-		var p := Kit.rope_point(a, b, 0.65, t)
-		var c: Color = flags[i % flags.size()]
-		Kit.tri(cloth, p + Vector3(-0.13, 0, 0), p + Vector3(0.0, -0.3, 0.01), p + Vector3(0.13, 0, 0), c, 0.55, true)
+	_banderitas(cloth, Vector3(-9.3, 6.3, z + 0.05), Vector3(9.3, 6.3, z + 0.05), 0.65, 46, flags)
 
 
 func _build_tricycle(st: SurfaceTool, at: Vector3, body: Color, yaw: float) -> void:
@@ -718,7 +827,7 @@ func _build_tricycle(st: SurfaceTool, at: Vector3, body: Color, yaw: float) -> v
 			put.call(Vector3(px, 1.35, pz), Vector3(0.05, 0.85, 0.05), chrome)
 	put.call(Vector3(0.45, 1.8, 0.05), Vector3(1.3, 0.08, 1.7), body.darkened(0.15))
 	put.call(Vector3(0.5, 1.25, 0.72), Vector3(0.9, 0.5, 0.03), _c("#9ec9e8"))
-	_shadow(at + Vector3(0.3, 0, -0.1), Vector2(1.9, 2.0))
+	_shadow(at + Vector3(0.3, 0, -0.1), Vector2(1.6, 1.9), false, 1.8)
 
 
 # ------------------------------------------------------------------ crowd, queue, scorer
@@ -731,7 +840,7 @@ func _monobloc(st: SurfaceTool, at: Vector3, yaw: float, col: Color) -> void:
 	for lx: float in [-0.2, 0.2]:
 		for lz: float in [-0.18, 0.2]:
 			Kit.beam(st, at + b * Vector3(lx * 0.9, 0.42, lz * 0.9), at + b * Vector3(lx * 1.15, 0.0, lz * 1.15), 0.045, col)
-	_shadow(at, Vector2(0.6, 0.55))
+	_shadow(at, Vector2(0.5, 0.48), true, 0.9)
 
 
 func _build_crowd_area(st: SurfaceTool) -> void:
@@ -746,10 +855,10 @@ func _build_crowd_area(st: SurfaceTool) -> void:
 	Kit.box(st, Vector3(-3.2, 0.43, -12.4), Vector3(2.7, 0.06, 0.4), wood)
 	for lx: float in [-4.4, -2.0]:
 		Kit.box(st, Vector3(lx, 0.2, -12.4), Vector3(0.08, 0.4, 0.34), wood.darkened(0.15))
-	_shadow(Vector3(-3.2, 0, -12.4), Vector2(2.9, 0.6), true)
+	_shadow(Vector3(-3.2, 0, -12.4), Vector2(2.75, 0.42), true, 0.46)
 	Kit.box(st, Vector3(-0.5, 0.18, -12.3), Vector3(0.5, 0.34, 0.34), _c("#d8453b"))   # cooler
 	Kit.box(st, Vector3(-0.5, 0.37, -12.3), Vector3(0.52, 0.05, 0.36), _c("#f2f0ea"))
-	_shadow(Vector3(-0.5, 0, -12.3), Vector2(0.6, 0.45))
+	_shadow(Vector3(-0.5, 0, -12.3), Vector2(0.54, 0.38), true, 0.4)
 
 
 func _build_queue(st: SurfaceTool) -> void:
@@ -759,7 +868,7 @@ func _build_queue(st: SurfaceTool) -> void:
 		_monobloc(st, Vector3(-6.55, 0, zs[i]), PI * 0.5, cols[i])
 	Kit.box(st, Vector3(-6.55, 0.6, -6.2), Vector3(0.36, 0.3, 0.22), _c("#3b4f7a"))      # sports bag on the middle chair
 	Kit.box(st, Vector3(-6.5, 0.1, -4.7), Vector3(0.18, 0.2, 0.18), _c("#4fa0d8"))       # water bottle tub
-	_shadow(Vector3(-6.5, 0, -4.7), Vector2(0.3, 0.25))
+	_shadow(Vector3(-6.5, 0, -4.7), Vector2(0.22, 0.22), true, 0.2)
 
 
 func _build_scorer(st: SurfaceTool) -> void:
@@ -769,7 +878,7 @@ func _build_scorer(st: SurfaceTool) -> void:
 	for lz: float in [-0.52, 0.52]:
 		for lx: float in [-0.25, 0.25]:
 			Kit.box(st, at + Vector3(lx, 0.36, lz), Vector3(0.05, 0.72, 0.05), wood.darkened(0.15))
-	_shadow(at, Vector2(0.8, 1.3), true)
+	_shadow(at, Vector2(0.66, 1.24), true, 0.77)
 	_monobloc(st, Vector3(6.75, 0, -3.2), -PI * 0.5, _c("#e8e7e0"))
 	# flip scoreboard: an easel facing the court and the camera
 	var yaw := -0.45
@@ -785,7 +894,43 @@ func _build_scorer(st: SurfaceTool) -> void:
 
 # ------------------------------------------------------------------ background
 
+## The background streets (trees, houses: ~16 ms each on the Mac, built twice per world and
+## the world is built at the title and again for the match). Built once per process into
+## their own mesh and appended (PerfToggles.env_bake_cache); the casters they add and the
+## RNG state they leave are replayed, so what follows is built exactly as before. A cached
+## entry is used only from the same RNG state, end and shift it was built from.
+static var _bg_cache: Dictionary = {}
+static var _cache_hooked := false
+
+## The caches outlive every world; drop them when the app shuts down (no leaked resources).
+static func _hook_cache_clear(tree: SceneTree) -> void:
+	if _cache_hooked or tree == null: return
+	_cache_hooked = true
+	tree.root.tree_exiting.connect(func():
+		_bg_cache.clear()
+		_mask_cache.clear())
+
 func _build_background(st: SurfaceTool, z_shift := 0.0) -> void:
+	if not PerfToggles.env_bake_cache:
+		_build_background_raw(st, z_shift)
+		return
+	_hook_cache_clear(get_tree())
+	var key := [z_shift, _build_end, _rng.state]
+	var hit: Dictionary = _bg_cache.get(key, {})
+	if hit.is_empty():
+		var own := Kit.begin()
+		var first := _casters.size()
+		_build_background_raw(own, z_shift)
+		hit = {"mesh": own.commit(), "casters": _casters.slice(first).duplicate(true), "rng": _rng.state}
+		_bg_cache[key] = hit
+	else:
+		_casters.append_array(Array(hit.casters).duplicate(true))
+		_rng.state = int(hit.rng)
+	var mesh: ArrayMesh = hit.mesh
+	if mesh.get_surface_count() > 0: st.append_from(mesh, 0, Transform3D.IDENTITY)
+
+
+func _build_background_raw(st: SurfaceTool, z_shift := 0.0) -> void:
 	# Rows of houses and trees out to the horizon (the phone's top edge sees ~170 m out).
 	var walls := ["#d9c7a3", "#b9cbb2", "#cfb3ae", "#a9bfd2", "#e0d19f", "#c8c0d8", "#e6e2d6"]
 	var rows := [[-32.0, 20.0, 3.0], [-46.0, 28.0, 3.4], [-64.0, 38.0, 4.0], [-88.0, 52.0, 5.0], [-118.0, 70.0, 6.5], [-150.0, 90.0, 8.0]]
@@ -802,7 +947,9 @@ func _build_background(st: SurfaceTool, z_shift := 0.0) -> void:
 				var greens := [_c("#5f9a55"), _c("#6fab5e"), _c("#558c4d")]
 				for k in 3:
 					Kit.box(st, Vector3(x + _rng.randf_range(-0.5, 0.5) * scale_f, hgt * (0.55 + k * 0.17), z + _rng.randf_range(-0.4, 0.4)), Vector3(2.6 - k * 0.6, 1.3, 2.4 - k * 0.5) * scale_f, greens[k], Basis(Vector3.UP, _rng.randf() * PI))
-				if z > -70.0: _shadow(Vector3(x + hgt * 0.15, 0, z), Vector2(2.6, 2.0) * scale_f)
+				if z > -70.0:
+					_shadow(Vector3(x, 0, z), Vector2(0.3, 0.3) * scale_f, false, hgt * 0.6)                  # trunk
+					_shadow(Vector3(x, 0, z), Vector2(2.4, 2.0) * scale_f, false, hgt * 0.45, hgt * 0.5)     # canopy
 				x += _rng.randf_range(2.5, 4.0) * scale_f
 				continue
 			var w := _rng.randf_range(4.0, 7.0) * scale_f
@@ -812,6 +959,32 @@ func _build_background(st: SurfaceTool, z_shift := 0.0) -> void:
 			var zz := z + _rng.randf_range(-1.5, 1.5)
 			var annex := _bg_house(st, x, x + w - 0.3, zz, h, d, wall, scale_f, z > -70.0)
 			x += w + annex + _rng.randf_range(0.2, 1.5)
+
+
+## A few flat golden-hour clouds far out in the sky (the serve camera sees a lot of sky):
+## stacks of flattened boxes in the toon bands, warm cream on top and toward the sun,
+## blue-violet underneath. Static, one mesh, no fog (the sky behind them is not fogged
+## either). Own random generator so the rest of the world builds the same as before.
+func _build_clouds() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = SEED + 7
+	var st := Kit.begin()
+	var tops := [_c("#f8e6d0"), _c("#f4dcc4"), _c("#f9ecdc")]
+	for k in 9:
+		var ang := TAU * (k + rng.randf_range(0.15, 0.85)) / 9.0
+		var r := rng.randf_range(230.0, 300.0)
+		var c := Vector3(cos(ang) * r, rng.randf_range(38.0, 72.0), sin(ang) * r)
+		var along := Basis(Vector3.UP, -ang + PI * 0.5)    # long side across the view
+		var w := rng.randf_range(26.0, 46.0)
+		var col: Color = tops[k % tops.size()]
+		for j in rng.randi_range(3, 5):
+			var off := along * Vector3(rng.randf_range(-0.4, 0.4) * w, rng.randf_range(0.0, 4.0), rng.randf_range(-4.0, 4.0))
+			var size := Vector3(w * rng.randf_range(0.35, 0.6), rng.randf_range(4.0, 7.0), rng.randf_range(10.0, 16.0))
+			Kit.box(st, c + off, size, col, along, false)
+	var mat: ShaderMaterial = _toon.duplicate()
+	mat.set_shader_parameter("fog", Vector3(0.0, 0.0, 0.0))
+	_cloud_mat = mat
+	_add_mesh("BarangayClouds", st, mat)
 
 
 ## Shade strip on a wall just under an overhang (eave, balcony, awning, canopy).
@@ -890,9 +1063,8 @@ func _bg_house(st: SurfaceTool, x0: float, x1: float, zc: float, h: float, d: fl
 		_shade_strip(st, x1, x1 + annex, az + ad * 0.5 + 0.012, ah, 0.35 * s, awall)
 		Kit.box(st, Vector3(x1 + annex * 0.5, ah * 0.5, az + ad * 0.5 + 0.01), Vector3(0.7 * s, 0.6 * s, 0.03), _c("#34303a"))
 	if shadows:
-		# the sun is up and to the left: each house throws a shadow on the ground to its right
-		var right := x1 + annex
-		_shadow(Vector3(right + h * 0.2, 0, zc), Vector2(h * 0.45, d), true)
+		# the low sun from the far left: each house's footprint swept along it by its height
+		_shadow(Vector3((x0 + x1 + annex) * 0.5, 0, zc), Vector2(w + annex, d), true, h)
 	return annex
 
 
@@ -1050,21 +1222,22 @@ func _build_figures() -> void:
 		p.base_prop = base
 		base += PROP_SLOTS
 		var pos: Vector3 = p.pos
-		var moving: bool = p.role == "walker"
-		if pos.y < 0.5 and (pos.z > -18.6 or moving):
-			p.shadow = _shadow(pos, Vector2(0.7, 0.5))
+		var moving: bool = p.role in ["walker", "ballkid", "vendor"] or int(p.get("end", 0)) == 1
+		var authored_z: float = -pos.z if int(p.get("end", 0)) == 1 else pos.z   # "far = -z" at either end
+		if pos.y < 0.5 and (authored_z > -18.6 or moving):
+			p.shadow = _figure_shadow(pos, 0.24 * float(p.get("s", 1.0)), (1.15 if bool(p.get("base_seated", false)) else 1.55) * float(p.get("s", 1.0)))
 	for ch in _chickens:
 		ch.base = base
 		base += Fig.CHICKEN_PARTS
 		Fig.color_chicken(_mm_fig, ch)
 		Fig.pose_chicken(_mm_fig, ch)
-		ch.shadow = _shadow(ch.pos, Vector2(0.35, 0.3))
+		ch.shadow = _figure_shadow(ch.pos, 0.15, 0.35)
 	for chick in _chicks:
 		chick.base = base
 		base += Fig.CHICK_PARTS
 		Fig.color_chick(_mm_fig, chick, _c("#f7dc4a"), _c("#f0a030"))
 		Fig.pose_chick(_mm_fig, chick)
-		chick.shadow = _shadow(chick.pos, Vector2(0.18, 0.15))
+		chick.shadow = _figure_shadow(chick.pos, 0.07, 0.12)
 	for cat in _cats:
 		cat.base = base
 		base += CAT_PARTS
@@ -1073,7 +1246,7 @@ func _build_figures() -> void:
 	_dog.base = base
 	Fig.color_dog(_mm_fig, _dog)
 	Fig.pose_dog(_mm_fig, _dog)
-	_dog.shadow = _shadow(_dog.pos, Vector2(0.5, 0.8))
+	_dog.shadow = _figure_shadow(_dog.pos, 0.3, 0.5)
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "BarangayFigures"
 	mmi.multimesh = _mm_fig
@@ -1084,57 +1257,199 @@ func _build_figures() -> void:
 
 
 func _build_shadows() -> void:
-	var quad := QuadMesh.new()
+	# the baked static mask: two L8 images, one multiply layer over the whole ground
+	_mask_near = Image.create(int(round(MASK_NEAR.size.x / MASK_NEAR_TEXEL)), int(round(MASK_NEAR.size.y / MASK_NEAR_TEXEL)), false, Image.FORMAT_L8)
+	_mask_far = Image.create(int(round(MASK_FAR.size.x / MASK_FAR_TEXEL)), int(round(MASK_FAR.size.y / MASK_FAR_TEXEL)), false, Image.FORMAT_L8)
+	_tex_near = ImageTexture.create_from_image(_mask_near)
+	_tex_far = ImageTexture.create_from_image(_mask_far)
+	_mask_mat = ShaderMaterial.new()
+	_mask_mat.shader = MaskShader
+	_mask_mat.render_priority = -2      # before the figures' ovals and the players' shadows
+	_mask_uniforms(_mask_mat)
+	_mask_mat.set_shader_parameter("far_mask", _tex_far)
+	_mask_mat.set_shader_parameter("far_rect", Vector4(MASK_FAR.position.x, MASK_FAR.position.y, MASK_FAR.size.x, MASK_FAR.size.y))
+	var layer := MeshInstance3D.new()
+	layer.name = "BarangayShadowMask"
+	var plane := PlaneMesh.new()
+	plane.size = MASK_FAR.size       # centred on the court, so the half turn of a swap keeps it
+	layer.mesh = plane
+	layer.position = Vector3(MASK_FAR.get_center().x, MASK_Y, MASK_FAR.get_center().y)
+	layer.material_override = _mask_mat
+	layer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(layer)
+	# the moving figures: one MultiMesh of flat ovals
+	var quad := PlaneMesh.new()
 	quad.size = Vector2.ONE
 	_mm_shadow = MultiMesh.new()
 	_mm_shadow.transform_format = MultiMesh.TRANSFORM_3D
-	_mm_shadow.use_custom_data = true
 	_mm_shadow.mesh = quad
-	_mm_shadow.instance_count = _shadow_specs.size()
-	for i in _shadow_specs.size(): _write_shadow(i)
-	var mat := ShaderMaterial.new()
-	mat.shader = ShadowShader
-	mat.set_shader_parameter("shadow_col", Color(0.16, 0.13, 0.24))
-	_set_push(mat)
-	mat.set_shader_parameter("push_gain", Pal.GAIN)
+	_mm_shadow.instance_count = _figs.size()
+	_shadow_mat = ShaderMaterial.new()
+	_shadow_mat.shader = ShadowShader
+	_shadow_mat.render_priority = -1
+	_mask_uniforms(_shadow_mat)
 	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "BarangayShadows"
+	mmi.name = "BarangayFigureShadows"
 	mmi.multimesh = _mm_shadow
-	mmi.material_override = mat
+	mmi.material_override = _shadow_mat
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.custom_aabb = AABB(Vector3(-120, -1, -80), Vector3(240, 4, 100))
+	mmi.custom_aabb = AABB(Vector3(-60, -1, -60), Vector3(120, 4, 120))
 	add_child(mmi)
 
 
-func _write_shadow(i: int) -> void:
-	var spec: Array = _shadow_specs[i]
-	var p: Vector2 = spec[0]
-	var s: Vector2 = spec[1]
-	var rect: bool = float(spec[2]) > 0.5
-	# Late-afternoon sun: env_shadow.gdshader sweeps the footprint this far along its world
-	# sun direction (figures and chairs by their size, building and table blocks shorter).
-	var sweep := clampf(0.5 * minf(s.x, s.y), 0.1, 1.2) if rect else clampf(0.9 * maxf(s.x, s.y), 0.15, 1.6)
-	var flat := Basis(Vector3(s.x, 0, 0), Vector3(0, 0, -s.y), Vector3(0, 1, 0))
-	_mm_shadow.set_instance_transform(i, Transform3D(flat, Vector3(p.x, GROUND_Y + 0.012 + i * 0.00002, p.y)))
-	_mm_shadow.set_instance_custom_data(i, Color(float(spec[2]), sweep, 0, 0))
+func _mask_uniforms(m: ShaderMaterial) -> void:
+	var c := Sun.SHADOW_COLOR
+	m.set_shader_parameter("shadow_col", Vector3(c.r, c.g, c.b))
+	m.set_shader_parameter("opacity", Sun.SHADOW_OPACITY)
+	m.set_shader_parameter("near_mask", _tex_near)
+	m.set_shader_parameter("near_rect", Vector4(MASK_NEAR.position.x, MASK_NEAR.position.y, MASK_NEAR.size.x, MASK_NEAR.size.y))
+	m.set_shader_parameter("texel", MASK_NEAR_TEXEL)
+	_set_push(m)
+
+
+## Projects every static caster along the sun (in world space, after the world's own turn)
+## and fills the convex hull of its points into the masks. Shapes are painted in order of
+## opacity, so where they overlap the darker one wins: a max union, never darker twice.
+## Baked masks by everything they are made from (casters, this node's turn, the sun), so a
+## world built again (title, then the match) or turned back reuses its masks
+## (PerfToggles.env_bake_cache).
+static var _mask_cache: Dictionary = {}
+
+func _bake_mask() -> void:
+	if _mask_near == null: return
+	var t0 := Time.get_ticks_usec()
+	var xf := global_transform if is_inside_tree() else transform
+	var o3 := Sun.project(Vector3.UP, 0.0)          # where 1 m of height lands (x, z)
+	var off := Vector2(o3.x, o3.z)
+	var key := 0
+	if PerfToggles.env_bake_cache:
+		key = hash([_casters, xf, o3, MASK_NEAR, MASK_FAR, MASK_NEAR_TEXEL, MASK_FAR_TEXEL])
+		var hit: Array = _mask_cache.get(key, [])
+		if not hit.is_empty():
+			_mask_near.copy_from(hit[0])
+			_mask_far.copy_from(hit[1])
+			_publish_mask(t0)
+			return
+	var polys: Array = []
+	for c in _casters:
+		var pts: PackedVector3Array = c[0]
+		var world: bool = c[3]
+		var g: float = c[4]
+		var p2 := PackedVector2Array()
+		p2.resize(pts.size())
+		for i in pts.size():
+			var w: Vector3 = pts[i] if world else xf * pts[i]
+			p2[i] = Vector2(w.x, w.z) + off * (w.y - g)
+		var hull := Geometry2D.convex_hull(p2)
+		if bool(c[2]):
+			# banderitas: only the flags whose shadow falls outside the court lines
+			var mid := Vector2.ZERO
+			for q in p2: mid += q
+			mid /= p2.size()
+			if absf(mid.x) < COURT_HALF.x and absf(mid.y) < COURT_HALF.y: continue
+		polys.append([hull, float(c[1])])
+	polys.sort_custom(func(a, b): return a[1] < b[1])
+	_mask_near.fill(Color.BLACK)
+	_mask_far.fill(Color.BLACK)
+	var inner := MASK_NEAR.grow(-0.5)
+	for poly in polys:
+		var hull: PackedVector2Array = poly[0]
+		var box := Rect2(hull[0], Vector2.ZERO)
+		for q in hull: box = box.expand(q)
+		if box.intersects(MASK_NEAR): _fill_hull(_mask_near, MASK_NEAR, MASK_NEAR_TEXEL, hull, poly[1])
+		if not inner.encloses(box): _fill_hull(_mask_far, MASK_FAR, MASK_FAR_TEXEL, hull, poly[1])
+	if PerfToggles.env_bake_cache:
+		if _mask_cache.size() >= 4: _mask_cache.clear()
+		_mask_cache[key] = [_mask_near.duplicate(), _mask_far.duplicate()]
+	_publish_mask(t0)
+
+
+func _publish_mask(t0: int) -> void:
+	_tex_near.update(_mask_near)
+	_tex_far.update(_mask_far)
+	ShadowMask.publish(_tex_near, MASK_NEAR)
+	PerfMonitor.record("env.shadow_bake", Time.get_ticks_usec() - t0)
+
+
+## Scanline fill of a convex polygon (world x, z) into a mask: every texel whose centre is
+## inside gets `value` (hard edges on the texel grid; nearest sampling keeps them).
+func _fill_hull(img: Image, rect: Rect2, texel: float, hull: PackedVector2Array, value: float) -> void:
+	var n := hull.size()
+	var xs := PackedFloat32Array()
+	var ys := PackedFloat32Array()
+	xs.resize(n)
+	ys.resize(n)
+	var y_lo := INF
+	var y_hi := -INF
+	for i in n:
+		xs[i] = (hull[i].x - rect.position.x) / texel
+		ys[i] = (hull[i].y - rect.position.y) / texel
+		y_lo = minf(y_lo, ys[i])
+		y_hi = maxf(y_hi, ys[i])
+	var w := img.get_width()
+	var h := img.get_height()
+	var j0 := maxi(int(ceil(y_lo - 0.5)), 0)
+	var j1 := mini(int(floor(y_hi - 0.5)), h - 1)
+	var col := Color(value, value, value)
+	for j in range(j0, j1 + 1):
+		var yc := j + 0.5
+		var xl := INF
+		var xr := -INF
+		for e in n:
+			var ay := ys[e]
+			var e1 := (e + 1) % n
+			var by := ys[e1]
+			if (ay <= yc) != (by <= yc):
+				var x := xs[e] + (yc - ay) * (xs[e1] - xs[e]) / (by - ay)
+				xl = minf(xl, x)
+				xr = maxf(xr, x)
+		var i0 := maxi(int(ceil(xl - 0.5)), 0)
+		var i1 := mini(int(floor(xr - 0.5)), w - 1)
+		if i1 >= i0: img.fill_rect(Rect2i(i0, j, i1 - i0 + 1, 1), col)
+
+
+## A moving figure's oval: from just behind its feet along the sun (world direction, so
+## undo this node's turn), FIG_REACH of its full cast length; hidden ones fold to nothing.
+func _write_fig(i: int, hidden := false) -> void:
+	var f: Array = _figs[i]
+	if hidden:
+		_mm_shadow.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3.ZERO), Vector3(0, -10, 0)))
+		return
+	var pos: Vector3 = f[0]
+	var r: float = f[1]
+	var along := 2.0 * r + FIG_REACH * float(f[2]) * Sun.shadow_length_per_metre()
+	var dir := (transform.basis.inverse() * Sun.shadow_dir()).normalized()
+	var side := dir.cross(Vector3.UP)
+	var at := pos + dir * (along * 0.5 - r)
+	_mm_shadow.set_instance_transform(i, Transform3D(Basis(dir * along, Vector3.UP, side * r * 1.8), Vector3(at.x, MASK_Y + 0.0005, at.z)))
 
 
 func _move_shadow(i: int, pos: Vector3, hidden := false) -> void:
-	_shadow_specs[i][0] = Vector2(pos.x, pos.z) if not hidden else Vector2(0, 400)
-	_write_shadow(i)
+	if i < 0 or i >= _figs.size(): return
+	var f: Array = _figs[i]
+	if hidden == bool(f[3]) and (hidden or Vector3(f[0]).is_equal_approx(pos)): return
+	f[0] = pos
+	f[3] = hidden
+	_write_fig(i, hidden)
 
 
 # ------------------------------------------------------------------ runtime
 
 ## Court view: with the swap on, the whole world turns half a turn so the other end's
 ## scenery faces the camera (the court is symmetric, so play is unchanged). The floor
-## pattern, the sun on each end and which end animates all follow.
+## pattern, which end animates and the sun all follow: the sun stays behind-left of the
+## camera at either end (Sun.set_flipped), the toon bands relight and the static shadow
+## mask is baked again in world space after the turn.
 func _apply_view() -> void:
 	var swapped := bool(Settings.get_value("video.court_view_swapped", false))
 	transform.basis = Basis(Vector3.UP, PI) if swapped else Basis.IDENTITY
 	_floor.set_shader_parameter("flip", -1.0 if swapped else 1.0)
-	for m in [_toon, _grimy]: m.set_shader_parameter("light_dir", transform.basis * LIGHT)
-	for m in [_toon_n, _grimy_n]: m.set_shader_parameter("light_dir", transform.basis * _near.transform.basis * LIGHT)
+	Sun.set_flipped(_flipped)
+	for m in [_toon, _grimy, _toon_n, _grimy_n, _cloud_mat]:
+		if m != null: m.set_shader_parameter("light_dir", Sun.to_sun())
+	_bake_mask()
+	if _mm_shadow != null:
+		for i in _figs.size(): _write_fig(i, bool(_figs[i][3]))
 	_live_end = (1 if _flipped else 0) ^ (1 if swapped else 0)
 	for p in _people: p.erase("sig")  # redraw everyone once
 
@@ -1158,10 +1473,22 @@ func _process(delta: float) -> void:
 		_apply_view()                     # the camera now faces the other end
 		_react_all("clap", 1.8)      # applause for the change of ends
 	_tick_t += delta
+	# Perf: the crowd's step waits one frame when this frame also carries a physics tick (at 60
+	# fps every other frame does, and those are the frames that run long). Never two in a row,
+	# so at 30 fps, where every frame carries one, it steps as before.
+	var physics_frame: int = Engine.get_physics_frames()
+	var carries_tick: bool = physics_frame != _seen_physics_frame
+	_seen_physics_frame = physics_frame
 	if _tick_t >= TICK:
-		_tick_t = fmod(_tick_t, TICK)
-		_step()
+		if carries_tick and not _step_waited: _step_waited = true
+		else:
+			_step_waited = false
+			_tick_t = fmod(_tick_t, TICK)
+			_step()
 	PerfMonitor.record("env.barangay", Time.get_ticks_usec() - t0)
+
+var _seen_physics_frame: int = -1
+var _step_waited := false
 
 
 func _connect_signals() -> void:
@@ -1336,12 +1663,25 @@ func _step() -> void:
 	# pose changed since the last tick are solved and rewritten (most sit still).
 	var cam_moved := cam_local.distance_to(_last_cam) > 0.01
 	_last_cam = cam_local
+	# PerfToggles.crowd_offscreen_skip: a figure outside the camera's view keeps its state
+	# stepping but is not solved or rewritten; its sig is dropped so it redraws on entering.
+	var planes: Array[Plane] = []
+	if PerfToggles.crowd_offscreen_skip and cam != null: planes = cam.get_frustum()
 	var changed := false
 	for i in _people.size():
 		var p: Dictionary = _people[i]
 		if int(p.get("end", -1)) >= 0 and int(p.end) != _live_end and p.has("sig"): continue   # the end behind the camera
-		if p.role in ["vendor", "dama", "pump", "mechanic", "cook", "diner", "buyer"]: PandesalEnd.step_person(self, p)
-		elif p.role != "walker" and p.role != "ballkid": _step_person(p, playing, have_ball, ball_local)
+		var pandesal: bool = p.role in ["vendor", "dama", "pump", "mechanic", "cook", "diner", "buyer"]
+		var steps_here: bool = not pandesal and p.role != "walker" and p.role != "ballkid"
+		# Off-screen seated / standing people (they never move) skip their step too: their
+		# reaction timers resume from _t when they are seen again.
+		var seen: bool = planes.is_empty() or _in_view(planes, p)
+		if pandesal: PandesalEnd.step_person(self, p)
+		elif steps_here and seen: _step_person(p, playing, have_ball, ball_local)
+		if not seen and (steps_here or not planes.is_empty() and not _in_view(planes, p)):
+			p.erase("sig")
+			if p.has("shadow"): _move_shadow(int(p.shadow), p.pos, not bool(p.visible))
+			continue
 		var sig := [p.arm_l, p.arm_r, p.lean, p.head_yaw, p.head_pitch, p.bounce, p.sway, p.seated, p.walk, p.pos, p.yaw, p.visible, p.prop]
 		if not cam_moved and sig == p.get("sig", []): continue
 		p.sig = sig
@@ -1349,6 +1689,7 @@ func _step() -> void:
 		var j := People.solve(p, _cards.extents(int(p.profile)))
 		_cards.write(i, p, j, cam_local)
 		_pose_props(p, j)
+		if p.has("shadow"): _move_shadow(int(p.shadow), p.pos, not bool(p.visible))
 	if changed: _cards.commit()
 	for ch in _chickens: _step_chicken(ch)
 	_step_chicks()
@@ -1357,6 +1698,15 @@ func _step() -> void:
 			cat.step = int(cat.step) + 1
 			_pose_cat(cat)
 	_step_dog()
+
+
+## Whether a figure's bounding sphere (feet to above the head, arms out, and its shadow's
+## reach) touches the camera frustum. Frustum planes face outward.
+func _in_view(planes: Array[Plane], p: Dictionary) -> bool:
+	var c: Vector3 = to_global(Vector3(p.pos) + Vector3(0.0, VIEW_CULL_UP, 0.0))
+	for pl in planes:
+		if pl.distance_to(c) > VIEW_CULL_R: return false
+	return true
 
 
 func _update_score() -> void:

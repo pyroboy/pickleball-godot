@@ -1,12 +1,17 @@
 shader_type spatial;
-// The ball's ground blob (visual only): a crisp dark disc straight under the ball, its
-// height cue (fx/ground_shadows.gd shrinks and fades it as the ball rises). Never a light
-// shadow, billboard or landing prediction. Hard pixel edge with a slightly lighter rim,
-// no gradient, and never under `min_pixels` render pixels across so it stays findable at
-// the far baseline. Keep depth testing: players/the ball can occlude it normally.
-render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, shadows_disabled;
+// The ball's ground shadow (visual only): a plain oval where the sun casts it, slid along
+// the light from the ball and drawn out along it like the players' shadows (placed by
+// fx/ground_shadows.gd, which also shrinks and lightens it as the ball rises). Never a
+// billboard or landing prediction. Multiplies the ground by
+// lerp(1, shadow_color, opacity) (SunLight.SHADOW_COLOR, about Sun.BALL_OPACITY): court lines
+// stay visible, and it is drawn after every other shadow (render_priority) so it still reads
+// inside a player's or the net's shadow. Hard pixel edge, never under `min_pixels` render
+// pixels across so it stays findable at the far baseline. Depth tested: players and the ball
+// occlude it normally. No TIME.
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, shadows_disabled, blend_mul;
 
-uniform float opacity : hint_range(0.0, 1.0) = 0.8;
+uniform float opacity : hint_range(0.0, 1.0) = 0.55;
+uniform vec3 shadow_color : source_color = vec3(0.231, 0.227, 0.361);
 uniform vec2 apron_half_size = vec2(8.0, 20.0);
 uniform float min_pixels = 5.0;
 varying vec2 court_position;
@@ -23,9 +28,6 @@ void vertex() {
 }
 
 void fragment() {
-	float r = length(local) * 2.0;
-	float on_apron = float(abs(court_position.x) < apron_half_size.x && abs(court_position.y) < apron_half_size.y);
-	float shade = r < 0.62 ? 1.0 : (r < 1.0 ? 0.72 : 0.0);
-	ALBEDO = vec3(0.008, 0.014, 0.02);
-	ALPHA = shade * opacity * on_apron;
+	if (dot(local, local) > 0.25 || abs(court_position.x) > apron_half_size.x || abs(court_position.y) > apron_half_size.y) discard;
+	ALBEDO = mix(vec3(1.0), shadow_color, opacity);
 }

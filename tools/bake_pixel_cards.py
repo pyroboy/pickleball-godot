@@ -124,10 +124,45 @@ def display_of(atlas_rgb):
 # ---------------------------------------------------------------- colours
 def hex_rgb(h): h = h.lstrip("#"); return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 def to_hex(c): return "#%02x%02x%02x" % tuple(int(max(0, min(255, round(x)))) for x in c)
-def scale_hex(h, f): return to_hex(np.array(hex_rgb(h), float) * f)
+def scale_hex(h, f):
+    if h.startswith("R:"):
+        b, r = h[2:].split("|")
+        return team_key(scale_hex(b, f), scale_hex(r, f))
+    if h.startswith("T"): return "T_dark" if f < 1.0 else h
+    return to_hex(np.array(hex_rgb(h), float) * f)
+
+# Per-team key "R:<blue key>|<red key>": the same solid painted differently on each team's atlas.
+def team_key(blue, red): return "R:%s|%s" % (blue, red)
+def pick_key(key, team):
+    if not key.startswith("R:"): return key
+    b, r = key[2:].split("|")
+    return r if team == "red" else b
+
+def red_kit(pr):
+    """Opponents (red team) always wear red: a light neutral top or a light bottom (white polo,
+    khaki shorts) is painted in the team colour on the red atlas only; the blue atlas is unchanged.
+    Without this a white kit read as beige on the concrete under the golden-hour grade."""
+    def light(h, lum, spread):
+        if not h.startswith("#"): return False
+        c = hex_rgb(h)
+        return sum(c) / 3.0 > lum and max(c) - min(c) < spread
+    top, bottom = pr.get("top", {}), pr.get("bottom", {})
+    body = top.get("color", "T")
+    if light(body, 180, 40):
+        top["color"] = team_key(body, "T")
+        if light(top.get("sleeve", body), 180, 40): top["sleeve"] = team_key(top.get("sleeve", body), "T")
+        col = top.get("collar", body)
+        # a collar the shirt's own colour stays the same key (same outline); else darker on red
+        top["collar"] = top["color"] if col == body else team_key(col, "T_dark")
+        if top.get("cuff", "") == "T": top["cuff"] = team_key("T", "T_dark")
+        if top.get("stripe", "") == "T": top["stripe"] = team_key("T", "#f4f4f2")
+        top.setdefault("logo", team_key("T", "#f4f4f2"))
+    if light(bottom.get("color", "T"), 90, 80): bottom["color"] = team_key(bottom["color"], "T_dark")
+    return pr
 
 def tones(key, team):
     """(light, main, dark) display colours for 'T', 'T_dark', 'T_light' or a hex colour."""
+    key = pick_key(key, team)
     if key.startswith("T"):
         pal = TEAMS[team]
         if key == "T": return pal["T_light"], pal["T"], pal["T_dark"]
@@ -708,6 +743,7 @@ def bake_far(pid, meta):
 
 def bake(pid, meta, suffix=""):
     with open(os.path.join(PROFILES, pid + ".json")) as f: pr = json.load(f)
+    pr = red_kit(pr)
     comp = make_compensator(float(meta.get("gain", 1.0)))
     grid = grid_for(meta)
     parts = build_parts(pr, grid)

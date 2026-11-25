@@ -5,35 +5,26 @@
 // reach full white.
 //
 // Per-actor accent: the team atlas and the other team's atlas differ only on the
-// team-coloured pixels (shirt, sleeves, trim). Where they differ, the pixel is
-// re-tinted with `accent_color` keeping its shade, so one set of art gives partner
+// team-coloured pixels (shirt, sleeves, trim). Where they differ and the pixel is
+// coloured (a white shirt on one team's atlas is red on the other's: it stays white), the
+// pixel is re-tinted with `accent_color` keeping its shade, so one set of art gives partner
 // and opponents their own look. accent_mix = 0 keeps the authored art untouched.
+//
+// Golden-hour sun (scripts/graphics/sun_light.gd, `shading` = 1 set by the rig): stepped,
+// not smooth. The sun's direction is taken to screen space; each pixel looks a few atlas
+// texels toward the sun and away from it along its own part's silhouette:
+//   - 1 render pixel from the sun-side edge: thin warm rim (players only; never the ball),
+//   - within SUN_BAND texels of the sun-side edge: lit band,
+//   - within SHADE_BAND texels of the far edge: shade band tinted toward the shadow colour,
+//   - everything else: the authored (calibrated) colour, unchanged.
+// `to_sun` follows SunLight.version (the rig re-reads it when the sun turns at a change of ends).
+// The material's next_pass (card_shadow.gdshader) draws the same mesh as the player's ground shadow.
+// shading = 0 (the default, tools/calibrate_cards.gd) is the plain calibrated card. No TIME:
+// nothing here changes while the game is paused. 4 extra texture reads per card pixel.
 //
 // Far tier: pixel_card_rig.gd swaps `atlas` / `atlas_other` / `atlas_px` to the profile's
 // half-size far set; nothing changes here.
 shader_type spatial;
 render_mode unshaded, cull_disabled, fog_disabled, depth_draw_opaque;
 
-uniform sampler2D atlas : source_color, filter_nearest;
-uniform sampler2D atlas_other : source_color, filter_nearest;
-uniform vec2 atlas_px = vec2(640.0, 440.0);
-uniform float gain = 1.0;
-uniform float accent_mix = 0.0;
-uniform vec3 accent_color : source_color = vec3(1.0);
-uniform float team_ref_lum = 0.2;
-uniform float flash = 0.0;   // 1 = card drawn white (hit flash, rally_moments.gd)
-
-void fragment() {
-	vec2 uv = UV;
-	vec4 c = texture(atlas, uv);
-	if (c.a < 0.5) discard;
-	vec3 rgb = c.rgb;
-	if (accent_mix > 0.5) {
-		vec3 o = texture(atlas_other, uv).rgb;
-		if (distance(rgb, o) > 0.02) {
-			float shade = dot(rgb, vec3(0.2126, 0.7152, 0.0722)) / team_ref_lum;
-			rgb = accent_color * clamp(shade, 0.25, 1.0);
-		}
-	}
-	ALBEDO = mix(rgb * gain, vec3(1.0), flash);
-}
+#include "res://shaders/pixel_card_body.gdshaderinc"

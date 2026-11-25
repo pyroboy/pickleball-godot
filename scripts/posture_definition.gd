@@ -276,7 +276,194 @@ static func blend_elbow_pole(a: Vector3, b: Vector3, weight: float, right_arm: b
 	return start.lerp(finish, t)
 
 
+## Perf: every authored value of this pose folded into one number, each with its own weight (an
+## edit to any field, or a swap between two, changes it). Caches keyed by a pose object check it
+## so that a pose changed in place is never served a stale result. Path points count by size and
+## body keys by object, not by content. Generated from the field list: add new fields here.
+func content_signature() -> float:
+	var sum: float = 0.0
+	sum += float(posture_id) * 1.118 + float(family) * 1.3541 + float(height_tier) * 0.9721 + paddle_forehand_mul * 0.5902
+	sum += paddle_forward_mul * 1.2082 + paddle_y_offset * 0.8262 + paddle_pitch_base_deg * 1.4443 + paddle_pitch_signed_deg * 1.0623
+	sum += float(paddle_pitch_sign_source) * 0.6803 + paddle_yaw_base_deg * 1.2984 + paddle_yaw_signed_deg * 0.9164 + float(paddle_yaw_sign_source) * 0.5344
+	sum += paddle_roll_base_deg * 1.1525 + paddle_roll_signed_deg * 0.7705 + float(paddle_roll_sign_source) * 1.3885 + paddle_floor_clearance * 1.0066
+	sum += (0.6246 if has_zone else 0.0) + zone_x_min * 1.2426 + zone_x_max * 0.8607 + zone_y_min * 1.4787
+	sum += zone_y_max * 1.0967 + zone_forward_offset * 0.7148 + float(paddle_hand) * 1.3328 + right_hand_offset.dot(Vector3(0.9508, 1.2455, 1.6259))
+	sum += main_grip_rotation_deg * 0.5689 + paddle_in_hand_rotation_deg * 1.1869 + support_grip_rotation_deg * 0.805 + support_grip_slide_m * 1.423
+	sum += support_index_closure * 1.041 + support_grip_style * 0.6591 + float(right_elbow_path.size()) * 1.2771 + float(left_elbow_path.size()) * 0.8951
+	sum += float(elbow_preset_bake.size()) * 0.5132 + right_elbow_pole.dot(Vector3(1.1312, 1.4819, 1.9344)) + right_shoulder_rotation_deg.dot(Vector3(0.7492, 0.9815, 1.2811)) + right_elbow_swivel_deg * 1.3673
+	sum += left_elbow_swivel_deg * 0.9853 + elbow_swivel_weight * 0.6033 + float(left_hand_mode) * 1.2214 + left_hand_offset.dot(Vector3(0.8394, 1.0996, 1.4354))
+	sum += left_elbow_pole.dot(Vector3(1.4574, 1.9092, 2.4922)) + left_shoulder_rotation_deg.dot(Vector3(1.0755, 1.4089, 1.8391)) + stance_width * 0.6935 + front_foot_forward * 1.3115
+	sum += back_foot_back * 0.9296 + right_foot_yaw_deg * 0.5476 + left_foot_yaw_deg * 1.1656 + right_foot_pitch_deg * 0.7837
+	sum += left_foot_pitch_deg * 1.4017 + right_knee_pole.dot(Vector3(1.0197, 1.3358, 1.7437)) + left_knee_pole.dot(Vector3(0.6378, 0.8355, 1.0906)) + right_foot_offset.dot(Vector3(1.2558, 1.6451, 2.1474))
+	sum += left_foot_offset.dot(Vector3(0.8738, 1.1447, 1.4942)) + air_right_foot_offset.dot(Vector3(1.4919, 1.9544, 2.5511)) + air_left_foot_offset.dot(Vector3(1.1099, 1.454, 1.8979)) + air_scissor_right_foot_offset.dot(Vector3(0.7279, 0.9535, 1.2447))
+	sum += air_scissor_left_foot_offset.dot(Vector3(1.346, 1.7633, 2.3017)) + float(lead_foot) * 0.964 + crouch_amount * 0.582 + weight_shift * 1.2001
+	sum += hip_yaw_deg * 0.8181 + torso_yaw_deg * 1.4361 + torso_pitch_deg * 1.0542 + torso_roll_deg * 0.6722
+	sum += spine_curve_deg * 1.2902 + shoulder_protraction_m * 0.9083 + body_position_offset.dot(Vector3(0.5263, 0.6895, 0.9)) + body_yaw_deg * 1.1443
+	sum += body_pitch_deg * 0.7624 + body_roll_deg * 1.3804 + head_yaw_deg * 0.9984 + head_pitch_deg * 0.6165
+	sum += head_track_ball_weight * 1.2345 + charge_paddle_offset.dot(Vector3(0.8525, 1.1168, 1.4578)) + charge_paddle_rotation_deg.dot(Vector3(1.4706, 1.9265, 2.5147)) + charge_body_rotation_deg * 1.0886
+	sum += charge_hip_coil_deg * 0.7067 + charge_back_foot_load * 1.3247 + ft_paddle_offset.dot(Vector3(0.9427, 1.2349, 1.612)) + ft_paddle_rotation_deg.dot(Vector3(0.5608, 0.7346, 0.959))
+	sum += ft_hip_uncoil_deg * 1.1788 + ft_front_foot_load * 0.7968 + ft_duration_strike * 1.4149 + ft_duration_sweep * 1.0329
+	sum += ft_duration_settle * 0.6509 + ft_duration_hold * 1.269 + compact_finish_lateral_scale * 0.887 + compact_motion_scale * 0.505
+	sum += compact_finish_elbow_offset.dot(Vector3(1.1231, 1.4713, 1.9205)) + float(ft_ease_curve) * 0.7411 + swing_path_blend * 1.3591 + float(paddle_path_times.size()) * 0.9772
+	sum += float(paddle_path_offsets.size()) * 0.5952 + float(paddle_path_tangents.size()) * 1.2132 + contact_curve * 0.8313 + ready_curve_auto * 1.4493
+	sum += ready_curve_bow * 1.0673 + ready_curve_round * 0.6854 + ready_curve_dir_deg * 1.3034 + ready_curve_peak * 0.9214
+	sum += float(ready_path_times.size()) * 0.5395 + float(ready_path_offsets.size()) * 1.1575 + float(ready_path_tangents.size()) * 0.7755 + speed_lead_start * 1.3936
+	sum += speed_lead_end * 1.0116 + speed_strike_start * 0.6296 + speed_strike_end * 1.2477 + speed_finish_start * 0.8657
+	sum += speed_finish_end * 1.4837 + float(speed_lead_points.size()) * 1.1018 + float(speed_strike_points.size()) * 0.7198 + float(speed_finish_points.size()) * 1.3378
+	sum += float(play_authored_keys) * 0.9559 + float(game_built_keys) * 0.5739 + (float(windup_body.get_instance_id() % 1000003) * 1.1919 if windup_body != null else 0.0) + (float(follow_through_body.get_instance_id() % 1000003) * 0.81 if follow_through_body != null else 0.0)
+	sum += (float(drop_body.get_instance_id() % 1000003) * 1.428 if drop_body != null else 0.0) + drop_paddle_offset.dot(Vector3(1.046, 1.3703, 1.7887)) + drop_paddle_rotation_deg.dot(Vector3(0.6641, 0.87, 1.1356)) + drop_time * 1.2821
+	sum += charge_duration * 0.9001 + float(backhand_face_variant.size()) * 0.5182 + float(schema_version) * 1.1362
+	return sum
+
+## Perf: the typed copy below reads and writes members directly (the untyped one looked every
+## field up by name: ~260 lookups per blend, 500+ blends a second in a rally). Same values.
+static var _swivel_script: Script
 func lerp_with(other, w: float):
+	var b: PostureDefinition = other as PostureDefinition
+	if b == null: return _lerp_with_untyped(other, w)
+	if _swivel_script == null: _swivel_script = load("res://scripts/elbow_swivel.gd")
+	var t: float = clampf(w, 0.0, 1.0)
+	var o: PostureDefinition = PostureDefinition.new()
+	o.posture_id = posture_id
+	o.display_name = display_name
+	o.family = family
+	o.height_tier = height_tier if t < 0.5 else b.height_tier
+	o.paddle_forehand_mul = lerpf(paddle_forehand_mul, b.paddle_forehand_mul, t)
+	o.paddle_forward_mul = lerpf(paddle_forward_mul, b.paddle_forward_mul, t)
+	o.paddle_y_offset = lerpf(paddle_y_offset, b.paddle_y_offset, t)
+	o.paddle_pitch_base_deg = lerpf(paddle_pitch_base_deg, b.paddle_pitch_base_deg, t)
+	o.paddle_pitch_signed_deg = lerpf(paddle_pitch_signed_deg, b.paddle_pitch_signed_deg, t)
+	o.paddle_pitch_sign_source = paddle_pitch_sign_source if t < 0.5 else b.paddle_pitch_sign_source
+	o.paddle_yaw_base_deg = lerpf(paddle_yaw_base_deg, b.paddle_yaw_base_deg, t)
+	o.paddle_yaw_signed_deg = lerpf(paddle_yaw_signed_deg, b.paddle_yaw_signed_deg, t)
+	o.paddle_yaw_sign_source = paddle_yaw_sign_source if t < 0.5 else b.paddle_yaw_sign_source
+	o.paddle_roll_base_deg = lerpf(paddle_roll_base_deg, b.paddle_roll_base_deg, t)
+	o.paddle_roll_signed_deg = lerpf(paddle_roll_signed_deg, b.paddle_roll_signed_deg, t)
+	o.paddle_roll_sign_source = paddle_roll_sign_source if t < 0.5 else b.paddle_roll_sign_source
+	o.paddle_floor_clearance = lerpf(paddle_floor_clearance, b.paddle_floor_clearance, t)
+	o.has_zone = has_zone if t < 0.5 else b.has_zone
+	o.zone_x_min = lerpf(zone_x_min, b.zone_x_min, t)
+	o.zone_x_max = lerpf(zone_x_max, b.zone_x_max, t)
+	o.zone_y_min = lerpf(zone_y_min, b.zone_y_min, t)
+	o.zone_y_max = lerpf(zone_y_max, b.zone_y_max, t)
+	o.zone_forward_offset = lerpf(zone_forward_offset, b.zone_forward_offset, t)
+	o.right_hand_offset = right_hand_offset.lerp(b.right_hand_offset, t)
+	o.main_grip_rotation_deg = PaddleRotation.angle_lerp(main_grip_rotation_deg, b.main_grip_rotation_deg, t)
+	o.paddle_in_hand_rotation_deg = PaddleRotation.angle_lerp(paddle_in_hand_rotation_deg, b.paddle_in_hand_rotation_deg, t)
+	o.support_grip_rotation_deg = PaddleRotation.angle_lerp(support_grip_rotation_deg, b.support_grip_rotation_deg, t)
+	o.support_grip_slide_m = lerpf(support_grip_slide_m, b.support_grip_slide_m, t)
+	o.support_index_closure = lerpf(support_index_closure, b.support_index_closure, t)
+	o.support_grip_style = lerpf(support_grip_style, b.support_grip_style, t)
+	o.right_elbow_path = right_elbow_path if t < 0.5 else b.right_elbow_path
+	o.left_elbow_path = left_elbow_path if t < 0.5 else b.left_elbow_path
+	# Like authored path arrays, immutable bake data is shared by transient samples.
+	# Persistence and editor copies deep-copy it at their transaction boundaries.
+	o.elbow_preset_bake = elbow_preset_bake if t < 0.5 else b.elbow_preset_bake
+	o.paddle_hand = paddle_hand if t < 0.5 else b.paddle_hand
+	o.right_elbow_pole = blend_elbow_pole(right_elbow_pole, b.right_elbow_pole, t, true)
+	o.right_shoulder_rotation_deg = right_shoulder_rotation_deg.lerp(b.right_shoulder_rotation_deg, t)
+	var swivel: Array = _swivel_script.blend(self, b, t)
+	o.right_elbow_swivel_deg = swivel[0]; o.left_elbow_swivel_deg = swivel[1]; o.elbow_swivel_weight = swivel[2]
+	o.left_hand_mode = left_hand_mode if t < 0.5 else b.left_hand_mode
+	o.left_hand_offset = left_hand_offset.lerp(b.left_hand_offset, t)
+	o.left_elbow_pole = blend_elbow_pole(left_elbow_pole, b.left_elbow_pole, t, false)
+	o.left_shoulder_rotation_deg = left_shoulder_rotation_deg.lerp(b.left_shoulder_rotation_deg, t)
+	o.stance_width = lerpf(stance_width, b.stance_width, t)
+	o.front_foot_forward = lerpf(front_foot_forward, b.front_foot_forward, t)
+	o.back_foot_back = lerpf(back_foot_back, b.back_foot_back, t)
+	o.right_foot_yaw_deg = lerpf(right_foot_yaw_deg, b.right_foot_yaw_deg, t)
+	o.left_foot_yaw_deg = lerpf(left_foot_yaw_deg, b.left_foot_yaw_deg, t)
+	o.right_foot_pitch_deg = lerpf(right_foot_pitch_deg, b.right_foot_pitch_deg, t)
+	o.left_foot_pitch_deg = lerpf(left_foot_pitch_deg, b.left_foot_pitch_deg, t)
+	o.right_knee_pole = right_knee_pole.lerp(b.right_knee_pole, t)
+	o.left_knee_pole = left_knee_pole.lerp(b.left_knee_pole, t)
+	o.right_foot_offset = right_foot_offset.lerp(b.right_foot_offset, t)
+	o.left_foot_offset = left_foot_offset.lerp(b.left_foot_offset, t)
+	o.air_right_foot_offset = air_right_foot_offset.lerp(b.air_right_foot_offset, t)
+	o.air_left_foot_offset = air_left_foot_offset.lerp(b.air_left_foot_offset, t)
+	o.air_scissor_right_foot_offset = air_scissor_right_foot_offset.lerp(b.air_scissor_right_foot_offset, t)
+	o.air_scissor_left_foot_offset = air_scissor_left_foot_offset.lerp(b.air_scissor_left_foot_offset, t)
+	o.lead_foot = lead_foot if t < 0.5 else b.lead_foot
+	if lead_foot != b.lead_foot:
+		# Lead is a discrete label, but each named foot needs a continuous path.
+		# Compensate only this sampled pose; authored anchors remain untouched.
+		var right_forward: float = lerpf(front_foot_forward if lead_foot == 0 else back_foot_back, b.front_foot_forward if b.lead_foot == 0 else b.back_foot_back, t)
+		var left_forward: float = lerpf(back_foot_back if lead_foot == 0 else front_foot_forward, b.back_foot_back if b.lead_foot == 0 else b.front_foot_forward, t)
+		o.right_foot_offset.z += right_forward - (o.front_foot_forward if o.lead_foot == 0 else o.back_foot_back)
+		o.left_foot_offset.z += left_forward - (o.back_foot_back if o.lead_foot == 0 else o.front_foot_forward)
+	o.crouch_amount = lerpf(crouch_amount, b.crouch_amount, t)
+	o.weight_shift = lerpf(weight_shift, b.weight_shift, t)
+	o.hip_yaw_deg = lerpf(hip_yaw_deg, b.hip_yaw_deg, t)
+	o.torso_yaw_deg = lerpf(torso_yaw_deg, b.torso_yaw_deg, t)
+	o.torso_pitch_deg = lerpf(torso_pitch_deg, b.torso_pitch_deg, t)
+	o.torso_roll_deg = lerpf(torso_roll_deg, b.torso_roll_deg, t)
+	o.spine_curve_deg = lerpf(spine_curve_deg, b.spine_curve_deg, t)
+	o.shoulder_protraction_m = lerpf(shoulder_protraction_m, b.shoulder_protraction_m, t)
+	o.body_position_offset = body_position_offset.lerp(b.body_position_offset, t)
+	o.body_yaw_deg = lerpf(body_yaw_deg, b.body_yaw_deg, t)
+	o.body_pitch_deg = lerpf(body_pitch_deg, b.body_pitch_deg, t)
+	o.body_roll_deg = lerpf(body_roll_deg, b.body_roll_deg, t)
+	o.head_yaw_deg = lerpf(head_yaw_deg, b.head_yaw_deg, t)
+	o.head_pitch_deg = lerpf(head_pitch_deg, b.head_pitch_deg, t)
+	o.head_track_ball_weight = lerpf(head_track_ball_weight, b.head_track_ball_weight, t)
+	o.charge_paddle_offset = charge_paddle_offset.lerp(b.charge_paddle_offset, t)
+	o.charge_paddle_rotation_deg = PaddleRotation.vector_lerp(charge_paddle_rotation_deg, b.charge_paddle_rotation_deg, t)
+	o.charge_body_rotation_deg = lerpf(charge_body_rotation_deg, b.charge_body_rotation_deg, t)
+	o.charge_hip_coil_deg = lerpf(charge_hip_coil_deg, b.charge_hip_coil_deg, t)
+	o.charge_back_foot_load = lerpf(charge_back_foot_load, b.charge_back_foot_load, t)
+	o.ft_paddle_offset = ft_paddle_offset.lerp(b.ft_paddle_offset, t)
+	o.ft_paddle_rotation_deg = PaddleRotation.vector_lerp(ft_paddle_rotation_deg, b.ft_paddle_rotation_deg, t)
+	o.ft_hip_uncoil_deg = lerpf(ft_hip_uncoil_deg, b.ft_hip_uncoil_deg, t)
+	o.ft_front_foot_load = lerpf(ft_front_foot_load, b.ft_front_foot_load, t)
+	o.ft_duration_strike = lerpf(ft_duration_strike, b.ft_duration_strike, t)
+	o.ft_duration_sweep = lerpf(ft_duration_sweep, b.ft_duration_sweep, t)
+	o.ft_duration_settle = lerpf(ft_duration_settle, b.ft_duration_settle, t)
+	o.ft_duration_hold = lerpf(ft_duration_hold, b.ft_duration_hold, t)
+	o.compact_finish_lateral_scale = lerpf(compact_finish_lateral_scale, b.compact_finish_lateral_scale, t)
+	o.compact_motion_scale = lerpf(compact_motion_scale, b.compact_motion_scale, t)
+	o.compact_finish_elbow_offset = compact_finish_elbow_offset.lerp(b.compact_finish_elbow_offset, t)
+	o.ft_ease_curve = ft_ease_curve if t < 0.5 else b.ft_ease_curve
+	o.swing_path_blend = lerpf(swing_path_blend, b.swing_path_blend, t)
+	o.paddle_path_times = (paddle_path_times if t < 0.5 else b.paddle_path_times).duplicate()
+	o.paddle_path_offsets = (paddle_path_offsets if t < 0.5 else b.paddle_path_offsets).duplicate()
+	o.paddle_path_tangents = (paddle_path_tangents if t < 0.5 else b.paddle_path_tangents).duplicate()
+	o.contact_curve = lerpf(contact_curve, b.contact_curve, t)
+	o.ready_curve_auto = lerpf(ready_curve_auto, b.ready_curve_auto, t)
+	o.ready_curve_bow = lerpf(ready_curve_bow, b.ready_curve_bow, t)
+	o.ready_curve_round = lerpf(ready_curve_round, b.ready_curve_round, t)
+	o.ready_curve_dir_deg = rad_to_deg(lerp_angle(deg_to_rad(ready_curve_dir_deg), deg_to_rad(b.ready_curve_dir_deg), t))
+	o.ready_curve_peak = lerpf(ready_curve_peak, b.ready_curve_peak, t)
+	o.ready_path_times = (ready_path_times if t < 0.5 else b.ready_path_times).duplicate()
+	o.ready_path_offsets = (ready_path_offsets if t < 0.5 else b.ready_path_offsets).duplicate()
+	o.ready_path_tangents = (ready_path_tangents if t < 0.5 else b.ready_path_tangents).duplicate()
+	o.speed_lead_start = speed_lead_start if t < 0.5 else b.speed_lead_start
+	o.speed_lead_end = speed_lead_end if t < 0.5 else b.speed_lead_end
+	o.speed_strike_start = speed_strike_start if t < 0.5 else b.speed_strike_start
+	o.speed_strike_end = speed_strike_end if t < 0.5 else b.speed_strike_end
+	o.speed_finish_start = speed_finish_start if t < 0.5 else b.speed_finish_start
+	o.speed_finish_end = speed_finish_end if t < 0.5 else b.speed_finish_end
+	o.speed_lead_points = (speed_lead_points if t < 0.5 else b.speed_lead_points).duplicate()
+	o.speed_strike_points = (speed_strike_points if t < 0.5 else b.speed_strike_points).duplicate()
+	o.speed_finish_points = (speed_finish_points if t < 0.5 else b.speed_finish_points).duplicate()
+	o.play_authored_keys = play_authored_keys if t < 0.5 else b.play_authored_keys
+	o.game_built_keys = game_built_keys if t < 0.5 else b.game_built_keys
+	o.windup_body = windup_body
+	o.follow_through_body = follow_through_body
+	o.drop_body = drop_body
+	o.drop_paddle_offset = drop_paddle_offset
+	o.drop_paddle_rotation_deg = drop_paddle_rotation_deg
+	o.drop_time = drop_time
+	o.charge_duration = lerpf(charge_duration, b.charge_duration, t)
+	o.schema_version = schema_version
+	o.notes = notes
+	o.last_tuned_by = last_tuned_by
+	o.last_tuned_at = last_tuned_at
+	PaddleRotation.blend_into(o, self, b, t)
+	return o
+
+
+## Fallback for a non-PostureDefinition `other` (old fixtures): the original untyped blend.
+func _lerp_with_untyped(other, w: float):
 	var t: float = clampf(w, 0.0, 1.0)
 	var o = load("res://scripts/posture_definition.gd").new()
 	o.posture_id = posture_id

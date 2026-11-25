@@ -4,6 +4,7 @@ extends Node3D
 ## the server (gold). Name tags sit on the floor in front of the feet, and step up above
 ## the head while that spot would cover the move stick or the HIT pad on screen.
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
 const TAG_FONT_SIZE := 34
 const TAG_PIXEL := .004
 const TAG_HEAD_HEIGHT := 1.2    # above the body origin (head is ~0.92): a nameplate over the card
@@ -41,17 +42,20 @@ func _update_cues()->void:
 	var camera:Camera3D=get_viewport().get_camera_3d()
 	var controls=game.get("mobile_controls")
 	var avoid:bool=camera!=null and controls!=null and controls.enabled and controls.visible
+	# One player cue at a time: your ring and tag step aside for the aim, timing,
+	# landing, smash and movement cues (player_cue_priority.gd).
+	var you_cue:bool=CuePriority.current(game)==CuePriority.YOU
 	for row in rows:
 		var actor=row.actor;var is_server:bool=actor==server;var human:bool=not actor.is_ai
 		var end_sign:float=-1.0 if actor.court_side==1 else 1.0
 		var at:Vector3=actor.get_global_transform_interpolated().origin   # drawn position (smooth at 30 Hz physics)
 		row.marker.global_position=Vector3(at.x,PickleballConstants.FLOOR_Y+.018,at.z)
-		row.marker.visible=human or is_server
+		row.marker.visible=(human and you_cue) or (not human and is_server)
 		var serving:int=int(is_server)
 		if serving!=row.serving:   # text and colour change only when the server changes
 			row.serving=serving;row.label.text=row.names[serving]
 			if not human: row.material.albedo_color=Color("ffe49a") if is_server else Color("e8f4ff")
-		row.label.visible=human or actor.team_id==0 or is_server
+		row.label.visible=(human and you_cue) or (not human and (actor.team_id==0 or is_server))
 		var feet:=Vector3(at.x,PickleballConstants.FLOOR_Y+.095,at.z+end_sign*.55)
 		var above:bool=false
 		if avoid and row.label.visible:

@@ -44,6 +44,9 @@ const HYSTERESIS_DEG: = 4.0
 const META_PATH: = "res://assets/pixel_cards/cards_meta.json"
 const TEXTURES: = ["res://assets/pixel_cards/cards_blue.png", "res://assets/pixel_cards/cards_red.png"]
 const CARD_SHADER: = preload("res://shaders/pixel_card.gdshader")
+const SOFT_SHADER: = preload("res://shaders/pixel_card_soft.gdshader")
+const Sun = preload("res://scripts/graphics/sun_light.gd")
+const GroundShadows = preload("res://scripts/fx/ground_shadows.gd")   # card_shadow next_pass + sun sync
 const LUT_PATH: = "res://assets/pixel_cards/card_tonemap_lut.json"
 
 const HAND_OPEN: = 0
@@ -113,7 +116,7 @@ const PART_BIAS: = {"head": 0.02, "torso": 0.0, "shorts": -0.01, "upper_arm": 0.
 const BIAS_BLEND: = 0.04              # metres of side offset over which near/far bias eases
 const POP_AMOUNT: = 0.08
 const ANTICIPATION_AMOUNT: = 0.04
-const ACCENT_DISPLAY: = [Color(0.13, 0.78, 0.72), Color(0.95, 0.58, 0.16)]   # on-screen accent per team (blue -> teal, red -> amber)
+const ACCENT_DISPLAY: = [Color(0.13, 0.78, 0.72), Color(0.97, 0.5, 0.06)]   # on-screen accent per team (blue -> teal, red -> orange)
 
 # Debug toggles (off by default except cards). Env var or set_debug().
 static var show_cards: bool = true
@@ -181,6 +184,57 @@ var _culled_cam: Camera3D = null
 var _flash_left: float = 0.0   # real seconds of white hit flash left (flash_white)
 
 var _mat: ShaderMaterial
+var _soft_mat: ShaderMaterial   # the card again, alpha blended: the soft edges of motion blur (pixel_card_soft.gdshader)
+
+const TICK_FAST_SQ := 0.03 * 0.03   # a card corner moved this far in a tick (0.9 m/s): motion blur can show. Under the shader's own threshold at any strength: the solid pass leaves blurred edges to the soft pass
+var _soft_on: bool = false
+
+## The soft pass is one more draw of the whole card mesh, so it is only chained on (after the
+## ground shadow pass) for a player with a card moving fast enough to blur this tick.
+func _set_soft_pass(on: bool) -> void:
+	on = on and _smear_shown > 0.0
+	if on == _soft_on or _shadow_mat == null: return
+	_soft_on = on
+	_chain_passes()
+
+## The passes after the card: its ground shadow, the shadow's soft rim while the lens blur is
+## on, the soft motion-blur edges while the player is moving fast.
+func _chain_passes() -> void:
+	if _shadow_mat == null: return
+	var last: ShaderMaterial = _shadow_mat
+	if _rim_on and _rim_mat != null:
+		last.next_pass = _rim_mat
+		last = _rim_mat
+	last.next_pass = _soft_mat if _soft_on else null
+
+const SHADOW_RIM_TEXELS := 2.5   # soft rim width at full lens blur, atlas texels
+var _rim_mat: ShaderMaterial     # the shadow's soft rim (shaders/card_shadow_soft.gdshader)
+var _rim_on: bool = false
+
+## Player shadows are drawn after the lens blur (serve aim, slow motion), so they soften
+## themselves: a rim pass is chained on while the lens is on, with the solid shadow's values.
+func _update_shadow_rim() -> void:
+	if _rim_mat == null or _shadow_mat == null: return
+	var soften: float = GroundShadows.lens_soften
+	# ... and a moving player's shadow gets the motion blur's trail from the same pass.
+	var trail: float = maxf(_smear_shown, 0.0) if _soft_on else 0.0
+	var on: bool = soften > 0.01 or trail > 0.0
+	if on != _rim_on:
+		_rim_on = on
+		_chain_passes()
+	if not on: return
+	for param in ["light_dir", "has_mask", "shadow_mask", "mask_rect", "cast"]:
+		_rim_mat.set_shader_parameter(param, _shadow_mat.get_shader_parameter(param))
+	_rim_mat.set_shader_parameter("soften", soften * SHADOW_RIM_TEXELS if soften > 0.01 else 0.0)
+	_rim_mat.set_shader_parameter("smear", trail)
+
+## One value for both card passes (they run the same shader code).
+func _card_param(param: StringName, value: Variant) -> void:
+	_mat.set_shader_parameter(param, value)
+	if _soft_mat != null: _soft_mat.set_shader_parameter(param, value)
+var _shadow_mat: ShaderMaterial   # _mat.next_pass: this mesh again, flattened onto the court along the sun
+var _sun_seen: = Vector2i(-1, -1)   # (Sun.version, ShadowMask.version) applied to the materials
+var _shadow_cast: bool = true
 var _mesh_inst: MeshInstance3D
 var _amesh: ArrayMesh
 var _verts: PackedVector3Array = PackedVector3Array()
@@ -204,6 +258,17 @@ var _dbg_inst: MeshInstance3D = null
 var _dbg_mesh: ImmediateMesh = null
 var _dbg_pts: PackedVector3Array = PackedVector3Array()
 var _dbg_cols: PackedColorArray = PackedColorArray()
+# PerfToggles.card_redraw_on_change: every input the quads are built from this frame (camera,
+# drawn joints, squash, cells, ball), compared per card with what that card was last built
+# from; a card that did not move keeps its quad, and with no card moved the upload is skipped.
+const SIG_HEAD: = 4
+const SIG_PER_CARD: = 5
+const SIG_TOL_SQ: = 0.0014 * 0.0014   # metres: 1/20 of a card texel (0.028 m)
+const CAM_TOL_SQ: = 0.01 * 0.01       # camera metres: at 5+ m that turns a card under 0.12 degrees
+var _sig: PackedVector3Array = PackedVector3Array()
+var _drawn_sig: PackedVector3Array = PackedVector3Array()
+static var cards_skipped: int = 0   # probes: card quads kept (all rigs)
+static var cards_drawn: int = 0     # probes: card quads rebuilt (all rigs)
 
 static func attach(player) -> PixelCardRig:
 	if player == null or player.body_pivot == null: return null
@@ -391,18 +456,29 @@ func _build_mesh(tex_path: String, other_path: String, meta: Dictionary) -> void
 	var own: Dictionary = _extended_atlas(tex_path, meta)
 	_mat = ShaderMaterial.new()
 	_mat.shader = CARD_SHADER
-	_mat.set_shader_parameter("atlas", own.tex)
+	_soft_mat = ShaderMaterial.new()
+	_soft_mat.shader = SOFT_SHADER
+	_card_param("atlas", own.tex)
 	_atlas_px = Vector2(own.img.get_width(), own.img.get_height())
-	_mat.set_shader_parameter("atlas_px", _atlas_px)
-	_mat.set_shader_parameter("gain", float(meta.get("gain", 1.0)))
+	_card_param("atlas_px", _atlas_px)
+	_card_param("cell_uv", Vector2(float(meta.cell[0]) / _atlas_px.x, float(meta.cell[1]) / _atlas_px.y))
+	_card_param("gain", float(meta.get("gain", 1.0)))
+	_card_param("shading", 1.0)   # stepped golden-hour sun bands + sun-side rim
+	_shadow_mat = GroundShadows.card_shadow_material(own.tex)
+	_rim_mat = GroundShadows.card_shadow_material(own.tex, true)
+	for shadow: ShaderMaterial in [_shadow_mat, _rim_mat]:
+		shadow.set_shader_parameter("atlas_px", _atlas_px)
+		shadow.set_shader_parameter("cell_uv", Vector2(float(meta.cell[0]) / _atlas_px.x, float(meta.cell[1]) / _atlas_px.y))
+	_mat.next_pass = _shadow_mat
+	_sun_seen = GroundShadows.sync_card_sun(_mat, _shadow_mat, _sun_seen)
 	_has_other = other_path != ""
 	if _has_other:
 		var other: Dictionary = _extended_atlas(other_path, meta)
-		_mat.set_shader_parameter("atlas_other", other.tex)
+		_card_param("atlas_other", other.tex)
 		_team_ref_lum = _team_reference_luminance(own.img, other.img, meta)
-		_mat.set_shader_parameter("team_ref_lum", _team_ref_lum)
+		_card_param("team_ref_lum", _team_ref_lum)
 	else:
-		_mat.set_shader_parameter("atlas_other", own.tex)
+		_card_param("atlas_other", own.tex)
 	_near_set = {"tex": own.tex, "other": _mat.get_shader_parameter("atlas_other"), "px": _atlas_px, "lum": _team_ref_lum}
 	var n: int = _cards.size()
 	_verts.resize(n * 4)
@@ -419,8 +495,17 @@ func _build_mesh(tex_path: String, other_path: String, meta: Dictionary) -> void
 	arrays[Mesh.ARRAY_VERTEX] = _verts
 	arrays[Mesh.ARRAY_TEX_UV] = _uvs
 	arrays[Mesh.ARRAY_INDEX] = idx
+	# CUSTOM0 (3 floats): each corner one physics tick ago, for the shader's blend (tick build).
+	var previous: = PackedFloat32Array()
+	previous.resize(n * 4 * 3)
+	arrays[Mesh.ARRAY_CUSTOM0] = previous
+	# CUSTOM1 (3 floats): each corner's eased motion per tick, for the motion blur.
+	arrays[Mesh.ARRAY_CUSTOM1] = previous.duplicate()
+	# CUSTOM2 (3 floats): the shadow's own corner, as an offset from the card's (true joint-to-joint shapes).
+	arrays[Mesh.ARRAY_CUSTOM2] = previous.duplicate()
+	_attr.resize(n * 4 * ATTR_STRIDE)
 	_amesh = ArrayMesh.new()
-	_amesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE)
+	_amesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE | (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) | (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT) | (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT))
 	_amesh.custom_aabb = AABB(Vector3(-60, -5, -60), Vector3(120, 20, 120))   # vertices are world space and move every frame
 	_mesh_inst = MeshInstance3D.new()
 	_mesh_inst.name = "Cards"
@@ -477,17 +562,17 @@ static func _display_to_atlas(display: Color) -> Color:
 func flash_white(seconds: float) -> void:
 	if _mat == null: return
 	_flash_left = maxf(_flash_left, seconds)
-	_mat.set_shader_parameter("flash", 0.85)
+	_card_param("flash", 0.85)
 
 func _update_flash(delta: float) -> void:
 	if _flash_left <= 0.0: return
 	_flash_left -= delta / maxf(Engine.time_scale, 0.05)
-	if _flash_left <= 0.0: _mat.set_shader_parameter("flash", 0.0)
+	if _flash_left <= 0.0: _card_param("flash", 0.0)
 
 func apply_accent(display_color: Color) -> void:
 	if _mat == null or not _has_other: return
-	_mat.set_shader_parameter("accent_color", _display_to_atlas(display_color))
-	_mat.set_shader_parameter("accent_mix", 1.0)
+	_card_param("accent_color", _display_to_atlas(display_color))
+	_card_param("accent_mix", 1.0)
 
 ## Human keeps the authored art (rank 0). Among same-team actors the human, then the lower
 ## actor id, ranks first; each later one gets the team accent so partner and opponents read apart.
@@ -521,21 +606,26 @@ func _pos(n: Node3D) -> Vector3:
 	if arm == null or not arm.has_meta(ElbowSwivel.VISUAL_TURN_META): return p
 	var fore: Transform3D = _xf(n)
 	var wrist_end: Vector3 = fore * Vector3(0.0, 0.0, -float(arm.forearm_length) * float(arm.visual_stretch))
-	return ElbowSwivel.visual_elbow(arm, _xf(arm.upper_pivot).origin, p, wrist_end, -1.0 if _raw else Engine.get_physics_interpolation_fraction())
+	return ElbowSwivel.visual_elbow(arm, _xf(arm.upper_pivot).origin, p, wrist_end, -1.0 if (_raw or _tick_read) else Engine.get_physics_interpolation_fraction())
 
 func _xf(n: Node3D) -> Transform3D:
-	var xf: Transform3D = n.global_transform if _raw else n.get_global_transform_interpolated()
+	var xf: Transform3D = n.global_transform if (_raw or _tick_read) else n.get_global_transform_interpolated()
 	if _motion != null and _motion.has_motion(): return _motion.apply(n, xf)
 	return xf
 
 ## Visual-only paddle spin about its shaft this frame, radians (reactions; the paddle skin applies it).
 func paddle_spin() -> float:
 	if _motion == null or not visible: return 0.0
+	if _tick_mode: return lerpf(_spin_before, _spin_now, minf(_blend_shown, 1.0))
 	return _motion.paddle_spin()
 
 ## The shown paddle hand's visual-only delta this frame (the paddle skin applies it).
 func paddle_delta() -> Transform3D:
 	if _motion == null or not visible: return Transform3D.IDENTITY
+	if _tick_mode:
+		# Blended like the cards, so the shown paddle stays in the shown hand between ticks.
+		if _paddle_before.is_equal_approx(_paddle_now): return _paddle_now
+		return _paddle_before.interpolate_with(_paddle_now, minf(_blend_shown, 1.0))
 	return _motion.paddle_delta(_paddle_arm)
 
 ## Anticipation hold (coil while charging / before contact) and contact pop, as a
@@ -592,10 +682,10 @@ func _build_far(far: Dictionary, team: int, near: Dictionary) -> void:
 		"lum": _team_reference_luminance(own.img, other.img, grid)}
 
 func _apply_set(card_set: Dictionary) -> void:
-	_mat.set_shader_parameter("atlas", card_set.tex)
-	_mat.set_shader_parameter("atlas_other", card_set.other)
-	_mat.set_shader_parameter("atlas_px", card_set.px)
-	_mat.set_shader_parameter("team_ref_lum", float(card_set.lum))
+	_card_param("atlas", card_set.tex)
+	_card_param("atlas_other", card_set.other)
+	_card_param("atlas_px", card_set.px)
+	_card_param("team_ref_lum", float(card_set.lum))
 
 func _update_far(dist: float, net_dist: float) -> void:
 	if _far_set.is_empty(): return
@@ -653,10 +743,152 @@ func _update_paddle_arm() -> void:
 			best = d
 			_paddle_arm = c.arm
 
+## Tick build (PerfToggles.card_tick_build). The cards were rebuilt on every drawn frame from
+## interpolated joints: 4 players x 60-120 frames a second, the largest script cost in the game
+## (about 1 ms a frame on the phone). The joints only change on a physics tick, so the cards
+## are now built once per tick from the tick's own joints, and each corner is stored with where
+## it was one tick before (attribute CUSTOM0). The card and shadow shaders blend the two by the
+## engine's interpolation fraction, the same fraction every other interpolated node is drawn
+## with, so cards, paddle and ball stay in step. Frames between ticks only set that fraction.
+## Not used in first person (the camera follows the drawn head every frame), while paused or in
+## a pose editor (no ticks), with debug lines, or when a tool records drawn positions.
+##
+## Build off the tick's frame (PerfToggles.card_build_off_tick). The frame a physics tick runs
+## in is the game's heaviest (the phone: about 25 ms against 8 ms for the frames between), so
+## the build waits for the next frame. The tick's own frame is drawn by carrying the last
+## tick's motion on (blend 1 + fraction). That is exact when the frame starts on the tick
+## (fraction 0, the steady case on a 60 or 120 Hz screen) and drifts with the fraction: a
+## running leg is off by about half a card texel at fraction 0.2, so the build only waits up
+## to TICK_WAIT_MAX_F and is done at once past it. When no frame comes between two ticks (30 fps or less) there is
+## nothing to wait for, and the build goes back to the tick's frame for TICK_WAIT_OFF builds
+## (after two such ticks within two seconds: one alone is a hitch).
+const TICK_WAIT_OFF := 300
+const TICK_WAIT_MAX_F := 0.12           # the build only waits when the tick's frame starts this early in the tick
+const TICK_WAIT_OFF_MAX := 3600
+var _wait_span: int = TICK_WAIT_OFF
+var _frame_tick: int = -1
+var _wait_missed: int = -1000
+var _waiting_tick: int = -1            # the tick whose build was left for the next frame
+var _wait_off: int = 0                 # builds left before waiting is tried again
+const ATTR_STRIDE := 11                # ... and the shadow's corner as an offset from the card's (x, y, z)
+const SHADOW_WIDEN := 1.15              # the shadow's width over the art's (native/src/pickle_cards.cpp)
+const VEL_FOLLOW := 0.55               # share of the way the blur's motion moves to this tick's each tick
+var _vel_last_a := PackedVector3Array()   # motion blur: each card's joints one tick ago, and their eased motion per tick
+var _vel_last_b := PackedVector3Array()
+var _vel_a := PackedVector3Array()
+var _vel_b := PackedVector3Array()
+var _vel_have: bool = false
+const TICK_JUMP_SQ := 1.5 * 1.5        # a corner that moved further than this in one tick teleported: no blend
+var _attr := PackedFloat32Array()
+var _built_tick: int = -1
+var _tick_read: bool = false           # joints read as the tick left them (not interpolated)
+var _tick_mode: bool = false
+var _blend_shown: float = -1.0
+var _tick_moving: bool = false         # the last tick build moved something: one more upload settles it
+const TICK_TURN_MIN := 0.3             # a card whose side or length axis turned past this cosine in one tick flipped: no blend
+var _paddle_before := Transform3D.IDENTITY   # the paddle hand's visual delta one tick ago and now
+var _paddle_now := Transform3D.IDENTITY
+var _spin_before: float = 0.0
+var _spin_now: float = 0.0
+var _redrawn := PackedByteArray()       # per card: this build changed its drawing (other atlas cell)
+
+var _native = null                     # PickleCards (native/src/pickle_cards.cpp), one per rig
+var _native_tried: bool = false
+var _native_stale: bool = true         # the script loop built last: the native builder rebuilds every card
+var _script_stale: bool = false        # ... and the other way round
+var _native_params := PackedFloat64Array()
+var _native_hands := PackedInt32Array()
+var _hand_cards := PackedInt32Array()  # indices of the hand cards (their drawing is picked in script)
+var _native_joints: bool = false       # the native builder also reads the joints
+var _native_extras := PackedVector3Array()
+var _elbow_slots: Array = []           # forearm pivots whose drawn elbow may differ from the joint (arm slot = index)
+var _no_cards: Array = []
+
+## The native card builder for this rig, or null (no library in this build, or the
+## `native_math` switch is off): the script loop in _draw_cards is then used.
+func _native_cards():
+	if NativeMath.lib() == null: return null
+	if _native_tried: return _native
+	_native_tried = true
+	if not ClassDB.class_exists(&"PickleCards") or _cards.size() > 62: return null
+	var statics := PackedFloat64Array()
+	var variants := PackedFloat64Array()
+	_hand_cards.clear()
+	for index in _cards.size():
+		var c: Dictionary = _cards[index]
+		var first: int = variants.size() / 3
+		if c.limb:
+			for v in c.variants: variants.append_array([float(v[0]), float(v[1]), float(v[2])])
+		elif c.part == "hand":
+			_hand_cards.append(index)
+			for base_row in c.hand_variants:
+				for v in c.hand_variants[base_row]: variants.append_array([float(base_row), float(v[0]), float(v[1])])
+		statics.append_array([1.0 if c.limb else 0.0, 1.0 if c.prev != null else 0.0, 1.0 if c.part == "hand" else 0.0,
+			1.0 if c.mirror else 0.0, 2.0 if c.facing == "head" else (1.0 if c.facing == "torso" else 0.0), float(c.side),
+			c.anchor.x, c.anchor.y, c.end.y, float(c.detail), float(c.row), float(c.low_row), float(c.top_row),
+			float(PART_BIAS.get(c.part, 0.0)), float(first), float(variants.size() / 3 - first)])
+	_native_params.resize(23)
+	_native_hands.resize(_cards.size())
+	_native_hands.fill(-1)
+	_native = ClassDB.instantiate(&"PickleCards")
+	_native.setup(statics, variants)
+	# Joint reads: the distinct joints, and per card which ones it reads.
+	var joints: Array = []
+	var reads := PackedInt32Array()
+	var joint_index: = func(n) -> int:
+		if n == null: return -1
+		var at: int = joints.find(n)
+		if at < 0:
+			joints.append(n)
+			at = joints.size() - 1
+		return at
+	_elbow_slots = _elbow_arm.keys()
+	for index in _cards.size():
+		var c: Dictionary = _cards[index]
+		var other = c.b if c.limb else c.prev
+		var up_mode: int = 3 if c.part == "hand" else ((1 if c.facing != "body" else 2) if (not c.limb and c.prev == null) else 0)
+		reads.append_array([joint_index.call(c.a), joint_index.call(other), joint_index.call(c.root), up_mode,
+			_elbow_slots.find(c.a), _elbow_slots.find(other) if other != null else -1, _hand_cards.find(index)])
+	_native_joints = _elbow_slots.size() <= 2 and _hand_cards.size() <= 3
+	if _native_joints:
+		_native_extras.resize(9)
+		_native.setup_joints(joints, reads)
+	return _native
+
+func _fill_native_params(cam_pos: Vector3, torso_pos: Vector3, ball_pos: Vector3, s: float, cell: Vector2, cols: int, tex_w: float, tex_h: float, squash: float, body_cell: int, torso_cell: int, head_cell: int, ball_ok: bool) -> void:
+	_native_params[0] = cam_pos.x; _native_params[1] = cam_pos.y; _native_params[2] = cam_pos.z
+	_native_params[3] = torso_pos.x; _native_params[4] = torso_pos.y; _native_params[5] = torso_pos.z
+	_native_params[6] = ball_pos.x; _native_params[7] = ball_pos.y; _native_params[8] = ball_pos.z
+	_native_params[9] = s; _native_params[10] = cell.x; _native_params[11] = cell.y; _native_params[12] = cols
+	_native_params[13] = tex_w; _native_params[14] = tex_h; _native_params[15] = squash
+	_native_params[16] = body_cell; _native_params[17] = torso_cell; _native_params[18] = head_cell
+	_native_params[19] = 1.0 if ball_ok else 0.0
+	var light: Vector3 = -Sun.to_sun()
+	_native_params[20] = light.x; _native_params[21] = light.y; _native_params[22] = light.z
+
+const SMEAR_KEY := "video.motion_smear"   # 0 off .. 1: trail length as a share of one tick's motion (pixel_card.gdshader)
+var _smear_setting: float = 1.0
+var _smear_shown: float = -1.0
+var photo_tick: bool = false     # photo history is drawing a past tick: build it as a tick
+var _blur_frozen: bool = false   # paused with blur on: the blur state is kept as it was
+var _shading_on: bool = true   # Settings video.player_shading: the sun bands and rim on this player's cards
+
+func _set_tick_blend(blend: float) -> void:
+	if is_equal_approx(blend, _blend_shown): return
+	_blend_shown = blend
+	_card_param("tick_blend", blend)
+	_shadow_mat.set_shader_parameter("tick_blend", blend)
+	if _rim_mat != null: _rim_mat.set_shader_parameter("tick_blend", blend)
+
 func _process(delta: float) -> void:
 	var _rt: = Time.get_ticks_usec()
 	_draw_cards(delta)
-	PerfMonitor.record("card.rig", Time.get_ticks_usec() - _rt)   # the whole rig for this player, card.motion included
+	var spent: int = Time.get_ticks_usec() - _rt
+	PerfMonitor.record("card.rig", spent)   # the whole rig for this player, card.motion included
+	var tick_now: int = Engine.get_physics_frames()
+	if tick_now != _frame_tick:
+		_frame_tick = tick_now
+		PerfMonitor.record("card.on_tick", spent)   # the share that lands on a frame with a physics tick (the heavy frames)
 
 func _draw_cards(delta: float) -> void:
 	if not is_instance_valid(_player) or not is_instance_valid(_player.body_pivot):
@@ -677,8 +909,71 @@ func _draw_cards(delta: float) -> void:
 	if _hide_timer <= 0.0:
 		_hide_timer = 2.0
 		_hide_classic()
+		_smear_setting = float(Settings.get_value(SMEAR_KEY, 1.0)) if bool(Settings.get_value("video.blur_body", true)) else 0.0
+		var shaded: bool = bool(Settings.get_value("video.player_shading", true))
+		if shaded != _shading_on:
+			_shading_on = shaded
+			_card_param("shading", 1.0 if shaded else 0.0)
 	_mesh_inst.visible = show_cards
+	var sun_before: Vector2i = _sun_seen
+	_sun_seen = GroundShadows.sync_card_sun(_mat, _shadow_mat, _sun_seen)
+	if _sun_seen.x != sun_before.x:   # the shadow shapes face the sun: rebuild every card
+		_native_stale = true
+		_script_stale = true
+	# First person hides your own head and hips near the eye: a headless shadow would read
+	# wrong, so your own shadow is off there (everyone else's stays).
+	if _shadow_cast == first_person:
+		_shadow_cast = not first_person
+		_shadow_mat.set_shader_parameter("cast", 1.0 if _shadow_cast else 0.0)
+	_update_shadow_rim()
 	_update_flash(delta)
+	_tick_mode = PerfToggles.card_tick_build and not first_person and not record_drawn and not (show_bones or show_axes) \
+		and not get_tree().paused and not (_player.posture != null and _player.posture.editor_preview_mode)
+	# Photo history (scripts/fx/photo_history.gd) draws a past tick as a tick, so the cards get
+	# that moment's motion for their blur.
+	if photo_tick: _tick_mode = true
+	_tick_read = _tick_mode
+	# Motion smear needs the two tick corners, which only the tick build keeps current.
+	# Paused (photo mode, the pause menu): the moment is frozen with its blur. The corners'
+	# motion is still in the mesh from the last tick, so the blur strength, the soft pass and
+	# the shadow trail are simply left as they were (the blur follows the photo camera, since
+	# the shaders read the motion in view space every frame).
+	_blur_frozen = get_tree().paused and not (_player.posture != null and _player.posture.editor_preview_mode) and _smear_shown > 0.0
+	# Slow motion: the exposure is real time, so the blur shrinks with the slow-down.
+	var smear: float = snappedf(_smear_setting * clampf(Engine.time_scale, 0.0, 1.0), 0.02) if _tick_mode else 0.0
+	if _blur_frozen: smear = _smear_shown
+	if smear != _smear_shown:
+		_smear_shown = smear
+		_card_param("smear", smear)
+	if _tick_mode:
+		var tick: int = Engine.get_physics_frames()
+		if tick == _built_tick and not photo_tick:
+			_set_tick_blend(Engine.get_physics_interpolation_fraction())
+			return
+		var into_tick: float = Engine.get_physics_interpolation_fraction()
+		if PerfToggles.card_build_off_tick and _built_tick == tick - 1 and _waiting_tick != tick and _wait_off <= 0 and into_tick <= TICK_WAIT_MAX_F and not photo_tick:
+			_waiting_tick = tick
+			_set_tick_blend(1.0 + into_tick)
+			return
+		if _waiting_tick == tick - 1:
+			# The next tick came with no frame between. Once is a hitch; twice within two seconds
+			# is a frame rate with no frames between ticks.
+			if tick - _wait_missed < 60:
+				_wait_off = _wait_span
+				_wait_span = mini(_wait_span * 2, TICK_WAIT_OFF_MAX)   # each failed retry waits twice as long
+			_wait_missed = tick
+		elif _wait_off > 0: _wait_off -= 1
+		_waiting_tick = -1
+		# The visual-only motion steps by game time per tick, not by the uneven time between the
+		# frames that happened to build (which made its speed waver).
+		delta = float(clampi(tick - _built_tick, 1, 4) if _built_tick >= 0 else 1) / float(Engine.physics_ticks_per_second)
+		_built_tick = tick
+	else:
+		_built_tick = -1
+	var old_verts: PackedVector3Array = _verts.duplicate() if _tick_mode else PackedVector3Array()
+	if _tick_mode:
+		if _redrawn.size() != _cards.size(): _redrawn.resize(_cards.size())
+		_redrawn.fill(0)
 	var meta: = _grid
 	var s: float = float(meta.meters_per_texel)
 	var cell: Vector2 = Vector2(meta.cell[0], meta.cell[1])
@@ -723,9 +1018,124 @@ func _draw_cards(delta: float) -> void:
 		_dbg_cols.clear()
 	var tex_w: float = _atlas_px.x
 	var tex_h: float = _atlas_px.y
+	# Read every joint once (the quad loop below uses these), then skip the rebuild when
+	# nothing it reads moved.
+	var n_sig: int = SIG_HEAD + SIG_PER_CARD * _cards.size()
+	if _sig.size() != n_sig: _sig.resize(n_sig)
+	var ball = _player._get_ball_ref() if _player.has_method("_get_ball_ref") else null
+	var ball_ok: bool = ball != null and is_instance_valid(ball)
+	var ball_pos: Vector3 = _xf(ball).origin if ball_ok else Vector3.ZERO
+	var pa_id: float = 0.0
+	if _paddle_arm != null: pa_id = 1.0 if _paddle_arm == _player.get("right_arm_node") else 2.0
+	var ball_held: bool = ball_ok and not bool(ball.get("is_in_play"))
+	var native = _native_cards() if not (first_person or want_dbg or record_drawn) else null
+	# The joint reads in C++ too (read_joints): each distinct joint once, with the motion
+	# layer's deltas; the drawn elbows and the hands' free weights are handed over from here.
+	var native_read: bool = false
+	if native != null and _native_joints:
+		_native_extras[0] = cam_pos
+		_native_extras[1] = Vector3(squash, 1.0 if _swing_active else 0.0, pa_id)
+		_native_extras[2] = Vector3(body_cell, torso_cell, head_cell)
+		_native_extras[3] = Vector3(1.0 if ball_held else 0.0, 1.0 if first_person else 0.0, 1.0 if _far else 0.0)
+		_native_extras[4] = torso_pos
+		_native_extras[5] = ball_pos
+		var read_flags: int = 4 if ball_held else 0
+		for slot in _elbow_slots.size():
+			var elbow_arm = _elbow_arm.get(_elbow_slots[slot])
+			if elbow_arm != null and elbow_arm.has_meta(ElbowSwivel.VISUAL_TURN_META):
+				_native_extras[6 + slot] = _pos(_elbow_slots[slot])
+				read_flags |= 1 << slot
+		var free: Vector3 = Vector3.ONE
+		for slot in _hand_cards.size():
+			var hand_arm = _cards[_hand_cards[slot]].arm
+			if hand_arm != null: free[slot] = _motion._free_w(hand_arm)
+		_native_extras[8] = free
+		native_read = native.read_joints(_motion._deltas, _native_extras, read_flags, not (_raw or _tick_read))
+	_sig[0] = cam_pos
+	_sig[1] = Vector3(squash, 1.0 if _swing_active else 0.0, pa_id)
+	_sig[2] = Vector3(body_cell, torso_cell, head_cell)
+	_sig[3] = Vector3(1.0 if ball_held else 0.0, 1.0 if first_person else 0.0, 1.0 if _far else 0.0)
+	var si: int = SIG_HEAD
+	for c in (_no_cards if native_read else _cards):
+		_sig[si] = _pos(c.a)
+		if c.limb: _sig[si + 1] = _pos(c.b)
+		elif c.prev != null: _sig[si + 1] = _pos(c.prev)
+		else: _sig[si + 1] = Vector3.ZERO
+		# The draw-order bias reads the root against the torso, so that difference is the input.
+		_sig[si + 2] = (_xf(c.root).origin - torso_pos) if c.root != null else Vector3.ZERO
+		if c.part == "hand": _sig[si + 3] = Vector3(_motion._free_w(c.arm) if c.arm != null else 1.0, 0.0, 0.0)
+		elif not c.limb and c.prev == null: _sig[si + 3] = _xf(c.a).basis.y if c.facing != "body" else Vector3.UP
+		else: _sig[si + 3] = Vector3.ZERO
+		_sig[si + 4] = ball_pos if (ball_held and c.part == "hand") else Vector3.ZERO   # a hand holding the ball reads it
+		si += SIG_PER_CARD
+	# Every input is a point (metres, unit vectors, small integers). A card whose inputs all
+	# moved less than SIG_TOL since it was last built keeps its quad; the camera (shared by
+	# every card) may drift CAM_TOL before all are rebuilt. Both are far under a screen pixel.
+	if native != null:
+		# The quad build in C++ (native/src/pickle_cards.cpp): the same steps as the loop below.
+		var force_all: bool = not PerfToggles.card_redraw_on_change or _raw or _native_stale
+		var mask: int = native.prepare_read(force_all) if native_read else native.prepare(_sig, force_all)
+		_native_stale = false
+		_script_stale = true
+		var cup_mask: int = 0
+		for hi in _hand_cards:
+			if mask & (1 << hi):
+				var hand_card: Dictionary = _cards[hi]
+				if int(hand_card.hand_state) == HAND_CUP: cup_mask |= 1 << hi
+				_native_hands[hi] = _hand_row(hand_card, _pos(hand_card.a))
+		_fill_native_params(cam_pos, torso_pos, ball_pos, s, cell, cols, tex_w, tex_h, squash, body_cell, torso_cell, head_cell, ball_ok)
+		var result: int = native.build(_native_params, _native_hands, cup_mask, _tick_mode)
+		cards_drawn += result & 255
+		cards_skipped += _cards.size() - (result & 255)
+		if not _blur_frozen or photo_tick: _set_soft_pass(_tick_mode and (result & 512) != 0)
+		if _tick_mode:
+			_paddle_before = _paddle_now
+			_spin_before = _spin_now
+			_paddle_now = _motion.paddle_delta(_paddle_arm)
+			_spin_now = _motion.paddle_spin()
+		if result & 256:
+			_amesh.surface_update_vertex_region(0, 0, native.vertex_bytes())
+			_amesh.surface_update_attribute_region(0, 0, native.attr_bytes())
+		_set_tick_blend(Engine.get_physics_interpolation_fraction() if _tick_mode and not photo_tick else 1.0)
+		_draw_debug(false)
+		return
+	_native_stale = true
+	var sun_light: Vector3 = -Sun.to_sun()
+	var all_cards: bool = not PerfToggles.card_redraw_on_change or first_person or want_dbg or _raw or _drawn_sig.size() != n_sig or _script_stale
+	_script_stale = false
+	if not all_cards:
+		if _sig[0].distance_squared_to(_drawn_sig[0]) > CAM_TOL_SQ: all_cards = true
+		else:
+			for k in range(1, SIG_HEAD):
+				if _sig[k].distance_squared_to(_drawn_sig[k]) > SIG_TOL_SQ:
+					all_cards = true
+					break
+	if all_cards:
+		_drawn_sig = _sig.duplicate() if _drawn_sig.size() != n_sig else _drawn_sig
+		for k in SIG_HEAD: _drawn_sig[k] = _sig[k]
+	var built: int = 0
+	si = SIG_HEAD
 	var i: int = 0
 	for c in _cards:
-		var a: Vector3 = _pos(c.a)
+		var a: Vector3 = _sig[si]
+		var b_src: Vector3 = _sig[si + 1]
+		var root_pos: Vector3 = _sig[si + 2] + torso_pos
+		var up_read: Vector3 = _sig[si + 3]
+		if not all_cards:
+			var moved: bool = false
+			for k in SIG_PER_CARD:
+				if _sig[si + k].distance_squared_to(_drawn_sig[si + k]) > SIG_TOL_SQ:
+					moved = true
+					break
+			if not moved:
+				si += SIG_PER_CARD
+				i += 1
+				cards_skipped += 1
+				continue
+		for k in SIG_PER_CARD: _drawn_sig[si + k] = _sig[si + k]
+		si += SIG_PER_CARD
+		built += 1
+		cards_drawn += 1
 		if record_drawn: drawn["%s%d" % [c.part, 1 if c.mirror else 0]] = a
 		if first_person and c.part in FIRST_PERSON_HIDDEN:
 			# Collapsed to a point: nothing drawn, the vertex layout stays the same.
@@ -734,15 +1144,14 @@ func _draw_cards(delta: float) -> void:
 			i += 1
 			continue
 		var b: Vector3
-		if c.limb: b = _pos(c.b)
+		if c.limb: b = b_src
 		elif c.prev != null:
-			var along: Vector3 = (a - _pos(c.prev)).normalized()
+			var along: Vector3 = (a - b_src).normalized()
 			# A hand cupping the ball points at the ball, so the ball sits in the palm and fingers
 			# (on the forearm's line it sat on the wrist).
 			if int(c.hand_state) == HAND_CUP:
-				var held_ball = _player._get_ball_ref() if _player.has_method("_get_ball_ref") else null
-				if held_ball != null and is_instance_valid(held_ball):
-					var to_ball: Vector3 = _xf(held_ball).origin - a
+				if ball_ok:
+					var to_ball: Vector3 = ball_pos - a
 					if to_ball.length() > 0.02 and to_ball.length() < CUP_OFF * 1.5: along = along.lerp(to_ball.normalized(), CUP_AIM).normalized()
 			b = a + along * 0.06
 		else: b = a
@@ -754,6 +1163,7 @@ func _draw_cards(delta: float) -> void:
 		var up_dir: Vector3
 		var sy: float = s
 		var limb_shift: Vector3 = Vector3.ZERO
+		var true_scale: float = 1.0   # a limb's real length over the length its card shows
 		var limb_row: int = -1
 		var limb_texels: float = 0.0
 		var tilt: float = 0.0
@@ -781,6 +1191,7 @@ func _draw_cards(delta: float) -> void:
 				var least: float = LIMB_MIN_SHOWN if is_zero_approx(float(pick[0])) else cos(deg_to_rad(absf(float(pick[0])))) * LIMB_AXIAL_MIN
 				var shown: float = maxf(dp.length(), d.length() * least)
 				sy = shown / texel_len
+				true_scale = d.length() / maxf(shown, 0.0001)
 				limb_shift = up_dir * (shown - dp.length()) * 0.5
 		else:
 			# Screen-up of the sprite: the part's own up (so a lean shows) while that is well
@@ -789,7 +1200,7 @@ func _draw_cards(delta: float) -> void:
 			var away: Vector3 = mid - face_cam
 			away.y = 0.0
 			var steep: float = smoothstep(0.55, 0.85, absf(z.y))
-			var up_hint: Vector3 = _xf(c.a).basis.y if c.facing != "body" else Vector3.UP
+			var up_hint: Vector3 = up_read
 			var plain: Vector3 = up_hint - z * up_hint.dot(z)
 			var level: Vector3 = Vector3.ZERO
 			if away.length_squared() > 1e-6:
@@ -809,7 +1220,7 @@ func _draw_cards(delta: float) -> void:
 		# front of it, the far one behind (small metre bias along the view ray, eased).
 		var bias: float = float(PART_BIAS.get(c.part, 0.0))
 		if c.side != 0:
-			bias *= clampf((_xf(c.root).origin - torso_pos).dot(z) / BIAS_BLEND, -1.0, 1.0)
+			bias *= clampf((root_pos - torso_pos).dot(z) / BIAS_BLEND, -1.0, 1.0)
 		origin_a += z * bias
 		var lsc: float = 1.0
 		var wsc: float = 1.0
@@ -871,10 +1282,119 @@ func _draw_cards(delta: float) -> void:
 		_uvs[v + 1] = Vector2(u1, v0)
 		_uvs[v + 2] = Vector2(u1, v1)
 		_uvs[v + 3] = Vector2(u0, v1)
+		var at: int = v * ATTR_STRIDE
+		# Another drawing (facing cell, view row, limb tilt row) has its own size and anchor: its
+		# corners are not the old drawing's corners moved, so this tick shows it as it is.
+		if _tick_mode and (not is_equal_approx(_attr[at], u0) or not is_equal_approx(_attr[at + 1], v0) or not is_equal_approx(_attr[at + 2 * ATTR_STRIDE + 1], v1)): _redrawn[i] = 1
+		_attr[at] = u0; _attr[at + 1] = v0
+		_attr[at + ATTR_STRIDE] = u1; _attr[at + ATTR_STRIDE + 1] = v0
+		_attr[at + 2 * ATTR_STRIDE] = u1; _attr[at + 2 * ATTR_STRIDE + 1] = v1
+		_attr[at + 3 * ATTR_STRIDE] = u0; _attr[at + 3 * ATTR_STRIDE + 1] = v1
+		# The shadow's own shape (the same steps as native/src/pickle_cards.cpp): independent of
+		# the camera. From the part's real joint, along its real line, turned to face the sun,
+		# SHADOW_WIDEN times the art's width; stored per corner as the offset from the card's corner.
+		var cast_axis: Vector3
+		if c.limb or c.prev != null:
+			var run: Vector3 = b - a
+			cast_axis = run.normalized() if run.length() > 1e-4 else -up_dir
+		else:
+			cast_axis = -up_read.normalized() if up_read.length_squared() > 1e-6 else Vector3.DOWN
+		var cast_side: Vector3 = cast_axis.cross(sun_light)
+		cast_side = cast_side.normalized() * SHADOW_WIDEN if cast_side.length_squared() > 1e-8 else x
+		if cast_side.dot(x) < 0.0: cast_side = -cast_side
+		var cast_y0: float = y0 * true_scale
+		var cast_y1: float = y1 * true_scale
+		var cast_corners: Array[Vector3] = [a + cast_side * x0 + cast_axis * cast_y0, a + cast_side * x1 + cast_axis * cast_y0, a + cast_side * x1 + cast_axis * cast_y1, a + cast_side * x0 + cast_axis * cast_y1]
+		for corner in 4:
+			var cast_offset: Vector3 = cast_corners[corner] - _verts[v + corner]
+			var slot: int = at + corner * ATTR_STRIDE + 8
+			_attr[slot] = cast_offset.x; _attr[slot + 1] = cast_offset.y; _attr[slot + 2] = cast_offset.z
 		i += 1
 		if want_dbg: _debug_lines(c, a, b, origin_a, x, up_dir, z)
-	_amesh.surface_update_vertex_region(0, 0, _verts.to_byte_array())
-	_amesh.surface_update_attribute_region(0, 0, _uvs.to_byte_array())
+	if _tick_mode:
+		# Each corner's place one tick ago: what it was before this build (a card that was not
+		# rebuilt did not move, so both are the same). A teleport does not slide across the court.
+		var moved: bool = built > 0
+		# Motion blur (the same steps as native/src/pickle_cards.cpp): each corner's motion this
+		# tick from the card's own joints, eased over a few ticks.
+		var fast: bool = false
+		var vel_changed: bool = false
+		var n_cards: int = _cards.size()
+		if _vel_a.size() != n_cards:
+			_vel_last_a.resize(n_cards); _vel_last_b.resize(n_cards); _vel_a.resize(n_cards); _vel_b.resize(n_cards)
+			_vel_a.fill(Vector3.ZERO); _vel_b.fill(Vector3.ZERO)
+			_vel_have = false
+		for index in n_cards:
+			var card: Dictionary = _cards[index]
+			var joint: Vector3 = _sig[SIG_HEAD + index * SIG_PER_CARD]
+			var far_joint: Vector3 = _sig[SIG_HEAD + index * SIG_PER_CARD + 1] if card.limb else joint
+			var raw_a: Vector3 = Vector3.ZERO
+			var raw_b: Vector3 = Vector3.ZERO
+			if _vel_have:
+				raw_a = joint - _vel_last_a[index]
+				raw_b = far_joint - _vel_last_b[index]
+				if raw_a.length_squared() > TICK_JUMP_SQ or raw_b.length_squared() > TICK_JUMP_SQ:
+					raw_a = Vector3.ZERO
+					raw_b = Vector3.ZERO
+			_vel_last_a[index] = joint
+			_vel_last_b[index] = far_joint
+			var va: Vector3 = _vel_a[index].lerp(raw_a, VEL_FOLLOW)
+			var vb: Vector3 = _vel_b[index].lerp(raw_b, VEL_FOLLOW)
+			if va.length_squared() < 0.0005 * 0.0005: va = Vector3.ZERO
+			if vb.length_squared() < 0.0005 * 0.0005: vb = Vector3.ZERO
+			_vel_a[index] = va
+			_vel_b[index] = vb
+			if va.length_squared() > TICK_FAST_SQ or vb.length_squared() > TICK_FAST_SQ: fast = true
+			var t0: float = 0.0
+			var t1: float = 0.0
+			if card.limb:
+				var limb_len: float = maxf(card.end.y - card.anchor.y, 1.0)
+				t0 = clampf(-card.anchor.y / limb_len, -0.5, 1.5)
+				t1 = clampf((cell.y - card.anchor.y) / limb_len, -0.5, 1.5)
+			var top: Vector3 = va + (vb - va) * t0
+			var bottom: Vector3 = va + (vb - va) * t1
+			for corner in 4:
+				var motion: Vector3 = top if corner < 2 else bottom
+				var slot: int = (index * 4 + corner) * ATTR_STRIDE
+				if _attr[slot + 5] != motion.x or _attr[slot + 6] != motion.y or _attr[slot + 7] != motion.z:
+					vel_changed = true
+					_attr[slot + 5] = motion.x; _attr[slot + 6] = motion.y; _attr[slot + 7] = motion.z
+		_vel_have = true
+		_paddle_before = _paddle_now
+		_spin_before = _spin_now
+		_paddle_now = _motion.paddle_delta(_paddle_arm)
+		_spin_now = _motion.paddle_spin()
+		if moved or _tick_moving or vel_changed:
+			for first in range(0, _verts.size(), 4):
+				# Blending corners is only right for a card that moved or turned a little. One that
+				# jumped (teleport), flipped (mirrored, turned end over end), changed drawing or was
+				# hidden a tick ago is shown where it is now, as the per-frame build showed it.
+				var now0: Vector3 = _verts[first]
+				var was0: Vector3 = old_verts[first]
+				var side_now: Vector3 = _verts[first + 1] - now0
+				var side_was: Vector3 = old_verts[first + 1] - was0
+				var tall_now: Vector3 = _verts[first + 3] - now0
+				var tall_was: Vector3 = old_verts[first + 3] - was0
+				var blend_ok: bool = _redrawn[first >> 2] == 0 and was0.distance_squared_to(now0) <= TICK_JUMP_SQ \
+					and side_now.dot(side_was) > TICK_TURN_MIN * side_now.length() * side_was.length() \
+					and tall_now.dot(tall_was) > TICK_TURN_MIN * tall_now.length() * tall_was.length()
+				if blend_ok and (was0.distance_squared_to(now0) > TICK_FAST_SQ or old_verts[first + 1].distance_squared_to(_verts[first + 1]) > TICK_FAST_SQ or old_verts[first + 2].distance_squared_to(_verts[first + 2]) > TICK_FAST_SQ or old_verts[first + 3].distance_squared_to(_verts[first + 3]) > TICK_FAST_SQ): fast = true
+				for corner in range(first, first + 4):
+					var before: Vector3 = old_verts[corner] if blend_ok else _verts[corner]
+					var at: int = corner * ATTR_STRIDE
+					_attr[at + 2] = before.x; _attr[at + 3] = before.y; _attr[at + 4] = before.z
+			_amesh.surface_update_vertex_region(0, 0, _verts.to_byte_array())
+			_amesh.surface_update_attribute_region(0, 0, _attr.to_byte_array())
+		_tick_moving = moved
+		_set_soft_pass(fast)
+		_set_tick_blend(1.0 if photo_tick else Engine.get_physics_interpolation_fraction())
+	else:
+		_vel_have = false
+		if not _blur_frozen: _set_soft_pass(false)
+		_set_tick_blend(1.0)
+		if built > 0:
+			_amesh.surface_update_vertex_region(0, 0, _verts.to_byte_array())
+			_amesh.surface_update_attribute_region(0, 0, _attr.to_byte_array())
 	_draw_debug(want_dbg)
 
 ## Bones: joint segments; axes: each card's x (red), up (green) and view (blue) vectors.

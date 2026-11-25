@@ -19,6 +19,11 @@ extends RefCounted
 const Kit := preload("res://scripts/environment/env_mesh_kit.gd")
 const Fig := preload("res://scripts/environment/env_figures.gd")
 const People := preload("res://scripts/environment/env_people.gd")
+const SignPaint := preload("res://scripts/environment/sign_paint.gd")
+## Metres per sign pixel. The shop signs are ~38-40 m from the play camera: 10.8-11.4 render
+## px per metre on a 720-wide view, 17.6-18.7 on an iPhone (1179 wide), and down to ~9 / ~15
+## from the serve camera. 0.09 m keeps a sign pixel at ~1 render px on 720 and >= 1.3 on the phone.
+const SIGN_TEXEL := 0.09
 
 # The rolling cart parks on the corner of the cement slab, angled a little in toward the
 # court (its front faces mostly at the court, turned toward the middle).
@@ -114,7 +119,7 @@ static func _panaderya(w, st: SurfaceTool) -> void:
 	for k in 3: Kit.cylinder(st, Vector3(cx - 1.8 + k * 1.8, 3.44, zf + 0.75), 0.13, 0.17, 0.25, w._c("#b5603e"), 6)
 	w._shade_strip(st, x0, x1, zf - 0.09, 5.8, 0.45, peach)
 	w._gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 0.5, zb - 0.3, 6.05, 5.45, true)
-	w._shadow(Vector3(cx + 0.6, 0, zf - 0.6), Vector2(x1 - x0 + 1.0, 1.6), true)
+	w._shadow(Vector3(cx, 0, (zf + 1.0 + zb) * 0.5), Vector2(x1 - x0 + 0.6, zf + 1.0 - zb), true, 5.8)
 
 
 static func _waiting_shed(w, st: SurfaceTool) -> void:
@@ -132,7 +137,7 @@ static func _waiting_shed(w, st: SurfaceTool) -> void:
 	w._gi_roof(st, x0 - 0.25, x1 + 0.25, zf + 0.5, zb - 0.3, 2.45, 2.75, true)
 	Kit.box(st, Vector3(cx, 2.62, zf + 0.52), Vector3(2.6, 0.36, 0.05), w._c("#f2efe6"))
 	w._label("WAITING SHED", Vector3(cx, 2.62, zf + 0.56), 0.22, Color(0.2, 0.3, 0.6))
-	w._shadow(Vector3(cx + 0.3, 0, (zf + zb) * 0.5), Vector2(x1 - x0 + 0.6, 1.6), true)
+	w._shadow(Vector3(cx, 0, (zf + 0.5 + zb) * 0.5), Vector2(x1 - x0 + 0.5, zf + 0.5 - zb), true, 2.6)
 
 
 static func _carinderia(w, st: SurfaceTool, props: SurfaceTool) -> void:
@@ -164,12 +169,11 @@ static func _carinderia(w, st: SurfaceTool, props: SurfaceTool) -> void:
 	# awning out over the front, the sign on its fascia
 	w._gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 1.3, zf, 2.55, 2.95, true)
 	Kit.box(st, Vector3(cx, 2.62, zf + 1.32), Vector3(x1 - x0 + 0.6, 0.18, 0.05), w._c("#d23b34"))
-	Kit.box(st, Vector3(cx, 3.25, zf + 0.06), Vector3(3.4, 0.5, 0.06), w._c("#f2efe6"))
-	w._label("CARINDERIA", Vector3(cx, 3.25, zf + 0.1), 0.36, Color(0.82, 0.18, 0.14))
+	# signboard standing on the awning in front of the eave (the board is 0.81 m tall)
+	_shop_sign(w, st, "CARINDERIA", Vector3(cx, 3.27, zf + 0.36), Color("#c42e22"))
 	w._gi_roof(st, x0 - 0.3, x1 + 0.3, zf + 0.3, zb - 0.3, 3.55, 3.0, true)
 	w._shade_strip(st, x0, x1, zf + 0.02, 2.55, 0.35, wall)
-	w._shadow(Vector3(cx + 0.6, 0, zf - 0.4), Vector2(x1 - x0 + 1.0, 1.4), true)
-	w._shadow(Vector3(x1 + 0.9, 0, (zf + zb) * 0.5), Vector2(1.8, zf - zb), true)
+	w._shadow(Vector3(cx, 0, (zf + 1.3 + zb) * 0.5), Vector2(x1 - x0 + 0.6, zf + 1.3 - zb), true, 3.3)
 	# long table with benches, left of where the pandesal cart parks
 	var t := Vector3(1.9, 0, -25.9)
 	Kit.box(props, t + Vector3(0, 0.74, 0), Vector3(1.9, 0.05, 0.7), w._c("#9a7048"))
@@ -183,7 +187,17 @@ static func _carinderia(w, st: SurfaceTool, props: SurfaceTool) -> void:
 	for k in 3:   # plates and cups
 		Kit.cylinder(props, t + Vector3(-0.6 + k * 0.6, 0.77, -0.15), 0.12, 0.12, 0.02, w._c("#f2efe6"), 8)
 		Kit.cylinder(props, t + Vector3(-0.45 + k * 0.6, 0.77, 0.12), 0.04, 0.04, 0.1, w._c("#5fa8d8"), 6)
-	w._shadow(t, Vector2(2.1, 1.5), true)
+	w._shadow(t, Vector2(1.95, 1.4), true, 0.77)
+
+
+## A painted shop sign (scripts/environment/sign_paint.gd): red letters on cream with a dark
+## red edge, on a thin backing board so it has some depth. `front` is the painted face.
+static func _shop_sign(w, st: SurfaceTool, text: String, front: Vector3, ink: Color) -> void:
+	var size := Vector2(SignPaint.pixel_size(text)) * SIGN_TEXEL
+	Kit.box(st, front - Vector3(0, 0, 0.03), Vector3(size.x, size.y, 0.05), w._c("#6e2a20"))
+	var sign := SignPaint.board(text, SIGN_TEXEL, Color("#f1e9d2"), ink, Color("#7a2a20"))
+	sign.position = front + Vector3(0, 0, 0.002)
+	w._near.add_child(sign)
 
 
 static func _vulcanizing(w, st: SurfaceTool) -> void:
@@ -194,8 +208,7 @@ static func _vulcanizing(w, st: SurfaceTool) -> void:
 	var cx := (x0 + x1) * 0.5
 	Kit.box(st, Vector3(cx, 1.5, (zf + zb) * 0.5), Vector3(x1 - x0, 3.0, zf - zb), w._c("#9fb8a0"))
 	Kit.box(st, Vector3(cx - 0.3, 1.15, zf + 0.01), Vector3(2.8, 2.3, 0.04), w._c("#2f2b30"))     # open bay
-	Kit.box(st, Vector3(cx, 2.75, zf + 0.06), Vector3(3.8, 0.5, 0.06), w._c("#f2efe6"))
-	w._label("VULCANIZING", Vector3(cx, 2.75, zf + 0.1), 0.3, Color(0.82, 0.16, 0.14))
+	_shop_sign(w, st, "VULCANIZING", Vector3(cx, 2.64, zf + 0.1), Color("#c42e22"))
 	w._gi_roof(st, x0 - 0.25, x1 + 0.25, zf + 0.8, zb - 0.3, 3.05, 3.4, true)
 	# tyre stacks, an air compressor, a hanging tyre sign
 	for t in [[x0 + 0.1, -23.8, 5], [x1 - 0.2, -23.9, 4], [x1 - 0.75, -23.7, 3]]:
@@ -213,8 +226,8 @@ static func _vulcanizing(w, st: SurfaceTool) -> void:
 	Kit.beam(st, bike + Vector3(-0.45, 0.33, 0), bike + Vector3(0.0, 0.65, 0), 0.04, w._c("#3e7fd0"))
 	Kit.beam(st, bike + Vector3(0.45, 0.33, 0), bike + Vector3(0.0, 0.65, 0), 0.04, w._c("#3e7fd0"))
 	Kit.beam(st, bike + Vector3(0.0, 0.65, 0), bike + Vector3(0.35, 0.85, 0), 0.04, w._c("#3e7fd0"))
-	w._shadow(Vector3(cx + 0.5, 0, zf - 0.3), Vector2(x1 - x0 + 0.8, 1.2), true)
-	w._shadow(bike, Vector2(1.3, 0.4))
+	w._shadow(Vector3(cx, 0, (zf + 0.8 + zb) * 0.5), Vector2(x1 - x0 + 0.5, zf + 0.8 - zb), true, 3.2)
+	w._shadow(bike, Vector2(1.3, 0.3), false, 0.8)
 
 
 static func _wall_and_cage(w, st: SurfaceTool, props: SurfaceTool) -> void:
@@ -238,7 +251,7 @@ static func _wall_and_cage(w, st: SurfaceTool, props: SurfaceTool) -> void:
 		Kit.box(props, cage + Vector3(bx, 0.4, 0.28), Vector3(0.015, 0.68, 0.015), w._c("#d9c48a"))
 		bx += 0.1
 	Kit.box(props, cage + Vector3(0, 0.77, 0), Vector3(0.72, 0.04, 0.62), w._c("#c4ae68"))
-	w._shadow(cage, Vector2(0.9, 0.7), true)
+	w._shadow(cage, Vector2(0.74, 0.64), true, 0.8)
 
 
 static func _sticker_post(w, props: SurfaceTool, cloth: SurfaceTool) -> void:
@@ -268,13 +281,16 @@ static func _sticker_post(w, props: SurfaceTool, cloth: SurfaceTool) -> void:
 			Kit.box(props, c + n * 0.007 + Vector3(0, -0.02, 0), Vector3(0.09, 0.015, 0.006), white, b)
 		y += 0.15
 		row += 1
-	w._shadow(POST, Vector2(0.5, 0.4))
+	w._shadow(POST, Vector2(0.26, 0.26), false, 7.8)
+	w._shadow_box(POST + Vector3(0, 7.25, 0), Vector3(1.8, 0.12, 0.12))           # crossarm
+	w._shadow(POST + Vector3(0.28, 0, 0), Vector2(0.48, 0.48), false, 0.65, 5.4)   # transformer
 	# the other two posts, wires and banderitas strung through the sticker post
 	var wire: Color = w._c("#2e2c30")
 	for x: float in [-9.3, 9.3]:
 		Kit.cylinder(props, Vector3(x, 0, -15.2), 0.13, 0.09, 7.6, concrete, 6)
 		Kit.box(props, Vector3(x, 7.05, -15.2), Vector3(1.6, 0.1, 0.1), w._c("#7d5c3e"))
-		w._shadow(Vector3(x, 0, -15.2), Vector2(0.4, 0.3))
+		w._shadow(Vector3(x, 0, -15.2), Vector2(0.24, 0.24), false, 7.6)
+		w._shadow_box(Vector3(x, 7.05, -15.2), Vector3(1.6, 0.1, 0.1))     # crossarm
 	for ix: float in [-0.65, 0.0, 0.65]:
 		Kit.rope(props, Vector3(-9.3 + ix, 7.15, -15.2), POST + Vector3(ix, 7.3, 0), 0.4, 0.025, wire, 8)
 		Kit.rope(props, POST + Vector3(ix, 7.3, 0), Vector3(9.3 + ix, 7.15, -15.2), 0.4, 0.025, wire, 8)
@@ -284,11 +300,7 @@ static func _sticker_post(w, props: SurfaceTool, cloth: SurfaceTool) -> void:
 	for seg in [[Vector3(-9.3, 6.3, -15.15), POST + Vector3(0, 6.3, 0.05)], [POST + Vector3(0, 6.3, 0.05), Vector3(9.3, 6.3, -15.15)]]:
 		var a: Vector3 = seg[0]
 		var b: Vector3 = seg[1]
-		Kit.rope(cloth, a, b, 0.5, 0.015, w._c("#efe8d8"), 10, 0.0)
-		var n := int(a.distance_to(b) / 0.4)
-		for i in n:
-			var p := Kit.rope_point(a, b, 0.5, (i + 0.5) / n)
-			Kit.tri(cloth, p + Vector3(-0.13, 0, 0), p + Vector3(0.0, -0.3, 0.01), p + Vector3(0.13, 0, 0), flags[i % flags.size()], 0.55, true)
+		w._banderitas(cloth, a, b, 0.5, int(a.distance_to(b) / 0.4), flags)   # with their shadows
 
 
 static func _poso(w, props: SurfaceTool) -> void:
@@ -299,7 +311,7 @@ static func _poso(w, props: SurfaceTool) -> void:
 	Kit.beam(props, at + Vector3(0, 1.2, 0), at + Vector3(-0.55, 1.35, 0), 0.04, w._c("#3f6f5a"))
 	Kit.beam(props, at + Vector3(0.05, 0.85, 0), at + Vector3(0.28, 0.8, 0), 0.05, w._c("#3f6f5a"))
 	Kit.cylinder(props, at + Vector3(0.3, 0.16, 0), 0.15, 0.18, 0.32, w._c("#3e7fd0"), 8)
-	w._shadow(at, Vector2(0.9, 0.8))
+	w._shadow(at, Vector2(0.8, 0.8), true, 1.3)
 
 
 static func _dama_table(w, props: SurfaceTool) -> void:
@@ -312,7 +324,7 @@ static func _dama_table(w, props: SurfaceTool) -> void:
 	for k in 5: Kit.cylinder(props, t + Vector3(-0.2 + (k * 37 % 5) * 0.1, 0.58, -0.18 + (k * 23 % 4) * 0.12), 0.035, 0.035, 0.02, w._c("#d23b34") if k % 2 else w._c("#f2c84b"), 6)
 	for sx: float in [-0.55, 0.55]:
 		Kit.box(props, t + Vector3(sx, 0.18, 0), Vector3(0.32, 0.36, 0.32), w._c("#e0473b") if sx < 0.0 else w._c("#3e7fd0"))
-	w._shadow(t, Vector2(1.6, 0.8))
+	w._shadow(t, Vector2(1.4, 0.7), false, 0.6)
 
 
 static func _audience_seats(w, props: SurfaceTool) -> void:
@@ -323,7 +335,7 @@ static func _audience_seats(w, props: SurfaceTool) -> void:
 		var at: Vector3 = cr[0]
 		Kit.box(props, at + Vector3(0, 0.17, 0), Vector3(0.46, 0.34, 0.34), w._c(cr[2]), b)
 		for k in 3: Kit.box(props, at + b * Vector3(-0.15 + k * 0.15, 0.17, 0.172), Vector3(0.05, 0.22, 0.01), w._c(cr[2]).darkened(0.3), b)
-		w._shadow(at, Vector2(0.6, 0.45), true)
+		w._shadow(at, Vector2(0.48, 0.36), true, 0.34)
 	# parked motorbike, side-on (two teens sit on it)
 	var mb := Vector3(-2.55, 0, -13.25)
 	for wx: float in [-0.6, 0.6]:
@@ -334,7 +346,7 @@ static func _audience_seats(w, props: SurfaceTool) -> void:
 	Kit.box(props, mb + Vector3(0.15, 0.7, 0), Vector3(0.8, 0.1, 0.26), w._c("#26232a"))
 	Kit.box(props, mb + Vector3(-0.55, 0.72, 0), Vector3(0.2, 0.42, 0.26), w._c("#3e7fd0"))
 	Kit.box(props, mb + Vector3(-0.62, 1.0, 0), Vector3(0.05, 0.04, 0.62), w._c("#26232a"))
-	w._shadow(mb, Vector2(1.7, 0.5))
+	w._shadow(mb, Vector2(1.6, 0.36), false, 1.05)
 	# a chair under a striped beach umbrella
 	w._monobloc(props, Vector3(0.3, 0, -12.65), -0.2, w._c("#e8e7e0"))
 	var top := Vector3(0.75, 2.1, -12.95)
@@ -343,7 +355,9 @@ static func _audience_seats(w, props: SurfaceTool) -> void:
 		var a0 := TAU * i / 8.0
 		var a1 := TAU * (i + 1) / 8.0
 		Kit.tri(props, top + Vector3(0, 0.1, 0), top + Vector3(cos(a0) * 1.0, -0.25, sin(a0) * 1.0), top + Vector3(cos(a1) * 1.0, -0.25, sin(a1) * 1.0), w._c("#f29ac0") if i % 2 == 0 else w._c("#f2efe6"), 0.0, true)
-	w._shadow(Vector3(0.95, 0, -12.75), Vector2(1.9, 1.2))
+	# beach umbrella: the pole's thin shadow, and the canopy's disc thrown along the sun
+	w._shadow(Vector3(0.75, 0, -12.95), Vector2(0.1, 0.1), false, 2.1)
+	w._shadow(Vector3(0.75, 0, -12.95), Vector2(2.0, 2.0), false, 0.35, 1.85)
 
 
 static func _side_pieces(w, props: SurfaceTool) -> void:
@@ -357,13 +371,13 @@ static func _side_pieces(w, props: SurfaceTool) -> void:
 		Kit.cylinder(props, t + Vector3(0, 0.77, -0.25 + k * 0.4), 0.13, 0.13, 0.36, w._c("#5fa8d8"), 8)
 		Kit.cylinder(props, t + Vector3(0, 1.13, -0.25 + k * 0.4), 0.05, 0.05, 0.05, w._c("#3e7fd0"), 6)
 	for k in 4: Kit.cylinder(props, t + Vector3(0.18, 0.77, 0.25 + k * 0.05), 0.03, 0.035, 0.08, w._c("#f2efe6"), 5)
-	w._shadow(t, Vector2(0.8, 1.1), true)
+	w._shadow(t, Vector2(0.66, 1.0), true, 0.77)
 	var wood: Color = w._c("#9a7048")
 	Kit.box(props, Vector3(-6.55, 0.43, -6.2), Vector3(0.4, 0.06, 2.2), wood)
 	for lz: float in [-7.1, -5.3]:
 		Kit.box(props, Vector3(-6.55, 0.2, lz), Vector3(0.34, 0.4, 0.08), wood.darkened(0.15))
 	Kit.box(props, Vector3(-6.55, 0.6, -6.2), Vector3(0.3, 0.28, 0.4), w._c("#7a3b2e"))
-	w._shadow(Vector3(-6.55, 0, -6.2), Vector2(0.6, 2.3), true)
+	w._shadow(Vector3(-6.55, 0, -6.2), Vector2(0.44, 2.2), true, 0.46)
 
 
 static func _jeepney(w) -> void:
@@ -563,7 +577,7 @@ static func _rolling_cart(w) -> void:
 	nst.cart_s = 0.0
 	nst.cart_speed = 0.0
 	nst.cart_open = 0.0
-	nst.cart_shadow = w._shadow(CART, Vector2(2.1, 2.2), true)
+	nst.cart_shadow = w._figure_shadow(CART, 1.0, 1.6)
 
 
 # ------------------------------------------------------------------ people

@@ -18,6 +18,12 @@ const NET_CLEAR_MIN: = 1.15
 var _player_left: Node
 var _player_right: Node
 
+## Perf (PerfToggles.shot_presolve): flight time of a solve made for this same shot a few ticks
+## before contact (player_ai_brain._presolve_shot). The next solve_aimed_launch /
+## solve_drop_launch tries that time first and returns it when it is feasible from the real
+## contact point; otherwise it searches as before. Read once, then cleared.
+var duration_hint: float = -1.0
+
 func setup(_ball: Node, p_left: Node, p_right: Node) -> void :
 	_player_left = p_left
 	_player_right = p_right
@@ -408,37 +414,68 @@ func _perf_solve_drop_launch(start: Vector3, charge: float, player_num: int, spi
 	var best: Dictionary = {}
 	var best_score: float = INF
 	var dt: float = 1.0 / float(Engine.physics_ticks_per_second)
+	var touch_pace_weight: float = 0.06 + (clampf(charge, 0.0, 1.0) * 0.3 if target_override.is_finite() else 0.0)
+	# Pre-solved shot (duration_hint): the candidate at that flight time alone, when it is feasible.
+	var hint: float = duration_hint
+	duration_hint = -1.0
+	if hint > 0.0:
+		var hinted: Dictionary = _solve_drop_candidate(start, target, profile, roundf(hint / dt) * dt, speed_cap, touch_pace_weight, INF)
+		if not hinted.is_empty() and hinted.feasible:
+			hinted.erase("_score")
+			return hinted
 	for candidate in range(18):
 		var duration: float = roundf((0.65 + candidate * 0.09) / dt) * dt
-		var launch: Vector3 = (target - start) / duration
-		launch.y += 0.5 * _Ball.get_effective_gravity() * duration
-		var omega: Vector3 = Vector3.ZERO
-		for iteration in range(10):
-			omega = profiles.angular_velocity(profile, launch)
-			var endpoint: Vector3 = _spin_position_after(start, launch, omega, duration)
-
-
-			launch += (target - Vector3(0, 0.0005, 0) - endpoint) / duration * 0.86
-			launch = launch.limit_length(speed_cap)
-		omega = profiles.angular_velocity(profile, launch)
-		var flight: Dictionary = _Flight.trace(start, launch, omega, 3.0, 1, false, false)
-		var net: Dictionary = flight["net_crossing"]
-		var clear: bool = not net.is_empty() and _NetProfile.crossing_clear(net.pos, _Ball.BALL_RADIUS, 0.12) and flight.get("post_hit", {}).is_empty()
-		var landing: Vector3 = flight["first_bounce"]
-		var error: float = landing.distance_to(target)
-		var peak: float = flight.peak_y
-
-		var touch_pace_weight: float = 0.06 + (clampf(charge, 0.0, 1.0) * 0.3 if target_override.is_finite() else 0.0)
-		var score: float = error * 30.0 + launch.length() * 0.18 + duration * touch_pace_weight
-		if not clear: score += 50.0
-		if peak > 4.6: score += 30.0
-		if float(flight.first_bounce_time) < 0.0: score = INF
-		if score < best_score:
-			best_score = score
-			best = {"velocity": launch, "omega": omega, "profile": profile, 
-				"target": target, "landing": landing, "net_clear": clear, 
-				"target_error": error, "duration": duration, "feasible": clear and error < 0.16}
+		var solved: Dictionary = _solve_drop_candidate(start, target, profile, duration, speed_cap, touch_pace_weight, best_score)
+		if solved.is_empty(): continue
+		if float(solved._score) < best_score:
+			best_score = solved._score
+			best = solved
+	if not best.is_empty(): best.erase("_score")
 	return best
+
+## One flight time of the drop search: the launch that lands on `target` in `duration`, its
+## flight and its score (lower is better). Empty when it cannot beat `best_score`: the score is
+## never below launch speed * 0.18 + duration * weight, so such a candidate is dropped before its
+## flight is traced (the same winner as tracing all of them).
+func _solve_drop_candidate(start: Vector3, target: Vector3, profile: Dictionary, duration: float, speed_cap: float, touch_pace_weight: float, best_score: float) -> Dictionary:
+	var profiles = preload("res://scripts/shot_profile.gd")
+	var launch: Vector3 = (target - start) / duration
+	launch.y += 0.5 * _Ball.get_effective_gravity() * duration
+	var omega: Vector3 = Vector3.ZERO
+	var native = NativeMath.lib()
+	if native != null:
+		# Native launch fit (native/src/pickle_native.cpp fit_launch): the loop below, in C++.
+		_Ball._refresh_damp()
+		launch = native.fit_launch(start, target, launch, duration, float(profile.get("topspin_rads", 0.0)), speed_cap, 10, PerfToggles.shot_solve_early_exit,
+			_Ball.get_effective_gravity(), 1.0 / float(Engine.physics_ticks_per_second), _Ball._linear_damp, _Ball._angular_damp)
+	for iteration in range(0 if native != null else 10):
+		omega = profiles.angular_velocity(profile, launch)
+		var endpoint: Vector3 = _spin_position_after(start, launch, omega, duration)
+
+
+		# Perf (PerfToggles.shot_solve_early_exit): stop once the endpoint is within 0.2 mm
+		# of the target, the tolerance the aimed solver below already uses. The remaining
+		# passes moved the launch by less than that (each pass is a full flight integration).
+		var residual: Vector3 = target - Vector3(0, 0.0005, 0) - endpoint
+		if PerfToggles.shot_solve_early_exit and residual.length_squared() < 4e-08: break
+		launch += residual / duration * 0.86
+		launch = launch.limit_length(speed_cap)
+	if launch.length() * 0.18 + duration * touch_pace_weight > best_score + 0.000001: return {}
+	omega = profiles.angular_velocity(profile, launch)
+	var flight: Dictionary = _Flight.trace(start, launch, omega, 3.0, 1, false, false)
+	var net: Dictionary = flight["net_crossing"]
+	var clear: bool = not net.is_empty() and _NetProfile.crossing_clear(net.pos, _Ball.BALL_RADIUS, 0.12) and flight.get("post_hit", {}).is_empty()
+	var landing: Vector3 = flight["first_bounce"]
+	var error: float = landing.distance_to(target)
+	var peak: float = flight.peak_y
+
+	var score: float = error * 30.0 + launch.length() * 0.18 + duration * touch_pace_weight
+	if not clear: score += 50.0
+	if peak > 4.6: score += 30.0
+	if float(flight.first_bounce_time) < 0.0: score = INF
+	return {"velocity": launch, "omega": omega, "profile": profile,
+		"target": target, "landing": landing, "net_clear": clear,
+		"target_error": error, "duration": duration, "feasible": clear and error < 0.16, "_score": score}
 
 
 
@@ -476,6 +513,23 @@ func _perf_solve_aimed_launch(start: Vector3, requested_target: Vector3, charge:
 	var visited: Dictionary = {}
 	var candidates: Array[Dictionary] = []
 	var best: Dictionary = {}
+	# Pre-solved shot (duration_hint): that flight time first, then its two neighbours; the first
+	# feasible one is the shot (the hinted time already holds the arc choice made below). When
+	# none is feasible from this origin, the full search runs as before.
+	var hint: float = duration_hint
+	duration_hint = -1.0
+	if hint > 0.0:
+		for duration in [hint, hint - 0.08, hint + 0.08]:
+			var time: float = roundf(clampf(duration, 0.24, 2.32) / dt) * dt
+			if visited.has(time): continue
+			visited[time] = true
+			var solved: Dictionary = _solve_aim_candidate(start, target, profile, time, power, shot_type, net_margin)
+			if solved.is_empty(): continue
+			if solved.feasible:
+				solved.erase("_score")
+				return solved
+			candidates.append(solved)
+			if best.is_empty() or solved._score < best._score: best = solved
 	for duration in times:
 		var time: float = roundf(clampf(duration, 0.24, 2.32) / dt) * dt
 		if visited.has(time): continue
@@ -534,7 +588,12 @@ func _solve_aim_candidate(start: Vector3, target: Vector3, profile: Dictionary, 
 	launch.y = (target.y - start.y) / duration + 0.5 * gravity * duration
 	launch = launch.limit_length(_Ball.MAX_SPEED)
 	var omega: Vector3 = Vector3.ZERO
-	for iteration in range(16):
+	var native = NativeMath.lib()
+	if native != null:
+		_Ball._refresh_damp()
+		launch = native.fit_launch(start, target, launch, duration, float(profile.get("topspin_rads", 0.0)), _Ball.MAX_SPEED, 16, true,
+			_Ball.get_effective_gravity(), 1.0 / float(Engine.physics_ticks_per_second), _Ball._linear_damp, _Ball._angular_damp)
+	for iteration in range(0 if native != null else 16):
 		omega = profiles.angular_velocity(profile, launch)
 		var endpoint: Vector3 = _spin_position_after(start, launch, omega, duration)
 

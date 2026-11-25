@@ -1,0 +1,16 @@
+[configuration]
+
+entry_symbol = "pickle_native_init"
+compatibility_minimum = "4.6"
+
+[libraries]
+
+macos.debug = "res://native/bin/libpickle_native.macos.dylib"
+macos.release = "res://native/bin/libpickle_native.macos.dylib"
+ios.debug = "res://native/bin/libpickle_native.ios.xcframework"
+ios.release = "res://native/bin/libpickle_native.ios.xcframework"
+
+[dependencies]
+
+ios.debug = {"res://native/bin/libgodot-cpp.ios.xcframework": ""}
+ios.release = {"res://native/bin/libgodot-cpp.ios.xcframework": ""}

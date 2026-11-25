@@ -68,6 +68,7 @@ static func _far(a: Vector3, b: Vector3) -> bool:
 	return (p + d * f).length() > FAR_M
 
 static func _shift(pose, hand: Vector3, head: Vector3, hand_a: Vector3, head_a: Vector3, hand_b: Vector3, head_b: Vector3, t: float) -> Vector3:
+	_load_frame(pose)
 	var mid: Vector3 = _mid(hand, head)
 	var mid_a: Vector3 = _mid(hand_a, head_a)
 	var mid_b: Vector3 = _mid(hand_b, head_b)
@@ -77,11 +78,11 @@ static func _shift(pose, hand: Vector3, head: Vector3, hand_a: Vector3, head_a: 
 	var near := Vector3.ZERO
 	for k in 9:
 		var p: Vector3 = mid_a.lerp(mid_b, k / 8.0)
-		var r: float = rho(pose, p)
+		var r: float = _rho_f(p)
 		if r < closest: closest = r; near = p
 	var around: float = smoothstep(1.0 + SOFT + AROUND_FADE, 1.0 + SOFT, closest) if closest < INF else 0.0
-	var pa: Vector3 = _polar(pose, mid_a); var pb: Vector3 = _polar(pose, mid_b); var pn: Vector3 = _polar(pose, near)
-	var pm: Vector3 = _polar(pose, mid)
+	var pa: Vector3 = _polar_f(mid_a); var pb: Vector3 = _polar_f(mid_b); var pn: Vector3 = _polar_f(near)
+	var pm: Vector3 = _polar_f(mid)
 	if around > 0.0 and pa.x < INF and pb.x < INF and pm.x < INF:
 		var turn: float = wrapf(pb.y - pa.y, -PI, PI)
 		var other: float = turn - signf(turn) * TAU if absf(turn) > 1e-4 else 0.0
@@ -89,18 +90,18 @@ static func _shift(pose, hand: Vector3, head: Vector3, hand_a: Vector3, head_a: 
 		if pn.x < INF and absf(wrapf(pa.y + other * 0.5 - pn.y, -PI, PI)) < absf(wrapf(pa.y + turn * 0.5 - pn.y, -PI, PI)): turn = other
 		var r: float = lerpf(pa.x, pb.x, t)
 		r = lerpf(r, maxf(r, _eased(r)), smoothstep(0.0, ENDS, t) * smoothstep(0.0, ENDS, 1.0 - t))
-		var target: Vector3 = _from_polar(pose, r, pa.y + turn * t, pm.z, mid)
+		var target: Vector3 = _from_polar_f(r, pa.y + turn * t, pm.z, mid)
 		delta = (target - mid) * around
 	# 2. Clear the shaft, pushing along the middle's own side (never flips front / back).
 	var ends: float = smoothstep(0.0, ENDS, t) * smoothstep(0.0, ENDS, 1.0 - t)
 	if ends > 0.0:
-		var out: Vector3 = _outward(pose, mid + delta)
+		var out: Vector3 = _outward_f(mid + delta)
 		var wrist: Vector3 = hand + (hand - head).normalized() * WRIST_BEYOND_GRIP if hand.distance_squared_to(head) > 1e-6 else hand
 		for step in 11:
 			var d: Vector3 = delta + out * (0.02 * step * ends)
 			var clear := true
 			for k in SHAFT_SAMPLES + 1:
-				if rho(pose, wrist.lerp(head, float(k) / SHAFT_SAMPLES) + d) < 1.0: clear = false; break
+				if _rho_f(wrist.lerp(head, float(k) / SHAFT_SAMPLES) + d) < 1.0: clear = false; break
 			if clear: delta = d; break
 	return delta
 
@@ -153,3 +154,53 @@ static func _outward(pose, p: Vector3) -> Vector3:
 ## Shell value of `p` for `pose`: < 1 inside the torso + margin, >= 1 + SOFT clear; INF off the torso.
 static func rho(pose, p: Vector3) -> float:
 	return _polar(pose, p).x
+
+## Perf: one body frame per shift. _frame() rebuilt the pivot and part bases (and inverted them)
+## for every sampled point, about 120 a shift and 166 shifts a second in a rally. The values and
+## the order of operations are those of _frame / _local / _polar / _from_polar / _outward.
+const HINGE := Vector3(0.0, WAIST_Y, 0.0)
+static var _f_origin: Vector3
+static var _f_pivot: Basis
+static var _f_pivot_inv: Basis
+static var _f_low: Basis        # part basis below the waist (hips)
+static var _f_low_inv: Basis
+static var _f_high: Basis       # above the waist (hips, torso yaw and pitch)
+static var _f_high_inv: Basis
+
+static func _load_frame(pose) -> void:
+	_f_origin = Vector3(0.0, LIFT - float(pose.crouch_amount), -float(pose.weight_shift) * 0.1)
+	_f_pivot = Basis.from_euler(Vector3(-float(pose.body_pitch_deg), -float(pose.body_yaw_deg), float(pose.body_roll_deg)) * (PI / 180.0))
+	_f_pivot_inv = _f_pivot.inverse()
+	_f_low = Basis(Vector3.UP, -deg_to_rad(float(pose.hip_yaw_deg)))
+	_f_low_inv = _f_low.inverse()
+	_f_high = _f_low * Basis(Vector3.UP, -deg_to_rad(float(pose.torso_yaw_deg))) * Basis(Vector3.RIGHT, -deg_to_rad(float(pose.torso_pitch_deg)))
+	_f_high_inv = _f_high.inverse()
+
+static func _local_f(p: Vector3) -> Vector3:
+	var q: Vector3 = _f_pivot_inv * (p - _f_origin)
+	return (_f_high_inv if q.y > WAIST_Y else _f_low_inv) * (q - HINGE) + HINGE
+
+static func _polar_f(p: Vector3) -> Vector3:
+	var local: Vector3 = _local_f(p)
+	var size: Vector2 = section(local.y)
+	if size == Vector2.ZERO: return Vector3(INF, 0.0, local.y)
+	var e := Vector2(local.x / (size.x + MARGIN), local.z / (size.y + MARGIN))
+	return Vector3(e.length(), atan2(e.y, e.x), local.y)
+
+static func _rho_f(p: Vector3) -> float:
+	return _polar_f(p).x
+
+static func _from_polar_f(r: float, angle: float, y: float, near: Vector3) -> Vector3:
+	var size: Vector2 = section(y)
+	var local := Vector3(cos(angle) * r * (size.x + MARGIN), y, sin(angle) * r * (size.y + MARGIN))
+	var q: Vector3 = _f_pivot_inv * (near - _f_origin)
+	return _f_origin + _f_pivot * ((_f_high if q.y > WAIST_Y else _f_low) * (local - HINGE) + HINGE)
+
+static func _outward_f(p: Vector3) -> Vector3:
+	var q: Vector3 = _f_pivot_inv * (p - _f_origin)
+	var high: bool = q.y > WAIST_Y
+	var local: Vector3 = (_f_high_inv if high else _f_low_inv) * (q - HINGE) + HINGE
+	var axis: Vector3 = _f_origin + _f_pivot * ((_f_high if high else _f_low) * (Vector3(0.0, local.y, 0.0) - HINGE) + HINGE)
+	var d: Vector3 = p - axis
+	d.y = 0.0
+	return d.normalized() if d.length_squared() > 1e-8 else Vector3(0.0, 0.0, -1.0)

@@ -3,8 +3,12 @@ extends RefCounted
 # All values and timers are in simulation seconds, just like the ball and Blue.
 # Hard can match Blue's top speed; difficulty never buys superhuman movement.
 const SPEEDS: Array[float] = [4.35, 5.0, 5.8]
-const ACCELERATIONS: Array[float] = [12.0, 14.0, 16.0]
-const BRAKES: Array[float] = [16.0, 18.0, 20.0]
+# Realistic footwork (user, 2026-11-26: players must not glide up to speed). A fit player
+# gains about 7-9 m/s every second from a standstill and stops a little harder than that;
+# the old 12-16 and 16-20 took a player from rest to 3 m/s in 0.17 s (measured), which no
+# legs can keep up with. travel_distance() below plans with the same numbers.
+const ACCELERATIONS: Array[float] = [7.0, 8.0, 9.0]
+const BRAKES: Array[float] = [10.0, 11.0, 12.0]
 const REPLAN_SECONDS: Array[float] = [0.15, 0.12, 0.10]
 
 const Tuning = preload("res://scripts/gameplay_tuning.gd")
@@ -19,7 +23,7 @@ static func speed(difficulty: int) -> float:
 # Block lunge: the last step toward a hard-hit ball is a quick lunge, not a jog.
 # The body was 0.2-0.4 m short of a fast volley and the arm could not cover it.
 const LUNGE_SPEED_MUL := 1.35
-const LUNGE_ACCELERATION := 26.0
+const LUNGE_ACCELERATION := 15.0   # was 26: a lunge is a hard push off one leg, not a teleport
 
 static func velocity(current: Vector3, input: Vector3, offset: Vector3, difficulty: int, delta: float, lunge: bool = false) -> Vector3:
 	var level: int = _level(difficulty)

@@ -70,6 +70,11 @@ static func fit_grip(player, pose: PostureDefinition, previous_pose: PostureDefi
 	if player == null or pose == null or player.posture.editor_preview_mode or player.hitting.serving_visual_active: return pose
 	var ball = player._get_ball_ref()
 	if ball == null or not ball.is_in_play: return pose
+	# Simple hands (PerfToggles.simple_hands; user, 2026-11-25: the pixel cards draw the hands, the
+	# game needs no 3D fingers or wrist limits): the grip stays as posed. No search for a grip
+	# roll inside the wrist budget (it ran a wrist solve about 680 times a second while HIT was
+	# held, 2-3 ms a call on the Mac). The paddle's own turn-rate limit below still applies.
+	if PerfToggles.simple_hands: return _continuous(player, previous_pose, pose, delta)
 	var paddle: Transform3D = Path.world_transform(player, pose)
 	var left: bool = pose.paddle_hand == 1
 	var arm = player.left_arm_node if left else player.right_arm_node
@@ -80,12 +85,15 @@ static func fit_grip(player, pose: PostureDefinition, previous_pose: PostureDefi
 	var anchor: Vector3 = paddle * Reach.grip_local(pose)
 	var angle: float = pose.main_grip_rotation_deg - pose.paddle_in_hand_rotation_deg
 	if _grip_fits(arm, shoulder, paddle.basis, anchor, angle, left, body_allowance): return _continuous(player, previous_pose, pose, delta)
+	# The smallest grip turn that fits: the first 5 degree step that fits in either direction,
+	# refined by bisection. Perf: both directions are stepped together, smallest turn first (the
+	# negative one first on a tie, as before). The old order tried every negative step before any
+	# positive one, so a hand that needed a small positive turn cost 18 failed fits each call.
+	# Same answer: a direction's first fitting step is the same either way.
 	var best := INF
-	for direction in [-1.0, 1.0]:
-		for index in range(1, 19):
-			var turn: float = float(index) * 5.0 * direction
-			if absf(turn) >= absf(best): break
-			if not _grip_fits(arm, shoulder, paddle.basis, anchor, angle + turn, left, body_allowance): continue
+	for index in range(1, 19):
+		for direction in [-1.0, 1.0]:
+			if not _grip_fits(arm, shoulder, paddle.basis, anchor, angle + float(index) * 5.0 * direction, left, body_allowance): continue
 			var low := float(index - 1) * 5.0; var high := float(index) * 5.0
 			for unused in range(10):
 				var middle := (low + high) * .5
@@ -93,6 +101,7 @@ static func fit_grip(player, pose: PostureDefinition, previous_pose: PostureDefi
 				else: low = middle
 			best = high * direction
 			break
+		if is_finite(best): break
 	if not is_finite(best): return _continuous(player, previous_pose, pose, delta)
 	var result: PostureDefinition = pose.duplicate(false)
 	result.main_grip_rotation_deg += best
@@ -104,6 +113,15 @@ static func fit_planned_contact_grip(player, pose: PostureDefinition, previous_p
 	# and interpolate its held/released hand into the returned Contact. Never
 	# invoke this to modify an already accepted hit or its physical paddle face.
 	var started: int = Time.get_ticks_usec()
+	if PerfToggles.simple_hands:
+		# Grip as posed: nothing to fit, and no cramped-reception shaft roll.
+		var as_posed: PostureDefinition = pose.duplicate(false)
+		as_posed.set_meta("planned_live_grip", true)
+		as_posed.set_meta("planned_live_grip_delta_deg", 0.0)
+		as_posed.set_meta("planned_live_grip_feasible", true)
+		as_posed.set_meta("planned_live_grip_status", "as_posed")
+		as_posed.set_meta("planned_live_grip_cost_usec", 0)
+		return as_posed
 	var planned: PostureDefinition = pose
 	if compact_reception and previous_pose != null and previous_pose.posture_id == pose.posture_id:
 		planned = _plane_roll(pose, float(previous_pose.get_meta("planned_live_grip_plane_deg", 0.0)))
@@ -176,17 +194,17 @@ static func _continuous(player, previous: PostureDefinition, pose: PostureDefini
 static func _grip_fits(arm, shoulder: Vector3, paddle: Basis, anchor: Vector3, angle: float, left: bool, body_allowance: float = 0.0) -> bool:
 	var hand: Basis = Grip.basis(paddle, left, angle)
 	var wrist: Vector3 = anchor + hand * Reach.socket(left)
-	var solved: Dictionary = WristBudget.solve(shoulder, wrist, arm.forearm_pivot.global_position,
-		hand * arm.articulated_hand.anatomical_basis, arm.upper_arm_length, arm.forearm_length, left)
-	if solved.feasible and solved.cost <= .97: return true
+	# Perf: WristBudget.fits_within answers "feasible and cost <= .97" exactly as the full solve
+	# did, without building the elbow nobody reads here.
+	var elbow: Vector3 = arm.forearm_pivot.global_position
+	var hand_frame: Basis = hand * arm.articulated_hand.anatomical_basis
+	if WristBudget.fits_within(shoulder, wrist, elbow, hand_frame, arm.upper_arm_length, arm.forearm_length, left, .97): return true
 	if body_allowance <= 0.0: return false
 	# The live Ready elbow already fits with a small knee flexion. Allow that
 	# existing body fit before demanding a new grip roll, so a small frame does
 	# not get stuck behind an unnecessary first-frame hand rotation.
 	var lower: Vector3 = Vector3.DOWN * body_allowance
-	solved = WristBudget.solve(shoulder + lower, wrist, arm.forearm_pivot.global_position + lower,
-		hand * arm.articulated_hand.anatomical_basis, arm.upper_arm_length, arm.forearm_length, left)
-	return solved.feasible and solved.cost <= .97
+	return WristBudget.fits_within(shoulder + lower, wrist, elbow + lower, hand_frame, arm.upper_arm_length, arm.forearm_length, left, .97)
 
 static func _project(centers: Array[Vector3], radii: Array[float], minimum_y: float) -> Vector3:
 	var offset := Vector3.ZERO

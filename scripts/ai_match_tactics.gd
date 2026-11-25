@@ -424,7 +424,7 @@ static func popup_launch(physics: ShotPhysics, origin: Vector3, team: int) -> Di
 static func _with_net_margin(origin: Vector3, launch: Dictionary, team: int, margin: float = SOFT_NET_MARGIN) -> Dictionary:
 	var lifted: Dictionary = launch.duplicate(true)
 	for step in 8:
-		var flight: Dictionary = Flight.trace(origin, lifted.velocity, lifted.omega, 3.0, 1, false)
+		var flight: Dictionary = Flight.trace(origin, lifted.velocity, lifted.omega, 3.0, 1, false, false)   # no per-step samples: only the crossing is read
 		var crossing: Dictionary = flight.net_crossing
 		if crossing.is_empty(): return launch
 		var point: Vector3 = crossing.get("pos", crossing.get("position", Vector3.INF))
@@ -436,7 +436,7 @@ static func _with_net_margin(origin: Vector3, launch: Dictionary, team: int, mar
 
 static func valid_launch(origin: Vector3, launch: Dictionary, team: int, x_max: float = 2.8, z_max: float = 6.4) -> bool:
 	if launch.is_empty() or not launch.get("velocity", Vector3.INF).is_finite(): return false
-	var flight: Dictionary = Flight.trace(origin, launch.velocity, launch.omega, 3.0, 1, false)
+	var flight: Dictionary = Flight.trace(origin, launch.velocity, launch.omega, 3.0, 1, false, false)   # no per-step samples: only bounce and net are read
 	var landing: Vector3 = flight.first_bounce
 	var direction: float = -1.0 if team == 0 else 1.0
 	return float(flight.first_bounce_time) > 0.0 and not flight.net_hit and not flight.net_crossing.is_empty() \

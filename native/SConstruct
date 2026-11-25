@@ -1,0 +1,21 @@
+#!/usr/bin/env python
+# Native (C++) hot paths for Pixel Pickleball: docs/PERFORMANCE_PLAN.md step 8.
+# Build: tools/build_native.sh (macOS dylib and iOS static library; needs godot-cpp).
+import os
+
+godot_cpp = os.environ.get("GODOT_CPP", os.path.expanduser("~/Documents/Codex/2026-10-15/task/duos-integration/toolchain/godot-cpp"))
+api = os.environ.get("GODOT_API", os.path.join(os.path.dirname(godot_cpp), "api463", "extension_api.json"))
+ARGUMENTS.setdefault("custom_api_file", api)
+env = SConscript(os.path.join(godot_cpp, "SConstruct"))
+
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+if env["platform"] == "macos":
+    library = env.SharedLibrary("bin/libpickle_native.macos.dylib", source=sources)
+elif env["platform"] == "ios":
+    library = env.StaticLibrary("bin/libpickle_native.ios.a", source=sources)
+else:
+    library = env.SharedLibrary("bin/libpickle_native{}{}".format(env["suffix"], env["SHLIBSUFFIX"]), source=sources)
+env.NoCache(library)
+Default(library)

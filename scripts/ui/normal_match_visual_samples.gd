@@ -10,7 +10,7 @@ static func fingerprint() -> Array:
  var result: Array=[]
  for script in [Burst,DecalVisual,Readability,Shadows,HudVisual]:
   result.append([script.resource_path,script.source_code.sha256_text()])
- for path in ["res://shaders/ball_readability.gdshader","res://shaders/ground_shadow.gdshader","res://shaders/ball_ground_shadow.gdshader","res://scripts/ui/hud_chrome.gd","res://scripts/ui/scoreboard_ball.gd","res://scripts/ui/game_ui_theme.gd"]:
+ for path in ["res://shaders/ball_readability.gdshader","res://shaders/card_shadow.gdshader","res://shaders/ball_ground_shadow.gdshader","res://scripts/ui/hud_chrome.gd","res://scripts/ui/scoreboard_ball.gd","res://scripts/ui/game_ui_theme.gd"]:
   result.append([path,FileAccess.get_file_as_string(path).sha256_text()])
  return result
 

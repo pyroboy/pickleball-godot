@@ -111,6 +111,7 @@ var practice_launcher
 var practice_panel
 var ball_physics_probe
 var hud: CanvasLayer
+var photo_history: Node   # the last 3 seconds for photo mode's rewind (scripts/fx/photo_history.gd)
 
 
 var game_serve
@@ -270,32 +271,46 @@ func _setup_environment() -> void :
 	var environment: Environment = Environment.new()
 
 	environment.background_mode = Environment.BG_SKY
+	# Golden hour (lighting pass 2026-11-25), one sun for everything:
+	# scripts/graphics/sun_light.gd. The sky's colours go through the same compensation as
+	# the props (env_palette.gd, drawn at its gain), so the horizon shows exactly as
+	# Sun.HORIZON_COLOR, the colour the world's distance fog leans to: the far houses melt
+	# into the sky. Deeper warm blue overhead; a sun disc and a wide warm glow toward the
+	# low sun (far left), so the serve camera's sky has a direction.
+	const Sun = preload("res://scripts/graphics/sun_light.gd")
+	const Pal = preload("res://scripts/environment/env_palette.gd")
 	var sky: Sky = Sky.new()
 	var sky_mat: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.3, 0.52, 0.85)
-	sky_mat.sky_horizon_color = Color(0.78, 0.86, 0.95)
-	sky_mat.sky_curve = 0.12
-	sky_mat.ground_bottom_color = Color(0.1, 0.13, 0.18)
-	sky_mat.ground_horizon_color = Color(0.38, 0.42, 0.5)
-	sky_mat.sun_angle_max = 30.0
-	sky_mat.sun_curve = 0.15
+	sky_mat.sky_top_color = Pal.comp(Color(0.3, 0.46, 0.74))
+	sky_mat.sky_horizon_color = Pal.comp(Sun.HORIZON_COLOR)
+	sky_mat.sky_curve = 0.09
+	sky_mat.ground_bottom_color = Pal.comp(Color(0.36, 0.3, 0.34))
+	sky_mat.ground_horizon_color = Pal.comp(Sun.HORIZON_COLOR)
+	sky_mat.energy_multiplier = Pal.GAIN
+	sky_mat.sun_angle_max = 24.0    # glow radius, degrees
+	sky_mat.sun_curve = 0.08        # how fast the glow falls off (lower: wider, softer)
 	sky.sky_material = sky_mat
 	environment.sky = sky
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environment.ambient_light_energy = 0.42   # was 0.32 + the CourtFill light (removed)
+	# Ambient: lower and cool (sky-blue violet), so the side away from the sun reads as shade.
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.62, 0.66, 0.86)
+	environment.ambient_light_energy = 0.3
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.tonemap_exposure = 1.05
 	environment.tonemap_white = 6.0
-	# Pixel look (VISUAL_PASS_PLAN step 2): no fog, flat gradient sky, one sun.
+	# Pixel look: no engine fog (the world shaders fog by distance themselves, toward the
+	# same horizon colour, and players, ball, net and court stay clear).
 	environment.fog_enabled = false
 	env.environment = environment
 	add_child(env)
 
-	var sun: DirectionalLight3D = DirectionalLight3D.new()
+	# aimed along -Sun.to_sun(), and again when the sun turns with the camera (Sun.version)
+	var sun: DirectionalLight3D = preload("res://scripts/graphics/sun_follow.gd").new()
 	sun.name = "Sun"
-	sun.rotation_degrees = Vector3(-60, 35, 0)
-	sun.light_energy = 1.8
-	sun.light_color = Color(1.0, 0.96, 0.88)
+	sun.transform.basis = Basis.looking_at(-Sun.to_sun(), Vector3.UP)
+	sun.light_energy = 1.9
+	sun.light_color = Sun.SUN_COLOR
+	sun.light_angular_distance = 1.6   # the sun disc in the sky, degrees
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 40.0
@@ -303,7 +318,7 @@ func _setup_environment() -> void :
 	sun.shadow_normal_bias = 2.0
 	sun.shadow_blur = 1.3
 	sun.shadow_opacity = 0.85
-	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY   # no sun disc in the sky
+	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_AND_SKY   # disc and glow in the sky
 	add_child(sun)
 
 
@@ -665,6 +680,11 @@ func _create_ui() -> void :
 	add_child(hud)
 	hud.pose_editor_requested.connect(open_mobile_pose_editor)
 	hud.pause_requested.connect( func(): PauseController.open())
+	hud.photo_requested.connect( func(): PauseController.open_photo())
+	photo_history = preload("res://scripts/fx/photo_history.gd").new()
+	photo_history.setup(self)
+	add_child(photo_history)
+	photo_history.rally_ready.connect(hud.on_rally_ready)
 
 	if scoreboard_ui:
 		scoreboard_ui.setup(hud)

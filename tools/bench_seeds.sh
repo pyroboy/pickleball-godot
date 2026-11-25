@@ -76,6 +76,13 @@ for s in seeds:
         for part in (m.group(2) or "").split(","):
             if part.strip(): k, v = part.strip().rsplit(" ", 1); reasons[k] += int(v)
     tot["ai_hits"] += sum(1 for l in open(f"logs/bench_{b}.perf.jsonl") if '"ai_launch"' in l)
+    for l in open(f"logs/bench_{b}.perf.jsonl"):
+        if '"state"' in l and '"event"' in l:
+            d = json.loads(l).get("data", {})
+            if d.get("from") == "SERVING":
+                tot["serves"] += 1
+                if d.get("to") == "POINT_SCORED": tot["serve_faults"] += 1
+        elif '"contact_inaccuracy"' in l and float(json.loads(l)["data"].get("stretch", 0.0)) > 0.002: tot["stretched"] += 1
     sw = subprocess.run(["python3", "tools/pose_timeline.py", b, "--swings"], capture_output=True, text=True).stdout
     fl = subprocess.run(["python3", "tools/pose_timeline.py", b, "--flights"], capture_output=True, text=True).stdout
     def num(pat, t, g=1, cast=int):
@@ -98,6 +105,7 @@ print(f"  contact snap-back {tot['snap']} of {tot['hits']} hits ({100 * tot['sna
       + (f" | median gap per seed {', '.join(f'{g:.1f}' for g in gaps)} cm" if gaps else ""))
 print(f"  wind-ups that wobble (reverse twice or more; one reversal is the backswing) {tot['windup_rev']} of {tot['windups']} | paddle flutter episodes {tot['flutter']}"
       f" | pose changed in last 0.3 s {tot['late']} of {tot['tracked']} (+{tot['reflex']} reflex blocks on balls inside the reaction delay)")
+print(f"  serves {tot['serves']}, faulted at the hit {tot['serve_faults']} | stretched contacts (arm over 2 mm short, adds shot error) {tot['stretched']} of {tot['ai_hits']} AI hits")
 # Animation rules (PASS / FAIL). Limits sit just above today's levels so a regression shows.
 errs = sum(int(m) for s in seeds for m in re.findall(r"script errors: (\d+)", open(f"logs/bench_{name}_s{s}.summary.txt").read()))
 rules = [
@@ -107,10 +115,20 @@ rules = [
     ("no snap-back at contact (at most 6% of hits)", tot["snap"] <= 0.06 * n, f"{100 * tot['snap'] / n:.1f}%"),
     ("wind-up is one backswing (wobble on at most 30%)", tot["windup_rev"] <= 0.3 * max(1, tot["windups"]), f"{100 * tot['windup_rev'] / max(1, tot['windups']):.0f}%"),
     ("paddle flutter at most 2 episodes per hit", tot["flutter"] <= 2 * n, f"{tot['flutter'] / n:.2f}"),
+    ("no serve faulted at the hit", tot["serve_faults"] == 0, f"{tot['serve_faults']} of {tot['serves']}"),
+    ("stretched contacts on at most 5% of AI hits", tot["stretched"] <= 0.05 * max(1, tot["ai_hits"]), f"{100 * tot['stretched'] / max(1, tot['ai_hits']):.1f}%"),
 ]
 print("  rules:")
 for label, ok, val in rules: print(f"    {'PASS' if ok else 'FAIL'}  {label}: {val}")
 EOF
+# Budget guard (docs/PERFORMANCE_PLAN.md "Frame budget"): tick cost and worst tick per seed. Mac
+# numbers; the phone is roughly 2-3x. Side-by-side seeds share the cores, so only a serial run
+# (SERIAL=1 or one seed) is a fair timing; a change that raises these says so in its notes.
+TIMING="serial"; [ "${SERIAL:-0}" != 1 ] && [ "$N" -gt 1 ] && TIMING="parallel seeds, timings inflated"
+for s in $RAN; do
+  P="logs/bench_${NAME}_s$s.perf.jsonl"; [ -s "$P" ] || continue
+  echo "  budget s$s ($TIMING): $(python3 tools/perf_report.py --budget "$P" 2>/dev/null | grep -E "^(Worst tick|Scoped tick)" | sed -E 's/ each second \([^)]*\)//; s/ \(rallies\)//' | paste -sd '|' - | sed 's/|/ | /g')"
+done >> "logs/bench_${NAME}.totals.txt"
 cat "logs/bench_${NAME}.totals.txt"
 grep -vE "^ +PASS|rules:" "logs/bench_${NAME}.totals.txt" | python3 tools/bench_log.py name="$NAME" tool=bench_seeds obj="$OBJ" \
   seeds="$SEEDS_ALL" ran="$RAN" secs="$SECS" why="${WHY:-}" wall="$SECONDS" need="${NEED_COUNTS%, }" \

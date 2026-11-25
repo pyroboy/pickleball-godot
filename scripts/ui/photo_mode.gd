@@ -123,6 +123,10 @@ func begin(menu: CanvasLayer) -> bool:
 			_rigs.append(node)
 			# First-person view: show your player whole (cards, not the eye-view arms) for the photo.
 			if bool(node.get("first_person")): _stash(node, "first_person", false)
+	_history = _game.get("photo_history")
+	if _history != null: _history.begin()
+	_rewind_row.visible = false
+	_play_button.visible = false
 	_add_dof()
 	_add_depth_view()
 	_focus_slider.set_value_no_signal(_subject_distance())
@@ -166,6 +170,31 @@ func _ready() -> void:
 	_zoom_label = _label()
 	_zoom_slider = _slider(1.0, ZOOM_MAX, 0.1)
 	column.add_child(_row(_zoom_label, _zoom_slider))
+	# Rally scrub: one physics tick per notch through the saved rally that is loaded
+	# (scripts/fx/photo_history.gd). Shown only while a rally is loaded.
+	_rewind_label = _label()
+	_rewind_slider = _slider(0, 90, 1)
+	_rewind_row = _row(_rewind_label, _rewind_slider)
+	_rewind_row.visible = false
+	column.add_child(_rewind_row)
+	_rewind_slider.value_changed.connect(_on_rewind)
+	# Saved rallies (scripts/fx/photo_history.gd): pick one to scrub or play it.
+	var replay_bar := HBoxContainer.new()
+	replay_bar.add_theme_constant_override("separation", 14)
+	replay_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_child(replay_bar)
+	replay_bar.add_child(_button("RALLIES", _toggle_rally_list, Vector2(260, 54), 22))
+	_play_button = _button("PLAY", _toggle_play, Vector2(260, 54), 22)
+	replay_bar.add_child(_play_button)
+	_rally_scroll = ScrollContainer.new()
+	_rally_scroll.custom_minimum_size = Vector2(0, 260)
+	_rally_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_rally_scroll.visible = false
+	column.add_child(_rally_scroll)
+	_rally_list = VBoxContainer.new()
+	_rally_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rally_list.add_theme_constant_override("separation", 8)
+	_rally_scroll.add_child(_rally_list)
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 14)
 	bar.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -602,8 +631,80 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and not _on_panel(event.position):
 		_move(Vector3(0, 0, 0.4 if event.button_index == MOUSE_BUTTON_WHEEL_UP else -0.4))
 
+var _rewind_label: Label
+var _rewind_slider: HSlider
+var _rewind_row: Control
+var _history: Node = null
+
+var _play_button: Button
+var _rally_scroll: ScrollContainer
+var _rally_list: VBoxContainer
+var _playing := false
+var _play_clock := 0.0
+
+## The list of saved rallies (newest first) and the live 3 seconds; rebuilt each time it opens.
+func _toggle_rally_list() -> void:
+	_rally_scroll.visible = not _rally_scroll.visible
+	if _rally_scroll.visible:
+		for child in _rally_list.get_children(): child.queue_free()
+		if _history != null and _history.viewing_saved: _rally_list.add_child(_button("BACK TO THE PAUSED MOMENT", _pick_rally.bind(""), Vector2(0, 52), 20))
+		var saved: Array = _history.saved_rallies() if _history != null else []
+		for entry in saved:
+			var when: Dictionary = Time.get_datetime_dict_from_unix_time(int(entry.when) + int(Time.get_time_zone_from_system().bias) * 60)
+			var row := _button("%02d:%02d:%02d    %.1f s%s" % [when.hour, when.minute, when.second, float(entry.seconds), "" if entry.fits else "    (other match setup)"], _pick_rally.bind(str(entry.path)), Vector2(0, 52), 20)
+			row.disabled = not bool(entry.fits)
+			_rally_list.add_child(row)
+		if saved.is_empty():
+			var none := _label()
+			none.text = "NO SAVED RALLIES YET"
+			_rally_list.add_child(none)
+	_place()
+
+func _pick_rally(path: String) -> void:
+	if _history == null or not _history.view(path): return
+	_playing = false
+	_play_button.text = "PLAY"
+	var loaded: bool = path != ""
+	_rewind_row.visible = loaded
+	_play_button.visible = loaded
+	if loaded:
+		_rewind_slider.max_value = maxi(_history.count() - 1, 0)
+		_rewind_slider.set_value_no_signal(_rewind_slider.max_value)   # a rally opens at its start
+		_on_rewind(_rewind_slider.value)
+	else:
+		_dirty = true
+	_rally_scroll.visible = false
+	_place()
+
+func _toggle_play() -> void:
+	_playing = not _playing
+	_play_clock = 0.0
+	if _playing and _rewind_slider.value <= 0.0: _rewind_slider.value = _rewind_slider.max_value   # from the start again
+	_play_button.text = "STOP" if _playing else "PLAY"
+
+func _on_rewind(value: float) -> void:
+	var back: int = int(roundf(value))
+	var rate: float = float(Engine.physics_ticks_per_second)
+	if _rewind_label != null:
+		_rewind_label.text = "RALLY %.1f / %.1f s" % [(_rewind_slider.max_value - float(back)) / rate, _rewind_slider.max_value / rate]
+	if _history != null and _history.viewing_saved:
+		_history.show_back(back)
+		_dirty = true
+		if _blur_material != null: _mark_active()   # not yet built while photo mode is opening
+
 func _process(delta: float) -> void:
 	if _camera == null: return
+	if _playing:
+		# One recorded tick per tick of real time, toward the end of the rally (the slider's 0).
+		_play_clock += delta
+		var step: float = 1.0 / float(Engine.physics_ticks_per_second)
+		var ticks: int = int(_play_clock / step)
+		if ticks > 0:
+			_play_clock -= float(ticks) * step
+			_rewind_slider.value = maxf(_rewind_slider.value - float(ticks), 0.0)
+			if _rewind_slider.value <= 0.0:
+				_playing = false
+				_play_button.text = "PLAY"
 	if not OS.has_feature("mobile"):
 		var fly := Vector3(float(Input.is_physical_key_pressed(KEY_D)) - float(Input.is_physical_key_pressed(KEY_A)),
 			float(Input.is_physical_key_pressed(KEY_E)) - float(Input.is_physical_key_pressed(KEY_Q)),
@@ -643,6 +744,7 @@ func _toggle_logo() -> void:
 
 ## Back to the pause menu with the match view restored.
 func finish() -> void:
+	if _history != null: _history.end()
 	OS.low_processor_usage_mode_sleep_usec = LOOP_STILL_USEC
 	if is_instance_valid(_blur_layer): _blur_layer.queue_free()
 	if is_instance_valid(_depth_view): _depth_view.queue_free()

@@ -37,6 +37,10 @@ var trajectory_arc_offset: float = 0.0
 
 
 var _key_states: Dictionary = {}
+const WAITING_UI_REFRESH: float = 0.25
+var _waiting_ui_age: float = WAITING_UI_REFRESH
+var _waiting_ui_aim: float = NAN
+var _waiting_ui_arc: float = NAN
 var _sound_test_states: Dictionary = {}
 
 func setup(game: Node, ball: RigidBody3D, p_left: CharacterBody3D, p_right: CharacterBody3D, camera: Node, practice: Node, sound_panel: Control, reaction: Node) -> void :
@@ -80,7 +84,8 @@ func _perf_process(delta: float) -> void:
 		_handle_sound_controls()
 		_game.game_sound_tune._handle_sound_panel_input()
 		return
-	_handle_camera_and_movement_controls()
+	# Keyboard-only shortcuts (O / P / C): the phone has no keys to poll (PerfToggles.touch_on_change).
+	if not (PerfToggles.touch_on_change and RuntimePolicy.mobile_runtime): _handle_camera_and_movement_controls()
 	_handle_practice_controls()
 	_handle_sound_controls()
 	var _tb := Time.get_ticks_usec()
@@ -258,11 +263,21 @@ func _handle_swing_charge(delta: float) -> void :
 func _update_aim_and_arc(delta: float) -> void :
 
 
-	if _game.game_state == 0 and _game.human_may_serve():
+	var may_serve: bool = _game.human_may_serve()
+	if _game.game_state == 0 and may_serve:
 		var lateral: float = float(Input.is_key_pressed(KEY_BRACKETRIGHT)) - float(Input.is_key_pressed(KEY_BRACKETLEFT))
 		_game.aim_controller.nudge(Vector2(lateral, 0), delta)
 		serve_aim_offset_x = _game.aim_controller.get_target().x
-		_game._update_waiting_ui()
+		# The serve-wait text (a formatted string) is rebuilt when the aim or arc moved, and at
+		# WAITING_UI_REFRESH for anything else it shows; it was rebuilt every frame.
+		_waiting_ui_age += delta
+		if not PerfToggles.touch_on_change or serve_aim_offset_x != _waiting_ui_aim or trajectory_arc_offset != _waiting_ui_arc or _waiting_ui_age >= WAITING_UI_REFRESH:
+			_waiting_ui_aim = serve_aim_offset_x
+			_waiting_ui_arc = trajectory_arc_offset
+			_waiting_ui_age = 0.0
+			_game._update_waiting_ui()
+	else:
+		_waiting_ui_age = WAITING_UI_REFRESH   # rebuilt on the first frame of the next serve wait
 
 
 	var raise = Input.is_key_pressed(KEY_R)
@@ -276,7 +291,7 @@ func _update_aim_and_arc(delta: float) -> void :
 
 	_key_states[KEY_R] = raise
 	_key_states[KEY_F] = lower
-	if _game and _game.human_may_serve():
+	if _game and may_serve:
 		_game.serve_aim_offset_x = serve_aim_offset_x
 		_game.trajectory_arc_offset = trajectory_arc_offset
 		if _game.game_serve:

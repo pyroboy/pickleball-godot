@@ -9,6 +9,7 @@ extends CanvasLayer
 
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 var _vbox: VBoxContainer
 var _portrait_note: Label
 var _panel: Panel
@@ -101,6 +102,14 @@ func _build() -> void :
 	tabs.add_child(_build_gameplay_tab())
 	tabs.add_child(_build_audio_tab())
 	tabs.add_child(_build_beta_debug_tab())
+	_tabs = tabs
+	# Hidden developer section: on the Mac (developer tools), or on the phone after tapping
+	# the "Settings" title 7 times (remembered in the settings file).
+	if RuntimePolicy.developer_tools or bool(Settings.get_value(Settings.PERF_UNLOCK_KEY, false)):
+		tabs.add_child(_build_perf_tab())
+	else:
+		title.mouse_filter = Control.MOUSE_FILTER_STOP
+		title.gui_input.connect(_on_title_input)
 	_portrait_note = Label.new()
 	_portrait_note.text = "Camera framing adapts to keep the ball visible. POV locks the ball at screen center."
 	_portrait_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -136,11 +145,23 @@ func _build_video_tab() -> ScrollContainer:
 	_slider_row(v, "Camera Shake", "video.shake", 0.0, 1.5, 0.05)
 	_build_focus_visuals(v)
 	_checkbox_row(v, "Hitstop on strong hits", "video.hitstop")
+	_slider_row(v, "Motion blur strength (0 = off)", "video.motion_smear", 0.0, 2.0, 0.1)
+	_checkbox_row(v, "Motion blur on the ball", "video.blur_ball")
+	_checkbox_row(v, "Motion blur on the paddle", "video.blur_paddle")
+	_checkbox_row(v, "Motion blur on the players", "video.blur_body")
+	_checkbox_row(v, "Ball holes (spinning)", "video.ball_holes")
+	_checkbox_row(v, "Sun shading on the players", "video.player_shading")
+	_checkbox_row(v, "Colour grade (warm light, contrast)", "video.color_grade")
+	_checkbox_row(v, "Vignette (darker corners)", "video.vignette")
+	_checkbox_row(v, "Photo button on the match screen", "video.photo_button")
+	_checkbox_row(v, "Save every rally (REC)", "video.rally_record")
+	_checkbox_row(v, "Ask to save the rally after each point", "video.rally_prompt")
 	_option_row(v, "Particle Density", "video.particle_density", 
 		["Off", "Low", "Medium", "High"])
 	_option_row(v, "Shadow Quality", "video.shadow_quality", 
 		["Off", "Low", "High"])
 	_option_row(v, "Frame rate", "video.fps_mode", ["60 fps", "Adaptive: 60 when it can", "30 fps (cooler)"])
+	_option_row(v, "Resolution of the 3D view", "video.resolution", preload("res://scripts/graphics/pixel_post.gd").RESOLUTION_NAMES)
 	return scroll
 
 func _build_focus_visuals(parent: VBoxContainer) -> void:
@@ -270,6 +291,37 @@ func _build_beta_debug_tab() -> ScrollContainer:
 	return scroll
 
 
+
+var _tabs: TabContainer
+var _unlock_taps: int = 0
+var _unlock_last_usec: int = 0
+
+func _on_title_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.pressed): return
+	var now: int = Time.get_ticks_usec()
+	_unlock_taps = _unlock_taps + 1 if now - _unlock_last_usec < 600000 else 1
+	_unlock_last_usec = now
+	if _unlock_taps < 7 or _tabs == null or _tabs.has_node("Performance"): return
+	Settings.set_value(Settings.PERF_UNLOCK_KEY, true)
+	_tabs.add_child(_build_perf_tab())
+	_tabs.current_tab = _tabs.get_tab_count() - 1
+
+## One switch per PerfToggles.NAMES (docs/PERFORMANCE_PLAN.md steps). On = the new, cheaper way.
+func _build_perf_tab() -> ScrollContainer:
+	var scroll: = ScrollContainer.new()
+	scroll.name = "Performance"
+	scroll.follow_focus = true
+	var v: = _inner_vbox()
+	scroll.add_child(v)
+	var note: = Label.new()
+	note.text = "Developer: performance switches. On = the optimised way, off = the old way. Each change is written to perf.jsonl."
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.add_theme_font_size_override("font_size", 16)
+	note.add_theme_color_override("font_color", UiTheme.MUTED)
+	v.add_child(note)
+	for n in PerfToggles.NAMES:
+		_checkbox_row(v, n.capitalize(), "perf." + n)   # unsaved keys read the live PerfToggles value
+	return scroll
 
 func _inner_vbox() -> VBoxContainer:
 	var v: VBoxContainer = VBoxContainer.new()

@@ -191,6 +191,12 @@ func toggle() -> void :
 	else:
 		open()
 
+## The HUD's quick Photo button: pause, and go straight into photo mode. Leaving photo mode
+## then resumes the match instead of stopping at the pause menu.
+func open_photo() -> void:
+	open()
+	if _menu != null and is_instance_valid(_menu) and _menu.has_method("open_photo_directly"): _menu.open_photo_directly.call_deferred()
+
 func open() -> void :
 	_cancel_scene_input()
 	_manual_paused = true

@@ -1,57 +1,47 @@
 shader_type spatial;
-// Contact shadows on the floor (visual only), one MultiMesh of flat quads.
-// INSTANCE_CUSTOM.x: 0 = soft-edged ellipse (figures, chairs), 1 = rectangle (buildings,
-// tables). Hard edges, one flat violet-gray tone: pixel-art shadows, no blur.
-// Late-afternoon sun: each footprint is swept INSTANCE_CUSTOM.y metres along a fixed world
-// direction (`sun_dir`, x/z; the players' blob shadows use the same one), so ellipses
-// become capsules and rectangles long slanted blocks. The quad grows in the vertex stage to
-// cover the sweep; the fragment tests the exact swept shape in footprint units.
-render_mode unshaded, fog_disabled, shadows_disabled, depth_draw_never, blend_mix, cull_disabled;
+// Shadows of the things that move around the court (visual only): people, animals and the
+// pandesal cart, one MultiMesh of flat unit planes placed by barangay_world.gd `_write_fig`
+// (local x along the sun, from just behind the feet). Each is a hard oval on the same 4 cm
+// grid as the baked static mask, multiplying the ground by the one shadow colour like
+// shadow_ground.gdshader. Where the mask already shades the ground it only adds the
+// difference, so a figure standing in a prop's shadow is not darker (max union).
+// Static shader: no TIME; the instances only move when the figures do (12 Hz steps).
+render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled, shadows_disabled, blend_mul;
 
-uniform vec3 shadow_col : source_color = vec3(0.16, 0.13, 0.24);
-uniform float strength = 0.38;
-uniform vec2 sun_dir = vec2(0.8, 0.35);   // where shadows fall, world x/z
-// the background push (env_toon.gdshader): the floor under a far shadow leans toward
-// push_col, so the shadow does too (push_col * push_gain is the floor's own albedo scale)
-uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
-uniform float push_gain = 2.2;
+uniform sampler2D near_mask : filter_nearest, repeat_disable;
+uniform vec4 near_rect = vec4(-20.0, -34.0, 40.0, 68.0);
+uniform float texel = 0.04;
+uniform vec3 shadow_col = vec3(0.231, 0.227, 0.361);   // #3b3a5c, display values
+uniform float opacity = 0.4;
 uniform vec2 court_half = vec2(3.05, 6.705);
-uniform vec3 push = vec3(2.0, 7.0, 0.24);
+uniform vec3 fog = vec3(8.0, 0.02, 0.7);
 
-varying float shape;
-varying vec2 fp;      // footprint units: the footprint is [-0.5, 0.5] square / 0.5 circle
-varying vec2 sweep;   // the sweep in footprint units
-varying vec2 world_xz;
+varying vec3 world_pos;
+varying vec2 o_c;     // the oval's centre and its two half-axes x 2 (world x, z)
+varying vec2 o_ax;
+varying vec2 o_az;
 
 void vertex() {
-	shape = INSTANCE_CUSTOM.x;
-	// world x/z of the quad's local x and y axes (instance basis and the world's turn)
-	mat2 m = mat2(MODEL_MATRIX[0].xz, MODEL_MATRIX[1].xz);
-	vec2 l = vec2(0.0);
-	if (abs(determinant(m)) > 1e-6) l = inverse(m) * (normalize(sun_dir) * INSTANCE_CUSTOM.y);
-	vec2 f = VERTEX.xy;
-	VERTEX.xy = f + vec2(f.x > 0.0 ? max(l.x, 0.0) : min(l.x, 0.0), f.y > 0.0 ? max(l.y, 0.0) : min(l.y, 0.0));
-	fp = VERTEX.xy;
-	sweep = l;
-	world_xz = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	o_c = MODEL_MATRIX[3].xz;
+	o_ax = MODEL_MATRIX[0].xz;
+	o_az = MODEL_MATRIX[2].xz;
 }
 
 void fragment() {
-	if (shape < 0.5) {
-		// capsule: within 0.5 of the segment from the footprint centre along the sweep
-		float t = clamp(dot(fp, sweep) / max(dot(sweep, sweep), 1e-6), 0.0, 1.0);
-		vec2 d = fp - sweep * t;
-		if (dot(d, d) > 0.25) discard;
-	} else {
-		// the square swept along the segment: some t in [0, 1] has |fp - t * sweep| <= 0.5
-		vec2 s = vec2(abs(sweep.x) < 1e-4 ? 1e-4 : sweep.x, abs(sweep.y) < 1e-4 ? 1e-4 : sweep.y);
-		vec2 t1 = (fp - 0.5) / s;
-		vec2 t2 = (fp + 0.5) / s;
-		vec2 tn = min(t1, t2);
-		vec2 tx = max(t1, t2);
-		if (max(max(tn.x, tn.y), 0.0) > min(min(tx.x, tx.y), 1.0)) discard;
-	}
-	float k = push.z * smoothstep(push.x, push.y, length(max(abs(world_xz) - court_half, vec2(0.0))));
-	ALBEDO = mix(shadow_col, push_col * push_gain, k);
-	ALPHA = strength;
+	// test the texel centre, so the oval's edge steps with the baked mask's texels
+	vec2 p = near_rect.xy + (floor((world_pos.xz - near_rect.xy) / texel) + 0.5) * texel;
+	mat2 m2 = mat2(o_ax, o_az);
+	if (abs(determinant(m2)) < 1e-8) discard;
+	vec2 l = inverse(m2) * (p - o_c);
+	if (dot(l, l) > 0.25) discard;
+	vec2 u = (p - near_rect.xy) / near_rect.zw;
+	float m = 0.0;
+	if (u.x >= 0.0 && u.y >= 0.0 && u.x < 1.0 && u.y < 1.0) m = textureLod(near_mask, u, 0.0).r;
+	float out_d = length(max(abs(world_pos.xz) - court_half, vec2(0.0)));
+	float keep = 1.0 - fog.z * (1.0 - exp(-fog.y * max(out_d - fog.x, 0.0)));
+	float s = opacity * keep;
+	m *= keep;
+	if (s <= m + 0.002) discard;
+	ALBEDO = mix(vec3(1.0), shadow_col, s) / mix(vec3(1.0), shadow_col, m);
 }

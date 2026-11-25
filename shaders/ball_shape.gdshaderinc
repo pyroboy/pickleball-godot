@@ -12,9 +12,19 @@ uniform float radius = 0.05625;        // mesh radius, metres
 uniform float min_pixels = 3.0;        // smallest body diameter on screen, render pixels
 uniform float outline_pixels = 1.0;    // outline width, render pixels
 uniform float floor_y = 0.081;         // lowest point of the drawn shape, world y
+// Motion blur (scripts/fx/ball_trail.gd sets `motion` every frame; zero = a round ball): the
+// way the ball came during the exposure, world metres. In flight the ball itself is an oblong:
+// body and outline are lengthened back along `motion` into an ellipsoid whose front tip is the
+// real ball's front (`stretched`, `lengthen` 1). Behind it a third pass (ball_soft.gdshader)
+// draws the same shape lengthened further (`lengthen` over 1): the blur's tail, see-through,
+// fading in a straight line along the flight. The outline (ball_readability.gdshader) is left
+// open at the rear, where the ball runs into that tail.
+uniform vec3 motion = vec3(0.0);
+varying float tail;
 
-// Model-space vertex of the drawn ball; `outline` grows it by the outline width.
-vec3 ball_vertex(vec3 vertex, mat4 model, mat4 view, mat4 proj, vec2 viewport, bool outline) {
+// Model-space vertex of the drawn ball; `outline` grows it by the outline width. `along` is
+// what the caller's vertex() stores in `tail` (a varying can only be set there).
+vec3 ball_vertex(vec3 vertex, mat4 model, mat4 view, mat4 proj, vec2 viewport, bool outline, bool stretched, float lengthen, out float along) {
 	vec3 centre = model[3].xyz;
 	float depth = max(-(view * vec4(centre, 1.0)).z, 0.05);
 	// abs: the Compatibility renderer flips y in the projection when drawing to a texture
@@ -23,5 +33,19 @@ vec3 ball_vertex(vec3 vertex, mat4 model, mat4 view, mat4 proj, vec2 viewport, b
 	float outer = body + 2.0 * outline_pixels / body_px;
 	float lift = max(0.0, floor_y + radius * outer - centre.y);
 	mat3 to_model = inverse(mat3(model));
-	return vertex * (outline ? outer : body) + to_model * vec3(0.0, lift, 0.0);
+	vec3 drawn = vertex * (outline ? outer : body) + to_model * vec3(0.0, lift, 0.0);
+	along = 0.0;
+	float travelled = length(motion) * lengthen;
+	if (stretched && travelled > 0.0005) {
+		// Each point moves back by half the length at the middle, none at the front tip and all
+		// of it at the rear tip: a sphere becomes an ellipsoid.
+		vec3 flight = normalize(motion);
+		float rear = -dot(normalize(mat3(model) * vertex), flight);
+		vec3 back = -flight * travelled * 0.5 * (1.0 + rear);
+		// never under the court: lifted like the ball itself
+		back.y = max(back.y, floor_y + radius * outer - (centre.y + lift));
+		drawn += to_model * back;
+		along = 0.5 * (1.0 + rear);
+	}
+	return drawn;
 }

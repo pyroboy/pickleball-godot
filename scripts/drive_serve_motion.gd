@@ -257,12 +257,16 @@ static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: b
 		shot_intent = str(motion_context.get("shot_intent", shot_intent))
 	# An explicitly committed overhead keeps its overhead mechanics at the kitchen.
 	if str(motion_context.get("profile", "")) == "SMASH": near_kitchen = false
-	var def: PostureDefinition = drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
+	# Perf (PerfToggles.pose_math_cache): the definition and its Wind-up key from the cache
+	# (_drive_entry); both are only read here. This runs every tick of a held or queued stroke.
+	var entry: Array = _drive_entry(base, charge, is_volley, spin_mode, near_kitchen, shot_intent) if PerfToggles.pose_math_cache else []
+	var def: PostureDefinition = entry[0] if not entry.is_empty() else drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
 	if base.family == 1 and base.left_hand_mode == 1:
-		var linked: PostureDefinition = Path.sample(def, 0.5 * (1.0 - (swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))))
+		var linked: PostureDefinition = _path_sample(def, 0.5 * (1.0 - (swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))), entry)
 		linked.set_meta("visual_wrist_lag_deg", 0.0)
 		return linked
-	var pose: PostureDefinition = Path.blend_pose(def, Path.endpoint(def, 0), swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))
+	var windup_key: PostureDefinition = entry[1] if not entry.is_empty() and entry[1] != null else Path.endpoint(def, 0)
+	var pose: PostureDefinition = Path.blend_pose(def, windup_key, swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0))
 	if base.family == 1 and base.height_tier == 2 and not is_volley and not near_kitchen and shot_intent != "DROP":
 		pose.left_elbow_pole = PostureDefinition.blend_elbow_pole(pose.left_elbow_pole, Vector3(0, -0.25, 0.35), smoothstep(0.35, 0.65, charge), false)
 	Support.swing(pose, base, 0.0, charge, is_volley or near_kitchen or shot_intent == "DROP")
@@ -271,6 +275,21 @@ static func held_drive_pose(base: PostureDefinition, charge: float, is_volley: b
 	return pose
 
 static func sample_drive(base: PostureDefinition, progress: float, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
+	return _sample_drive_from(base, progress, charge, is_volley, spin_mode, near_kitchen, shot_intent, motion_context, false)
+
+## drive_definition for callers that only READ it (no motion context): one object per contact pose
+## and shot inputs from the cache instead of a rebuild a tick. Never change the returned pose.
+static func drive_definition_shared(base: PostureDefinition, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO") -> PostureDefinition:
+	if not PerfToggles.pose_math_cache: return drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
+	return _drive_entry(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)[0]
+
+## sample_drive for callers that only READ the result: the exact Wind-up (0) and Contact (0.5)
+## samples come back as one shared object per cache entry instead of a new pose every tick.
+## Never change the returned pose.
+static func sample_drive_shared(base: PostureDefinition, progress: float, charge: float, is_volley: bool = false, spin_mode: int = 0, near_kitchen: bool = false, shot_intent: String = "AUTO", motion_context: Dictionary = {}) -> PostureDefinition:
+	return _sample_drive_from(base, progress, charge, is_volley, spin_mode, near_kitchen, shot_intent, motion_context, true)
+
+static func _sample_drive_from(base: PostureDefinition, progress: float, charge: float, is_volley: bool, spin_mode: int, near_kitchen: bool, shot_intent: String, motion_context: Dictionary, share: bool) -> PostureDefinition:
 	if not plays_authored_keys(base) and TacticalMotion.eligible(motion_context): return TacticalMotion.sample(base, progress, motion_context)
 	if not motion_context.is_empty():
 		charge = float(motion_context.get("charge", charge))
@@ -280,16 +299,46 @@ static func sample_drive(base: PostureDefinition, progress: float, charge: float
 		shot_intent = str(motion_context.get("shot_intent", shot_intent))
 	# An explicitly committed overhead keeps its overhead mechanics at the kitchen.
 	if str(motion_context.get("profile", "")) == "SMASH": near_kitchen = false
-	var def: PostureDefinition = drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
 	var t: float = clampf(progress, 0.0, 1.0)
+	var entry: Array = _drive_entry(base, charge, is_volley, spin_mode, near_kitchen, shot_intent) if PerfToggles.pose_math_cache else []
+	# The Wind-up (0) and Contact (0.5) samples are asked every tick of a stroke and never change
+	# for one entry.
+	var fixed: bool = share and not entry.is_empty() and (t == 0.0 or t == 0.5)
+	if fixed and entry[4].has(t): return entry[4][t]
+	var result: PostureDefinition = _sample_drive(base, t, charge, is_volley, spin_mode, near_kitchen, shot_intent, entry)
+	if fixed: entry[4][t] = result
+	return result
+
+## Perf (PerfToggles.pose_math_cache): the drive definition and its Wind-up / Finish keys depend
+## only on the contact pose and the shot inputs, yet were rebuilt for every sample: up to four a
+## tick per hitting player, 360 us each on the Mac (20 ms/s in rallies). One entry per contact
+## pose object and input set, valid while that pose's content is unchanged: [definition, Wind-up
+## key, Finish key, content signature, {progress: sample}]. Entries are read-only.
+static var _drive_memo: Dictionary = {}
+const DRIVE_MEMO_MAX := 32
+static func _drive_entry(base: PostureDefinition, charge: float, is_volley: bool, spin_mode: int, near_kitchen: bool, shot_intent: String) -> Array:
+	var key: Array = [base.get_instance_id(), charge, is_volley, spin_mode, near_kitchen, shot_intent]
+	var signature: float = base.content_signature()
+	var entry = _drive_memo.get(key)
+	if entry != null and entry[3] == signature: return entry
+	var def: PostureDefinition = drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
+	var fresh: Array = [def, null, null, signature, {}]
+	if def.posture_id != 20:
+		fresh[1] = Path.endpoint(def, 0); fresh[2] = Path.endpoint(def, 2)
+	if _drive_memo.size() >= DRIVE_MEMO_MAX: _drive_memo.clear()
+	_drive_memo[key] = fresh
+	return fresh
+
+static func _sample_drive(base: PostureDefinition, t: float, charge: float, is_volley: bool, spin_mode: int, near_kitchen: bool, shot_intent: String, entry: Array) -> PostureDefinition:
+	var def: PostureDefinition = entry[0] if not entry.is_empty() else drive_definition(base, charge, is_volley, spin_mode, near_kitchen, shot_intent)
 	if base.family == 1 and base.left_hand_mode == 1:
 
 
-		var linked: PostureDefinition = Path.sample(def, lerpf(0.5, t, swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0)))
+		var linked: PostureDefinition = _path_sample(def, lerpf(0.5, t, swing_amount(charge) if plays_authored_keys(base) else clampf(charge, 0.0, 1.0)), entry)
 		linked.set_meta("visual_wrist_lag_deg", 0.0)
 		ElbowPreset.tag(linked,base,t,"stroke_runtime")
 		return linked
-	var pose: PostureDefinition = Path.sample(def, t)
+	var pose: PostureDefinition = _path_sample(def, t, entry)
 	if t < 0.5 and shot_intent != "DROP":
 
 
@@ -316,6 +365,11 @@ static func sample_drive(base: PostureDefinition, progress: float, charge: float
 	result.set_meta("visual_wrist_lag_deg", Preparation.wrist_lag(base, t, charge, drive_strength(base, charge, is_volley, near_kitchen), is_volley or near_kitchen or shot_intent == "DROP"))
 	ElbowPreset.tag(result,base,t,"stroke_runtime")
 	return result
+
+## Path.sample with the entry's ready-made Wind-up / Finish keys (Path.sample builds both per call).
+static func _path_sample(def: PostureDefinition, t: float, entry: Array) -> PostureDefinition:
+	if entry.is_empty() or entry[1] == null: return Path.sample(def, t)
+	return Path.sample_with_endpoints(def, t, entry[1], entry[2])
 
 
 

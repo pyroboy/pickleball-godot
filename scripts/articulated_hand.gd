@@ -101,14 +101,53 @@ func initialize(arm, left: bool) -> void :
 		skeleton.set_bone_parent(bone, _data.parents[bone])
 		skeleton.set_bone_rest(bone, _data.rest_local[bone])
 		skeleton.set_bone_pose(bone, _data.rest_local[bone])
-	hand_mesh.mesh = _data.mesh
-	hand_mesh.skin = _data.skin
+	if PerfToggles.simple_hand_shape:
+		simple_shape = true
+		if not _simple_cache.has(left): _simple_cache[left] = _simple_mesh(_data)
+		hand_mesh.mesh = _simple_cache[left]
+		hand_mesh.skin = null
+	else:
+		hand_mesh.mesh = _data.mesh
+		hand_mesh.skin = _data.skin
 	hand_mesh.skeleton = NodePath("HandSkeleton")
 	hand_mesh.material_override = preload("res://scripts/player_athlete_visual.gd").material()
 
 	hand_mesh.custom_aabb = AABB(Vector3( - 0.21, - 0.17, - 0.16), Vector3(0.42, 0.34, 0.32))
 	hand_mesh.set_meta("articulated_hand", self)
 	set_pose("GRIP")
+
+## Simple hand shape (PerfToggles.simple_hand_shape; user, 2026-11-25: the pixel cards draw the
+## hands, the game needs no 3D fingers). The hand the ball can touch is the palm as one rigid box:
+## the palm patch's outline, from the palm surface (where a held ball rests, so the serve toss
+## and the catch read as before) PALM_SLAB_M toward the back of the hand. 12 triangles and no
+## skinning, against 702 triangles on 17 bones posed for every contact snapshot. The finger
+## skeleton stays (serve, pickup and dive code write finger poses), it just skins nothing.
+## Fingers are no longer a surface: a ball there meets the paddle handle behind them.
+const PALM_SLAB_M := 0.022
+static var _simple_cache: Dictionary = {}
+var simple_shape: bool = false
+
+static func _simple_mesh(data: Dictionary) -> ArrayMesh:
+	var patch: PackedVector3Array = data.palm_patch
+	var low := Vector3.INF
+	var high := -Vector3.INF
+	for point in patch:
+		low = low.min(point); high = high.max(point)
+	high.z = low.z + PALM_SLAB_M   # palm surface at low.z, facing -z; back of the hand toward +z
+	var box := BoxMesh.new()
+	box.size = high - low
+	var arrays: Array = box.get_mesh_arrays()
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var centre: Vector3 = (low + high) * 0.5
+	for index in vertices.size(): vertices[index] += centre
+	var kept: Array = []
+	kept.resize(Mesh.ARRAY_MAX)
+	kept[Mesh.ARRAY_VERTEX] = vertices
+	kept[Mesh.ARRAY_NORMAL] = arrays[Mesh.ARRAY_NORMAL]
+	kept[Mesh.ARRAY_INDEX] = arrays[Mesh.ARRAY_INDEX]
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, kept)
+	return mesh
 
 func set_mesh_world_transform(world_transform: Transform3D) -> void :
 	assert (world_transform.basis.determinant() > 0.0, "Never mirror a runtime hand transform")

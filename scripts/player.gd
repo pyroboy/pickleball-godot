@@ -149,9 +149,12 @@ var left_leg_node: Node3D = null
 var skeleton: Skeleton3D = null
 var skeleton_bones: Dictionary = {}
 var current_velocity: Vector3 = Vector3.ZERO
-const MANUAL_ACCEL := 72.0
-const MANUAL_REVERSE_ACCEL := 84.0
-const MANUAL_BRAKE := 34.0
+# Your own player (user, 2026-11-26: realistic footwork, no gliding): was 72 / 84 / 34, which
+# put you at full speed in under two ticks. Still quicker than the AI's, so the stick stays
+# responsive: full speed in about a quarter of a second.
+const MANUAL_ACCEL := 18.0
+const MANUAL_REVERSE_ACCEL := 24.0
+const MANUAL_BRAKE := 16.0
 var _manual_motion_active := false
 var paddle_rest_position: Vector3 = Vector3.ZERO
 var paddle_rest_rotation: Vector3 = Vector3.ZERO
@@ -425,6 +428,10 @@ func _perf_physics_process(delta: float) -> void:
 		special_reach_driver.idle_step(delta)
 		special_reach_driver.before_normal_movement()
 	var between = _between_point_owner()
+	# Your held-HIT curves are built ahead while no rally is on (HumanContact.prewarm_held_curves).
+	if not is_ai and player_num == 0 and posture != null and not posture.editor_preview_mode and PerfToggles.held_curve_prewarm:
+		if posture.human_contact == null and _ensure_paddle_ready(): posture.human_contact = posture.HumanContact.new(self, posture)
+		if posture.human_contact != null: posture.human_contact.prewarm_held_curves()
 	if special_reach_driver != null and special_reach_driver.bridge_active(): between = null
 	var input_dir: Vector3 = Vector3.ZERO
 	if erne_action: erne_action.before_physics(delta, _get_ball_ref())
@@ -654,6 +661,7 @@ func refresh_contact_support(owned_pose: PostureDefinition, physics_presentation
 		PerfMonitor.record("rig.refresh_skipped", 0)
 		_cache_paddle_rest_transform()
 		_nvz_state.update(self)
+		if physics_presentation: _nvz_state.mark_endpoint(self)
 		return true
 	var lerp_pos: Vector3 = posture._posture_lerp_pos
 	var lerp_rot: Vector3 = posture._posture_lerp_rot
@@ -674,6 +682,7 @@ func refresh_contact_support(owned_pose: PostureDefinition, physics_presentation
 
 	_cache_paddle_rest_transform()
 	_nvz_state.update(self)
+	if physics_presentation: _nvz_state.mark_endpoint(self)
 	return true
 
 func _human_owns_physics_pose() -> bool:
@@ -704,7 +713,7 @@ func present_between_point_physics(owner, pose, delta: float) -> void:
 func _owns_waiting_receiver_pose() -> bool:
 	if posture == null or posture.editor_preview_mode or _between_point_owner() != null or get_tree().paused: return false
 	var game = get_parent()
-	if game == null or not "game_state" in game or game.game_state not in [game.GameState.WAITING, game.GameState.SERVING]: return false
+	if game == null or not "game_state" in game or (game.game_state != game.GameState.WAITING and game.game_state != game.GameState.SERVING): return false
 	if game._is_practice() or game._tool_state_active() or game.get_server_actor() == self: return false
 	if game.game_serve == null: return false
 	var ball = _get_ball_ref()
@@ -883,13 +892,15 @@ func _ensure_paddle_ready() -> bool:
 func _get_swing_sign() -> float:
 	return -1.0 if court_side == 0 else 1.0
 
+# Perf: these run dozens of times per player per tick; read the court side
+# fields directly instead of through the court_side property getter.
 func _get_forward_axis() -> Vector3:
-	if court_side == 0:
+	if (player_num if _court_side < 0 else _court_side) == 0:
 		return Vector3(0.0, 0.0, -1.0)
 	return Vector3(0.0, 0.0, 1.0)
 
 func _get_forehand_axis() -> Vector3:
-	if court_side == 0:
+	if (player_num if _court_side < 0 else _court_side) == 0:
 		return Vector3(1.0, 0.0, 0.0)
 	return Vector3(-1.0, 0.0, 0.0)
 
@@ -1103,8 +1114,16 @@ func _deferred_log_body() -> void :
 func can_volley_from_feet() -> bool:
 	return _nvz_state.can_volley(self)
 
+# Perf: asked many times per player per tick. The game creates its controller
+# once; keep the reference and ask only whether it is active.
+var _between_controller: Object = null
 func _between_point_owner():
-	var game = get_parent()
-	if game == null or not "between_point_controller" in game: return null
-	var owner = game.between_point_controller
-	return owner if is_instance_valid(owner) and owner.is_active() else null
+	var owner: Object = _between_controller
+	if owner == null or not is_instance_valid(owner):
+		_between_controller = null
+		var game = get_parent()
+		if game == null or not "between_point_controller" in game: return null
+		owner = game.between_point_controller
+		if not is_instance_valid(owner): return null
+		_between_controller = owner
+	return owner if owner.is_active() else null

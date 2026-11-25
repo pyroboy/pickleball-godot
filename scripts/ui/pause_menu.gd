@@ -223,8 +223,21 @@ func _on_photo_mode() -> void:
 func _exit_tree() -> void:
 	if is_instance_valid(_photo_mode): _photo_mode.finish()
 
+## From the HUD's quick Photo button (pause_controller.gd open_photo): photo mode at once, and
+## the match resumes when it closes (unless the match cannot be resumed without a reset).
+var _photo_then_resume: bool = false
+func open_photo_directly() -> void:
+	_photo_then_resume = true
+	_on_photo_mode()
+	if not is_instance_valid(_photo_mode): _photo_then_resume = false
+
 func photo_mode_closed() -> void:
 	_photo_mode = null
+	if _photo_then_resume:
+		_photo_then_resume = false
+		if _resume_button != null and not _resume_button.disabled:
+			_on_resume()
+			return
 	_photo_button.grab_focus()
 
 ## Back / ESC: closes photo mode, the confirmation or settings first. Returns true when it did.

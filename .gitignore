@@ -43,3 +43,10 @@ data/postures_backup/
 
 # Local native iOS project + build output
 build/
+
+# Native extension build leftovers (tools/build_native.sh recreates them)
+native/.sconsign.dblite
+native/src/*.os
+native/src/*.o
+# Prebuilt godot-cpp for iPhone (37 MB): copied from the toolchain by tools/build_native.sh ios
+native/bin/libgodot-cpp.ios.xcframework/

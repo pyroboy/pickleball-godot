@@ -7,6 +7,7 @@ const RuntimePolicy = preload("res://scripts/runtime_policy.gd")
 signal pose_editor_requested
 signal pause_requested
 signal skip_retrieval_requested
+signal photo_requested   # the quick Photo button: pause and open photo mode in one tap
 const MobileLayout = preload("res://scripts/ui/mobile_layout.gd")
 const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
 const HudChrome = preload("res://scripts/ui/hud_chrome.gd")
@@ -35,6 +36,10 @@ var debug_mode: = false
 var _debug_toolbar: GridContainer
 var _debug_button: Button
 var _skip_button: Button
+var _rec_button: Button            # rally replays: save every rally while on
+var _save_rally_button: Button     # asks to save the rally that just ended
+var _save_rally_token: int = 0
+var _photo_button: Button   # quick way into photo mode; Settings > Video > Photo button (video.photo_button)
 var _between_point_active: = false
 var _portrait: = false
 var _score_panel: Panel
@@ -242,6 +247,7 @@ func _note_ui_rects() -> void:
 	var rects: = {}
 	var named: Array = [["serve", _serve_label], ["shot", shot_type], ["speed", speed], ["locked", _locked_spin_label], ["board", _board], ["dot", hittable_dot]]
 	var toolbar_names: = ["debug", "skip", "guide", "pause"]
+	if _photo_button != null and _photo_button.visible: named.append(["photo", _photo_button])
 	for i in _toolbar.get_child_count(): named.append([toolbar_names[i] if i < toolbar_names.size() else "tool%d" % i, _toolbar.get_child(i)])
 	var game: = get_parent()
 	for extra in game.get("extra_touch_buttons") if game != null and game.get("extra_touch_buttons") != null else []:
@@ -545,6 +551,45 @@ func _build_toolbar() -> void :
 			label.hide()
 			button.add_child(label)
 			_toolbar_captions.append(label)
+	# Quick Photo button: a small camera button beside the HIT pad on the touch layout (under
+	# the toolbar's right end where there is no HIT pad), so one tap pauses the match and opens
+	# photo mode. Shown with the gameplay HUD while Settings > Video > Photo button is on.
+	_photo_button = Button.new()
+	_photo_button.name = "QuickPhoto"
+	_photo_button.icon = _camera_icon()
+	_photo_button.expand_icon = true
+	_photo_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_photo_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+	_photo_button.theme = UiTheme.create()
+	_photo_button.focus_mode = Control.FOCUS_NONE
+	_photo_button.tooltip_text = "Pause and open photo mode"
+	_photo_button.pressed.connect(func(): photo_requested.emit())
+	add_child(_photo_button)
+	# Rally replays (scripts/fx/photo_history.gd): REC above the camera saves every rally by
+	# itself while it is on; while it is off, a SAVE RALLY? button comes up for a few seconds
+	# after each point (Settings > Video > Ask to save rally).
+	_rec_button = Button.new()
+	_rec_button.name = "RallyRecord"
+	_rec_button.text = "REC"
+	_rec_button.theme = UiTheme.create()
+	_rec_button.focus_mode = Control.FOCUS_NONE
+	_rec_button.tooltip_text = "Save every rally (keeps the 10 newest)"
+	_rec_button.pressed.connect(_toggle_rally_record)
+	add_child(_rec_button)
+	_save_rally_button = Button.new()
+	_save_rally_button.name = "SaveRally"
+	_save_rally_button.theme = UiTheme.create()
+	_save_rally_button.focus_mode = Control.FOCUS_NONE
+	_save_rally_button.visible = false
+	_save_rally_button.pressed.connect(_save_rally_pressed)
+	add_child(_save_rally_button)
+	_toolbar.item_rect_changed.connect(_place_photo_button)
+	get_viewport().size_changed.connect(func(): _place_photo_button.call_deferred())
+	var settings: Node = get_node_or_null("/root/Settings")
+	if settings != null and settings.has_signal("settings_changed"):
+		settings.settings_changed.connect(func(key: String, _value: Variant) -> void:
+			if key in ["video.photo_button", "video.rally_record"]: _place_photo_button())
+	_place_photo_button.call_deferred()
 	_debug_toolbar = GridContainer.new()
 	_debug_toolbar.columns = 3
 	_debug_toolbar.theme = UiTheme.create()
@@ -819,6 +864,108 @@ func set_end_change_pending(pending: bool) -> void:
 	_skip_button.tooltip_text = "Players must finish walking to the other end. Pause or reset remains available." if pending else ""
 	if text_changed: _layout_desktop()
 
+## A small pixel camera: body, viewfinder bump, lens with a highlight (16 x 13, drawn once).
+static var _camera_texture: ImageTexture = null
+static func _camera_icon() -> Texture2D:
+	if _camera_texture != null: return _camera_texture
+	var light := Color(0.95, 0.97, 1.0)
+	var dark := Color(0.09, 0.14, 0.2)
+	var image := Image.create_empty(16, 13, false, Image.FORMAT_RGBA8)
+	for y in 13:
+		for x in 16:
+			var c := Color(0, 0, 0, 0)
+			if y <= 1 and x >= 5 and x <= 9: c = light            # viewfinder bump
+			elif y >= 2: c = light                                 # body
+			var lens: float = Vector2(x - 7.5, y - 7.5).length()
+			if lens <= 3.4: c = dark                               # lens
+			if lens <= 1.2: c = light                              # its highlight
+			if y == 4 and x >= 12 and x <= 13: c = dark            # flash window
+			image.set_pixel(x, y, c)
+	_camera_texture = ImageTexture.create_from_image(image)
+	return _camera_texture
+
+## On the touch layout: above and to the right of the HIT pad, outside its touch circle and
+## its timing ring's start. Otherwise under the toolbar's right end.
+func _place_photo_button() -> void:
+	if _photo_button == null or _toolbar == null: return
+	var settings: Node = get_node_or_null("/root/Settings")
+	var wanted: bool = bool(settings.call("get_value", "video.photo_button", true)) if settings != null and settings.has_method("get_value") else true
+	_photo_button.visible = wanted and _gameplay_visible
+	if not _photo_button.visible:
+		if _rec_button != null: _rec_button.visible = false
+		if _save_rally_button != null: _save_rally_button.visible = false
+		return
+	var game: Node = get_parent()
+	# The touch controls hand taps on these buttons over (mobile_controls._toolbar_at_point).
+	if game != null and "extra_touch_buttons" in game and not game.extra_touch_buttons.has(_photo_button): game.extra_touch_buttons.append(_photo_button)
+	var touch = game.get("mobile_controls") if game != null else null
+	var size: Vector2
+	var at: Vector2
+	if touch != null and is_instance_valid(touch) and bool(touch.get("enabled")):
+		var pad: Vector2 = touch.get("_charge_center")
+		var reach: float = float(touch.get("_charge_radius"))
+		size = Vector2.ONE * roundf(reach * 1.0)
+		at = pad + Vector2(reach * 0.75, -reach * 1.95) - size * 0.5
+		at.x = minf(at.x, get_viewport().get_visible_rect().size.x - size.x - 4.0)
+	else:
+		var bar: Rect2 = _toolbar.get_global_rect()
+		var like: Vector2 = _pause_button.size if _pause_button != null and _pause_button.size.x > 1.0 else Vector2(100, 44)
+		size = Vector2(maxf(roundf(like.y * 1.2), 48.0), like.y)
+		at = Vector2(bar.end.x - size.x, bar.end.y + maxf(roundf(like.y * 0.08), 4.0))
+	_photo_button.custom_minimum_size = size
+	_photo_button.size = size
+	_photo_button.global_position = at.round()
+	# REC sits above the camera, the save question to their left.
+	var recording: bool = bool(settings.call("get_value", "video.rally_record", false)) if settings != null and settings.has_method("get_value") else false
+	var gap: float = maxf(roundf(size.y * 0.12), 4.0)
+	_rec_button.visible = true
+	_rec_button.custom_minimum_size = Vector2(size.x, roundf(size.y * 0.62))
+	_rec_button.size = _rec_button.custom_minimum_size
+	_rec_button.global_position = (at - Vector2(0.0, _rec_button.size.y + gap)).round()
+	_rec_button.add_theme_font_size_override("font_size", maxi(roundi(_rec_button.size.y * 0.42), 12))
+	var rec_color: Color = Color(1.0, 0.32, 0.28) if recording else Color(0.95, 0.97, 1.0, 0.7)
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]: _rec_button.add_theme_color_override(state, rec_color)
+	_save_rally_button.custom_minimum_size = Vector2(roundf(size.x * 2.7), _rec_button.size.y)
+	_save_rally_button.size = _save_rally_button.custom_minimum_size
+	_save_rally_button.global_position = (_rec_button.global_position - Vector2(_save_rally_button.size.x + gap, 0.0)).round()
+	_save_rally_button.add_theme_font_size_override("font_size", maxi(roundi(_rec_button.size.y * 0.38), 12))
+	for button in [_rec_button, _save_rally_button]:
+		if game != null and "extra_touch_buttons" in game and not game.extra_touch_buttons.has(button): game.extra_touch_buttons.append(button)
+
+func _toggle_rally_record() -> void:
+	var settings: Node = get_node_or_null("/root/Settings")
+	if settings == null or not settings.has_method("set_value"): return
+	settings.call("set_value", "video.rally_record", not bool(settings.call("get_value", "video.rally_record", false)))
+	_place_photo_button()
+
+## A rally just ended (photo_history.gd rally_ready). REC on: save it and say so. REC off: ask,
+## for a few seconds, without stopping anything.
+func on_rally_ready(seconds: float) -> void:
+	var settings: Node = get_node_or_null("/root/Settings")
+	var history: Node = get_parent().get("photo_history") if get_parent() != null else null
+	if settings == null or history == null or _save_rally_button == null: return
+	var recording: bool = bool(settings.call("get_value", "video.rally_record", false))
+	if recording:
+		_show_rally_note("RALLY SAVED" if history.save_last_rally() else "NOT SAVED", 1.6, true)
+	elif bool(settings.call("get_value", "video.rally_prompt", true)) and _gameplay_visible:
+		_show_rally_note("SAVE RALLY?  %.0f s" % seconds, 6.0, false)
+
+func _show_rally_note(text: String, seconds: float, done: bool) -> void:
+	_save_rally_token += 1
+	var token: int = _save_rally_token
+	_save_rally_button.text = text
+	_save_rally_button.disabled = done
+	_save_rally_button.visible = true
+	_place_photo_button()
+	_save_rally_button.visible = true
+	get_tree().create_timer(seconds).timeout.connect(func() -> void:
+		if token == _save_rally_token and is_instance_valid(_save_rally_button): _save_rally_button.visible = false)
+
+func _save_rally_pressed() -> void:
+	var history: Node = get_parent().get("photo_history") if get_parent() != null else null
+	if history == null: return
+	_show_rally_note("RALLY SAVED" if history.save_last_rally() else "NOT SAVED", 1.6, true)
+
 func set_between_point_active(active: bool) -> void :
 	_between_point_active = active
 	_guidance_chrome.guidance_details = not active
@@ -830,6 +977,7 @@ func set_between_point_active(active: bool) -> void :
 func set_gameplay_elements_visible(p_visible: bool) -> void :
 	_gameplay_visible = p_visible
 	_skip_button.visible = p_visible and _between_point_active
+	_place_photo_button()
 	_debug_toolbar.visible = p_visible and debug_mode
 	_spin_label.visible = p_visible and _spin_enabled and not _portrait
 	_locked_spin_label.visible = p_visible and _spin_locked
@@ -922,7 +1070,7 @@ func _layout_desktop() -> void :
 		_layout_singles_feedback()
 		return
 	_restore_desktop_fonts()
-	for control in [_guidance_chrome, state, _charge_label, _charge_bar, _controls_hint]: control.modulate.a = 1.0   # landscape keeps its status panel
+	for control in [_guidance_chrome, state, _charge_label, _charge_bar, _controls_hint, hittable_dot]: control.modulate.a = 1.0   # landscape keeps its status panel
 	var width: = viewport_size.x
 	var height: = viewport_size.y
 	var margin: = 20.0 if width >= 900.0 else 12.0
@@ -1219,6 +1367,11 @@ func _layout_portrait(viewport_size: Vector2) -> void :
 	_set_pill_region(speed, Rect2(x + w - right_w, row_y + line_h + gap_y, right_w, line_h))
 	var dot_y: float = row_y + 2.0 * (line_h + gap_y)
 	_place(hittable_dot, Rect2(x + w - 12 * s, dot_y, 12 * s, 12 * s))
+	# The reach dot is a desktop status-panel cue (its meaning lives in a hover tooltip):
+	# on the phone it read as a stray circle under the speed pill, and the timing ring
+	# around HIT already says the ball is reachable. Kept in place, alpha 0 (as the
+	# archived status box above), so its rect and sampling are unchanged.
+	hittable_dot.modulate.a = 0.0
 	_locked_spin_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_set_pill_region(_locked_spin_label, Rect2(x + w - right_w, dot_y + 12 * s + gap_y, right_w, line_h))
 	_place(debug, Rect2(x, y + 310 * s, w, 100 * s))

@@ -8,6 +8,7 @@ const FLOOR_REST_Y: float = _Ball.FLOOR_Y + _Ball.BALL_RADIUS
 const _NetProfile = preload("res://scripts/net_profile.gd")
 
 const NET_CLEAR_Y: float = _NetProfile.FLOOR_Y + _NetProfile.CENTER_HEIGHT + _Ball.BALL_RADIUS
+const POST_REACH_Z: float = _NetProfile.POST_RADIUS + _Ball.BALL_RADIUS   # a ball centre further than this from z = 0 is clear of the posts
 
 static func net_clear_y_at(x: float) -> float:
 	return _NetProfile.clear_y_at(x, _Ball.BALL_RADIUS)
@@ -58,7 +59,10 @@ static func _perf_trace(start_pos: Vector3, start_vel: Vector3, start_omega: Vec
 			vel.y = minf(vel.y, 0.0)
 		var elapsed: float = (step + 1) * dt
 
-		if post_hit.is_empty():
+		# Perf: a step that stays on one side of the posts' depth cannot touch a post (post_sweep's
+		# own second early-out, taken here before its call and result dictionary: every step of
+		# every predicted flight asked it).
+		if post_hit.is_empty() and not (minf(previous.z, pos.z) > POST_REACH_Z or maxf(previous.z, pos.z) < -POST_REACH_Z):
 			var post_contact: Dictionary = _NetProfile.post_sweep(previous, pos, _Ball.BALL_RADIUS)
 			if post_contact.get("hit", false):
 				post_hit = post_contact

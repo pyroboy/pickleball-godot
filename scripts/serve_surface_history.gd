@@ -13,10 +13,14 @@ var previous:Dictionary={}
 var current:Dictionary={}
 var ball_from:=Vector3.ZERO
 var departures:Dictionary={}
+## Simple hand shape (articulated_hand.gd, one palm box): the server's hand that holds the ball
+## at release. The box has no cupped fingers to tell "leaving the hand" from "hitting it"
+## triangle by triangle, so that hand cannot fault the serve; every other part still can.
+var held_parts:Dictionary={}
 var fault:Dictionary={}
 var latest:Dictionary={}
 func clear()->void:
- active=false;previous.clear();current.clear();departures.clear();fault={};latest={}
+ active=false;previous.clear();current.clear();departures.clear();held_parts.clear();fault={};latest={}
 func prime(players:Array,server,point:Vector3,radius:float)->void:
  clear();active=true;server_num=ActorIdentity.team_id(server);server_actor_id=ActorIdentity.actor_id(server);ball_from=point
  for p in players:previous[ActorIdentity.actor_id(p)]=Surface.snapshot(p,true)
@@ -24,6 +28,9 @@ func prime(players:Array,server,point:Vector3,radius:float)->void:
  for id in snapshot.parts:
   var part:Dictionary=snapshot.parts[id]
   if not part.hand.is_empty():
+   if part.hand.has("grip"):
+    if AABB(part.bounds).grow(radius+HELD_REACH_M).has_point(point):held_parts[int(id)]=true
+    continue
    var triangles:Dictionary=touching_triangles(part,point,radius)
    if not triangles.is_empty():departures[int(id)]=triangles
  current=previous.duplicate(true)
@@ -36,6 +43,8 @@ func sample(players:Array,point:Vector3,radius:float)->Dictionary:
  for p in players:
   var now:=Surface.snapshot(p,true);current[ActorIdentity.actor_id(p)]=now
   var before:Dictionary=previous.get(ActorIdentity.actor_id(p),now)
+  if ActorIdentity.actor_id(p)==server_actor_id and not held_parts.is_empty():
+   before=_without_held(before);now=_without_held(now)
   var allowed:Dictionary=departures if ActorIdentity.actor_id(p)==server_actor_id else {}
   var remaining_units:int=maxi(0,576-total_algebra_units)
   var found:=History.query(before,now,ball_from,point,radius,1.0,true,0.0,1.0,-1,maxi(0,4096-total_queries),allowed,12,{},Vector3.INF,remaining_units)
@@ -56,6 +65,16 @@ func sample(players:Array,point:Vector3,radius:float)->Dictionary:
   if departures[id].is_empty():departures.erase(id)
  previous=current.duplicate(true);ball_from=point
  return first
+const HELD_REACH_M:=0.02 # a hand whose box is this close to the ball's surface at release holds it
+func _without_held(snapshot:Dictionary)->Dictionary:
+ if not snapshot.has("parts"):return snapshot
+ var kept:Dictionary={}
+ for id in snapshot.parts:
+  if not held_parts.has(int(id)):kept[id]=snapshot.parts[id]
+ var copy:Dictionary=snapshot.duplicate()
+ copy.erase("lean_without_legs");copy.erase("lean_without_paddle")
+ copy["parts"]=kept
+ return copy
 static func touching(part:Dictionary,point:Vector3,radius:float)->bool:
  if not AABB(part.bounds).grow(radius+History.CONTACT_EPSILON).has_point(point):return false
  var triangles:=Surface.snapshot_triangles(part)

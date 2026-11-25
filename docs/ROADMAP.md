@@ -30,6 +30,8 @@ physics and timing stay locked until a deliberate "Gameplay v2".
 Status: done, in progress, next, later.
 
 ### Phase 0: Performance baseline (in progress)
+Current plan for steady 60 fps and a cooler phone (phone data, solver bake, hitch fixes):
+`docs/PERFORMANCE_PLAN.md`.
 - [x] PerfMonitor autoload, spike log, F3 graph, `tools/perf_report.py`
 - [x] Seeded benchmark + pose trace (`tools/bench.sh`, `tools/pose_diff.py`)
 - [x] Physics catch-up cap, IK once per player per tick, READY recheck at 10 Hz, AI re-plan cap
@@ -303,3 +305,224 @@ and `RUN_SLACK` weights are first guesses, not tuned.
   (`docs/PICKLEBALL_2.5D_PROPOSAL.pdf`, `docs/pixel_art_test/`).
 - Proposal with Part 2 (physics and mechanics, 41 pages): `docs/PICKLEBALL_2.5D_PROPOSAL.pdf`
   on this branch. Rebuild with `docs/proposal_pdf/build.sh` (needs reportlab and pypdf).
+
+## Motion smear (2026-11-25, build 119, not yet judged on the phone)
+
+Fast limbs leave a short trail of their own texels (`shaders/pixel_card.gdshader`, Settings > Video >
+Motion smear, `video.motion_smear` 0-1, default 0.6). The motion is real: the per-tick card build already
+stores each corner now and one tick ago, so the shader knows how far each part moved. A part moving over
+5 texels a tick (about 4 m/s) smears; opaque pixels stay untouched, the trail is dithered on the art's
+own texel grid and capped at 6 texels. No full-screen pass and no extra buffers. Off in first person,
+pause and pose editors (no tick build there). Next if liked: the same for the paddle (it is a 3D mesh,
+it needs its previous transform as a uniform). Not planned: full-screen camera blur (the camera barely
+moves, and a screen pass costs fill rate on the phone).
+
+**Build 120:** the user could not see the card-only smear on the phone, so it is bolder (from about 3 m/s,
+up to 12 texels, default strength 1) and the ball has its own motion blur: the drawn ball is stretched
+back along its flight by one tick of travel (`scripts/fx/ball_trail.gd` `_place_blur`, uniform `motion` in
+`shaders/ball_shape.gdshaderinc`), from 3 m/s, at most 0.6 m, never past the last bounce or hit, dithered
+out toward the tail. The front of the shape is the real ball. One slider drives both.
+
+**Build 121, realistic motion blur (user asked for a camera-like blur on body, ball and paddle):**
+the dithered smear is gone. Body: each card pixel averages 8 reads of the art along the way the part came
+during the exposure (half a tick = 1/60 s at strength 1); fully covered pixels are drawn solid, partly
+covered ones by a second, alpha-blended pass (`shaders/pixel_card_soft.gdshader`, same code through
+`pixel_card_body.gdshaderinc`), chained on only for players with a card moving over 0.9 m/s. Ball: the
+ball stays whole and sharp; a third pass (`shaders/ball_tail.gdshader`) draws it stretched back along its
+flight, see-through and fading out. Paddle: five see-through copies between last frame's place and this
+one (`scripts/graphics/paddle_skin.gd` `_blur`). One slider (Settings > Video, 0-2). Open: GPU cost on
+the phone, and whether soft edges on running bodies are wanted or only on swings (BLUR_FROM in the
+shader body).
+
+**Build 122, steadier body blur (user: the card blur was sometimes jittery):** the blur's motion no longer
+comes from the card's corners (they jump when a limb changes drawing or flips, so the blur vanished for a
+tick). Each card's two joints give its motion per tick, eased over a few ticks (55% of the way each tick)
+and stored per corner in a second mesh attribute (CUSTOM1; `pickle_cards.cpp` and its script twin). The
+shader eases the blur in over 3 texels of blur length, from the sharp sun-shaded pixel to the exposure's
+average, instead of switching between two looks. Measured: the blur drops out in 1 of 8,628 moving samples.
+
+**Build 123 (user: the paddle blur read as ghost copies, and the ball's blur was sometimes missing):**
+Paddle: no copies any more. Its parts are drawn once more through `shaders/paddle_blur.gdshader`, which
+puts every vertex on the trailing side back where it was at the start of the exposure (the part's whole
+earlier transform, so turn and travel are both followed) and fades the stretched faces out: one
+continuous streak. The edge band takes the face's average colour, since the face is what passed through.
+Ball: the blur now follows the drawn ball's own frame-to-frame motion instead of the trail's path history,
+which restarted at every bounce and hit; it is on in 92% of frames flying over 5 m/s (hit stops and the
+ease-in below 7 m/s are the rest).
+
+**Build 124 (user: make the ball's blur realistic):** the streak in `shaders/ball_tail.gdshader` is now as
+wide as the drawn ball (outline included, so it meets the ball's silhouette), falls off toward the sides,
+is evenly exposed along its length (more see-through the longer it is) with a round fading end, and uses
+the ball's mid tone with a little of its shading. Before it was a thinner flat-colour strip that faded
+linearly from the ball.
+
+**Build 125, stretch blur (user asked for it for forward motion):** motion toward or away from the camera
+hardly crosses the screen, so forward swings and flights blurred less than sideways ones. Its on-screen
+length is now given back 70% of the way to what the same speed would show sideways, at most 2.5 times
+longer, direction unchanged: in the card shader (`DEPTH_STRETCH`), the ball's streak
+(`BLUR_DEPTH_STRETCH` in `fx/ball_trail.gd`) and the paddle's sweep (`paddle_skin.gd`). A deliberate
+exaggeration: a real camera does not do this.
+
+**Build 126 (user: the ball should look like an oblong in flight, not a ball with a streak):** the streak
+pass is gone (`ball_tail.gdshader` removed). The ball's own body and outline are lengthened back along
+the flight into an ellipsoid (`shaders/ball_shape.gdshaderinc`): front tip at the real ball's front, rear
+tip one exposure behind. Extra length = travel in 1/80 s at strength 1, from 3 m/s, at most 0.2 m (0.32 m
+with the depth stretch); the drawn ball is 0.11 m across. Round when slow, held or frozen.
+
+**Build 127 (user: add blur to the oblong, and no outline along the part that lengthens):** the ball is
+again drawn whole and round at its real place. Behind it `shaders/ball_soft.gdshader` draws the ball
+lengthened into an ellipsoid along the flight, see-through, fading to the rear tip and thinning toward
+its sides, pushed a ball's width back in depth so the round ball always covers it. The outline
+(`ball_readability.gdshader`) is left open on the side of the screen the blur comes out of. Extra length:
+travel in 1/55 s at strength 1, at most 0.3 m. Tried and dropped: making the front part of one stretched
+ball solid and the rest see-through; for a ball flying away the see-through rear faces the camera and the
+ball looked hollow.
+
+**Build 128 (user: the oblong back, with a linear blur along the direction and more stretch on the tail):**
+the ball in flight is a solid oblong again (body and outline lengthened into an ellipsoid, front tip at the
+real ball's front; extra length = travel in 1/95 s, at most 0.14 m). The outline is open at its rear.
+Behind it `shaders/ball_soft.gdshader` draws the same shape 2.8 times longer (`tail_lengthen`),
+see-through, its opacity falling in a straight line along the flight from 0.85 at the ball to 0 at the
+rear tip, pushed back in depth so the solid oblong covers it. Open: motion blur does not yet shrink in
+slow motion (all three effects measure game time); the user was asked and has not decided.
+
+**Build 129:** (1) Motion blur shrinks with slow motion: ball, paddle and card blur are multiplied by
+`Engine.time_scale` (the exposure is real time; at 30% speed the blur is 30% as long, gone near a freeze).
+(2) Pickleball holes on the ball (`shaders/ball_body.gdshader`): 32 darker dots fixed to the ball's
+surface, turned by the ball's real angular velocity (`fx/ball_trail.gd` `_turn_holes`; the drawn mesh
+itself never rotates). They fade out as the ball lengthens in flight and only show when the ball is drawn
+more than 6.5 pixels across (full from 11): smaller than that a hole is one stray dark pixel. In normal
+play the ball is mostly below that size, so the holes show in close views. Not verified: the slow-motion
+scaling in a real slow-motion moment, and the holes rolling (the ball had no spin in the test match).
+
+**Build 130, resolution setting:** Settings > Video > Resolution of the 3D view (`video.resolution`):
+Default (the build's own: 1/3 on main, 1/2 in the phone builds), Low 1/3, Medium 1/2, High 2/3, Full.
+`scripts/graphics/pixel_post.gd` applies it at once (viewport 3D scale, the upscale shader, and the size
+other effects read). UI stays full resolution. Pixel count grows with the square of the share: Full draws
+four times the pixels of 1/2. Its cost on the phone's frame rate is not measured yet.
+
+**Build 131, the ball's holes roll:** the game's own spin is zero on most shots, so the holes never turned.
+The shown ball now rolls forward along its flight like a ball with a little topspin (`fx/ball_trail.gd`
+`_turn_holes`: 1.6 rad/s per m/s of speed, between 2.5 and 12 rad/s, so under two turns a second and about
+7 degrees a frame), or with the shot's real spin when it has any. It runs on game time, so it turns slowly
+in slow motion. It is not turned while the ball is lengthened by blur (user: on a fast ball the spin cannot
+be seen, so it is useless there); the holes are faded out then anyway.
+
+**Build 132, more graphics switches (Settings > Video, all on by default):** motion blur on the ball, on the
+paddle and on the players, each its own checkbox (the slider stays the common strength); ball holes;
+sun shading on the players (the stepped light and shade bands and rim); colour grade (contrast,
+saturation, warm light, split tones in `pixel_post.gd`); vignette. They apply while playing: the post
+ones at once, the others within two seconds (they are read on the 2 s sweep each effect already has).
+
+**Build 133, player shadows:** (1) Gaps at the joints: each card is a flat picture turned to the camera and
+set nearer or further for draw order, so slid along the sun the cards of one body landed apart and the
+shadow broke into blobs at knees, elbows and hips. Every card's shadow is now grown by 1.5 atlas texels
+(`shaders/card_shadow_body.gdshaderinc` `grow`), which joins them. (2) Lens blur: the serve-aim and
+slow-motion lens blurs what is drawn before it; player shadows are drawn after it and stayed sharp on a
+blurred court. While the lens is on (`ground_shadows.gd` `lens_soften`, set by `solo_aim_focus.gd`) a
+second pass (`card_shadow_soft.gdshader`) adds a soft rim up to 2.5 texels wide outside each shadow. Not
+yet softened the same way: the ball's blob shadow and the motion blur passes.
+
+**Build 134 (user: the shadows are too fat):** the growth that closes the joint gaps is no longer on all
+sides. Each part's shadow is only lengthened, 1.25 texels (3.5 cm) at both ends along the part's own
+length, so limbs reach into the next part and nothing gets wider. If gaps come back at this size, the
+root fix is to give the shadow pass true joint-to-joint positions instead of the camera-facing cards'.
+
+**Build 135, shadow joints fixed at the root (user: the joints of the shadows are what is broken):** the
+shadow is no longer the camera-facing cards slid along the sun. Each part casts its true shape: from its
+joint, along its real joint-to-joint length, as wide as its art, turned to face the sun. The card
+builders (`native/src/pickle_cards.cpp` and the loop in `pixel_card_rig.gd`) store that per corner as an
+offset from the card's corner in a third mesh attribute (CUSTOM2), and the shadow shader adds it, so limbs
+meet exactly at knees, elbows, hips and shoulders. No growth or lengthening any more (`grow` 0). Card
+cost on the Mac 9.6 -> 10.05 ms/s.
+
+**Build 136 (user picked the old shadow's look from the build-135 comparison):** the shadow shapes are no
+longer turned to face the sun, which made a thinner, stick-like figure. Each part's shadow keeps the
+card's own picture, turn and width, and is only moved to where the part really is: its real joint, its real
+joint-to-joint line, and without the draw-order push along the view. Same full silhouette as before the
+shadow work, with the parts joined at their joints.
+
+**Build 137 (user's photo-mode screenshot: the shadow breaks into a fan of thin lines from another
+angle):** build 136 kept the cards' camera-facing turn for the shadow, so with the camera near the sun's
+line every card was edge-on to the light and its shadow collapsed. The shadow shape now contains no
+camera at all: the part's real joint, its real line (its own up for head, chest and hips), turned to
+face the sun, 1.15 times the art's width (`SHADOW_WIDEN`) so it stays about as full as the old shadow
+read from the match camera. The shader flattens it onto the court, so it is the same from every angle.
+
+**Build 138, paddle and ball shadows by the sun:** (1) The paddle casts a shadow: its materials draw the
+mesh once more flattened onto the court along the light (`shaders/mesh_shadow.gdshader`, one shared
+material from `ground_shadows.gd` `mesh_shadow_material`), with the players' shadow stencil so paddle,
+hand and arm darken the court once. (2) The ball's shadow follows the sun like the players' (user's
+request; it was straight under the ball by the earlier spec): its oval is placed where the light from
+the ball meets the court and drawn out along the light (up to 2.2 times its width). It still shrinks and
+lightens with height. The ball's spot directly below it, which read as a landing and height cue, is gone.
+
+**Build 139, motion blur on the shadows:** players: the soft shadow pass that already made the lens rim
+also draws a trail behind a fast limb's shadow, as dark as the share of the exposure the shadow covered
+that spot (`card_shadow_body.gdshaderinc` `smear`; the solid shadow itself is unchanged, so overlaps
+still darken once). Paddle: the motion-blur sweep casts its own fading shadow
+(`shaders/paddle_blur_shadow.gdshader`). Ball: its oval is drawn out along the way the shadow moves over
+the court and lightened to match (`ground_shadows.gd`, at most 0.3 m longer). All three follow the blur
+slider, the per-part switches and the slow-motion scaling.
+
+**Build 140, quick Photo button:** a small PHOTO button under the Guide / Pause buttons on the match
+screen (`scripts/ui/hud.gd`). One tap pauses the match and opens photo mode
+(`PauseController.open_photo`); DONE in photo mode resumes the match instead of stopping at the pause
+menu. Settings > Video > Photo button on the match screen (`video.photo_button`, on by default) hides it.
+Photo mode from the pause menu works as before.
+
+**Build 141:** (1) The quick photo button is a pixel camera icon above and to the right of the HIT pad on
+the touch layout (1.8 pad radii from its centre, outside its touch circle); without touch controls it
+stays under the toolbar. (2) Motion blur is frozen in photo mode and under the pause menu: pausing used
+to drop the limb blur, its shadow trail and the paddle sweep, and let the ball's decay. Each effect now
+keeps the state it had at the moment of pausing; the limb and shadow blur follow the photo camera as it
+moves, since their shaders read the stored motion in view space every frame.
+
+**Build 142, rewind in photo mode:** a REWIND slider steps back through the last 3 seconds, one physics tick
+per notch (30 a second). `scripts/fx/photo_history.gd` records, each tick, the joints every player's cards
+and paddle are drawn from and the ball's place, blur and spin. Showing a past tick places only the joints
+under each player and the drawn ball (the players' bodies and the ball's physics body never move), draws
+the two ticks before it first so the cards carry that moment's motion blur and shadow trail, and gives the
+paddle its sweep from the tick before. Closing photo mode puts every joint back exactly (verified: 73 of
+73 transforms identical) and play resumes from the moment it was paused. The camera button is bigger
+(as wide as the HIT pad's radius). Not in the history: the crowd and background animation, UI, particles.
+
+**Build 143, rally replays:** every rally is kept in memory from the start of the serve to a second after
+the point (`scripts/fx/photo_history.gd`, the same per-tick records as the rewind). Saving: the REC button
+above the camera icon saves every rally by itself while it is on; while it is off a SAVE RALLY? button
+comes up for 6 seconds after each point (Settings > Video: Save every rally, Ask to save the rally after
+each point). Files: `user://rallies`, compressed, about 74 KB per second of rally (a 28 s rally is 2.1 MB),
+the 10 newest kept. Watching: photo mode > RALLIES lists them (newest first, scrollable) with the live 3
+seconds on top; the slider scrubs the whole rally and PLAY runs it at match speed, with the photo camera
+free. A rally only plays in a match with the same players (same joint lists); rows that do not fit are
+greyed. Open: the save itself may take a noticeable moment for a long rally (not measured), and the file
+format stores full transforms where position + rotation would halve it.
+
+**Build 144, realistic starts and stops (user: players speed-glide, wants realistic footwork and paddle
+speeds):** measured from a bench trace, a player went from standing to 3 m/s in 0.17 s and stopped as
+hard, which the legs cannot show: that is the glide. Accelerations are now 7 / 8 / 9 m/s2 for the AI by
+level (were 12 / 14 / 16), brakes 10 / 11 / 12 (16 / 18 / 20), lunge push 15 (26); your own player 18 to
+speed up, 24 to reverse, 16 to stop (72 / 84 / 34). Top speeds are unchanged. Now: 0.30 s to 3 m/s, 0.50 m
+per step (0.42). The AI plans its reach with the same numbers. Three seeds: all animation rules pass, 16
+points and 182 hits (about 11 hits a rally). Paddle speed was already in a real range (swings peak at
+10-19 m/s at the tip); two single-tick jumps over 25 m/s per 120 s remain. Open: 0.30 s to 3 m/s is still
+quicker than a person (about 0.5 s); going further shortens rallies. Your player's feel is for the phone
+to judge (the all-AI bench cannot see it).
+
+**Build 145 (user: the 3-second rewind in photo mode gone; save performance while recording rallies):**
+the always-on 3-second history is removed. `scripts/fx/photo_history.gd` now reads the players' joints only
+while a rally is on (serve to one second after the point), and only if a rally could be saved at all (REC
+on, or the save question on): 0.42 ms/s on the Mac in rallies, 0 while waiting, against 0.60 ms/s always
+before. Photo mode opens on the paused moment as it used to; the scrub slider and PLAY appear when a
+saved rally is picked from RALLIES, with a row to go back to the paused moment. Further savings not
+done: record every second tick and blend on playback (half the cost and file size), store position +
+rotation instead of full transforms (about 40% smaller files), write the file over several frames.
+
+**Build 146, rally recording in C++ (user: no performance loss from creating replays):**
+`native/src/pickle_replay.cpp` (class PickleReplay) records a rally tick in 2.3 microseconds: 0.07 ms per
+second of rally on the Mac (the script recorder: 0.42; before build 145: 0.60 at all times), and nothing
+outside rallies. The rally is kept as one flat block in the file's own layout, handed over by a swap when
+the point ends, and written and compressed on a worker thread, so a save costs the match about 0.3 ms.
+Playback places the joints straight from the block. `scripts/fx/photo_history.gd` keeps the script
+recorder as the twin and fallback; both write and read the same file (checked: the script loader reads
+the C++ files, positions within a micrometre).

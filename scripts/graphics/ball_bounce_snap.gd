@@ -37,6 +37,8 @@ func _process(_delta: float) -> void:
 	if _snap != Vector3.INF:
 		xf.origin = _snap
 		_snap = Vector3.INF
+	# Photo mode's rewind (scripts/fx/photo_history.gd) draws the ball where it was.
+	if _ball.has_meta("photo_origin"): xf.origin = _ball.get_meta("photo_origin")
 	_ball.set_meta("render_origin", xf.origin)
 	for part in _parts:
 		var node: GeometryInstance3D = part[0]

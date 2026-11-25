@@ -53,7 +53,9 @@ func _ready() -> void:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://logs"))
 		path = "res://logs/perf.jsonl"
 	for arg in OS.get_cmdline_user_args():
-		if arg.begins_with("--perf-out="): path = arg.trim_prefix("--perf-out=")
+		if arg.begins_with("--perf-out="):
+			path = arg.trim_prefix("--perf-out=")
+			_custom_out = true
 		if arg.begins_with("--pose-trace="): _pose_path = arg.trim_prefix("--pose-trace=")
 		if arg.begins_with("--frame-log="): _frame_file = FileAccess.open(arg.trim_prefix("--frame-log="), FileAccess.WRITE)
 		if arg.begins_with("--frame-log="): PixelCardRig.record_drawn = true
@@ -82,6 +84,7 @@ func _ready() -> void:
 			var link: Node = load("res://scripts/debug/pose_studio_link.gd").new()
 			link.port = int(arg.trim_prefix("--pose-studio="))
 			add_child(link)
+	if not _custom_out: _rotate_logs(path)
 	_file = FileAccess.open(path, FileAccess.WRITE)
 	if _pose_path != "":
 		_pose_file = FileAccess.open(_pose_path, FileAccess.WRITE)
@@ -94,6 +97,7 @@ func _ready() -> void:
 	_write({"kind": "meta", "engine": Engine.get_version_info().string, "os": OS.get_name(),
 		"model": OS.get_model_name(), "renderer": RenderingServer.get_current_rendering_method(),
 		"physics_hz": Engine.physics_ticks_per_second, "spike_ms": _spike_ms})
+	_write_toggles()
 	_build_graph()
 	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), true)
 
@@ -119,6 +123,16 @@ func _process(delta: float) -> void:
 	if _frame_file != null: _write_frame(now, frame_ms, costs)
 	_motion_frame(now, frame_ms, delta)
 	_sec_frames.append(frame_ms)
+	# Frames that carried a physics tick against the frames in between (at 60 fps with 30 Hz
+	# physics they alternate, and only the first kind runs long): count, total and worst ms,
+	# how many missed a 60 fps slot, and the engine's own physics / process times.
+	var physics_frame: int = Engine.get_physics_frames()
+	var kind: Array = _sec_tick_frames if physics_frame != _seen_physics_frame else _sec_free_frames
+	_seen_physics_frame = physics_frame
+	kind[0] += 1; kind[1] += frame_ms; kind[2] = maxf(kind[2], frame_ms)
+	if frame_ms > 17.5: kind[3] += 1
+	_sec_engine_phys += Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0
+	_sec_engine_proc += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 	_history.append(frame_ms)
 	if _history.size() > GRAPH_SAMPLES: _history.remove_at(0)
 
@@ -389,7 +403,10 @@ func _flush_second(now: int) -> void:
 	var sorted := _sec_frames.duplicate()
 	sorted.sort()
 	var total := 0.0
-	for f in sorted: total += f
+	var slow: int = 0   # frames that missed a 60 fps slot (Settings.ADAPT_SLOW_MS)
+	for f in sorted:
+		total += f
+		if f >= 21.0: slow += 1
 	var per_frame := {}
 	for label in _sec_costs:
 		var s: Array = _sec_costs[label]
@@ -405,13 +422,64 @@ func _flush_second(now: int) -> void:
 		"phys_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.1),
 		"draws": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
 		"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
-		"scopes": top, "jitter": _sec_jitter, "state_frames": _sec_state_frames})
+		"scopes": top, "jitter": _sec_jitter, "state_frames": _sec_state_frames,
+		"canary_ms": _canary_ms(), "max_fps": Engine.max_fps, "slow": slow,
+		"tick_f": [int(_sec_tick_frames[0]), snappedf(_sec_tick_frames[1] / maxf(_sec_tick_frames[0], 1.0), 0.1), snappedf(_sec_tick_frames[2], 0.1), int(_sec_tick_frames[3])],
+		"free_f": [int(_sec_free_frames[0]), snappedf(_sec_free_frames[1] / maxf(_sec_free_frames[0], 1.0), 0.1), snappedf(_sec_free_frames[2], 0.1), int(_sec_free_frames[3])],
+		"eng_phys_avg": snappedf(_sec_engine_phys / n, 0.01), "eng_proc_avg": snappedf(_sec_engine_proc / n, 0.01)})
+	_sec_tick_frames = [0, 0.0, 0.0, 0]; _sec_free_frames = [0, 0.0, 0.0, 0]
+	_sec_engine_phys = 0.0; _sec_engine_proc = 0.0
+	if PerfToggles.mask() != _toggle_mask: _write_toggles()
 	_sec_frames.clear()
 	_sec_costs.clear()
 	_sec_spikes = 0
 	_sec_jitter = {}
 	_sec_state_frames = {}
 	_sec_start = now
+
+var _seen_physics_frame: int = -1
+var _sec_tick_frames: Array = [0, 0.0, 0.0, 0]   # frames with a physics tick this second: count, total ms, worst ms, over 17.5 ms
+var _sec_free_frames: Array = [0, 0.0, 0.0, 0]   # frames without one
+var _sec_engine_phys: float = 0.0
+var _sec_engine_proc: float = 0.0
+
+# ---- performance plan helpers (docs/PERFORMANCE_PLAN.md, working method + step 0) ----
+var _custom_out := false
+var _toggle_mask: int = -1
+var _canary_sink: float = 0.0
+const KEEP_LOGS := 5
+const CANARY_LOOPS := 3000   # ~0.09 ms on the Mac, expect ~0.2 ms on the phone cold
+
+# Active PerfToggles (one row at start and whenever a switch changes), plus what they set.
+func _write_toggles() -> void:
+	_toggle_mask = PerfToggles.mask()
+	_write({"kind": "toggles", "t": _t(Time.get_ticks_usec()), "toggles": PerfToggles.active(),
+		"max_physics_steps": Engine.max_physics_steps_per_frame, "max_fps": Engine.max_fps})
+
+# A fixed workload timed once a second: the same math every time, so its time only moves when
+# the processor itself slows (thermal throttling), separate from the game's own work.
+func _canary_ms() -> float:
+	var t0: int = Time.get_ticks_usec()
+	var acc: float = _canary_sink
+	var x: float = 1.0001
+	for i in CANARY_LOOPS:
+		x = x * 1.0000001 + 0.5
+		acc += sqrt(x) * 0.001 - floorf(acc)
+	_canary_sink = acc * 0.0
+	return snappedf((Time.get_ticks_usec() - t0) / 1000.0, 0.001)
+
+# The phone overwrites perf.jsonl at every launch: keep the last five as perf.1 ... perf.5.
+func _rotate_logs(path: String) -> void:
+	var abs_path: String = ProjectSettings.globalize_path(path)
+	if not FileAccess.file_exists(abs_path): return
+	var base: String = abs_path.get_basename()
+	var ext: String = abs_path.get_extension()
+	var oldest: String = "%s.%d.%s" % [base, KEEP_LOGS, ext]
+	if FileAccess.file_exists(oldest): DirAccess.remove_absolute(oldest)
+	for i in range(KEEP_LOGS - 1, 0, -1):
+		var from: String = "%s.%d.%s" % [base, i, ext]
+		if FileAccess.file_exists(from): DirAccess.rename_absolute(from, "%s.%d.%s" % [base, i + 1, ext])
+	DirAccess.rename_absolute(abs_path, "%s.1.%s" % [base, ext])
 
 # label -> [ms total this frame, calls], largest first
 func _top(costs: Dictionary, key: Callable) -> Dictionary:

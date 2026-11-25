@@ -282,6 +282,10 @@ static func _perf_select_extended(player, ball, flight: Dictionary, previous_id:
 
 	var samples: Array = flight.get("samples", [])
 	if samples.is_empty() or not should_track(player, ball): return {}
+	# Perf (PerfToggles.ai_plan_once): this search and both swept fallbacks only accept a
+	# point within arm reach of a shoulder (<= ~1.5 m) among the first 60 samples. A flight
+	# that never comes within EXTENDED_FAR_SKIP of the feet cannot give a contact: skip all three.
+	if PerfToggles.ai_plan_once and _flight_far_from(player.global_position, samples, 60, EXTENDED_FAR_SKIP): return {}
 	var fault_time: float = predicted_fault_time(player, ball, flight)
 	var legal_zero: bool = legal_ball(player, ball, 0, volley_override)
 	var legal_one: bool = legal_ball(player, ball, 1, volley_override)
@@ -337,6 +341,29 @@ static func _perf_select_extended(player, ball, flight: Dictionary, previous_id:
 			break
 	return best if not best.is_empty() else select_floor_swept(player, ball, flight, previous_id, require_bounce, volley_override)
 
+
+## Shoulder reach (MAX_HEAD_DISTANCE + 0.12, plus a crouched floor receive) with a wide
+## margin for the shoulder's own offset from the feet in any authored pose.
+const EXTENDED_FAR_SKIP := 2.6
+
+## True when no segment of the first `count` samples passes within `radius` (ground plane)
+## of `root`.
+static func _flight_far_from(root: Vector3, samples: Array, count: int, radius: float) -> bool:
+	var last: int = mini(samples.size() - 1, count)
+	var r2: float = radius * radius
+	var here := Vector2(root.x, root.z)
+	var prev: Vector3 = samples[0].pos
+	var a := Vector2(prev.x, prev.z)
+	if a.distance_squared_to(here) <= r2: return false
+	for index in range(1, last + 1):
+		var p: Vector3 = samples[index].pos
+		var b := Vector2(p.x, p.z)
+		var ab: Vector2 = b - a
+		var len2: float = ab.length_squared()
+		var t: float = clampf((here - a).dot(ab) / len2, 0.0, 1.0) if len2 > 0.0000001 else 0.0
+		if (a + ab * t).distance_squared_to(here) <= r2: return false
+		a = b
+	return true
 
 static func select_floor_swept(player, ball, flight: Dictionary, previous_id: int = -1, require_bounce: bool = false, volley_override: int = -1) -> Dictionary:
 	var _pt := Time.get_ticks_usec()

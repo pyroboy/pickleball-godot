@@ -307,12 +307,21 @@ func _perf_get_ai_input(delta: float = -1.0) -> Vector3:
 		var plan_left: float = float(_movement_plan.get("time", -1.0)) - (_observation_time - float(_movement_plan.get("observed_at", _observation_time)))
 		var plan_locked: bool = not _movement_plan.is_empty() and bool(_movement_plan.get("reachable", false))\
 			and int(_movement_plan.get("flight_id", -1)) == ball.flight_id and plan_left > 0.0 and plan_left < PLAN_LOCK_SECONDS
-		if (_movement_plan.is_empty() or _observation_time >= _movement_plan_due and not plan_locked) and _intercept_slot_tick != tick:
+		# Plan once per ball (PerfToggles.ai_plan_once): past the human re-read cadence, a plan is
+		# only solved again when the read flight changed (bounce, net, new read off the real
+		# ball), it was not reachable, or the player can no longer get to its spot in time.
+		var replan: bool = _observation_time >= _movement_plan_due and not plan_locked
+		if replan and PerfToggles.ai_plan_once and not _movement_plan.is_empty():
+			replan = _plan_stale(ball, plan_left)
+		if (_movement_plan.is_empty() or replan) and _intercept_slot_tick != tick:
 			_intercept_slot_tick = tick
 			_movement_plan = _get_ai_intercept_solution(predicted_landing)
 			_movement_plan_due = _observation_time + Movement.REPLAN_SECONDS[clampi(ai_difficulty, 0, 2)]
 			_movement_plan["observed_at"] = _observation_time
 			_movement_plan["flight_id"] = ball.flight_id
+			_movement_plan["trace_serial"] = _base_flight_serial
+			if PerfToggles.ai_plan_once and bool(_movement_plan.get("reachable", false)) and _base_lookup(float(_movement_plan.get("time", -1.0))):
+				_movement_plan["contact_bounces"] = _lookup_bounces
 		if _movement_plan.is_empty():
 			intercept_solution = {"target": _player.global_position, "posture": PP_READY, "contact": predicted_landing,
 				"time": -1.0, "reachable": false, "observed_at": _observation_time, "deferred": true}
@@ -513,13 +522,14 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 	# standing spot, m along the forehand axis).
 	var keep_side: bool = not _movement_plan.is_empty() and bool(_movement_plan.get("reachable", false)) and int(_movement_plan.get("flight_id", -1)) == ball.flight_id
 	var kept_lateral: float = (Vector3(_movement_plan.contact) - Vector3(_movement_plan.target)).dot(forehand_axis) if keep_side else 0.0
+	var practice = _exchange_practice()
+	var zone_defs: Array = zone_library.all_definitions()
 	for sample_index in range(1, samples.size(), 3):
 		var sample: Dictionary = samples[sample_index]
 		var contact_point: Vector3 = sample["pos"]
 		var contact_time: float = sample["time"]
 		var total_bounces: int = bounce_origin + int(sample.get("bounces", 0))
 		if total_bounces >= 2: continue
-		var practice = _exchange_practice()
 		if practice and practice.needs_bounce() and total_bounces == 0:
 			continue
 		if contact_time < legal_after or contact_point.z < _player.min_z or contact_point.z > _player.max_z:
@@ -537,8 +547,10 @@ func _perf_get_ai_intercept_solution(predicted_ball_pos: Vector3) -> Dictionary:
 				and absf(contact_point.z) < PickleballConstants.NON_VOLLEY_ZONE - (_EarlyTuning.LINE_VOLLEY_REACH if line_volley else _EarlyTuning.KITCHEN_GUARD_REACH):
 			continue
 		var rel_height: float = contact_point.y - COURT_FLOOR_Y
-		var height_postures: Array[int] = _get_posture_for_height(rel_height)
-		for posture in height_postures:
+		# Same postures and order as _get_posture_for_height, without an array per sample.
+		for zone_def in zone_defs:
+			if not (zone_def.has_zone and rel_height >= zone_def.zone_y_min - 0.03 and rel_height <= zone_def.zone_y_max + 0.03): continue
+			var posture: int = zone_def.posture_id
 			var def: PostureDefinition = zone_library.get_def(posture)
 			if def == null or not def.has_zone:
 				continue
@@ -742,8 +754,9 @@ func _perf_sample_ball_history(ball: RigidBody3D, delta: float = -1.0) -> void:
 		_movement_plan.clear()
 		_movement_plan_due = 0.0
 		_perception_ready = false
-		_predicted_flight.clear()
+		_predicted_flight = {}
 		_predicted_flight_frame = -1
+		_base_flight = {}
 		ai_is_charging = false
 		if not _player.hitting.is_in_follow_through and not _player.hitting.serving_visual_active:
 			_player.hitting.charge_visual_active = false
@@ -796,6 +809,7 @@ func _advance_recorded_ball_history() -> void:
 	_perceived_state = _Flight.advance(oldest.pos, oldest.vel, oldest.omega, age)
 	_observed_opponent = oldest.opponent
 	_predicted_flight_frame = -1
+	_perceived_serial += 1
 
 func _perceived_ball_pos(ball: RigidBody3D) -> Vector3:
 	return _perceived_state.get("pos", ball.global_position if ball else Vector3.ZERO)
@@ -826,10 +840,143 @@ func _perf_get_predicted_flight(ball: RigidBody3D) -> Dictionary:
 		return {}
 	var frame: int = Engine.get_physics_frames()
 	if _predicted_flight_frame != frame or _predicted_flight.is_empty():
-		_predicted_flight = _Flight.trace(_perceived_ball_pos(ball), _perceived_ball_vel(ball), 
-			_perceived_ball_omega(ball), 3.0, 2, true)
+		if PerfToggles.ai_plan_once:
+			_refresh_base_flight(ball)
+			var offset: float = _observation_time - _base_flight_time
+			_predicted_flight = _base_flight if offset <= FLIGHT_TIME_EPSILON else _shifted_base_flight(ball, offset)
+		else:
+			_predicted_flight = _Flight.trace(_perceived_ball_pos(ball), _perceived_ball_vel(ball),
+				_perceived_ball_omega(ball), 3.0, 2, true)
 		_predicted_flight_frame = frame
 	return _predicted_flight
+
+# --- Plan once per ball (PerfToggles.ai_plan_once) ---------------------------------
+# The read flight is traced once and kept while each new (delayed) read of the real ball
+# still lies on it. A bounce, net touch or any drift past the tolerances below traces it
+# again, which also marks the contact plan stale (_base_flight_serial).
+const FLIGHT_TIME_EPSILON := 0.000001
+const FLIGHT_KEEP_POS := 0.03     # m between the new read and the kept trace
+const FLIGHT_KEEP_VEL := 0.15     # m/s
+var _base_flight: Dictionary = {}
+var _base_flight_time := 0.0       # _observation_time the kept trace starts at
+var _base_flight_id := -1
+var _base_flight_origin := -1      # observed bounces since the hit at the trace start
+var _base_flight_serial := 0       # bumped on every new trace
+var _base_cursor := 0              # last kept sample at or before now
+var _base_checked_serial := -1
+var _perceived_serial := 0
+
+func _refresh_base_flight(ball: RigidBody3D) -> void:
+	if _base_checked_serial == _perceived_serial and not _base_flight.is_empty() and _base_flight_id == _observed_flight_id: return
+	_base_checked_serial = _perceived_serial
+	if _base_flight_matches(): return
+	_base_flight = _Flight.trace(_perceived_ball_pos(ball), _perceived_ball_vel(ball), _perceived_ball_omega(ball), 3.0, 2, true)
+	_base_flight_time = _observation_time
+	_base_flight_id = _observed_flight_id
+	_base_flight_origin = _observed_contact_bounces()
+	_base_flight_serial += 1
+	_base_cursor = 0
+
+## True when the current read of the ball still lies on the kept trace.
+func _base_flight_matches() -> bool:
+	if _base_flight.is_empty() or _base_flight_id != _observed_flight_id or _perceived_state.is_empty(): return false
+	var offset: float = _observation_time - _base_flight_time
+	if offset < -FLIGHT_TIME_EPSILON: return false
+	var samples: Array = _base_flight.samples
+	var n: int = samples.size()
+	var i: int = mini(_base_cursor, n - 1)
+	while i + 1 < n and float(samples[i + 1].time) <= offset + FLIGHT_TIME_EPSILON: i += 1
+	_base_cursor = i
+	if i + 1 >= n: return offset <= FLIGHT_TIME_EPSILON and n > 0
+	var a: Dictionary = samples[i]
+	var b: Dictionary = samples[i + 1]
+	if int(a.bounces) != int(b.bounces) and float(a.time) < offset - FLIGHT_TIME_EPSILON: return false   # read inside a bounce step
+	var span: float = float(b.time) - float(a.time)
+	var f: float = clampf((offset - float(a.time)) / span, 0.0, 1.0) if span > FLIGHT_TIME_EPSILON else 0.0
+	if _base_flight_origin + int(a.bounces) != _observed_contact_bounces(): return false
+	var pos: Vector3 = Vector3(a.pos).lerp(b.pos, f)
+	var vel: Vector3 = Vector3(a.vel).lerp(b.vel, f)
+	return pos.distance_squared_to(_perceived_state.pos) <= FLIGHT_KEEP_POS * FLIGHT_KEEP_POS \
+		and vel.distance_squared_to(_perceived_state.vel) <= FLIGHT_KEEP_VEL * FLIGHT_KEEP_VEL
+
+## The kept trace as a trace started now: same keys, times and bounce counts from now.
+func _shifted_base_flight(ball: RigidBody3D, offset: float) -> Dictionary:
+	var src: Array = _base_flight.samples
+	var shift_bounces: int = int(src[mini(_base_cursor, src.size() - 1)].bounces) if not src.is_empty() else 0
+	var start_pos: Vector3 = _perceived_ball_pos(ball)
+	var samples: Array[Dictionary] = [{"time": 0.0, "pos": start_pos, "vel": _perceived_ball_vel(ball), "omega": _perceived_ball_omega(ball), "bounces": 0}]
+	var peak_y: float = start_pos.y
+	for j in range(_base_cursor + 1, src.size()):
+		var s: Dictionary = src[j]
+		var t: float = float(s.time) - offset
+		if t <= FLIGHT_TIME_EPSILON: continue
+		var p: Vector3 = s.pos
+		peak_y = maxf(peak_y, p.y)
+		samples.append({"time": t, "pos": p, "vel": s.vel, "omega": s.omega, "bounces": int(s.bounces) - shift_bounces})
+	var events: Array[Dictionary] = []
+	var first_bounce: Vector3 = Vector3.ZERO
+	var first_bounce_time: float = -1.0
+	for event in _base_flight.bounce_events:
+		var t: float = float(event.time) - offset
+		if t <= FLIGHT_TIME_EPSILON: continue
+		events.append({"time": t, "pos": event.pos})
+		if first_bounce_time < 0.0:
+			first_bounce = event.pos
+			first_bounce_time = t
+	var crossing: Dictionary = _base_flight.net_crossing
+	var net_crossing: Dictionary = {}
+	if not crossing.is_empty() and float(crossing.time) - offset > FLIGHT_TIME_EPSILON:
+		net_crossing = {"time": float(crossing.time) - offset, "pos": crossing.pos}
+	var post: Dictionary = _base_flight.post_hit
+	var post_hit: Dictionary = {}
+	if not post.is_empty() and float(post.get("time", -1.0)) - offset > FLIGHT_TIME_EPSILON:
+		post_hit = post.duplicate()
+		post_hit.time = float(post.time) - offset
+	return {"samples": samples, "peak_y": peak_y, "first_bounce": first_bounce, "first_bounce_time": first_bounce_time,
+		"bounce_events": events, "net_crossing": net_crossing,
+		"net_hit": bool(_base_flight.net_hit) and (not net_crossing.is_empty() or not post_hit.is_empty()), "post_hit": post_hit}
+
+const PLAN_KEEP_CONTACT := 0.12   # m the planned contact may move on a new read before a re-solve
+var _lookup_pos := Vector3.ZERO
+var _lookup_bounces := 0
+
+## Ball on the kept trace `seconds` from now: sets _lookup_pos and _lookup_bounces (observed
+## bounces since the hit). False when the trace does not reach that far.
+func _base_lookup(seconds: float) -> bool:
+	if _base_flight.is_empty() or seconds < 0.0: return false
+	var at: float = _observation_time - _base_flight_time + seconds
+	var samples: Array = _base_flight.samples
+	var n: int = samples.size()
+	var i: int = mini(_base_cursor, n - 1)
+	while i + 1 < n and float(samples[i + 1].time) <= at: i += 1
+	if i + 1 >= n: return false
+	var a: Dictionary = samples[i]
+	var b: Dictionary = samples[i + 1]
+	var span: float = float(b.time) - float(a.time)
+	var f: float = clampf((at - float(a.time)) / span, 0.0, 1.0) if span > FLIGHT_TIME_EPSILON else 0.0
+	_lookup_pos = Vector3(a.pos).lerp(b.pos, f)
+	_lookup_bounces = _base_flight_origin + int(a.bounces)
+	return true
+
+## Plan once per ball: should the kept contact plan be solved again? (Called only when the
+## human re-read cadence would have re-solved it.)
+func _plan_stale(ball: RigidBody3D, plan_left: float) -> bool:
+	if int(_movement_plan.get("flight_id", -1)) != ball.flight_id: return true
+	if _movement_plan.get("deferred", false) or not bool(_movement_plan.get("reachable", false)) or plan_left <= 0.0: return true
+	if int(_movement_plan.get("trace_serial", -1)) != _base_flight_serial:
+		# The read flight changed: keep the plan only if the ball still passes its contact
+		# point at the same time, on the same bounce (it then follows the new read).
+		if not _base_lookup(plan_left) or _lookup_bounces != int(_movement_plan.get("contact_bounces", -99)) \
+				or _lookup_pos.distance_to(_movement_plan.contact) > PLAN_KEEP_CONTACT:
+			return true
+		_movement_plan["contact"] = _lookup_pos
+		_movement_plan["trace_serial"] = _base_flight_serial
+	# Own situation: can the player still reach the planned spot before the contact?
+	var to_target: Vector3 = Vector3(_movement_plan.target) - _player.global_position
+	to_target.y = 0.0
+	var gap: float = to_target.length()
+	if gap <= LUNGE_ALLOWANCE: return false
+	return gap > Movement.travel_distance(_player.current_velocity, to_target, plan_left, ai_difficulty) + LUNGE_ALLOWANCE
 
 func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	var _pt := Time.get_ticks_usec()
@@ -838,6 +985,14 @@ func _predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
 	return _pr
 
 func _perf_predict_first_bounce_position(ball: RigidBody3D) -> Vector3:
+	if PerfToggles.ai_plan_once and ball != null:
+		# Read straight off the kept trace: no shifted copy just for the landing spot.
+		_refresh_base_flight(ball)
+		var offset: float = _observation_time - _base_flight_time
+		for event in _base_flight.get("bounce_events", []):
+			if float(event.time) - offset > FLIGHT_TIME_EPSILON: return event.pos
+		var kept: Array = _base_flight.get("samples", [])
+		return kept.back()["pos"] if not kept.is_empty() else ball.global_position
 	var flight: Dictionary = _get_predicted_flight(ball)
 	var bounce: Vector3 = flight.get("first_bounce", Vector3.ZERO)
 	if bounce != Vector3.ZERO:
@@ -896,6 +1051,11 @@ var _wait_seconds := 0.0
 var _wait_tick := -100
 var _wait_hunt := false   # waiting pose target was Hunt Ready (hunt_ready.gd)
 const RESTORE_LIGHT := true   # false: solve legs and arms on the restore too (as before)
+const GRIP_REFIT_M := 0.06   # contact point (relative to the body) may move this far before the grip is fitted again
+var _grip_fit_key: Array = []
+var _grip_fit_point := Vector3.INF
+var _grip_base: PostureDefinition = null   # last grip-fitted contact pose (align_paddle_to_contact)
+var _grip_base_values: Array = []          # what it was built from: source id + content, grip values
 func align_paddle_to_contact(delta: float) -> void :
 	# Receipt describes this actual presentation call, never a prior flight.
 	coordination_forward_progress = 0.0
@@ -926,7 +1086,12 @@ func align_paddle_to_contact(delta: float) -> void :
 	if hunt_now != _wait_hunt:
 		_wait_hunt = hunt_now
 		_wait_tick = -100
-	var same_pose_below: bool = solves_below and (not waits or _wait_tick == Engine.get_physics_frames() - 1 and _wait_seconds + delta >= READY_SETTLED_SECONDS)
+	# Perf (PerfToggles.ready_restore_skip): the restore only matters to what reads the rig before
+	# the Ready pose is applied below, and with a kept pose that is the hand-turn limiter alone
+	# (first READY_LIMITER_SECONDS of waiting). After that the restore was written and replaced
+	# in the same call, so it is skipped from there on, not only once the pose has settled.
+	var restore_until: float = READY_LIMITER_SECONDS if PerfToggles.ready_restore_skip else READY_SETTLED_SECONDS
+	var same_pose_below: bool = solves_below and (not waits or _wait_tick == Engine.get_physics_frames() - 1 and _wait_seconds + delta >= restore_until)
 	if not same_pose_below:
 		var _al_restore := Time.get_ticks_usec()
 		_player.posture.transition_pose_blend = previous_support
@@ -968,26 +1133,52 @@ func align_paddle_to_contact(delta: float) -> void :
 		# Retain the existing plan-selection clock and random sequence, but
 		# capture its context before fitting the Contact endpoint this frame.
 		var _al_motion_plan := Time.get_ticks_usec()
+		var had_plan: bool = _planned_flight == ball.flight_id and not _planned_shot.is_empty()
 		_prepare_motion_plan(ball, base, contact)
 		PerfMonitor.record("al.motion_plan", Time.get_ticks_usec() - _al_motion_plan)
-	if ai_selected_contact_time <= 0.65 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, contact):
-		var _al_intended_pose := Time.get_ticks_usec()
-		var intended: PostureDefinition = preload("res://scripts/incoming_contact_planner.gd").pose_at(_player, base, contact)
-		PerfMonitor.record("al.intended_pose", Time.get_ticks_usec() - _al_intended_pose)
-		if not motion_context.is_empty():
-			intended = DriveMotion.sample_drive(intended, .5, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
+		# Not on the tick the plan was made, and not on the last two ticks before contact.
+		if had_plan and ai_selected_contact_time > SHOT_PRESOLVE_MIN_SECONDS: _presolve_shot(ball, contact)
+	# Simple hands (PerfToggles.simple_hands): the contact pose keeps its posed grip, so there is no
+	# grip to fit and no fitted copy of the pose to make.
+	if not PerfToggles.simple_hands and ai_selected_contact_time <= 0.65 and preload("res://scripts/incoming_contact_planner.gd").point_fits(_player, base, contact):
 		var compact_reception: bool = base.height_tier == 0 or str(motion_context.get("profile", "")) == "JAMMED"
-		var preferred: PostureDefinition = _planned_contact_grip
-		if compact_reception and preferred == null:
-			preferred = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
-		var _al_grip_fit := Time.get_ticks_usec()
-		_planned_contact_grip = PlannedGrip.fit_planned_contact_grip(_player, intended, preferred, compact_reception)
-		PerfMonitor.record("al.grip_fit", Time.get_ticks_usec() - _al_grip_fit)
-		base = base.duplicate(false)
-		base.main_grip_rotation_deg = _planned_contact_grip.main_grip_rotation_deg
-		if compact_reception and absf(float(_planned_contact_grip.get_meta("planned_live_grip_plane_deg", 0.0))) > .00001:
+		# Perf (PerfToggles.grip_fit_once): the grip for this contact is fitted once per plan, not
+		# every tick of the last 0.65 s (the fit builds the contact pose and searches grip turns:
+		# 0.5 ms a tick on the Mac, up to 5 ms in one). It is fitted again when the ball, the
+		# contact pose, the shot plan or the contact point relative to the body changes.
+		var fit_point: Vector3 = contact - _player.global_position
+		var fit_key: Array = [ball.flight_id, ball.bounces_since_last_hit, base.get_instance_id(), compact_reception, motion_context.is_empty(), str(motion_context.get("profile", ""))]
+		var refit: bool = not PerfToggles.grip_fit_once or _planned_contact_grip == null or fit_key != _grip_fit_key or fit_point.distance_to(_grip_fit_point) > GRIP_REFIT_M
+		if refit:
+			var _al_intended_pose := Time.get_ticks_usec()
+			var intended: PostureDefinition = preload("res://scripts/incoming_contact_planner.gd").pose_at(_player, base, contact)
+			PerfMonitor.record("al.intended_pose", Time.get_ticks_usec() - _al_intended_pose)
+			if not motion_context.is_empty():
+				intended = DriveMotion.sample_drive(intended, .5, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
+			var preferred: PostureDefinition = _planned_contact_grip
+			if compact_reception and preferred == null:
+				preferred = incoming_pose_override if incoming_pose_override != null else _player.posture.capture_displayed_pose()
+			var _al_grip_fit := Time.get_ticks_usec()
+			_planned_contact_grip = PlannedGrip.fit_planned_contact_grip(_player, intended, preferred, compact_reception)
+			PerfMonitor.record("al.grip_fit", Time.get_ticks_usec() - _al_grip_fit)
+			_grip_fit_key = fit_key; _grip_fit_point = fit_point
+		# Perf: the grip-fitted contact pose is the same from tick to tick while its source pose
+		# and the fitted grip are unchanged. Keeping that one object (instead of a new copy a tick)
+		# lets the swing-key cache (DriveMotion._drive_entry) serve the whole stroke.
+		var plane: bool = compact_reception and absf(float(_planned_contact_grip.get_meta("planned_live_grip_plane_deg", 0.0))) > .00001
+		var grip_values: Array = [base.get_instance_id(), base.content_signature(), _planned_contact_grip.main_grip_rotation_deg, plane]
+		if plane:
 			for field in preload("res://scripts/paddle_rotation.gd").BASE + preload("res://scripts/paddle_rotation.gd").SIGNED:
-				base.set(field, _planned_contact_grip.get(field))
+				grip_values.append(_planned_contact_grip.get(field))
+		if PerfToggles.pose_math_cache and _grip_base != null and grip_values == _grip_base_values:
+			base = _grip_base
+		else:
+			base = base.duplicate(false)
+			base.main_grip_rotation_deg = _planned_contact_grip.main_grip_rotation_deg
+			if plane:
+				for field in preload("res://scripts/paddle_rotation.gd").BASE + preload("res://scripts/paddle_rotation.gd").SIGNED:
+					base.set(field, _planned_contact_grip.get(field))
+			_grip_base = base; _grip_base_values = grip_values
 	if ai_selected_contact_time <= 0.35:
 		if not motion_context.is_empty():
 			# Team-coordination receipt only (team_coordination_bridge reads it); keep its clock.
@@ -1031,7 +1222,7 @@ func align_paddle_to_contact(delta: float) -> void :
 	# The contact-point tracking (_exchange_align_head) is unchanged; the Wind-up
 	# head offset rides on top like the half-volley approach arc and is zero at Contact.
 	var _al_stroke := Time.get_ticks_usec()
-	var contact_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5, ball)
+	var contact_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5, ball, true)
 	var strike: float = _strike_progress(base, ai_selected_contact_time, delta)
 	# Swing playback (like the human swing, human_swing_playback.gd): once charging with the
 	# contact plan locked, the strike plays straight onto the fixed contact target instead of a
@@ -1043,7 +1234,7 @@ func align_paddle_to_contact(delta: float) -> void :
 	var windup_offset := Vector3.ZERO
 	var windup_raw := Vector3.ZERO
 	if strike < 1.0:
-		var swing_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5 * strike, ball)
+		var swing_pose: PostureDefinition = _stroke_presentation_pose(base, 0.5 * strike, ball, true)
 		var swing_path = preload("res://scripts/stroke_swing_path.gd")
 		var contact_head: Vector3 = swing_path.world_transform(_player, contact_pose) * PaddleDimensions.HEAD_OFFSET
 		windup_offset = swing_path.world_transform(_player, swing_pose) * PaddleDimensions.HEAD_OFFSET - contact_head
@@ -1051,7 +1242,7 @@ func align_paddle_to_contact(delta: float) -> void :
 		# in flight, and each posture has its own Wind-up: the raw offset jumped 0.4 m
 		# back and forth (bench: paddle flicker every 4-5 ticks). Rate-limit the full
 		# Wind-up offset and fade the correction out with the strike, so Contact is exact.
-		var full_offset: Vector3 = windup_offset if strike <= 0.0 else swing_path.world_transform(_player, _stroke_presentation_pose(base, 0.0, ball)) * PaddleDimensions.HEAD_OFFSET - contact_head
+		var full_offset: Vector3 = windup_offset if strike <= 0.0 else swing_path.world_transform(_player, _stroke_presentation_pose(base, 0.0, ball, true)) * PaddleDimensions.HEAD_OFFSET - contact_head
 		if _windup_offset_flight != ball.flight_id or _windup_offset_bounces != ball.bounces_since_last_hit or Engine.get_physics_frames() - _windup_offset_tick > 3:
 			_windup_offset_smoothed = full_offset
 		else:
@@ -1196,7 +1387,12 @@ func _strike_progress(def: PostureDefinition, time_to_contact: float, delta: flo
 ## The stroke pose at swing progress (0 Wind-up, 0.5 Contact) through DriveMotion, so the
 ## committed plan's power, volley/kitchen/compact and tactical rules apply. Before the
 ## plan exists the AI shows a medium charge.
-func _stroke_presentation_pose(contact_def: PostureDefinition, progress: float, ball) -> PostureDefinition:
+## `shared`: the caller only reads the pose (DriveMotion.sample_drive_shared).
+func _stroke_presentation_pose(contact_def: PostureDefinition, progress: float, ball, shared: bool = false) -> PostureDefinition:
+	if shared:
+		if not motion_context.is_empty():
+			return DriveMotion.sample_drive_shared(contact_def, progress, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
+		return DriveMotion.sample_drive_shared(contact_def, progress, AI_PRESENTATION_CHARGE, ball.bounces_since_last_hit == 0, 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65)
 	if not motion_context.is_empty():
 		return DriveMotion.sample_drive(contact_def, progress, float(motion_context.charge), bool(motion_context.is_volley), int(motion_context.spin_mode), bool(motion_context.near_kitchen), str(motion_context.shot_intent), motion_context)
 	return DriveMotion.sample_drive(contact_def, progress, AI_PRESENTATION_CHARGE, ball.bounces_since_last_hit == 0, 0, absf(_player.global_position.z) <= PickleballConstants.NON_VOLLEY_ZONE + 0.65)
@@ -1261,7 +1457,7 @@ func _try_ai_hit_ball() -> void:
 	if ball == null or not ball.is_in_play or ball.last_hit_by == _player.player_num: return
 	if incoming_pose_override == null or _player.paddle_node == null: return
 	_contact_sweep = {"ball": ball.global_position, "paddle": _player.paddle_node.global_transform,
-		"pose": incoming_pose_override.duplicate(false), "flight": ball.flight_id,
+		"pose": incoming_pose_override if PerfToggles.contact_sweep_share else incoming_pose_override.duplicate(false), "flight": ball.flight_id,
 		"bounces": ball.bounces_since_last_hit, "tick": Engine.get_physics_frames()}
 
 func _contact_sweep_valid(ball) -> bool:
@@ -1701,8 +1897,9 @@ func _update_ai_trajectory_fade(delta: float) -> void :
 
 func _exchange_practice():
 	var _pt := Time.get_ticks_usec()
-	_perf_exchange_practice()
+	var practice = _perf_exchange_practice()
 	PerfMonitor.record("ai.exchange_practice", Time.get_ticks_usec() - _pt)
+	return practice
 
 func _perf_exchange_practice():
 	if _game_node and "practice_launcher" in _game_node and _game_node.practice_launcher and _game_node.practice_launcher.is_exchange():
@@ -1983,6 +2180,27 @@ func _prepare_motion_plan(ball, base: PostureDefinition, point: Vector3) -> void
 		_commit_execution_for_motion(ball)
 		MotionContext.apply_feet(_player, motion_context)
 
+## Perf (PerfToggles.shot_presolve): the launch search for the planned shot (2.5 ms on the Mac,
+## the largest single piece of a hit tick) runs here, once per plan, a few ticks before contact
+## and from the predicted contact point. Only its flight time is kept: the hit tick then solves
+## that one flight time from the real contact point (settle_contact_intent), so the shot still
+## starts exactly where the ball was met.
+const SHOT_PRESOLVE_MIN_SECONDS := 0.07
+const SHOT_HINT_MAX_M := 0.5   # real contact further than this from the predicted one: full search
+var _shot_hint: Dictionary = {}
+
+func _shot_plan_key(plan: Dictionary) -> Array:
+	return [plan.get("target"), plan.get("charge"), plan.get("intent"), plan.get("shot_type"), plan.get("arc"), int(plan.get("spin_mode", 0))]
+
+func _presolve_shot(ball, point: Vector3) -> void:
+	if not PerfToggles.shot_presolve or _planned_shot.is_empty() or _planned_flight != ball.flight_id or _exchange_practice(): return
+	var key: Array = _shot_plan_key(_planned_shot)
+	if int(_shot_hint.get("flight", -1)) == ball.flight_id and _shot_hint.get("key") == key: return
+	var launch: Dictionary = _game_node.shot_physics.solve_aimed_launch(point, _planned_shot.target, _planned_shot.charge, _player.court_side,
+		int(_planned_shot.get("spin_mode", 0)), _planned_shot.intent, _planned_shot.shot_type, _planned_shot.arc)
+	_shot_hint = {"flight": ball.flight_id, "key": key, "origin": point,
+		"duration": float(launch.get("duration", -1.0)) if not launch.is_empty() and bool(launch.get("feasible", false)) else -1.0}
+
 func _same_motion_plan(context: Dictionary, shot: Dictionary) -> bool:
 	if context.is_empty(): return false
 	return str(context.tactic) == str(shot.get("kind", "")) \
@@ -2090,7 +2308,11 @@ func settle_contact_intent(intent: Dictionary, certificate: Dictionary) -> Dicti
 		launch = _game_node.solve_ai_launch(body.global_position, clampf(float(intent.charge_time) / AI_CHARGE_DURATION, .05, 1.0), int(intent.posture), certificate.paddle.origin, Vector3.ZERO, 0.0, _player)
 	else:
 		if plan.is_empty(): plan = MatchTactics.plan(context, _tactic_rng.randf(), _tactic_rng.randf())
+		if PerfToggles.shot_presolve and float(_shot_hint.get("duration", -1.0)) > 0.0 and int(_shot_hint.get("flight", -1)) == body.flight_id \
+				and _shot_hint.get("key") == _shot_plan_key(plan) and Vector3(_shot_hint.origin).distance_to(body.global_position) <= SHOT_HINT_MAX_M:
+			_game_node.shot_physics.duration_hint = float(_shot_hint.duration)
 		launch = MatchTactics.solve_plan(_game_node.shot_physics, body.global_position, context, plan)
+		_game_node.shot_physics.duration_hint = -1.0
 	if launch.is_empty(): last_settle_decline = "unsolved_" + str(plan.get("kind", "")); return {}
 	# Contact rule (match_contact_authority.contact_launch): the planned trajectory
 	# wins while the face is within tolerance; too far off is a pop-up mishit.

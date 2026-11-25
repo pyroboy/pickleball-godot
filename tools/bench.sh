@@ -18,6 +18,7 @@
 #   POSITION_TEAM=n only team n uses the position rules (9 = nobody): positional-play A/B
 #   SMART_TEAM=n    only team n uses the AI stamina strategy (9 = nobody)
 #   STAMINA_PIN=a:v[,a:v]  hold actor a's stamina at v (0 exhausted, 100 unlimited); others drain
+#   TOGGLES=a=0,b=0  PerfToggles switched for this run (scripts/debug/perf_toggles.gd; default: all as coded)
 #   OBJ="..."    required: what the run must answer; logged in docs/BENCH_LOG.md (rules: docs/BENCH_RULES.md)
 #   KEEP=n        keep the newest n bench runs in logs/ (default 12), delete older ones
 #   -> logs/bench_<name>.perf.jsonl, .pose.jsonl.gz (.log only if it had errors).
@@ -31,6 +32,8 @@ PIN=(--set=gameplay.difficulty=${DIFF:-0})
 IFS=, read -r ST0 ST1 ST2 ST3 <<< "${STYLES:-0,1,0,2}"
 PIN+=(--set=gameplay.ai_style_self=${ST0:-0} --set=gameplay.ai_style_opponent_one=${ST1:-1}
       --set=gameplay.ai_style_partner=${ST2:-0} --set=gameplay.ai_style_opponent_two=${ST3:-2})
+IFS=, read -ra TG <<< "${TOGGLES:-}"
+for kv in ${TG[@]+"${TG[@]}"}; do PIN+=(--set=perf.${kv%%=*}=$([ "${kv#*=}" = 0 ] && echo false || echo true)); done
 mkdir -p logs
 if [ -z "${GODOT:-}" ]; then
   for c in "$(command -v godot 2>/dev/null)" /Applications/Godot.app/Contents/MacOS/Godot \

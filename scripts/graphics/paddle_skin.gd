@@ -6,6 +6,7 @@ extends Node3D
 ## outline from paddle_dimensions.gd, so the look always matches the hitbox.
 
 const D = preload("res://scripts/paddle_dimensions.gd")
+const GroundShadows = preload("res://scripts/fx/ground_shadows.gd")
 const DATA_PATH: = "res://data/paddles.json"
 const SETTING_KEY: = "video.paddle"
 const CLASSIC_LAYER: = 20   # same hidden layer as pixel_card_rig.gd
@@ -128,6 +129,11 @@ func _ready() -> void:
 	top_level = true
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	var mats: Dictionary = _materials_for(design_id)
+	# Sun shadow: every paddle material draws the mesh once more, flattened onto the court along
+	# the light (shaders/mesh_shadow.gdshader), merged with the players' shadows.
+	var sun_shadow: ShaderMaterial = GroundShadows.mesh_shadow_material()
+	for key in mats:
+		if mats[key] is BaseMaterial3D and (mats[key] as BaseMaterial3D).next_pass != sun_shadow: (mats[key] as BaseMaterial3D).next_pass = sun_shadow
 	if _head_mesh == null: _head_mesh = _build_head()
 	var head: = _mesh_node(_head_mesh, Vector3.ZERO)
 	head.set_surface_override_material(0, mats.face)
@@ -172,7 +178,9 @@ func _process(delta: float) -> void:
 	var head: = _paddle.get_node_or_null("Head") as GeometryInstance3D
 	visible = _paddle.is_visible_in_tree() and head != null and head.layers != 0 \
 		and head.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
-	if not visible: return
+	if not visible:
+		_drawn_valid = false
+		return
 	var cam: = get_viewport().get_camera_3d()
 	if cam != null and cam != _culled_cam:
 		cam.set_cull_mask_value(CLASSIC_LAYER, false)
@@ -181,7 +189,150 @@ func _process(delta: float) -> void:
 	if _hide_timer <= 0.0:
 		_hide_timer = 2.0
 		_hide_original()
+		_blur_setting = float(Settings.get_value(BLUR_KEY, 1.0)) if bool(Settings.get_value("video.blur_paddle", true)) else 0.0
 	_follow(delta)
+	_blur(delta)
+
+## Motion blur of the paddle (Settings video.motion_smear, 0 = off). The paddle is a 3D mesh, so
+## its exposure is drawn as swept geometry: its parts once more through
+## shaders/paddle_blur.gdshader, which pulls the trailing side of each part back to where it
+## was at the start of the exposure and fades the stretched faces out. One continuous streak
+## that follows both travel and turn. Shown only when the head travels more than BLUR_FROM_M
+## during the exposure. The extra parts are children of this skin (top level), never of the
+## player's body.
+const BLUR_KEY: = "video.motion_smear"
+const BlurShader = preload("res://shaders/paddle_blur.gdshader")
+const SweepShadowShader = preload("res://shaders/paddle_blur_shadow.gdshader")
+const BLUR_SHUTTER_S: = 1.0 / 40.0   # exposure at strength 1
+const BLUR_FROM_M: = 0.015           # head travel during the exposure before the blur shows
+const BLUR_DEPTH_STRETCH: = 0.7      # share of the missing on-screen sweep given back to a swing in depth
+const BLUR_DEPTH_STRETCH_MAX: = 2.5  # at most this much longer
+var _blur_setting: = 1.0
+var _blur_root: Node3D = null
+var _blur_parts: Array = []          # [ShaderMaterial, part transform, part middle (local to the skin)]
+var _drawn_before: = Transform3D.IDENTITY
+var _drawn_valid: = false
+var blur_travel: = 0.0               # m the head travelled during the last exposure (probes)
+var blur_from: = Vector3.ZERO        # where the head was at the start of it, world (probes)
+
+func _blur(delta: float) -> void:
+	if get_tree().paused: return   # photo mode / pause: the sweep stays as it was at that moment
+	var now: Transform3D = global_transform
+	var show: = false
+	if _blur_setting > 0.0 and _drawn_valid and delta > 0.0:
+		# Share of last frame's move that the exposure spans (more than 1 at high frame rates).
+		# `delta` is game time: in slow motion the same real exposure spans less of it.
+		var back: float = clampf(BLUR_SHUTTER_S * _blur_setting * clampf(Engine.time_scale, 0.0, 1.0) / delta, 0.0, 2.5)
+		# Stretch blur: a swing away from or toward the camera sweeps along the line of sight and
+		# shows little, so its exposure is lengthened toward what a sideways swing would show.
+		var cam: = get_viewport().get_camera_3d()
+		var moved: Vector3 = now * D.HEAD_OFFSET - _drawn_before * D.HEAD_OFFSET
+		if cam != null and moved.length() > 0.0005:
+			var seen: Vector3 = cam.global_transform.basis.inverse() * moved.normalized()
+			back *= lerpf(1.0, minf(1.0 / maxf(Vector2(seen.x, seen.y).length(), 0.001), BLUR_DEPTH_STRETCH_MAX), BLUR_DEPTH_STRETCH)
+		var travel: float = (_drawn_before * D.HEAD_OFFSET).distance_to(now * D.HEAD_OFFSET) * back
+		blur_travel = travel
+		if travel > BLUR_FROM_M and travel < LAG_RESET_M * BLUR_DEPTH_STRETCH_MAX:
+			show = true
+			if _blur_root == null: _build_blur()
+			var start: Transform3D = now.interpolate_with(_drawn_before, back)
+			blur_from = start * D.HEAD_OFFSET
+			_blur_root.global_transform = now
+			for entry in _blur_parts:
+				var material: ShaderMaterial = entry[0]
+				material.set_shader_parameter("before", start * (entry[1] as Transform3D))
+				material.set_shader_parameter("centre", now * (entry[2] as Vector3))
+				var swept_shadow: ShaderMaterial = material.next_pass as ShaderMaterial
+				if swept_shadow != null:
+					swept_shadow.set_shader_parameter("before", start * (entry[1] as Transform3D))
+					swept_shadow.set_shader_parameter("centre", now * (entry[2] as Vector3))
+					swept_shadow.set_shader_parameter("light_dir", -GroundShadows.Sun.to_sun())
+	if _blur_root != null: _blur_root.visible = show
+	_drawn_before = now
+	_drawn_valid = true
+
+## Photo history (scripts/fx/photo_history.gd): the sweep for a past tick, from where the paddle
+## was one tick earlier to where it is in that tick.
+func photo_sweep(before: Transform3D, now: Transform3D) -> void:
+	global_transform = now
+	var show: = false
+	if _blur_setting > 0.0:
+		var back: float = clampf(BLUR_SHUTTER_S * _blur_setting * float(Engine.physics_ticks_per_second), 0.0, 2.5)
+		var travel: float = (before * D.HEAD_OFFSET).distance_to(now * D.HEAD_OFFSET) * back
+		if travel > BLUR_FROM_M and travel < LAG_RESET_M * BLUR_DEPTH_STRETCH_MAX:
+			show = true
+			if _blur_root == null: _build_blur()
+			var start: Transform3D = now.interpolate_with(before, back)
+			_blur_root.global_transform = now
+			for entry in _blur_parts:
+				var material: ShaderMaterial = entry[0]
+				for swept: ShaderMaterial in [material, material.next_pass as ShaderMaterial]:
+					if swept == null: continue
+					swept.set_shader_parameter("before", start * (entry[1] as Transform3D))
+					swept.set_shader_parameter("centre", now * (entry[2] as Vector3))
+				if material.next_pass is ShaderMaterial: (material.next_pass as ShaderMaterial).set_shader_parameter("light_dir", -GroundShadows.Sun.to_sun())
+	if _blur_root != null: _blur_root.visible = show
+
+func _build_blur() -> void:
+	_blur_root = Node3D.new()
+	_blur_root.top_level = true
+	_blur_root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_blur_root.visible = false
+	var parts: Array = []
+	for child in get_children():
+		if child is MeshInstance3D: parts.append(child)
+	add_child(_blur_root)
+	for part: MeshInstance3D in parts:
+		var node: = MeshInstance3D.new()
+		node.mesh = part.mesh
+		node.transform = part.transform
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		node.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		# The head mesh starts at the grip: its middle is the head's centre. The others are centred.
+		var middle: Vector3 = part.transform * (D.HEAD_OFFSET if part.mesh == _head_mesh else Vector3.ZERO)
+		if part.material_override != null:
+			node.material_override = _blur_material(part.material_override, part.transform, middle)
+		else:
+			for surface in part.mesh.get_surface_count():
+				var source: Material = part.get_surface_override_material(surface)
+				if source == null: continue
+				var swept: ShaderMaterial = _blur_material(source, part.transform, middle)
+				# The head's edge band spans the sweep when the face moves along its own normal: what
+				# passed through there was the face, so that band takes the face's average colour.
+				if part.mesh == _head_mesh and surface == 2: swept.set_shader_parameter("tint", _face_average())
+				node.set_surface_override_material(surface, swept)
+		_blur_root.add_child(node)
+
+func _face_average() -> Color:
+	var face: = _materials_for(design_id).face as BaseMaterial3D
+	if face == null or face.albedo_texture == null: return Color(0.5, 0.5, 0.5)
+	var image: Image = face.albedo_texture.get_image()
+	image.resize(1, 1, Image.INTERPOLATE_LANCZOS)
+	var c: Color = image.get_pixel(0, 0)
+	return Color(c.r, c.g, c.b, 1.0)
+
+## The part's own look (colour, texture, roughness) through the sweep shader.
+func _blur_material(source: Material, part_transform: Transform3D, middle: Vector3) -> ShaderMaterial:
+	var m: = ShaderMaterial.new()
+	m.shader = BlurShader
+	var base: = source as BaseMaterial3D
+	if base != null:
+		m.set_shader_parameter("tint", base.albedo_color)
+		m.set_shader_parameter("rough", base.roughness)
+		if base.albedo_texture != null:
+			m.set_shader_parameter("tex", base.albedo_texture)
+			m.set_shader_parameter("has_tex", true)
+	# The sweep's own shadow on the court (shaders/paddle_blur_shadow.gdshader).
+	var swept_shadow: = ShaderMaterial.new()
+	swept_shadow.shader = SweepShadowShader
+	swept_shadow.render_priority = GroundShadows.PLAYER_PRIORITY + 1
+	swept_shadow.set_shader_parameter("ground_y", Ball.FLOOR_Y)
+	swept_shadow.set_shader_parameter("shadow_y", Ball.FLOOR_Y + GroundShadows.PLAYER_SHADOW_LIFT)
+	swept_shadow.set_shader_parameter("shadow_color", GroundShadows.Sun.SHADOW_COLOR)
+	swept_shadow.set_shader_parameter("opacity", GroundShadows.Sun.SHADOW_OPACITY)
+	m.next_pass = swept_shadow
+	_blur_parts.append([m, part_transform, middle])
+	return m
 
 func _follow(delta: float = 0.0) -> void:
 	# Pose editors pause physics and pose directly: read live transforms there.

@@ -90,3 +90,30 @@ Don't re-run the same thing. Pick one:
 stopped, wall time. Fill in the **Verdict** line after reading the result (what was decided,
 or "inconclusive: <next step>"). Check the log before a new bench: the answer may be there.
 `motion_bench.sh` and `pose_review.sh` are not logged.
+
+## 6. Performance benches
+
+Plan and budgets: `docs/PERFORMANCE_PLAN.md`. Sections 1-5 still apply (objective, datapoints,
+one seed first, stop early, log).
+
+- **Where the answer lives.** Frame rate, hitches and heat are answered on the phone only (a
+  3-10 minute match, then the perf log). The Mac answers "how much work does a tick do" and
+  "what did gameplay do". The M5 runs the same work 2-3x faster than the phone and barely
+  throttles, so a Mac saving is a prediction until a phone log confirms it.
+- **Timing runs are serial.** `tools/bench.sh` or `bench_seeds.sh` with `SERIAL=1`; never compare
+  ms per tick from seeds run side by side (inflated 10-15%). Run a timing A/B back to back on
+  the same code base and repeat once: single runs vary.
+- **Gameplay may move.** A performance refactor, cleanup or native port need not read
+  `IDENTICAL` (user's call, 2026-11-25). The bench compares against the version before the
+  change and reports what moved: hits, misses, stretched contacts, rally length, faults and
+  the animation rules. The change notes say why the new way is better; the user judges feel
+  on the phone. Visual-only changes still expect `IDENTICAL`, and when a change is meant to be
+  pure speed, `IDENTICAL` is the quickest proof.
+- **Budget line.** Every gameplay-touching bench prints serial tick cost and worst tick per
+  second against the plan's budgets. A change that raises them says so in its log entry.
+- **Human seat.** The all-AI bench never runs your player's planner or touch input. Use the
+  scripted human-seat run for those (see the plan's working method), and the phone for feel.
+- **Keep the cost table current.** The costs in section 1 (about 30 s per seed) shrink as the
+  plan lands. Update them from real runs, and recheck the seed sizing with
+  `tools/bench_plan.py`: cheaper seeds make more events affordable, but the 3-seed cap stays
+  until the user changes it.

@@ -117,14 +117,14 @@ func reset() -> void:
 func prime_serve_delivery(server) -> void:
 	if game == null or game.ball == null: return
 	_serve_admitted = false
-	if ActorIdentity.find_actor(game, ActorIdentity.actor_id(server)) != server:
+	if _find_actor(ActorIdentity.actor_id(server)) != server:
 		_serve_history.clear(); return
 	_serve_history.prime(_players(), server, game.ball.global_position, game.ball.BALL_RADIUS)
 
 func before_serve_contact(server) -> bool:
 	_serve_admitted = false
 	if game == null or game.ball.is_in_play or not unresolved_continuation.is_empty(): return false
-	if ActorIdentity.find_actor(game, ActorIdentity.actor_id(server)) != server or _serve_history.server_actor_id != ActorIdentity.actor_id(server):
+	if _find_actor(ActorIdentity.actor_id(server)) != server or _serve_history.server_actor_id != ActorIdentity.actor_id(server):
 		last_evidence = {"blocked": true, "reason": "unknown_serve_actor", "serve_admission": "unresolved"}; return false
 	var observed: Dictionary = _serve_history.sample(_players(), game.ball.global_position, game.ball.BALL_RADIUS)
 	if observed.get("ambiguous", false) or observed.get("reason", "") in ["serve_release_not_observed", "serve_body_contact"]:
@@ -182,7 +182,7 @@ func _before_paddle_impl(player, evidence: Dictionary = {}) -> bool:
 		last_evidence = {"blocked": true, "reason": "two_phase_intent_required"}
 		return false
 	if game == null or not game.ball.is_in_play or not unresolved_continuation.is_empty(): return false
-	if ActorIdentity.find_actor(game, ActorIdentity.actor_id(player)) != player:
+	if _find_actor(ActorIdentity.actor_id(player)) != player:
 		last_evidence = {"blocked": true, "hit": false, "reason": "unknown_contact_actor"}; return false
 	if not _manifold.is_empty():
 		last_evidence = {"blocked": true, "reason": "maintained_physical_contact"}; return false
@@ -278,7 +278,9 @@ func _current_snapshot(actor) -> Dictionary:
 	return _frame_current[id]
 
 func _perf_capture_current() -> void:
-	_ensure_all_arms()
+	var _pa := Time.get_ticks_usec()
+	_ensure_all_arms()   # solves this tick's deferred arm IK (else RigArmFlush does it later)
+	PerfMonitor.record("contact.arms", Time.get_ticks_usec() - _pa)
 	_frame_current.clear()
 	# Perf: in a live rally, skip players the ball cannot reach this tick (ball moves
 	# ~0.33 m/tick; arm + paddle reach ~1.5 m). A skipped player has no previous
@@ -298,25 +300,28 @@ func _query_range(from: Vector3, to: Vector3, start: float, end: float, incoming
 	var algebra_before: int = _algebra_units
 	var steps_before: int = _manifold_step_count
 	var result: Dictionary = _query_range_impl(from, to, start, end, incoming_flight, physical_displacement, physical_velocity)
+	PerfMonitor.record("contact.query", Time.get_ticks_usec() - began)
 	_record_performance("surface_query", began, queries_before, algebra_before, steps_before)
 	return result
 
 func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, incoming_flight: int, physical_displacement: Vector3 = Vector3.INF, physical_velocity: Vector3 = Vector3.INF) -> Dictionary:
 	var earliest: Dictionary = {"hit": false, "blocked": false, "ambiguous": false, "fraction": 2.0}
+	var last_actor: int = _evidence_actor(_last_contact)
 	for player in _players():
 		if _query_work >= MAX_FRAME_TRIANGLE_QUERIES:
 			return {"hit": false, "blocked": true, "ambiguous": true, "fraction": start, "reason": "frame_contact_budget"}
-		if not _frame_current.has(ActorIdentity.actor_id(player)): continue   # out of ball reach this tick
-		if Engine.get_physics_frames() <= int(_mishit_free.get(ActorIdentity.actor_id(player), -1)): continue   # pop-up leaving a mishit paddle
-		var current: Dictionary = _frame_current[ActorIdentity.actor_id(player)]
-		var previous: Dictionary = _snapshots.get(ActorIdentity.actor_id(player), current) if _flight == incoming_flight else current
-		var departing: int = int(_last_contact.get("mesh_id", -1)) if _evidence_actor(_last_contact) == ActorIdentity.actor_id(player) else -1
+		var id: int = ActorIdentity.actor_id(player)
+		if not _frame_current.has(id): continue   # out of ball reach this tick
+		if Engine.get_physics_frames() <= int(_mishit_free.get(id, -1)): continue   # pop-up leaving a mishit paddle
+		var current: Dictionary = _frame_current[id]
+		var previous: Dictionary = _snapshots.get(id, current) if _flight == incoming_flight else current
+		var departing: int = int(_last_contact.get("mesh_id", -1)) if last_actor == id else -1
 		if _confirm_actual_contact: departing = -1
 		var query_start: float = start
 		var query_end: float = end
 		var geometry_span := 1.0
 		if _remainder_geometry_start >= 0.0:
-			previous = _contact_pose_snapshots.get(ActorIdentity.actor_id(player), current)
+			previous = _contact_pose_snapshots.get(id, current)
 			geometry_span = maxf(1.0 - _remainder_geometry_start, 1e-12)
 			query_start = clampf((start - _remainder_geometry_start) / geometry_span, 0.0, 1.0)
 			query_end = clampf((end - _remainder_geometry_start) / geometry_span, query_start, 1.0)
@@ -324,11 +329,11 @@ func _query_range_impl(from: Vector3, to: Vector3, start: float, end: float, inc
 			previous = _without_legs(previous)
 			current = _without_legs(current)
 		if _own_paddle_pass(player):
-			if Engine.get_physics_frames() - int(_paddle_hit_tick.get(ActorIdentity.actor_id(player), -1000)) <= OWN_SHOT_LEG_TICKS: continue
+			if Engine.get_physics_frames() - int(_paddle_hit_tick.get(id, -1000)) <= OWN_SHOT_LEG_TICKS: continue
 			previous = _without_paddle(previous)
 			current = _without_paddle(current)
 		var remaining_units: int = maxi(0, MAX_FRAME_ALGEBRA_QUERIES * History.ALGEBRA_UNITS_PER_QUERY - _algebra_units)
-		var result: Dictionary = History.query_range(previous, current, from, to, game.ball.BALL_RADIUS + _query_radius_adjustment, query_start, query_end, true, departing, MAX_FRAME_TRIANGLE_QUERIES - _query_work, {}, ceili(float(remaining_units) / History.ALGEBRA_UNITS_PER_QUERY), _maintained_faces if ActorIdentity.actor_id(player) == _maintained_player else {}, physical_displacement, remaining_units, physical_velocity, _delta * geometry_span)
+		var result: Dictionary = History.query_range(previous, current, from, to, game.ball.BALL_RADIUS + _query_radius_adjustment, query_start, query_end, true, departing, MAX_FRAME_TRIANGLE_QUERIES - _query_work, {}, ceili(float(remaining_units) / History.ALGEBRA_UNITS_PER_QUERY), _maintained_faces if id == _maintained_player else {}, physical_displacement, remaining_units, physical_velocity, _delta * geometry_span)
 		if _remainder_geometry_start >= 0.0:
 			for key in ["fraction", "hit_fraction", "uncertain_fraction"]:
 				if result.has(key) and float(result[key]) >= 0.0: result[key] = _remainder_geometry_start + float(result[key]) * geometry_span
@@ -375,11 +380,16 @@ func _legs_pass(player) -> bool:
 
 func _without_legs(snapshot: Dictionary) -> Dictionary:
 	if not snapshot.has("parts"): return snapshot
+	# Lean: a snapshot never changes after capture, so its filtered copy is kept on it and
+	# reused next tick, when this tick's current becomes the previous.
+	if PerfToggles.contact_lean and snapshot.has("lean_without_legs"): return snapshot.lean_without_legs
 	var kept := {}
 	for id in snapshot.parts:
 		if not str(snapshot.parts[id].get("part", "")) in LEG_PARTS: kept[id] = snapshot.parts[id]
 	var copy: Dictionary = snapshot.duplicate()
+	copy.erase("lean_without_legs"); copy.erase("lean_without_paddle")
 	copy["parts"] = kept
+	if PerfToggles.contact_lean: snapshot["lean_without_legs"] = copy
 	return copy
 
 # Ball flight comes only from the solved launch, never from the paddle face.
@@ -394,12 +404,15 @@ func _own_paddle_pass(player) -> bool:
 
 func _without_paddle(snapshot: Dictionary) -> Dictionary:
 	if not snapshot.has("parts"): return snapshot
+	if PerfToggles.contact_lean and snapshot.has("lean_without_paddle"): return snapshot.lean_without_paddle
 	var kept := {}
 	for id in snapshot.parts:
 		var part: Dictionary = snapshot.parts[id]
 		if not part.get("equipment", false) and Dictionary(part.get("hand", {})).is_empty(): kept[id] = part
 	var copy: Dictionary = snapshot.duplicate()
+	copy.erase("lean_without_legs"); copy.erase("lean_without_paddle")
 	copy["parts"] = kept
+	if PerfToggles.contact_lean: snapshot["lean_without_paddle"] = copy
 	return copy
 
 func _fault(evidence: Dictionary) -> void:
@@ -411,10 +424,33 @@ func _physics_process(delta: float) -> void:
 	PerfMonitor.record("contact.authority", Time.get_ticks_usec() - _pt)
 
 func _perf_physics_process(delta: float) -> void:
+	if PerfToggles.contact_idle_skip and _idle_tick(): return
 	var pending: Dictionary = game.ball.deferred_scene_interval() if game != null and game.ball != null else {}
 	_process_authoritative_interval(delta)
 	if not pending.is_empty() and unresolved_continuation.is_empty() and game.rally_scorer.has_method("resume_deferred_scene_rules"):
 		game.rally_scorer.resume_deferred_scene_rules(pending)
+
+## PERFORMANCE_PLAN step 2 (PerfToggles.contact_idle_skip): with no ball in play, no serve
+## toss, no fast point transition and nothing held, there is nothing for the ball to touch,
+## so skip strokes, arm flush, snapshots and queries. Ball position / flight stay sampled so
+## the first live tick sweeps from where the ball really was; pose history is dropped, so
+## that tick's body sweep starts fresh (previous = current), as after reset(). Arms are still
+## solved by RigArmFlush at the end of the tick. The serve toss runs the full path (the serve
+## contact reads last tick's server snapshot, and the delivery history samples every tick).
+func _idle_tick() -> bool:
+	if game == null: return false
+	var ball = game.ball
+	if ball == null or ball.is_in_play or not unresolved_continuation.is_empty() or not _manifold.is_empty(): return false
+	if _serve_history.active or not ball._deferred_scene.is_empty(): return false
+	var serve = game.get("game_serve")
+	if serve != null and not serve._pending_release.is_empty(): return false
+	var quick = game.get("_fast_point_transition")   # its admission needs this tick's snapshots
+	if quick != null and quick.active: return false
+	if not _snapshots.is_empty(): _snapshots.clear()
+	if not _frame_current.is_empty(): _frame_current.clear()
+	if not _strokes.is_empty(): _strokes.clear()
+	_previous_ball = ball.global_position; _flight = ball.flight_id
+	return true
 
 func _process_authoritative_interval(delta: float) -> void:
 	var reset_epoch: int = _interval_reset_epoch
@@ -486,7 +522,9 @@ func _process_authoritative_interval(delta: float) -> void:
 	_snapshots = _frame_current.duplicate()
 
 func owns_live_scene_motion() -> bool:
-	return game != null and game.ball != null and game.ball.is_in_play and game.game_state in [game.GameState.PLAYING, game.GameState.SERVING] and not game._tool_state_active()
+	if game == null or game.ball == null or not game.ball.is_in_play: return false
+	var state: int = game.game_state
+	return (state == game.GameState.PLAYING or state == game.GameState.SERVING) and not game._tool_state_active()
 
 func _scene_context() -> Dictionary:
 	var ball = game.ball
@@ -559,7 +597,31 @@ func _stroke_state(player) -> Dictionary:
 	if human == null: return {"serial": -1, "active": false}
 	return {"serial": human.stroke_serial, "active": human.phase in [1, 2]}
 
+## Stroke serial / active of _stroke_state without building a Dictionary (lean path).
+var _stroke_serial := -1
+var _stroke_active := false
+
+func _read_stroke(player) -> void:
+	_stroke_serial = -1; _stroke_active = false
+	var id: int = ActorIdentity.actor_id(player)
+	if _serve_strokes.has(id) and not game.game_serve._follow_through.is_empty():
+		var serve: Dictionary = game.game_serve._follow_through
+		if int(serve.get("actor_id", _serve_history.server_actor_id)) == id:
+			_stroke_serial = int(_serve_strokes[id]); _stroke_active = float(serve.elapsed) <= ServeStyles.sweep_duration(int(serve.style)); return
+	if "special_reach_driver" in player and player.special_reach_driver != null:
+		var special = player.special_reach_driver
+		if special.active:
+			_stroke_serial = 1000000000 + int(special.stroke_serial); _stroke_active = bool(special.stroke_contact_active); return
+	if player.hitting == null or player.posture == null: return
+	if player.is_ai:
+		_stroke_serial = int(player.hitting.stroke_serial); _stroke_active = bool(player.hitting.stroke_contact_active); return
+	var human = player.posture.human_contact
+	if human == null: return
+	var phase: int = int(human.phase)
+	_stroke_serial = int(human.stroke_serial); _stroke_active = phase == 1 or phase == 2
+
 func _observe_stroke(player) -> void:
+	if PerfToggles.contact_lean: _observe_stroke_lean(player); return
 	var state: Dictionary = _stroke_state(player)
 	var head: Vector3 = player.paddle_node.global_transform * PaddleDimensions.HEAD_OFFSET
 	var previous: Dictionary = _strokes.get(ActorIdentity.actor_id(player), {})
@@ -575,6 +637,26 @@ func _observe_stroke(player) -> void:
 			state.direction = motion.normalized()
 	state["head"] = head
 	_strokes[ActorIdentity.actor_id(player)] = state
+
+## Same result as the old path. A stroke with the same serial is updated in place (only the
+## same-tick readers of serial see it; serial is unchanged); a new serial gets a new entry.
+func _observe_stroke_lean(player) -> void:
+	_read_stroke(player)
+	var id: int = ActorIdentity.actor_id(player)
+	var head: Vector3 = player.paddle_node.global_transform * PaddleDimensions.HEAD_OFFSET
+	var previous: Dictionary = _strokes.get(id, {})
+	if previous.is_empty() or int(previous.serial) != _stroke_serial:
+		_strokes[id] = {"serial": _stroke_serial, "active": _stroke_active, "direction": Vector3.ZERO, "continuous": true, "hit_direction": Vector3.ZERO, "head": head}
+		return
+	previous["serial"] = _stroke_serial
+	previous["active"] = _stroke_active
+	if not previous.has("hit_direction"): previous["hit_direction"] = Vector3.ZERO
+	var motion: Vector3 = head - Vector3(previous.head)
+	if _stroke_active and motion.length() > 0.0005:
+		var reference: Vector3 = previous.hit_direction
+		if reference.length_squared() > 0.5 and motion.normalized().dot(reference) < 0.0: previous["continuous"] = false
+		previous["direction"] = motion.normalized()
+	previous["head"] = head
 
 func note_paddle_contact(player) -> void:
 	_observe_stroke(player)
@@ -656,11 +738,12 @@ func _resolve_hand(evidence: Dictionary, full_delta: float) -> Dictionary:
 	var steps_before: int = _manifold_step_count
 	var result: Dictionary = _resolve_hand_impl(evidence, full_delta)
 	_record_performance("physical_resolution", began, queries_before, algebra_before, steps_before)
+	PerfMonitor.record("contact.resolve", Time.get_ticks_usec() - began)
 	return result
 
 func _resolve_hand_impl(evidence: Dictionary, full_delta: float) -> Dictionary:
 	var ball = game.ball
-	var player = ActorIdentity.find_actor(game, _evidence_actor(evidence))
+	var player = _find_actor(_evidence_actor(evidence))
 	if player == null: return {"stop": false, "unresolved": true, "reason": "unknown contact actor"}
 	var stroke: Dictionary = _strokes.get(ActorIdentity.actor_id(player), _stroke_state(player))
 	# No rig rejection for legal paddle / hand contacts: the cards draw no 3D wrist, and rejecting
@@ -1036,16 +1119,50 @@ func _record_performance(kind: String, began: int, query_before: int, algebra_be
 		"manifold_steps": _manifold_step_count - steps_before, "physics_frame": Engine.get_physics_frames(), "maintained": not _manifold.is_empty()})
 	if performance_receipts.size() > 512: performance_receipts.pop_front()
 
+# 1b (PerfToggles.contact_lean): the roster is built once per physics tick and reset epoch
+# (it was rebuilt, validated and sorted about eight times a tick). Read-only, so a caller
+# cannot change the shared copy; rebuilt if a cached actor was freed.
+var _roster: Array = []
+var _roster_frame := -1
+var _roster_epoch := -1
+
 func _players() -> Array:
-	return ActorIdentity.players(game, [game.player_left, game.player_right])
+	if not PerfToggles.contact_lean: return ActorIdentity.players(game, [game.player_left, game.player_right])
+	var frame: int = Engine.get_physics_frames()
+	if frame == _roster_frame and _roster_epoch == _interval_reset_epoch:
+		var intact := true
+		for actor in _roster:
+			if not is_instance_valid(actor): intact = false; break
+		if intact: return _roster
+	_roster = ActorIdentity.players(game, [game.player_left, game.player_right])
+	_roster.make_read_only()
+	_roster_frame = frame; _roster_epoch = _interval_reset_epoch
+	return _roster
 
 func _paddles() -> Array:
 	var result: Array = []
 	for actor in _players(): result.append(actor.paddle_node)
 	return result
 
+## ActorIdentity.find_actor over this tick's roster.
+func _find_actor(number: int):
+	for actor in _players():
+		if ActorIdentity.actor_id(actor) == number: return actor
+	return null
+
 func _evidence_actor(evidence: Dictionary) -> int:
-	return ActorIdentity.evidence_actor(evidence, game, [game.player_left, game.player_right])
+	if not PerfToggles.contact_lean or not evidence.has("actor_id"):
+		return ActorIdentity.evidence_actor(evidence, game, [game.player_left, game.player_right])
+	# Same checks as ActorIdentity.evidence_actor, on this tick's cached roster.
+	var wanted: int = int(evidence.actor_id)
+	for actor in _players():
+		if ActorIdentity.actor_id(actor) != wanted: continue
+		var team: int = ActorIdentity.team_id(actor)
+		if evidence.has("team_id") and int(evidence.team_id) != team: return -1
+		if evidence.has("player_num") and int(evidence.player_num) != team: return -1
+		if evidence.has("court_side") and int(evidence.court_side) != ActorIdentity.court_side(actor): return -1
+		return wanted
+	return -1
 
 func _observe_receiving_contact(actor, evidence: Dictionary) -> Dictionary:
 	if not game.has_method("observe_doubles_first_return"):
@@ -1065,7 +1182,7 @@ func _observe_receiving_contact(actor, evidence: Dictionary) -> Dictionary:
 
 # Two-phase publication is deliberately separate from finite contact evidence.
 func uses_two_phase_contact(actor) -> bool:
-	return owns_live_scene_motion() and game.game_state == game.GameState.PLAYING and ActorIdentity.find_actor(game, ActorIdentity.actor_id(actor)) == actor
+	return owns_live_scene_motion() and game.game_state == game.GameState.PLAYING and _find_actor(ActorIdentity.actor_id(actor)) == actor
 
 func publish_contact_intent(actor, intent: Dictionary) -> Dictionary:
 	if not uses_two_phase_contact(actor) or not unresolved_continuation.is_empty() or not IntentQueue.controller_payload(intent): return {"valid": false, "reason": "inactive_or_invalid_intent"}
@@ -1126,7 +1243,7 @@ func _finish_published_intents() -> void:
 		if not unresolved_continuation.is_empty(): break
 		var offer: Dictionary = completed[id]
 		if int(offer.frame) != Engine.get_physics_frames() or int(offer.epoch) != _interval_reset_epoch: continue
-		var actor = ActorIdentity.find_actor(game, int(id))
+		var actor = _find_actor(int(id))
 		if actor == null or actor.get_instance_id() != int(offer.instance): continue
 		var controller = _controller_for_intent(actor, str(offer.intent.get("kind", "")))
 		if controller != null: controller.finish_contact_intent(offer.intent)
@@ -1152,7 +1269,10 @@ func _process_ordered_live(pending: Dictionary, control_seconds: float) -> void:
 	if ball.global_position.distance_to(expected_endpoint) > drift_reserve:
 		last_evidence = {"source": "ordered_native_drift", "physical_seconds": seconds, "control_seconds": control_seconds, "residual": ball.global_position - expected_endpoint, "roundoff_bound": drift_reserve}
 		_hold_unresolved(seconds, "unowned ordered native drift"); return
-	if not _seal_contact_intents(pending, seconds):
+	var _ps := Time.get_ticks_usec()   # intent publication: roster, pose versions, offers
+	var sealed: bool = _seal_contact_intents(pending, seconds)
+	PerfMonitor.record("contact.seal", Time.get_ticks_usec() - _ps)
+	if not sealed:
 		_hold_unresolved(seconds, "incomplete final actor publication"); return
 	_ordered_live = true
 	var endpoint: Vector3 = ball.global_position
@@ -1245,7 +1365,9 @@ func _settle_intended_paddle(actor, evidence: Dictionary, seconds: float, event_
 	var samples_before: int = game.shot_physics.accuracy.samples
 	var stamina_before: float = actor.stamina.value
 	var event_context: Dictionary = game.team_coordination._public_context().duplicate(true) if event_permission.has("advisory_context") else {}
+	var _pz := Time.get_ticks_usec()
 	var result: Dictionary = controller.settle_contact_intent(entry.intent, _settlement_scope.duplicate(true))
+	PerfMonitor.record("contact.settle_shot", Time.get_ticks_usec() - _pz)
 	if result.is_empty(): _note_decline(actor, "controller_declined")
 	_settlement_scope.clear()
 	var boundary: Dictionary = _contact_callback_boundary(epoch, ball_epoch, not result.get("interrupted", false))
@@ -1445,7 +1567,7 @@ func _first_floor_permission(actor, entry: Dictionary, fraction: float) -> Dicti
 	var id: int = ActorIdentity.actor_id(actor)
 	if not ball.is_in_play or ball.bounces_since_last_hit != 1 or ball.flight_id != int(interval.flight) or ball.get_last_hit_team_id() == ActorIdentity.team_id(actor): return {}
 	if interval != _intent_interval or entry.interval != interval or int(interval.frame) != Engine.get_physics_frames() or int(interval.reset_epoch) != _interval_reset_epoch or int(interval.native_serial) != _last_consumed_native_serial: return {}
-	if ActorIdentity.find_actor(game, id) != actor or int(entry.actor.actor_id) != id or int(entry.actor.instance_id) != actor.get_instance_id() or int(entry.stroke_serial) != int(_stroke_state(actor).serial): return {}
+	if _find_actor(id) != actor or int(entry.actor.actor_id) != id or int(entry.actor.instance_id) != actor.get_instance_id() or int(entry.stroke_serial) != int(_stroke_state(actor).serial): return {}
 	if not _intents._sealed or not _intents.matches_interval(interval) or not _frame_current.has(id) or entry.endpoint_version != _snapshot_version(_frame_current[id]): return {}
 	if not is_finite(fraction) or fraction < float(_ordered_first_floor.fraction) or fraction > 1.0: return {}
 	var intent: Dictionary = entry.intent

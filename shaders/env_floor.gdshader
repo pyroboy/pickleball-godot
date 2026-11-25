@@ -6,8 +6,9 @@ shader_type spatial;
 // kitchen faded green; old basketball lines, mostly worn away, ghosting under everything;
 // a drainage gutter along one side; packed dirt with weeds beyond. The bright pickleball
 // lines are their own mesh on top (court.gd CourtLines) and stay the clearest thing on
-// the floor. Outside the court lines the floor leans toward the same light grey as the
-// props (env_toon.gdshader `push`), so the background sits back.
+// the floor. Wear is kept small and low in contrast (it read as camouflage when big).
+// Far out the floor takes the same distance fog as the props (env_toon.gdshader `fog`),
+// so it meets the warm sky horizon; the court and its surround get none.
 // Worked out on a 5 cm world grid so the pattern matches the pixel look. `flip` follows
 // the camera's half turn after a change of ends so the far end always looks the same.
 // Colours are tonemap-compensated (scripts/environment/env_palette.gd).
@@ -24,9 +25,8 @@ uniform vec3 kitchen : source_color;
 uniform vec3 court_paint : source_color;
 uniform float bball_mix = 0.3;          // old basketball lines on bare cement
 uniform float bball_mix_paint = 0.16;   // and where the court paint covers them
-uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
-uniform vec3 push = vec3(2.0, 7.0, 0.24);   // env_toon.gdshader: start m, full m, amount
-uniform float push_desat = 0.4;
+uniform vec3 fog_col : source_color = vec3(0.8, 0.66, 0.53);
+uniform vec3 fog = vec3(8.0, 0.02, 0.7);   // env_toon.gdshader: start m, per metre, max
 uniform vec3 gutter : source_color;
 uniform vec3 grate : source_color;
 uniform vec3 dirt : source_color;
@@ -114,36 +114,37 @@ void fragment() {
 	vec2 a = abs(p);
 	vec3 c;
 	if (a.x < slab_half.x && a.y < slab_half.y) {
-		// cement: two-tone mottling plus grain
-		float m = vnoise(p * 0.7) + 0.5 * vnoise(p * 2.3);
-		c = m > 0.95 ? cement_lt : (m < 0.55 ? cement_dk : cement);
+		// cement: small two-tone mottling plus grain
+		float m = vnoise(p * 1.8) + 0.5 * vnoise(p * 4.6);
+		c = m > 1.0 ? cement_lt : (m < 0.5 ? cement_dk : cement);
 		if (n > 0.95) c = cement_dk;
 		else if (n < 0.03) c = cement_lt;
-		// patched squares (2.5 m grid), crisp edges
+		// a few small patched squares (2.5 m grid), crisp edges
 		vec2 pc = floor(p / 2.5);
 		float ph = hash(pc + 7.0);
-		if (ph > 0.84) {
+		if (ph > 0.9) {
 			vec2 local = p - pc * 2.5;
-			vec2 lo = 0.3 + hash2(pc) * 0.6;
-			vec2 hi = lo + 0.5 + hash2(pc + 3.0) * 0.8;
-			if (all(greaterThan(local, lo)) && all(lessThan(local, hi))) c = n > 0.9 ? cement_dk : patch_col;
+			vec2 lo = 0.3 + hash2(pc) * 1.2;
+			vec2 hi = lo + 0.3 + hash2(pc + 3.0) * 0.4;
+			if (all(greaterThan(local, lo)) && all(lessThan(local, hi))) c = mix(c, patch_col, 0.7);
 		}
-		// water stains near the slab edge: blotches with a lighter tide mark
+		// water stains near the slab edge: faint blotches with a lighter tide mark
 		float edge = min(slab_half.x - a.x, slab_half.y - a.y);
-		if (edge < 2.6) {
-			float s = vnoise(p * 0.9 + 4.0) - edge * 0.12;
-			if (s > 0.55) c = mix(c, stain, 0.7);
-			else if (s > 0.52) c = mix(c, cement_lt, 0.5);
+		if (edge < 2.0) {
+			float s = vnoise(p * 1.6 + 4.0) - edge * 0.15;
+			if (s > 0.58) c = mix(c, stain, 0.4);
+			else if (s > 0.55) c = mix(c, cement_lt, 0.3);
 		}
 		// court paint: kitchen faded green, the rest worn slate blue-green; both rubbed
 		// thin in spots so the cement shows through
 		bool painted = a.x < court_half.x && a.y < court_half.y;
+		// (small scuffs, not big blotches: the old 0.6-0.8 m patches read as camouflage)
 		if (a.x < kitchen_half.x && a.y < kitchen_half.y) {
-			float wear = vnoise(p * 1.7 + 11.0);
-			c = mix(c, kitchen, wear > 0.25 ? 0.75 : 0.35);
+			float wear = vnoise(p * 4.2 + 11.0) + 0.3 * vnoise(p * 9.0 + 2.0);
+			c = mix(c, kitchen, wear > 0.3 ? 0.8 : 0.66);
 		} else if (painted) {
-			float wear = vnoise(p * 1.3 + 23.0) + 0.3 * vnoise(p * 4.1 + 5.0);
-			c = mix(c, court_paint, wear > 0.4 ? 0.84 : 0.55);
+			float wear = vnoise(p * 3.6 + 23.0) + 0.3 * vnoise(p * 8.3 + 5.0);
+			c = mix(c, court_paint, wear > 0.3 ? 0.88 : 0.76);
 		}
 		// old basketball lines, mostly worn away, with gaps
 		if (bball_lines(p) > 0.5 && vnoise(p * 3.1) > 0.28 && n > 0.12) c = mix(c, bball, painted ? bball_mix_paint : bball_mix);
@@ -162,9 +163,8 @@ void fragment() {
 		float near = max(a.x - slab_half.x, a.y - slab_half.y);
 		if (g > 1.0 - clamp(near * 0.04, 0.0, 0.25)) c = n > 0.5 ? grass : grass_dk;
 	}
-	float k = push.z * smoothstep(push.x, push.y, length(max(a - court_half, vec2(0.0))));
-	vec3 s = sqrt(c);
-	s = mix(s, vec3(dot(s, vec3(0.299, 0.587, 0.114))), k * push_desat);
-	s = mix(s, sqrt(push_col), k);
-	ALBEDO = s * s * gain;
+	// fog by world distance (not the flipped pattern coordinate: both are symmetric)
+	float out_d = length(max(abs(world_pos.xz) - court_half, vec2(0.0)));
+	float k = fog.z * (1.0 - exp(-fog.y * max(out_d - fog.x, 0.0)));
+	ALBEDO = mix(c, fog_col, k) * gain;
 }

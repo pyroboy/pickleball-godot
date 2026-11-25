@@ -53,6 +53,16 @@ static func displayed_report(player) -> Dictionary:
 		var reference: Basis = Anatomy.forearm_reference_for_arm(arm, wrist, side == 1)
 		var channels: Dictionary = Anatomy.decompose(reference, mount.basis * model.anatomical_basis, -1.0 if side == 1 else 1.0)
 		var valid: bool = wrist.is_finite() and upper_error <= .00002 and fore_error <= .00002 and socket_error <= .00002 and bool(channels.within_animation_budget)
+		if PerfToggles.simple_hands:
+			# Simple hands (the pixel cards draw the hand): the arm is judged by reach alone. It is
+			# stretched only when the hand's grip point is further from the shoulder than the arm
+			# plus the hand, however the wrist would have to turn; wrist comfort limits and the
+			# exact wrist seat no longer count. (With the grip-roll fit gone, the posed wrist seat
+			# sat a few centimetres out of reach on some hits and the contact rule read that as
+			# arm stretch: shot error on about a fifth of hits.)
+			var deficit: float = maxf(0.0, shoulder.distance_to(mount.origin) - (arm.upper_arm_length + arm.forearm_length + model.wrist_socket.length()))
+			upper_error = 0.0; fore_error = 0.0; socket_error = deficit
+			valid = wrist.is_finite() and deficit <= .00002
 		result.arms.append({"valid": valid, "channels": channels, "upper_link_error": upper_error,
 			"fore_link_error": fore_error, "wrist_socket_error": socket_error,
 			"reach": shoulder.distance_to(wrist), "link_budget": arm.upper_arm_length + arm.forearm_length})
@@ -109,6 +119,37 @@ static func solve(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand_basis:
 	result.angle = best
 	result.elbow = center + radial.rotated(axis, best) * radius
 	return result
+
+## `solve(...).feasible and solve(...).cost <= maximum` (maximum <= 1) without building the solve.
+## Same elbow planes and the same cost: the current plane decides when it is inside the budget,
+## otherwise the first lattice plane within `maximum` does. No elbow is returned, so the
+## nearest-plane bookkeeping and the 14-step bisection are not needed. Callers that only ask
+## "does a grip fit" (held_preparation_reach) ran the full solve about 680 times a second
+## while HIT was held.
+static func fits_within(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand_basis: Basis, upper: float, fore: float, is_left: bool, maximum: float) -> bool:
+	var span: Vector3 = wrist - shoulder
+	var distance: float = span.length()
+	if distance < 0.00001 or distance >= upper + fore or distance <= absf(upper - fore): return false
+	var axis: Vector3 = span / distance
+	var along: float = (upper * upper - fore * fore + distance * distance) / (2.0 * distance)
+	var radius: float = sqrt(maxf(0.0, upper * upper - along * along))
+	var center: Vector3 = shoulder + axis * along
+	var radial: Vector3 = elbow - center
+	radial -= axis * radial.dot(axis)
+	if radial.length_squared() < 0.00000001:
+		radial = Vector3.UP - axis * axis.y
+	if radial.length_squared() < 0.00000001:
+		radial = Vector3.RIGHT - axis * axis.x
+	radial = radial.normalized()
+	var hand: Basis = hand_basis.orthonormalized()
+	var initial: float = cost(shoulder, wrist, center + radial * radius, hand, is_left)
+	if initial <= 1.0: return initial <= maximum
+	var reference: Vector3 = hand_basis.y - axis * hand_basis.y.dot(axis)
+	if reference.length_squared() < 0.00000001: reference = hand_basis.z - axis * hand_basis.z.dot(axis)
+	reference = reference.normalized()
+	for index in range(SOLVE_LATTICE):
+		if cost(shoulder, wrist, center + reference.rotated(axis, float(index) * STEP) * radius, hand, is_left) <= maximum: return true
+	return false
 
 static func _fits(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Basis, is_left: bool) -> bool:
 	return _cost(shoulder, wrist, elbow, hand, is_left) <= 1.0
@@ -188,15 +229,28 @@ static func _accepts(shoulder: Vector3, wrist: Vector3, elbow: Vector3, hand: Ba
 		if cost(shoulder, wrist, center + reference.rotated(axis, float(index) * LATTICE_STEP) * radius, hand_orthonormal, left) <= maximum: return true
 	return false
 
+static var _reach_script: Script   # loaded on first use (a preload would be circular)
 static func apply(player, pose, hands) -> void:
 	var _pt := Time.get_ticks_usec()
 	_perf_apply(player, pose, hands)
 	PerfMonitor.record("arm.budget", Time.get_ticks_usec() - _pt)
 
 static func _perf_apply(player, pose, hands) -> void:
-	if not load("res://scripts/live_transition_arm_reach.gd").enabled(player, pose): return
+	if _reach_script == null: _reach_script = load("res://scripts/live_transition_arm_reach.gd")
+	if not _reach_script.enabled(player, pose): return
 	var reports: Array = []
-	var rally: bool = load("res://scripts/live_transition_arm_reach.gd").in_rally(player)
+	var rally: bool = _reach_script.in_rally(player)
+	if rally and PerfToggles.simple_hands:
+		# Simple hands (user, 2026-11-25: no 3D fingers, no complicated wrist): in a rally the hands
+		# stay where the arm IK put them. No wrist-budget turn of a released hand, no search to
+		# keep it off the paddle, no finger re-shaping. Only the support hand's turn clock is
+		# kept current (the paddle's turn-rate limit reads it). Serves and between points, which
+		# hold and release the ball, keep the full path below.
+		for side in range(2):
+			if side == pose.paddle_hand: continue
+			var free_arm = player.right_arm_node if side == 0 else player.left_arm_node
+			_remember_support(player, free_arm, free_arm.hand_mesh.global_transform)
+		return
 	for side in range(2):
 		var arm = player.right_arm_node if side == 0 else player.left_arm_node
 		var model = arm.articulated_hand

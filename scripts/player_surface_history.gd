@@ -111,6 +111,7 @@ static func query(previous: Dictionary, current: Dictionary, ball_from: Vector3,
 					if not now.hand.is_empty() and not before.hand.is_empty() and current.get("has_paddle", false) and previous.get("has_paddle", false):
 						var hand := {"wrist": Vector3(before.hand.wrist).lerp(now.hand.wrist, global_fraction),
 							"distal": Vector3(before.hand.distal).lerp(now.hand.distal, global_fraction).normalized()}
+						if now.hand.has("grip") and before.hand.has("grip"): hand["grip"] = Vector3(before.hand.grip).lerp(now.hand.grip, global_fraction)
 						var at_time := PackedVector3Array()
 						for vertex in start_triangles.size(): at_time.append(start_triangles[vertex].lerp(end_triangles[vertex], time))
 						var paddle: Transform3D = _linear_frame(previous.paddle, current.paddle, global_fraction)
@@ -296,6 +297,7 @@ static func touching_hitting_surface(previous: Dictionary, current: Dictionary, 
 		for i in posed.size(): posed[i] = old[i].lerp(posed[i], fraction)
 		var hand: Dictionary = {} if equipment else {"wrist": Vector3(before.hand.wrist).lerp(now.hand.wrist, fraction),
 			"distal": Vector3(before.hand.distal).lerp(now.hand.distal, fraction).normalized()}
+		if not equipment and now.hand.has("grip") and before.hand.has("grip"): hand["grip"] = Vector3(before.hand.grip).lerp(now.hand.grip, fraction)
 		for i in range(0, posed.size() - 2, 3):
 			var point: Vector3 = Geometry.closest_triangle(center, posed[i], posed[i + 1], posed[i + 2])
 			if point.distance_to(center) <= radius + CONTACT_EPSILON and (equipment or Surface.hand_contact_kind(hand, posed, point, paddle) == "legal_hand"): return true

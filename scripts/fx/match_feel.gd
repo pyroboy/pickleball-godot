@@ -29,6 +29,11 @@ const KITCHEN_GLOW_ALPHA := 0.16
 const KITCHEN_FLASH_SECONDS := 1.4
 const IN_COLOR := Color("5ff0ff")
 const OUT_COLOR := Color("ffab5c")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
+const LabelPill = preload("res://scripts/ui/label_pill_3d.gd")
+const UiTheme = preload("res://scripts/ui/game_ui_theme.gd")
+## Incoming landing this frame: 0 none, 1 in, 2 out (read by player_cue_priority.gd).
+var landing_state := 0
 
 var _game
 var _flashes: Array[MeshInstance3D] = []
@@ -115,7 +120,9 @@ func setup(game) -> void:
 	_landing_label.no_depth_test = true
 	_landing_label.modulate = OUT_COLOR
 	_landing_label.visible = false
+	_pixel_label(_landing_label)
 	add_child(_landing_label)
+	LabelPill.attach(_landing_label)
 	_kitchen = MeshInstance3D.new()
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(PickleballConstants.COURT_WIDTH, PickleballConstants.NON_VOLLEY_ZONE)
@@ -138,6 +145,14 @@ func _material(color: Color) -> StandardMaterial3D:
 	material.disable_fog = true
 	material.albedo_color = color
 	return material
+
+## Pixel display font, as on the HUD pills (one pixel UI style); thin dark outline.
+func _pixel_label(label: Label3D) -> void:
+	label.font = UiTheme.pixel_font()
+	label.font_size = UiTheme.pixel_size(label.font_size)
+	label.outline_size = 6
+	label.outline_modulate = UiTheme.PANEL
+	label.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
 
 func _human():
 	return _game.get_human_actor() if _game != null and _game.has_method("get_human_actor") else null
@@ -223,12 +238,15 @@ func _update_landing() -> void:
 	var landing: Vector3 = flight.get("first_bounce", Vector3.ZERO) if show else Vector3.ZERO
 	# Only a ball coming down on the player's own side.
 	show = show and landing.z * human.global_position.z > 0.0
+	var out: bool = show and RallyScorer.is_outside_painted_court(landing)
+	landing_state = (2 if out else 1) if show else 0
+	# One player cue at a time: the landing ring and chevrons only when they are the cue.
+	show = show and CuePriority.current(_game) in [CuePriority.LANDING, CuePriority.OUT]
 	_landing.visible = show
 	if not show:
 		_landing_label.visible = false
 		for chevron in _chevrons: chevron.visible = false
 		return
-	var out: bool = RallyScorer.is_outside_painted_court(landing)
 	var color: Color = OUT_COLOR if out else IN_COLOR
 	_landing_material.albedo_color = Color(color, 0.85)
 	# The ring closes in as the ball arrives, a simple timing cue.
@@ -305,7 +323,9 @@ func _build_extras() -> void:
 		label.shaded = false
 		label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		label.visible = false
+		_pixel_label(label)
 		add_child(label)
+		LabelPill.attach(label)   # shot names sit on the HUD's dark navy pill
 		_labels.append(label)
 		_label_age.append(LABEL_SECONDS)
 	_tap_spark_material = _additive(Color(1.0, 0.93, 0.6, 0.0))
@@ -386,6 +406,8 @@ func _spawn_label(hitter, kind: String) -> void:
 	_next_label = (_next_label + 1) % _labels.size()
 	label.text = ShotNames.display(kind)
 	label.modulate = ShotNames.color(kind)
+	LabelPill.fit(label)
+	LabelPill.set_alpha(label, 1.0)
 	label.global_position = hitter.global_position + Vector3(0.0, 2.15, 0.0)
 	label.visible = true
 
@@ -397,6 +419,8 @@ func _on_partner_tap(at: Vector3) -> void:
 	_next_label = (_next_label + 1) % _labels.size()
 	label.text = "TAP"
 	label.modulate = Color(1.0, 0.92, 0.55)
+	LabelPill.fit(label)
+	LabelPill.set_alpha(label, 1.0)
 	label.global_position = at + Vector3(0.0, 0.35, 0.0)
 	label.scale = Vector3.ONE * 1.45
 	label.visible = true
@@ -522,6 +546,7 @@ func _update_extras(real: float) -> void:
 		label.position.y += real * 0.5
 		label.scale = Vector3.ONE * (1.0 + 0.45 * (1.0 - smoothstep(0.0, 0.25, share)))
 		label.modulate.a = 1.0 - smoothstep(0.55, 1.0, share)
+		LabelPill.set_alpha(label, label.modulate.a)
 	# dust puffs
 	for index in _dust.size():
 		var puff := _dust[index]

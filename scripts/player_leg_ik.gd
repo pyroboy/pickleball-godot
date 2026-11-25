@@ -123,7 +123,11 @@ var _split_body_offset := 0.0
 var _split_body_applied := false
 var _split_ankle_pitch := 0.0
 var applied_foot_pitch_deg: Array[float] = [0.0, 0.0]
-var _foot_pitch_reports: Array[Dictionary] = [{}, {}]
+var _pitch_reported: Array[bool] = [false, false]
+var _pitch_requested: Array[float] = [0.0, 0.0]
+var _pitch_procedural: Array[float] = [0.0, 0.0]
+var _pitch_limited: Array[bool] = [false, false]
+var _pitch_grounded: Array[bool] = [true, true]
 var motion_state := MotionState.new()
 var _shot_context: Dictionary = {}
 var locomotion_state := "ready"
@@ -172,10 +176,11 @@ func _stance_targets(def, base: Vector3, authored: bool = false) -> Array[Vector
 		fh = fh.rotated(Vector3.UP, -deg_to_rad(_ready_facing_deg))
 		fwd = fwd.rotated(Vector3.UP, -deg_to_rad(_ready_facing_deg))
 	var targets: Array[Vector3] = []
-	for side in [1, -1]:
+	for i: int in 2:
+		var side: int = 1 - 2 * i
 		var right: bool = side == 1
 		var foot: Vector3 = base + fh * side * 0.27
-		if drive_preparation.state in ["setup", "hold"]:
+		if (drive_preparation.state == "setup" or drive_preparation.state == "hold"):
 			var local: Vector3 = drive_preparation.profile.right if right else drive_preparation.profile.left
 			# The authored profile already describes court-space foot placement;
 			# do not rotate it a second time by its body/hip setup heading.
@@ -202,7 +207,7 @@ func _stance_targets(def, base: Vector3, authored: bool = false) -> Array[Vector
 
 func _landing_yaw(side: int) -> float:
 	var authored: float = 0.0
-	if drive_preparation.state in ["setup", "hold"]:
+	if (drive_preparation.state == "setup" or drive_preparation.state == "hold"):
 		authored = float(drive_preparation.profile.right_yaw if side == 0 else drive_preparation.profile.left_yaw) - drive_preparation.facing_deg
 	elif drive_preparation.state == "recover":
 		var ready = PostureLibrary.instance().get_def(20)
@@ -274,7 +279,7 @@ func shot_context() -> Dictionary:
 	return result
 
 func is_support_ready(side: int) -> bool:
-	if side not in [0, 1] or not feet_initialized: return false
+	if side < 0 or side > 1 or not feet_initialized: return false
 	if _airborne or _landing_remaining > 0.0 or _active_side >= 0 or _run_active or _run_stopping: return false
 	if Vector2(_player.current_velocity.x, _player.current_velocity.z).length() > SUPPORT_READY_SPEED: return false
 	var locked: bool = right_foot_locked if side == 0 else left_foot_locked
@@ -299,10 +304,25 @@ func _ready_facing_for(_def) -> float:
 	if owner != null and owner.has_method("ready_facing_for_actor"): return owner.ready_facing_for_actor(_player)
 	return drive_preparation.facing_deg if drive_preparation.active() else 0.0
 
+var _updating := false
+var _split_sample_ready := false
+var _split_sample: Dictionary = {}
 func _split_step_sample() -> Dictionary:
+	# Perf: sampled once per leg update (was up to 3 dictionaries); a split-step
+	# cancel inside the update clears it (_cancel_split_step).
+	if _split_sample_ready: return _split_sample
+	_split_sample = _read_split_step_sample()
+	_split_sample_ready = _updating
+	return _split_sample
+
+func _read_split_step_sample() -> Dictionary:
 	if "pose_controller" not in _player or _player.pose_controller == null or "split_step" not in _player.pose_controller: return {}
 	var split = _player.pose_controller.split_step
 	return split.sample() if split != null else {}
+
+func _cancel_split_step(reason: String) -> void:
+	_player.pose_controller.split_step.cancel(reason)
+	_split_sample_ready = false
 
 func _split_hard_interrupted() -> bool:
 	if _motion_context() == "pickup": return true
@@ -374,25 +394,35 @@ func _apply_split_step(sample: Dictionary, delta: float, base: Vector3, velocity
 	_solve_legs(delta, def)
 	return true
 
-func _drive_preparation_input() -> Dictionary:
-	if _motion_context() == "pickup" or not _player.has_method("_get_ball_ref"): return {"lifecycle": "reset"}
-	if "is_jumping" in _player and _player.is_jumping: return {"lifecycle": "reset"}
+# Perf: the drive-preparation input is written to these fields (was a new
+# Dictionary per tick). _dp_candidate is empty unless a setup candidate is valid.
+var _dp_lifecycle := "reset"
+var _dp_authored := false
+var _dp_candidate: Dictionary = {}
+var _dp_no_candidate: Dictionary = {}
+var _dp_ai_candidate: Dictionary = {}
+func _drive_preparation_input() -> void:
+	_dp_lifecycle = "reset"; _dp_authored = false; _dp_candidate = _dp_no_candidate
+	if _motion_context() == "pickup" or not _player.has_method("_get_ball_ref"): return
+	if "is_jumping" in _player and _player.is_jumping: return
 	var split := _split_step_sample()
 	if split.get("active", false):
 		var phase: String = str(split.get("phase", ""))
-		if phase in ["split_load", "split_unweight"] or phase == "split_land" and float(split.get("crouch", 0.0)) > 0.00001: return {"lifecycle": "pause"}
-	if "posture" not in _player or _player.posture == null or _player.posture.editor_preview_mode: return {"lifecycle": "reset"}
-	if "hitting" in _player and _player.hitting != null and _player.hitting.serving_visual_active: return {"lifecycle": "reset"}
+		if phase == "split_load" or phase == "split_unweight" or phase == "split_land" and float(split.get("crouch", 0.0)) > 0.00001:
+			_dp_lifecycle = "pause"; return
+	if "posture" not in _player or _player.posture == null or _player.posture.editor_preview_mode: return
+	if "hitting" in _player and _player.hitting != null and _player.hitting.serving_visual_active: return
 	var ball = _player._get_ball_ref()
-	if ball == null: return {"lifecycle": "invalid"}
+	if ball == null:
+		_dp_lifecycle = "invalid"; return
 	var human = _player.posture.human_contact if "human_contact" in _player.posture else null
-	var candidate: Dictionary = {}
+	var candidate: Dictionary = _dp_no_candidate
 	var lifecycle := "receive"
 	var authored := false
 	if human != null:
 		authored = _player.hitting.charge_visual_active or human.phase >= 0
 		if human._charge_cancel_recovering: lifecycle = "cancel"
-		elif human.phase in [2, 3]: lifecycle = "finish"
+		elif human.phase == 2 or human.phase == 3: lifecycle = "finish"
 		elif human.phase == 4: lifecycle = "recover"
 		elif human.phase == 1: lifecycle = "swing"
 		if lifecycle == "receive": candidate = human.preparation_contact()
@@ -402,8 +432,13 @@ func _drive_preparation_input() -> Dictionary:
 		if _player.hitting.is_in_follow_through: lifecycle = "finish"
 		elif brain.ai_selected_contact_reachable:
 			var pose = brain.ai_reach_pose if brain.ai_reach_pose != null else PostureLibrary.instance().get_def(brain.ai_desired_posture)
-			candidate = {"def": pose, "point": brain.ai_predicted_contact_position, "time": brain.ai_selected_contact_time, "bounces": 0}
-	if lifecycle not in ["finish", "recover"] and (not ball.is_in_play or ball.last_hit_by == _player.player_num or ball.bounces_since_last_hit >= 2): lifecycle = "invalid"
+			# Reused each tick (read only below); same four keys every time.
+			_dp_ai_candidate["def"] = pose
+			_dp_ai_candidate["point"] = brain.ai_predicted_contact_position
+			_dp_ai_candidate["time"] = brain.ai_selected_contact_time
+			_dp_ai_candidate["bounces"] = 0
+			candidate = _dp_ai_candidate
+	if lifecycle != "finish" and lifecycle != "recover" and (not ball.is_in_play or ball.last_hit_by == _player.player_num or ball.bounces_since_last_hit >= 2): lifecycle = "invalid"
 	if lifecycle == "receive" and not candidate.is_empty():
 		var def = candidate.get("def")
 		var point: Vector3 = candidate.get("point", Vector3.INF)
@@ -420,18 +455,29 @@ func _drive_preparation_input() -> Dictionary:
 			if drive_preparation.state == "idle":
 				var preparation_pose = preload("res://scripts/stroke_swing_path.gd").sample(def, 0.0)
 				profile = DrivePreparation.profile_from(preparation_pose)
-			return {"lifecycle": lifecycle, "authored": authored, "candidate": {"flight": ball.flight_id, "family": def.family, "time": candidate.get("time", 0.0), "profile": profile, "offset": BodyPose.foot_position_offset(_player, _heading_def)}}
-	return {"lifecycle": lifecycle, "authored": authored}
+			_dp_lifecycle = lifecycle; _dp_authored = authored
+			_dp_candidate = {"flight": ball.flight_id, "family": def.family, "time": candidate.get("time", 0.0), "profile": profile, "offset": BodyPose.foot_position_offset(_player, _heading_def)}
+			return
+	_dp_lifecycle = lifecycle; _dp_authored = authored
 
 func _update_drive_preparation(delta: float, velocity: Vector3) -> void:
-	var data := _drive_preparation_input()
-	_drive_lifecycle = data.lifecycle
+	_drive_preparation_input()
+	_drive_lifecycle = _dp_lifecycle
 	var was_active := drive_preparation.active()
-	drive_preparation.update(delta, data.get("candidate", {}), _drive_lifecycle, velocity.length() > MotionState.IDLE_SPEED, data.get("authored", false))
+	drive_preparation.update(delta, _dp_candidate, _drive_lifecycle, velocity.length() > MotionState.IDLE_SPEED, _dp_authored)
 	if not was_active and drive_preparation.state == "setup" and _split_step_sample().get("active", false):
-		_player.pose_controller.split_step.cancel("selected stance setup after grounded landing")
+		_cancel_split_step("selected stance setup after grounded landing")
 
+var _motion_context_ready := false
+var _motion_context_value := "rally"
 func _motion_context() -> String:
+	# Perf: read once per leg update (up to 4 callers per update); see update_leg_ik.
+	if _motion_context_ready: return _motion_context_value
+	_motion_context_value = _read_motion_context()
+	_motion_context_ready = _updating
+	return _motion_context_value
+
+func _read_motion_context() -> String:
 	if _player.has_method("_between_point_owner") and _player._between_point_owner() != null:
 		return "pickup"
 	if _player.has_method("get_parent"):
@@ -451,7 +497,7 @@ func _support_limited_heading(desired: float) -> float:
 	var limit := deg_to_rad(MAX_SUPPORT_TURN_DEGREES)
 	var lower := -INF
 	var upper := INF
-	for side in [0, 1]:
+	for side: int in 2:
 		if not (right_foot_locked if side == 0 else left_foot_locked): continue
 		var knee_forward := Vector3.FORWARD.rotated(Vector3.UP, _knee_yaw[side])
 		var support: float = court.signed_angle_to(knee_forward, Vector3.UP)
@@ -463,20 +509,32 @@ func _support_limited_heading(desired: float) -> float:
 	if lower > upper: return (lower + upper) * 0.5
 	return clampf(desired, lower, upper)
 
+var _heading_inputs_ready := false
+var _heading_charged_phase := "idle"
+var _heading_motion_context := "rally"
+var _heading_ball_behind := false
+var _heading_shot_context: Dictionary = {}
 func _update_heading(delta: float, velocity: Vector3, traveled: float) -> void:
 	var court: Vector3 = _player._get_forward_axis()
 	var speed := velocity.length()
-	var charged = _charged_footwork()
-	var phase: String = charged.state if charged != null else "idle"
+	# Perf: the charged phase, ball side and shot context cannot change while the
+	# legs sub-step one update, so they are read once per update (were per sub-step).
+	if not _heading_inputs_ready:
+		var charged = _charged_footwork()
+		_heading_charged_phase = charged.state if charged != null else "idle"
+		_heading_motion_context = _motion_context()
+		_heading_ball_behind = _ball_is_behind()
+		_heading_shot_context = shot_context()
+		_heading_inputs_ready = _updating
 	var ready_angle := -deg_to_rad(_ready_facing_deg)
 	var unsettled := _run_active or _active_side >= 0 or absf(angle_difference(_heading_angle, ready_angle)) > deg_to_rad(2.0)
-	motion_state.update(delta, velocity, traveled, court.rotated(Vector3.UP, ready_angle), _motion_context(), phase, _ball_is_behind(), unsettled, shot_context())
+	motion_state.update(delta, velocity, traveled, court.rotated(Vector3.UP, ready_angle), _heading_motion_context, _heading_charged_phase, _heading_ball_behind, unsettled, _heading_shot_context)
 	locomotion_state = motion_state.state
 	locomotion_phase = motion_state.phase
 	locomotion_gait = motion_state.gait
 	if drive_preparation.active() and speed <= SUPPORT_READY_SPEED:
 		locomotion_state = "drive_" + drive_preparation.state + "_" + drive_preparation.stance_kind
-		locomotion_phase = "plant_load" if drive_preparation.state in ["setup", "hold"] else "recover"
+		locomotion_phase = "plant_load" if (drive_preparation.state == "setup" or drive_preparation.state == "hold") else "recover"
 	locomotion_mode = locomotion_state
 	_route_distance = motion_state.route_distance
 	_route_direction = motion_state.route_direction
@@ -515,7 +573,7 @@ func _reset_feet(targets: Array[Vector3], reset_heading: bool = true) -> void :
 		_retreat_distance = 0.0
 		locomotion_hip_yaw_deg = _ready_facing_deg
 		locomotion_body_weight = 0.0
-		for side in [0, 1]:
+		for side: int in 2:
 			_yaw_from[side] = _landing_yaw(side); _yaw_target[side] = _yaw_from[side]
 			_knee_yaw_from[side] = atan2(-_heading_forward.x,-_heading_forward.z)
 			_knee_yaw_target[side] = _knee_yaw_from[side]
@@ -660,7 +718,7 @@ func _update_moving_feet(delta: float, from: Vector3, to: Vector3, velocity: Vec
 	# Fast court-facing shuffles/backpedals still need the bounded contact cycle;
 	# the old single-step micro-strides could exceed twenty footfalls per second.
 	var athletic_cycle: bool = locomotion_phase == "travel" and locomotion_gait != "drop_step" and speed >= RUN_ENTER_SPEED
-	if (locomotion_gait in ["jog", "run", "crossover"] or athletic_cycle or _run_active) and speed >= (RUN_EXIT_SPEED if _run_active else RUN_ENTER_SPEED):
+	if (locomotion_gait == "jog" or locomotion_gait == "run" or locomotion_gait == "crossover" or athletic_cycle or _run_active) and speed >= (RUN_EXIT_SPEED if _run_active else RUN_ENTER_SPEED):
 		if locomotion_gait == "crossover" and not _run_active:
 			var outside: int = 0 if velocity.dot(_player._get_forehand_axis()) >= 0.0 else 1
 			if _active_side < 0 and step_foot == outside:
@@ -677,7 +735,7 @@ func _update_moving_feet(delta: float, from: Vector3, to: Vector3, velocity: Vec
 	var ratio: float = clampf(speed / maxf(_player.move_speed, 0.1), 0.0, 1.0)
 
 
-	var stride_budget: float = lerpf(0.20, .54 if locomotion_gait in ["shuffle","drop_step"] else MAX_STEP_DISTANCE, ratio)
+	var stride_budget: float = lerpf(0.20, .54 if (locomotion_gait == "shuffle" or locomotion_gait == "drop_step") else MAX_STEP_DISTANCE, ratio)
 	var duration: float = minf(lerpf(STEP_DURATION_WALK, STEP_DURATION_RUN, ratio), stride_budget * 0.5 / maxf(speed, 0.1))
 	if locomotion_gait == "walk": duration = clampf(.26 / maxf(speed,.35),.20,.38)
 	var lateral: float = absf(velocity.normalized().dot(_player._get_forehand_axis()))
@@ -756,7 +814,7 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 	half_width *= lerpf(1.0, 0.86, absf(velocity.normalized().dot(_player._get_forehand_axis())))
 	half_width = lerpf(half_width, SHUFFLE_HALF_WIDTH, shuffle)
 	var lift: float = lerpf(0.105, 0.16, ratio)
-	if locomotion_state in ["backpedal", "backward_strafe", "lateral_shuffle"]: lift *= 0.70
+	if locomotion_state == "backpedal" or locomotion_state == "backward_strafe" or locomotion_state == "lateral_shuffle": lift *= 0.70
 	if not _run_active or _run_stopping:
 		_run_active = true
 		_run_stopping = false
@@ -768,7 +826,7 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 			_crossover_entry_side = 1-support_side
 			crossover_entry_count += 1
 		_run_phase = contact_fraction * 0.65 + (0.0 if support_side == 0 else 0.5)
-		for side in [0, 1]:
+		for side: int in 2:
 			var foot: Vector3 = right_foot_smooth if side == 0 else left_foot_smooth
 			_run_origins[side] = foot - from
 			_run_swing_starts[side] = fposmod(_run_phase + side * 0.5, 1.0)
@@ -787,7 +845,7 @@ func _update_running_feet(delta: float, from: Vector3, to: Vector3, velocity: Ve
 		var base: Vector3 = from.lerp(to, (elapsed + dt) / delta)
 		_run_phase = fposmod(_run_phase + dt / cycle, 1.0)
 		gait_arc_length += from.distance_to(to) * dt / delta
-		for side in [0, 1]:
+		for side: int in 2:
 			var phase: float = fposmod(_run_phase + side * 0.5, 1.0)
 			var foot: Vector3 = right_foot_smooth if side == 0 else left_foot_smooth
 			var locked: bool = right_foot_locked if side == 0 else left_foot_locked
@@ -880,7 +938,7 @@ func _settle_running_feet(delta: float, def) -> void :
 
 		if right_foot_locked: _run_stop_targets[0] = right_foot_smooth
 		if left_foot_locked: _run_stop_targets[1] = left_foot_smooth
-		for side in [0, 1]:
+		for side: int in 2:
 			if not (right_foot_locked if side == 0 else left_foot_locked):
 				_start_yaw_swing(side)
 				if charged == null or charged.state == "idle":
@@ -983,7 +1041,7 @@ func _apply_locomotion_body(def) -> void:
 		hip_shift_applied+=landing
 
 const KNEE_FOLLOW := 0.35   # share of the gap the knee target closes per physics tick (1 = follow at once, as before)
-var _knee_goal: Array = [Vector3.ZERO, Vector3.ZERO]
+var _knee_goal: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _knee_goal_tick: Array[int] = [-1, -1]
 func _solve_legs(delta: float, def, authored: bool = false) -> void:
 	var _pt := Time.get_ticks_usec()
@@ -994,12 +1052,16 @@ func _perf_solve_legs(delta: float, def, authored: bool = false) -> void:
 	if not authored:
 		_apply_locomotion_body(def)
 		_fit_body_to_feet(def)
-	WideBackhandReach.apply(_player, def, [right_foot_smooth, left_foot_smooth])
-	BackhandReach.apply(_player, def, [right_foot_smooth, left_foot_smooth])
-	if not authored: LiveArmReach.apply(_player, def, [right_foot_smooth, left_foot_smooth])
+	# One feet pair for the three reach checks (they only read it; the feet do not
+	# move between them).
+	var feet: Array = [right_foot_smooth, left_foot_smooth]
+	WideBackhandReach.apply(_player, def, feet)
+	BackhandReach.apply(_player, def, feet)
+	if not authored: LiveArmReach.apply(_player, def, feet)
 	var fh: Vector3 = _player._get_forehand_axis()
 	var fwd: Vector3 = _player._get_forward_axis()
-	for side in [0, 1]:
+	var tick: int = Engine.get_physics_frames()
+	for side: int in 2:
 		var right: bool = side == 0
 		var leg = _player.right_leg_node if right else _player.left_leg_node
 		var foot: Vector3 = right_foot_smooth if right else left_foot_smooth
@@ -1022,9 +1084,8 @@ func _perf_solve_legs(delta: float, def, authored: bool = false) -> void:
 			# goal jumps whenever a pose with unset knee poles (Ready) blends with one that has
 			# them (the pole is scaled from zero, so its direction flips in one tick) and when a
 			# foot is planted: the drawn knee snapped up to 20 cm in a tick.
-			var tick: int = Engine.get_physics_frames()
 			if _knee_goal_tick[side] < 0 or tick - _knee_goal_tick[side] > 2: _knee_goal[side] = pole_offset
-			elif tick != _knee_goal_tick[side]: _knee_goal[side] = Vector3(_knee_goal[side]).lerp(pole_offset, 1.0 - pow(1.0 - KNEE_FOLLOW, float(tick - _knee_goal_tick[side])))
+			elif tick != _knee_goal_tick[side]: _knee_goal[side] = _knee_goal[side].lerp(pole_offset, 1.0 - pow(1.0 - KNEE_FOLLOW, float(tick - _knee_goal_tick[side])))
 			_knee_goal_tick[side] = tick
 			pole_offset = _knee_goal[side]
 		leg.solve_ik(foot, foot + pole_offset, tilt)
@@ -1036,14 +1097,19 @@ func _perf_solve_legs(delta: float, def, authored: bool = false) -> void:
 		if right: _right_yaw = angle
 		else: _left_yaw = angle
 		leg.foot_pivot.global_rotation.y = angle
-		var pitch_field := "right_foot_pitch_deg" if right else "left_foot_pitch_deg"
+		var pitch_field: StringName = &"right_foot_pitch_deg" if right else &"left_foot_pitch_deg"
 		var requested_pitch: float = float(def.get(pitch_field)) if def != null and pitch_field in def else 0.0
 		var authored_pitch: float = requested_pitch
 		var procedural_pitch: float = _split_ankle_pitch if not authored else 0.0
 		requested_pitch += procedural_pitch
 		var grounded: bool = (right_foot_locked if right else left_foot_locked) and foot.y <= ANKLE_HEIGHT + 0.002
 		applied_foot_pitch_deg[side] = FootPitchGrounding.apply(leg, angle, requested_pitch, grounded)
-		_foot_pitch_reports[side] = {"requested": authored_pitch, "procedural": procedural_pitch, "applied": applied_foot_pitch_deg[side], "limited": absf(requested_pitch - applied_foot_pitch_deg[side]) > 0.01, "grounded": grounded}
+		# Perf: plain values per tick; foot_pitch_report() builds the dictionary on demand.
+		_pitch_requested[side] = authored_pitch
+		_pitch_procedural[side] = procedural_pitch
+		_pitch_limited[side] = absf(requested_pitch - applied_foot_pitch_deg[side]) > 0.01
+		_pitch_grounded[side] = grounded
+		_pitch_reported[side] = true
 
 func _update_authored_stance(def) -> void :
 	_finish_split_pose()
@@ -1130,7 +1196,17 @@ func _hold_service_stance(serving: bool, velocity: Vector3, displacement: float)
 
 func update_leg_ik(delta: float, def_override = null) -> void:
 	var _pt := Time.get_ticks_usec()
+	# Per-update caches (motion context, heading inputs, split sample) live only
+	# inside this call; nothing in it can change what they read.
+	_updating = true
+	_motion_context_ready = false
+	_heading_inputs_ready = false
+	_split_sample_ready = false
 	_perf_update_leg_ik(delta, def_override)
+	_updating = false
+	_motion_context_ready = false
+	_heading_inputs_ready = false
+	_split_sample_ready = false
 	PerfMonitor.record("leg.ik", Time.get_ticks_usec() - _pt)
 
 func _perf_update_leg_ik(delta: float, def_override = null) -> void:
@@ -1139,7 +1215,7 @@ func _perf_update_leg_ik(delta: float, def_override = null) -> void:
 	if _split_pose_active and _split_hard_interrupted():
 		_finish_split_pose()
 		if "pose_controller" in _player and _player.pose_controller != null and "split_step" in _player.pose_controller:
-			_player.pose_controller.split_step.cancel("own action or presentation context took priority")
+			_cancel_split_step("own action or presentation context took priority")
 	if _split_pose_active and delta > 0.0:
 		right_foot_smooth = _split_ground_feet[0]; left_foot_smooth = _split_ground_feet[1]
 	var base: = Vector3(_player.global_position.x, ANKLE_HEIGHT, _player.global_position.z)
@@ -1220,7 +1296,8 @@ func _perf_update_leg_ik(delta: float, def_override = null) -> void:
 
 func foot_pitch_report(right: bool) -> Dictionary:
 	var side := 0 if right else 1
-	return _foot_pitch_reports[side].duplicate() if not _foot_pitch_reports[side].is_empty() else {"requested": 0.0, "applied": 0.0, "limited": false, "grounded": true, "procedural": 0.0}
+	if not _pitch_reported[side]: return {"requested": 0.0, "applied": 0.0, "limited": false, "grounded": true, "procedural": 0.0}
+	return {"requested": _pitch_requested[side], "procedural": _pitch_procedural[side], "applied": applied_foot_pitch_deg[side], "limited": _pitch_limited[side], "grounded": _pitch_grounded[side]}
 
 func get_feet_gap() -> float:
 	return Vector3(right_foot_smooth.x, 0, right_foot_smooth.z).distance_to(Vector3(left_foot_smooth.x, 0, left_foot_smooth.z))
@@ -1247,7 +1324,7 @@ func _fit_body_to_feet(def = null) -> void :
 			hip_shift_applied += correction
 			_player.paddle_node.global_transform = fixed_paddle
 	var lower: = 0.0
-	for side in [0, 1]:
+	for side: int in 2:
 		var leg = _player.right_leg_node if side == 0 else _player.left_leg_node
 		if not "thigh_pivot" in leg or leg.thigh_pivot == null: continue
 		var foot: Vector3 = right_foot_smooth if side == 0 else left_foot_smooth

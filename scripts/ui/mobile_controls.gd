@@ -7,6 +7,11 @@ const HitTiming = preload("res://scripts/ui/hit_timing_feedback.gd")
 const PixelDraw = preload("res://scripts/ui/pixel_draw.gd")
 const PixelStyle = preload("res://scripts/ui/pixel_style_box.gd")
 const HumanShots = preload("res://scripts/human_shot_choice.gd")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
+## Shorter forms for captions that would not fit their button (tried before shrinking).
+const CAPTION_SHORT: = {"SPEED-UP": "SPD-UP", "HOLD: STEP IN": "STEP IN", "RELEASE TO HIT": "RELEASE", "COMMITTED": "LOCKED", "Drop Drive": "Drop Drv", "CANCEL": "X"}
+## While HIT is held the timing ring closes onto the pad, never out over the court.
+const TIMING_HELD_REACH: = 26.0
 const TIMING_RING_WIDTH_FRACTION: = 0.54
 const TIMING_RING_MIN_GAP_FRACTION: = 0.16
 const TIMING_RING_SMOOTH_SECONDS: = 0.045
@@ -101,6 +106,7 @@ func _layout() -> void :
 	stick_zone = Rect2(_stick_center - Vector2.ONE * _stick_radius, Vector2(_stick_radius * 2.0, _stick_radius + 128 * _s)).grow(6 * _s)
 	hit_zone = Rect2(_charge_center - Vector2.ONE * _charge_radius, Vector2(_charge_radius * 2.0, _charge_radius + 112 * _s)).grow(6 * _s)
 	_cache_hit_guide()
+	_fit_cache.clear()
 	queue_redraw()
 
 var stick_zone: = Rect2()
@@ -139,9 +145,17 @@ func _perf_process(delta: float) -> void:
 	_guide_phase = fmod(float(Time.get_ticks_msec()) * 0.0016, 1.0)
 	if blocked: _guide_show = 0.0
 	if enabled and not blocked:
-		game.hud.state.text = game.hud.state.text.replace("SPACE", "HIT").replace("Space", "Hit")
-		game.hud.difficulty.text = game.hud.difficulty.text.replace("  [X]", "").replace(" [X]", "")
-		game.hud._spin_label.text = game.hud._spin_label.text.replace("  [Q]", "").replace("  [E]", "")
+		# Keyboard hints out of the HUD text; with touch_on_change only when the text changed.
+		var on_change: bool = PerfToggles.touch_on_change
+		if not on_change or game.hud.state.text != _hud_state_seen:
+			game.hud.state.text = game.hud.state.text.replace("SPACE", "HIT").replace("Space", "Hit")
+			_hud_state_seen = game.hud.state.text
+		if not on_change or game.hud.difficulty.text != _hud_difficulty_seen:
+			game.hud.difficulty.text = game.hud.difficulty.text.replace("  [X]", "").replace(" [X]", "")
+			_hud_difficulty_seen = game.hud.difficulty.text
+		if not on_change or game.hud._spin_label.text != _hud_spin_seen:
+			game.hud._spin_label.text = game.hud._spin_label.text.replace("  [Q]", "").replace("  [E]", "")
+			_hud_spin_seen = game.hud._spin_label.text
 		if game.game_state == 0 and game.serving_team == 0:
 			if not game._is_practice():
 				game.hud.state.text = "Aim the target · release HIT to serve" if game.hud._charging else "Your serve · hold HIT to charge"
@@ -150,7 +164,40 @@ func _perf_process(delta: float) -> void:
 	if enabled and game.reaction_button:
 
 		game.reaction_button.visible = false
-	queue_redraw()
+	if not PerfToggles.touch_on_change or _controls_animating(blocked):
+		queue_redraw()
+		_idle_redraw_age = 0.0
+		return
+	# Nothing on the pads is moving: redraw when what they show changed, and at IDLE_REDRAW_SECONDS
+	# for the rest (touches redraw at once from _press / _drag / _release).
+	_idle_redraw_age += real_delta
+	var human = game.player_left.posture.human_contact if game.player_left != null and game.player_left.posture != null else null
+	_idle_key[0] = game.game_state
+	_idle_key[1] = game.selected_spin_mode
+	_idle_key[2] = game.selected_shot_intent.hash()
+	_idle_key[3] = human.phase if human != null else -9
+	_idle_key[4] = game.player_left.posture._committed_incoming_posture if human != null else -9
+	_idle_key[5] = int(blocked) + 2 * int(enabled) + 4 * int(_hit_timing.active)
+	_idle_key[6] = _hit_timing.caption.hash()
+	if _idle_key != _idle_key_drawn or _idle_redraw_age >= IDLE_REDRAW_SECONDS:
+		_idle_key_drawn = _idle_key.duplicate()
+		_idle_redraw_age = 0.0
+		queue_redraw()
+
+## PerfToggles.touch_on_change: the controls are redrawn every frame only while something on them
+## animates; otherwise on a change of what they show, or at this interval.
+const IDLE_REDRAW_SECONDS: float = 0.1
+var _idle_redraw_age: float = 0.0
+var _idle_key: PackedInt64Array = PackedInt64Array([0, 0, 0, 0, 0, 0, 0])
+var _idle_key_drawn: PackedInt64Array = PackedInt64Array()
+var _hud_state_seen: String = ""
+var _hud_difficulty_seen: String = ""
+var _hud_spin_seen: String = ""
+
+func _controls_animating(blocked: bool) -> bool:
+	if blocked: return false
+	return _charge_id != -1 or _stick_id != -1 or _serve_selector_id != -1 or _hit_timing.active \
+		or _guide_show > 0.0 or _shot_fb_age < SHOT_FB_SECONDS or _serve_contact_flash > 0.0 or _is_serve_context()
 
 func _notification(what: int) -> void :
 	if what in [NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_WM_WINDOW_FOCUS_OUT]:
@@ -483,11 +530,49 @@ func _second_caption_baseline(first_size: int, second_size: int, authored_y: flo
 func _caption(text: String, center: Vector2, font_size: int, color: Color, minimum_design_size: int = 0) -> void :
 	PixelDraw.text(self, text, center, _caption_size(font_size, minimum_design_size), color, PixelDraw.unit(_s))
 
+## Widest text a round button fits at this baseline (offset from its centre): the
+## circle's chord at the glyphs' furthest row, less a UI pixel each side. 5x7 font:
+## capitals are 7 font pixels tall on the baseline; mixed case (serve wheel) also
+## counts the descenders.
+func _chord_width(inner_radius: float, baseline_offset: float, font_size: int, minimum_design_size: int = 0, descenders: bool = false) -> float:
+	var size: int = _caption_size(font_size, minimum_design_size)
+	var cap: float = 7.0 * float(size) / UiTheme.PIXEL_UNIT
+	var dy: float = maxf(absf(baseline_offset - cap), absf(baseline_offset + (PixelDraw.font().get_descent(size) if descenders else 0.0)))
+	return maxf(0.0, 2.0 * sqrt(maxf(0.0, inner_radius * inner_radius - dy * dy)) - 2.0 * PixelDraw.unit(_s))
+
+## Caption that never spills out of `max_width`: the text, then its short form
+## (CAPTION_SHORT), then one pixel-font step smaller at a time. Measured once per text.
+var _fit_cache: Dictionary = {}
+func _caption_in(slot: String, text: String, center: Vector2, font_size: int, color: Color, minimum_design_size: int, max_width: float) -> void:
+	var fitted: Array = _fit_cache.get(slot, [])
+	if fitted.is_empty() or fitted[0] != text or not is_equal_approx(float(fitted[3]), max_width):
+		fitted = [text] + fit_caption(text, _caption_size(font_size, minimum_design_size), max_width) + [max_width]
+		_fit_cache[slot] = fitted
+	# Each glyph advance ends in one blank font pixel: centre the ink, not the advance.
+	PixelDraw.text(self, fitted[1], center + Vector2(0.5 * float(fitted[2]) / UiTheme.PIXEL_UNIT, 0.0), fitted[2], color, PixelDraw.unit(_s))
+
+## [shown text, font size] for `text` at `size` within `max_width` (pixel font).
+static func fit_caption(text: String, size: int, max_width: float) -> Array:
+	var shown: String = text
+	if ink_width(shown, size) > max_width:
+		for key in CAPTION_SHORT: shown = shown.replace(key, CAPTION_SHORT[key])
+	while size > UiTheme.PIXEL_UNIT and ink_width(shown, size) > max_width: size -= UiTheme.PIXEL_UNIT
+	return [shown, size]
+
+## Drawn width of pixel text: the advance less the last glyph's blank font pixel.
+static func ink_width(text: String, size: int) -> float:
+	return PixelDraw.text_width(text, size) - float(size) / UiTheme.PIXEL_UNIT
+
 ## Base of a round control: translucent navy disc, bevel, coloured pixel rim.
 func _pad(center: Vector2, radius: float, rim: Color, fill_alpha: float = 0.55, rim_width: int = 1) -> void:
 	PixelDraw.disc(self, center, radius, PixelDraw.unit(_s), Color(UiTheme.PANEL, fill_alpha), rim, rim_width)
 
 func _draw() -> void :
+	var _pt: int = Time.get_ticks_usec()
+	_perf_draw()
+	PerfMonitor.record("draw.mobile_controls", Time.get_ticks_usec() - _pt)
+
+func _perf_draw() -> void:
 	if game == null or not enabled: return
 	var u: float = PixelDraw.unit(_s)
 	var stick_color: Color = UiTheme.BLUE
@@ -519,7 +604,8 @@ func _draw() -> void :
 	_draw_shot_feedback()
 	var knob: = _charge_center + _charge_vector * _charge_radius * 0.6
 	PixelDraw.disc(self, knob, 28 * _s, u, Color(hit_color, 0.22), Color(0, 0, 0, 0), 1, false)
-	_caption("CANCEL" if _cancel_armed else _hit_label(), _charge_center + Vector2(0, -2 * _s), 19, hit_color, 19)
+	var pad_inner: float = _charge_radius - (2.0 if perfect else 1.0) * u   # inside the pixel rim
+	_caption_in("main", "CANCEL" if _cancel_armed else _hit_label(), _charge_center + Vector2(0, -2 * _s), 19, hit_color, 19, _chord_width(pad_inner, -2 * _s, 19, 19))
 	var serve_locked: bool = _is_serve_context() and bool(_serve_timing.get("locked", false))
 	var subcaption: String = "HOLD + AIM"
 	var preview: Dictionary = {} if _is_serve_context() else _shot_preview()
@@ -531,17 +617,20 @@ func _draw() -> void :
 		subcaption = "COMMITTED"
 		footer = "CONTACT"
 	elif held:
-		subcaption = "LOCKED" if not _charge_owns_action and _gesture_is_serve else "NEXT SHOT" if not _charge_owns_action else "%d%%" % roundi(ratio * 100)
+		subcaption = "LOCKED" if not _charge_owns_action and _gesture_is_serve else "NEXT SHOT" if not _charge_owns_action else "RELEASE" if perfect else "%d%%" % roundi(ratio * 100)
 		footer = "CONTACT" if not _charge_owns_action and _gesture_is_serve else "NEXT SHOT" if not _charge_owns_action else "RELEASE TO HIT"
 	if _cancel_armed: subcaption = "RELEASE"
-	_caption(subcaption, _charge_center + Vector2(0, _second_caption_baseline(19, 15, 23, 19)), 15, UiTheme.INK, 19)
+	var sub_baseline: float = _second_caption_baseline(19, 15, 23, 19)
+	_caption_in("sub", subcaption, _charge_center + Vector2(0, sub_baseline), 15, UiTheme.INK, 19, _chord_width(pad_inner, sub_baseline, 15, 19))
 	if not _cancel_armed:
-		_caption(footer, _charge_center + Vector2(0, 106 * _s), 20, hit_color, 23)
+		# Under the pad: kept inside the screen's right edge.
+		_caption_in("footer", footer, _charge_center + Vector2(0, 106 * _s), 20, hit_color, 23, 2.0 * (_timing_safe.end.x - _charge_center.x))
 
 	if held:
 		var cancel_color: Color = UiTheme.RED if _cancel_armed else UiTheme.MUTED
 		_pad(_cancel_center, _cancel_radius, cancel_color, 0.94)
-		_caption("CANCEL", _cancel_center + Vector2(0, 6 * _s), 15, cancel_color, 19)
+		var cancel_baseline: float = 3.5 * float(_caption_size(15, 19)) / UiTheme.PIXEL_UNIT   # capitals centred
+		_caption_in("cancel", "CANCEL", _cancel_center + Vector2(0, cancel_baseline), 15, cancel_color, 19, _chord_width(_cancel_radius - u, cancel_baseline, 15, 19))
 
 	_draw_hit_timing()
 	if _is_serve_context() or _serve_contact_flash > 0:
@@ -583,7 +672,9 @@ func _update_hit_timing(blocked: bool, real_delta: float = 0.0) -> void :
 
 func _timing_radius() -> float:
 	if not _hit_timing.active or _hit_timing.ready: return _charge_radius
-	return lerpf(_charge_radius, _timing_ring_max, _timing_draw_fraction)
+	# Held: the aim arc is the cue on the court, so the countdown stays on the pad.
+	var reach: float = _charge_radius + TIMING_HELD_REACH * _s if _charge_id != -1 else _timing_ring_max
+	return lerpf(_charge_radius, reach, _timing_draw_fraction)
 
 func _timing_arc_angles(radius: float) -> Vector2:
 
@@ -611,8 +702,38 @@ func _timing_corner_arc_angles(radius: float) -> Vector2:
 func _draw_timing_arc(radius: float, angles: Vector2, color: Color, flash: float) -> void :
 	if angles.y <= angles.x: return
 	var u: float = PixelDraw.unit(_s)
-	PixelDraw.arc(self, _charge_center, radius, u, angles.x, angles.y, Color(UiTheme.PANEL, 0.9), 4 + roundi(flash))
-	PixelDraw.arc(self, _charge_center, radius, u, angles.x, angles.y, color.lerp(Color.WHITE, flash), 2 + roundi(flash))
+	# Never across your player: the ring breaks where it would cross the sprite.
+	var body: Rect2 = Rect2()
+	if radius > _charge_radius + TIMING_HELD_REACH * _s:
+		body = CuePriority.player_screen_rect(game, get_viewport().get_camera_3d())
+		if body.has_area(): body = body.grow(8.0 * _s)
+	var runs: Array[Vector2] = _arc_runs_outside(radius, angles, body)
+	for run in runs:
+		PixelDraw.arc(self, _charge_center, radius, u, run.x, run.y, Color(UiTheme.PANEL, 0.9), 4 + roundi(flash))
+	for run in runs:
+		PixelDraw.arc(self, _charge_center, radius, u, run.x, run.y, color.lerp(Color.WHITE, flash), 2 + roundi(flash))
+
+## Angle runs of the arc [angles.x, angles.y] at `radius` that stay outside `avoid`.
+func _arc_runs_outside(radius: float, angles: Vector2, avoid: Rect2) -> Array[Vector2]:
+	var runs: Array[Vector2] = []
+	if not avoid.has_area() or not avoid.intersects(Rect2(_charge_center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0)):
+		runs.append(angles)
+		return runs
+	const STEPS := 96
+	var start: float = INF
+	var last_outside: float = INF
+	for i in STEPS + 1:
+		var angle: float = lerpf(angles.x, angles.y, float(i) / STEPS)
+		var outside: bool = not avoid.has_point(_charge_center + Vector2.from_angle(angle) * radius)
+		if outside:
+			if start == INF: start = angle
+			last_outside = angle
+		elif start != INF:
+			# Ends on the last sample outside: a run never reaches into the rect.
+			if last_outside - start > 0.0001: runs.append(Vector2(start, last_outside))
+			start = INF
+	if start != INF and last_outside - start > 0.0001: runs.append(Vector2(start, last_outside))
+	return runs
 
 ## Which way on screen the lit side band is (-1 left, +1 right, 0 none): the MOVE CLOSER arrow.
 func _band_screen_side(human) -> int:
@@ -659,7 +780,9 @@ func _draw_hit_timing() -> void :
 	var Tune = preload("res://scripts/gameplay_tuning.gd")
 	if risk >= Tune.RISK_RED: color = UiTheme.RED
 	elif risk >= Tune.RISK_YELLOW: color = Color("ffb23c")
-	if _hit_timing.active:
+	# One player cue at a time (player_cue_priority.gd): the full timing ring only while
+	# it is the cue; held, it is the compact countdown on the pad under the aim arc.
+	if _hit_timing.active and (_charge_id != -1 or CuePriority.current(game) == CuePriority.TIMING):
 		var radius: float = _timing_radius()
 		var angles: Vector2 = _timing_arc_angles(radius)
 		var flash: float = _hit_timing.flash_strength()
@@ -667,12 +790,21 @@ func _draw_hit_timing() -> void :
 
 		_draw_timing_arc(radius, angles, color, flash)
 		_draw_timing_arc(radius, _timing_corner_arc_angles(radius), color, flash)
-	if _hit_timing.caption == "MOVE CLOSER" and risk < Tune.RISK_RED:
+	var caption: String = _timing_caption_text()
+	if caption == "MOVE CLOSER":
 		_draw_move_closer(Color("ffb23c"))
-	elif not _hit_timing.caption.is_empty():
-
+	elif not caption.is_empty():
 		draw_style_box(_guide_caption_backing, _timing_caption_rect)
-		_caption("TOO LOW" if risk >= Tune.RISK_RED else _hit_timing.caption, _timing_caption_center, 16, color if _hit_timing.active else UiTheme.RED, 19)
+		_caption(caption, _timing_caption_center, 16, color if _hit_timing.active else UiTheme.RED, 19)
+
+## The court pill above HIT: warnings only (MOVE CLOSER, TOO LOW, NO CONTACT). The
+## prompts it used to show (HOLD HIT, HOLD, RELEASE) are on the HIT pad itself, so the
+## pill never stacks on the other player cues.
+func _timing_caption_text() -> String:
+	var caption: String = _hit_timing.caption
+	if caption.is_empty(): return ""
+	if _hold_risk() >= preload("res://scripts/gameplay_tuning.gd").RISK_RED: return "TOO LOW"
+	return caption if caption in ["MOVE CLOSER", "NO CONTACT"] else ""
 
 ## Shot feedback at the HIT ring (STAMINA_UX / player feel): when a rally shot is released,
 ## its name pops above the ring (DINK, RESET, FAST DINK, DRIVE ...), and a flick shows
@@ -755,8 +887,10 @@ func _draw_serve_selector() -> void :
 		_caption("DROP", _serve_selector_center + Vector2(0, 23 * _s), 13, UiTheme.MUTED, 19)
 	else:
 		_caption("SERVE", _serve_selector_center + Vector2(0, -79 * _s), 17, UiTheme.MUTED, 19)
-		_caption(str(option.get("label", "Flat")), _serve_selector_center + Vector2(0, -2 * _s), 18, UiTheme.INK, 19)
-		_caption(delivery, _serve_selector_center + Vector2(0, _second_caption_baseline(18, 13, 21, 19)), 13, UiTheme.MUTED, 19)
+		var wheel_inner: float = _serve_selector_radius - PixelDraw.unit(_s)
+		_caption_in("wheel", str(option.get("label", "Flat")), _serve_selector_center + Vector2(0, -2 * _s), 18, UiTheme.INK, 19, _chord_width(wheel_inner, -2 * _s, 18, 19, true))
+		var delivery_baseline: float = _second_caption_baseline(18, 13, 21, 19)
+		_caption_in("delivery", delivery, _serve_selector_center + Vector2(0, delivery_baseline), 13, UiTheme.MUTED, 19, _chord_width(wheel_inner, delivery_baseline, 13, 19))
 	_caption("ROTATE", _serve_selector_center + Vector2(0, 84 * _s), 16, color, 19)
 	var pointer: = PackedVector2Array([_serve_selector_center + Vector2(-5, -65) * _s, _serve_selector_center + Vector2(5, -65) * _s, _serve_selector_center + Vector2(0, -58) * _s])
 	draw_colored_polygon(pointer, color)
@@ -829,5 +963,7 @@ func camera_occlusion_regions() -> Array[Rect2]:
 			regions.append(Rect2(center - Vector2.ONE * _shot_button_radius, Vector2.ONE * _shot_button_radius * 2).grow(padding))
 	if _charge_id != -1:
 		regions.append(Rect2(_cancel_center - Vector2.ONE * _cancel_radius, Vector2.ONE * _cancel_radius * 2).grow(padding))
+	# Camera framing keeps its old rule (the caption slot), so the camera is unchanged
+	# even though the slot now only shows warnings.
 	if not _hit_timing.caption.is_empty(): regions.append(_timing_caption_rect.grow(padding))
 	return regions

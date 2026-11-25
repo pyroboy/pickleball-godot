@@ -10,31 +10,28 @@ extends RefCounted
 ## near/far draw bias), for every person in one dynamic mesh: one draw call.
 
 ## The crowd's own card shader: shaders/pixel_card.gdshader's atlas draw (hard alpha cut,
-## unshaded, atlas pre-compensated, `gain`) plus the environment's background push
-## (shaders/env_toon.gdshader `push`): by distance outside the court lines the cards lean
-## toward the same light grey as the buildings, so the crowd sits behind the players.
+## unshaded, atlas pre-compensated, `gain`) plus the environment's distance fog
+## (shaders/env_toon.gdshader `fog`): far out from the court lines the cards lean toward
+## the same warm horizon colour as the buildings; the near crowd keeps full colour.
 ## Set per vertex: a card is small, its corners are all about as far out.
 const CROWD_SHADER_CODE := """
 shader_type spatial;
 render_mode unshaded, cull_disabled, fog_disabled, depth_draw_opaque;
 uniform sampler2D atlas : source_color, filter_nearest;
 uniform float gain = 1.0;
-uniform vec3 push_col : source_color = vec3(0.78, 0.76, 0.72);
+uniform vec3 fog_col : source_color = vec3(0.8, 0.66, 0.53);
 uniform vec2 court_half = vec2(3.05, 6.705);
-uniform vec3 push = vec3(2.0, 7.0, 0.24);
-uniform float push_desat = 0.4;
+uniform vec3 fog = vec3(8.0, 0.02, 0.7);
 varying float k;
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	k = push.z * smoothstep(push.x, push.y, length(max(abs(wp.xz) - court_half, vec2(0.0))));
+	float out_d = length(max(abs(wp.xz) - court_half, vec2(0.0)));
+	k = fog.z * (1.0 - exp(-fog.y * max(out_d - fog.x, 0.0)));
 }
 void fragment() {
 	vec4 c = texture(atlas, UV);
 	if (c.a < 0.5) discard;
-	vec3 s = sqrt(c.rgb);
-	s = mix(s, vec3(dot(s, vec3(0.299, 0.587, 0.114))), k * push_desat);
-	s = mix(s, sqrt(push_col), k);
-	ALBEDO = s * s * gain;
+	ALBEDO = mix(c.rgb, fog_col, k) * gain;
 }
 """
 const META_PATH := "res://assets/crowd_cards/crowd_meta.json"

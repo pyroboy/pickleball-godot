@@ -228,5 +228,9 @@ func _place_toast() -> void:
 	_toast.add_theme_color_override("font_color", TIP_COLOR)
 	# The plate hugs a one-line tip; longer tips wrap at the old width.
 	var one_line: float = _toast.get_theme_font("font").get_string_size(_toast.text, HORIZONTAL_ALIGNMENT_LEFT, -1, _toast.get_theme_font_size("font_size")).x + _toast.get_theme_stylebox("normal").get_minimum_size().x
-	_toast.size = Vector2(minf(ceilf(one_line), minf(_court.size.x * 0.5, 300.0 * _scale)), 0)
+	var width: float = minf(ceilf(one_line), minf(_court.size.x * 0.5, 300.0 * _scale))
+	_toast.size = Vector2(width, 0)
+	# A wrapping label keeps the height it needed at its old width (a new tip wrapped at the
+	# last, narrower width: a plate 1600 px tall down the court). Ask again at the new width.
+	_toast.size = Vector2(width, _toast.get_minimum_size().y)
 	_toast.position = Vector2(_court.end.x - _toast.size.x - 12.0 * _scale, _button.position.y + _button.size.y + 6.0 * _scale)

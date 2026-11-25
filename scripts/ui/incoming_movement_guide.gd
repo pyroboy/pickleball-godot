@@ -3,6 +3,7 @@ extends CanvasLayer
 ## Never interpolates root positions, writes input, or changes gameplay state.
 const Advisor = preload("res://scripts/movement_guidance_advisor.gd")
 const Layout = preload("res://scripts/ui/mobile_layout.gd")
+const CuePriority = preload("res://scripts/ui/player_cue_priority.gd")
 const FLOOR_LIFT := 0.025
 const RING_RADIUS := 0.23
 const RING_SEGMENTS := 40
@@ -562,6 +563,8 @@ static func _overlaps_any(rect: Rect2, others: Array[Rect2]) -> bool:
 
 func draw_guide(canvas: Control) -> void:
 	if _presentation.is_empty(): return
+	# One player cue at a time: the aim arc wins while HIT is held (player_cue_priority.gd).
+	if CuePriority.current(game) != CuePriority.MOVE: return
 	var state := _presentation
 	var color: Color = state.color
 	var width: float = state.metrics.stroke

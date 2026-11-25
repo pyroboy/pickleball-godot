@@ -154,7 +154,7 @@ func _free_w(arm) -> float:
 func _holds_paddle(arm) -> bool:
 	var paddle: Node3D = _rig._player.get("paddle_node")
 	if paddle == null or arm == null or arm.get("hand_pivot") == null: return false
-	var pxf: Transform3D = paddle.global_transform if _rig._raw else paddle.get_global_transform_interpolated()
+	var pxf: Transform3D = paddle.global_transform if (_rig._raw or _rig._tick_read) else paddle.get_global_transform_interpolated()
 	var a: Vector3 = pxf.origin
 	var b: Vector3 = pxf * Vector3(0.0, 0.42, 0.0)
 	var h: Vector3 = _plain(arm.hand_pivot)
@@ -273,7 +273,7 @@ func _gait(delta: float, swinging: bool, paddle_arm) -> void:
 # ------------------------------------------------------------------ reactions (stage 10)
 
 func _plain(n: Node3D) -> Vector3:
-	return (n.global_transform if _rig._raw else n.get_global_transform_interpolated()).origin
+	return (n.global_transform if (_rig._raw or _rig._tick_read) else n.get_global_transform_interpolated()).origin
 
 ## The reaction playing now ("" when none).
 func reaction() -> String:

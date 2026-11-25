@@ -146,7 +146,8 @@ func _setup_ball() -> void :
 	col.shape = shape
 	add_child(col)
 
-	add_child(_build_visual())
+	visual_mesh = _build_visual()
+	add_child(visual_mesh)
 
 	if spin_debug_visible:
 		_setup_spin_debug_visuals()
@@ -163,6 +164,7 @@ func _setup_ball() -> void :
 const VISUAL_SCALE: = 1.5
 const BodyShader = preload("res://shaders/ball_body.gdshader")
 const OutlineShader = preload("res://shaders/ball_readability.gdshader")
+const SoftShader = preload("res://shaders/ball_soft.gdshader")
 ## On-screen colours (measured through the game's chain: unshaded x 2.2, the 3D buffer's
 ## clamp, Filmic, PixelPost; vignette off) and the stored values that produce them.
 ## The chain tops out near 218 per channel, so #d2ee2c itself can't be shown; mid keeps
@@ -172,6 +174,9 @@ const BALL_DARK: = Color("#3d4b0f")     # shows #91ac0b, lower-right crescent
 const BALL_LIGHT: = Color("#65712c")    # shows #cfda60, small upper-left spot (paler, not brighter)
 const BALL_OUTLINE: = Color("#14150c")  # shows #23270a, near-black olive
 const VISUAL_GAIN: = 2.2
+
+var visual_mesh: MeshInstance3D   # the drawn ball (body material, outline as its next pass)
+var blur_materials: Array = []   # body, outline and soft-rear materials: all take the flight's `motion`
 
 func _build_visual() -> MeshInstance3D:
 	var mesh_inst: MeshInstance3D = MeshInstance3D.new()
@@ -199,6 +204,20 @@ func _build_visual() -> MeshInstance3D:
 		# just above the ball's blob shadow (fx/ground_shadows.gd FLOOR_Y)
 		m.set_shader_parameter("floor_y", FLOOR_Y + 0.006)
 	body.next_pass = outline
+	# Motion blur: fx/ball_trail.gd sets `motion` on both, and the shaders lengthen the ball
+	# into an oblong along its flight (shaders/ball_shape.gdshaderinc).
+	# The rear of the oblong is blur: a third pass draws it see-through and fading out, and the
+	# first two stop there (no outline along the lengthened part).
+	var soft: = ShaderMaterial.new()
+	soft.shader = SoftShader
+	soft.set_shader_parameter("dark", BALL_DARK)
+	soft.set_shader_parameter("mid", BALL_MID)
+	soft.set_shader_parameter("light", BALL_LIGHT)
+	soft.set_shader_parameter("gain", VISUAL_GAIN)
+	soft.set_shader_parameter("radius", mesh.radius)
+	soft.set_shader_parameter("floor_y", FLOOR_Y + 0.006)
+	outline.next_pass = soft
+	blur_materials = [body, outline, soft]
 	mesh_inst.material_override = body
 	return mesh_inst
 
@@ -757,6 +776,28 @@ func reset_rally_state() -> void :
 
 
 
+static var _damp_tick: int = -1
+static var _linear_damp: float = 0.0
+static var _angular_damp: float = 0.0
+static var _decay_dt: float = -1.0
+static var _decay: float = 1.0
+
+## The engine's default damp settings, read once per physics tick (runtime tuning still shows
+## on the next tick).
+static func _refresh_damp() -> void:
+	var tick: int = Engine.get_physics_frames()
+	if tick == _damp_tick: return
+	_damp_tick = tick
+	_linear_damp = float(ProjectSettings.get_setting("physics/3d/default_linear_damp"))
+	_angular_damp = float(ProjectSettings.get_setting("physics/3d/default_angular_damp"))
+
+## Spin decay of one step of `dt` (one exp per timestep value instead of one per predicted step).
+static func _spin_decay_for(dt: float) -> float:
+	if dt != _decay_dt:
+		_decay_dt = dt
+		_decay = exp( - dt * 0.693 / (SPIN_DAMPING_HALFLIFE * AERO_EFFECT_SCALE))
+	return _decay
+
 static func predict_aero_step(pos: Vector3, vel: Vector3, omega: Vector3, gravity: float, dt: float) -> Array:
 	var speed: float = vel.length()
 	if speed > 0.1 and AERO_EFFECT_SCALE > 0.0:
@@ -770,21 +811,18 @@ static func predict_aero_step(pos: Vector3, vel: Vector3, omega: Vector3, gravit
 		vel += (magnus_force / BALL_MASS) * dt * AERO_EFFECT_SCALE
 
 	if omega.length_squared() > 0.001 and AERO_EFFECT_SCALE > 0.0:
-		var spin_decay: float = exp( - dt * 0.693 / (SPIN_DAMPING_HALFLIFE * AERO_EFFECT_SCALE))
-		omega *= spin_decay
+		omega *= _spin_decay_for(dt)
 
 	if vel.length() > MAX_SPEED:
 		vel = vel.normalized() * MAX_SPEED
 
 
 
-	var engine_damp: float = float(ProjectSettings.get_setting("physics/3d/default_linear_damp"))
-	vel *= maxf(1.0 - engine_damp * dt, 0.0)
-
-
-
-	var engine_angular_damp: float = float(ProjectSettings.get_setting("physics/3d/default_angular_damp"))
-	omega *= maxf(1.0 - engine_angular_damp * dt, 0.0)
+	# Perf: the two damp settings were looked up by name on every predicted step (a flight trace
+	# is 30-90 steps, a shot solve hundreds). Read once per physics tick; same values.
+	_refresh_damp()
+	vel *= maxf(1.0 - _linear_damp * dt, 0.0)
+	omega *= maxf(1.0 - _angular_damp * dt, 0.0)
 
 
 	vel.y -= gravity * dt
@@ -797,14 +835,18 @@ static func predict_aero_step(pos: Vector3, vel: Vector3, omega: Vector3, gravit
 # operation order and physics timestep; no trajectory samples are needed by solvers.
 # Settings are read per invocation so runtime tuning is never hidden by a stale cache.
 static func predict_aero_steps(pos: Vector3, vel: Vector3, omega: Vector3, gravity: float, dt: float, count: int) -> Array:
-	var engine_damp: float = float(ProjectSettings.get_setting("physics/3d/default_linear_damp"))
-	var engine_angular_damp: float = float(ProjectSettings.get_setting("physics/3d/default_angular_damp"))
-	var spin_decay: float = exp( - dt * 0.693 / (SPIN_DAMPING_HALFLIFE * AERO_EFFECT_SCALE)) if AERO_EFFECT_SCALE > 0.0 else 1.0
+	_refresh_damp()
+	var native = NativeMath.lib()
+	if native != null: return native.aero_steps(pos, vel, omega, gravity, dt, count, _linear_damp, _angular_damp)
+	var engine_damp: float = _linear_damp
+	var engine_angular_damp: float = _angular_damp
+	var spin_decay: float = _spin_decay_for(dt) if AERO_EFFECT_SCALE > 0.0 else 1.0
+	# Same product, same order as the single step (0.5 * density * drag * area, then speed twice).
+	var drag_factor: float = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * (PI * BALL_RADIUS * BALL_RADIUS)
 	for step in count:
 		var speed: float = vel.length()
 		if speed > 0.1 and AERO_EFFECT_SCALE > 0.0:
-			var cross_section: float = PI * BALL_RADIUS * BALL_RADIUS
-			var drag_force_mag: float = 0.5 * AIR_DENSITY * DRAG_COEFFICIENT * cross_section * speed * speed
+			var drag_force_mag: float = drag_factor * speed * speed
 			var drag_accel: Vector3 = - vel.normalized() * (drag_force_mag / BALL_MASS)
 			vel += drag_accel * dt * AERO_EFFECT_SCALE
 		if omega.length_squared() > 0.01 and speed > 0.5 and AERO_EFFECT_SCALE > 0.0:

@@ -35,7 +35,7 @@ static func locomotion_weight(player, def) -> float:
 	var captured:float=clampf(float(def.get_meta("travel_locomotion_weight",0.0)),0.0,1.0)
 	if def.has_meta("visual_locomotion_weight"):
 		return maxf(captured,clampf(float(def.get_meta("visual_locomotion_weight")),0.0,1.0)*motion)
-	if def.posture_id not in [12,20]: return 0.0
+	if def.posture_id != 12 and def.posture_id != 20: return 0.0
 	if "posture" in player and player.posture != null:
 		if "_committed_incoming_posture" in player.posture and player.posture._committed_incoming_posture >= 0: return 0.0
 	if "hitting" in player and player.hitting != null:
@@ -43,7 +43,10 @@ static func locomotion_weight(player, def) -> float:
 	return motion
 
 static func locomotion_turn(player, def) -> float:
-	var weight: float = locomotion_weight(player, def)
+	return _turn_for(player, def, locomotion_weight(player, def))
+
+## locomotion_turn for a weight the caller already has (one weight per body frame, not one per joint).
+static func _turn_for(player, def, weight: float) -> float:
 	if weight <= 0.0: return 0.0
 	var turn:float=rad_to_deg(angle_difference(deg_to_rad(def.body_yaw_deg+def.hip_yaw_deg),deg_to_rad(player.leg_ik.locomotion_hip_yaw_deg)))
 	var reference:float=player.leg_ik._body_turn_reference_deg
@@ -64,24 +67,45 @@ static func position_offset(player, def) -> Vector3:
 ## Requested/applied are stance-space metres; world_offset excludes floor fitting.
 ## Optional feet describe existing live plants, rather than the settled targets.
 static func position_report(player, def, feet: Array = []) -> Dictionary:
-	var requested: Vector3 = requested_position_offset(player, def)
-	var result := {"requested": def.body_position_offset if def != null and "body_position_offset" in def else Vector3.ZERO,
-		"applied": Vector3.ZERO, "world_offset": Vector3.ZERO, "limited": false, "reason": ""}
-	if requested == Vector3.ZERO: return result
-	# Canonical serve-joint math has axes only, not a live rig or floor. Preserve
-	# its authored translation; the real player applies the physical cap later.
-	if not "global_position" in player or not "COURT_FLOOR_Y" in player:
-		result.applied = result.requested; result.world_offset = requested
-		return result
+	# Perf: the no-feet report is asked 2-3 times a tick for the same pose (body placement, the
+	# feet fit, shoulder lookups), and every tick for a held pose while the player stands still.
+	# One entry per pose object and player, reused only while every input it reads is unchanged.
+	# The feet version (once a tick, with the live plants) reuses that entry's paddle and body
+	# frames, which do not depend on the feet, and its report.
+	if PerfToggles.pose_math_cache and def is PostureDefinition and "global_position" in player and "COURT_FLOOR_Y" in player and "leg_ik" in player and def.body_position_offset != Vector3.ZERO:
+		var key: int = def.get_instance_id() * 4 + (int(player.actor_id) & 3 if "actor_id" in player else 0)
+		var signature: float = _report_signature(player, def)
+		var at: Vector3 = player.global_position
+		var entry = _report_memo.get(key)
+		if entry == null or entry[0] != signature or entry[1] != at or entry[2] != player.get_instance_id():
+			var parts: Dictionary = _report_parts(player, def)
+			if _report_memo.size() >= REPORT_MEMO_MAX: _report_memo.clear()
+			entry = [signature, at, player.get_instance_id(), _position_report(player, def, [], parts), parts]
+			_report_memo[key] = entry
+		if feet.is_empty(): return entry[3]
+		return _position_report(player, def, feet, entry[4], entry[3])
+	return _position_report(player, def, feet)
+
+static var _report_memo: Dictionary = {}
+const REPORT_MEMO_MAX := 48
+
+## Everything the no-feet report reads: the pose's own values (PostureDefinition.content_signature),
+## the metas the body frame uses, and the player's facing and travel turn.
+static func _report_signature(player, def: PostureDefinition) -> float:
+	var weight: float = locomotion_weight(player, def)
+	return def.content_signature() + weight * 0.917 + _turn_for(player, def, weight) * 0.613 + _counterturn(player, weight) * 0.409 \
+		+ player._get_forward_axis().z * 3.3 + float(def.get_meta("charged_load_lateral", 0.0)) * 3.49 \
+		+ (37.1 if bool(def.get_meta("travel_paddle_follow", false)) else 0.0)
+
+## The parts of the report that do not depend on the feet: paddle and body frames, wrist, head
+## and support-hand targets (`parts` below; a cached entry shares them between calls).
+static var _path_script: Script
+static func _report_parts(player, def) -> Dictionary:
 	# Dynamic loading avoids the Path -> BodyPose preload dependency cycle.
 	# world_transform explicitly uses the untranslated shoulder and cannot recurse.
-	var path: Script = load("res://scripts/stroke_swing_path.gd")
+	if _path_script == null: _path_script = load("res://scripts/stroke_swing_path.gd")
+	var path: Script = _path_script
 	var paddle: Transform3D = path.world_transform(player, def)
-	var pivot: Transform3D = untranslated_pivot_transform(player, def)
-	var context: Dictionary = _position_context(player, def, feet)
-	var baseline: Dictionary = _position_candidate(player, def, pivot, Vector3.ZERO, feet, context)
-	var wrist: Vector3 = WristReach.wrist_world(paddle, def)
-	var head: Vector3 = paddle * PaddleSize.HEAD_OFFSET
 	var support_wrist := Vector3.INF
 	var support_budget := 0.7
 	if path._support_mode(def) == 1:
@@ -94,6 +118,31 @@ static func position_report(player, def, feet: Array = []) -> Dictionary:
 		if arm_key in player:
 			var arm = player.get(arm_key)
 			if arm != null: support_budget = arm.upper_arm_length + arm.forearm_length
+	return {"paddle": paddle, "pivot": untranslated_pivot_transform(player, def),
+		"wrist": WristReach.wrist_world(paddle, def), "head": paddle * PaddleSize.HEAD_OFFSET,
+		"support_wrist": support_wrist, "support_budget": support_budget,
+		"pelvis": pelvis_transform(player, def), "torso": torso_transform(player, def),
+		"main_shoulder": shoulder_local(player, def, -1.0 if def.paddle_hand == 1 else 1.0),
+		"support_shoulder": shoulder_local(player, def, 1.0 if def.paddle_hand == 1 else -1.0)}
+
+static func _position_report(player, def, feet: Array = [], parts = null, no_feet_report = null) -> Dictionary:
+	var requested: Vector3 = requested_position_offset(player, def)
+	var result := {"requested": def.body_position_offset if def != null and "body_position_offset" in def else Vector3.ZERO,
+		"applied": Vector3.ZERO, "world_offset": Vector3.ZERO, "limited": false, "reason": ""}
+	if requested == Vector3.ZERO: return result
+	# Canonical serve-joint math has axes only, not a live rig or floor. Preserve
+	# its authored translation; the real player applies the physical cap later.
+	if not "global_position" in player or not "COURT_FLOOR_Y" in player:
+		result.applied = result.requested; result.world_offset = requested
+		return result
+	if parts == null: parts = _report_parts(player, def)
+	var pivot: Transform3D = parts.pivot
+	var context: Dictionary = _position_context(player, def, feet, parts)
+	var baseline: Dictionary = _position_candidate(player, def, pivot, Vector3.ZERO, feet, context)
+	var wrist: Vector3 = parts.wrist
+	var head: Vector3 = parts.head
+	var support_wrist: Vector3 = parts.support_wrist
+	var support_budget: float = parts.support_budget
 	var limits := {"wrist": maxf(WristReach.link_budget(player, def), baseline.shoulder.distance_to(wrist)) + 0.00001,
 		"head": maxf(PaddleReach.MAX_HEAD_DISTANCE, baseline.shoulder.distance_to(head)) + 0.00001,
 		"raw_head": maxf(PaddleReach.MAX_HEAD_DISTANCE, baseline.raw_shoulder.distance_to(head)) + 0.00001,
@@ -101,7 +150,7 @@ static func position_report(player, def, feet: Array = []) -> Dictionary:
 		"support_wrist": support_wrist, "support_budget": maxf(support_budget, baseline.support_shoulder.distance_to(support_wrist)) + .00001 if support_wrist.is_finite() else INF}
 	# Existing live plants can further restrict an already capped settled pose,
 	# but must not expand it and thereby move its new authored foot targets.
-	var desired: Vector3 = position_report(player, def).world_offset if feet.size() == 2 else requested
+	var desired: Vector3 = (no_feet_report.world_offset if no_feet_report != null else position_report(player, def).world_offset) if feet.size() == 2 else requested
 	var candidate: Dictionary = _position_candidate(player, def, pivot, desired, feet, context)
 	var scale := 1.0
 	if not _position_fits(candidate, wrist, head, limits):
@@ -132,7 +181,7 @@ static func _position_fits(candidate: Dictionary, wrist: Vector3, head: Vector3,
 # These frames and contact anchors are invariant during one synchronous cap
 # search. Keep them invocation-local so edits, handedness and live plants
 # are observed immediately by the next call.
-static func _position_context(player, def, feet: Array) -> Dictionary:
+static func _position_context(player, def, feet: Array, parts = null) -> Dictionary:
 	var fh: Vector3 = player._get_forehand_axis()
 	var fwd: Vector3 = player._get_forward_axis()
 	var foot_targets: Array[Vector3] = []
@@ -149,6 +198,9 @@ static func _position_context(player, def, feet: Array) -> Dictionary:
 			foot = player.global_position + fh * lateral + fwd * ((def.front_foot_forward if lead else def.back_foot_back) + authored.z)
 			foot.y = PickleballConstants.FLOOR_Y + .04 + maxf(authored.y, 0.0)
 		foot_targets.append(foot)
+	if parts != null:
+		return {"pelvis": parts.pelvis, "torso": parts.torso, "main_shoulder": parts.main_shoulder,
+			"support_shoulder": parts.support_shoulder, "feet": foot_targets, "hips": hip_locals}
 	return {"pelvis": pelvis_transform(player, def), "torso": torso_transform(player, def),
 		"main_shoulder": shoulder_local(player, def, -1.0 if def.paddle_hand == 1 else 1.0),
 		"support_shoulder": shoulder_local(player, def, 1.0 if def.paddle_hand == 1 else -1.0),
@@ -206,22 +258,51 @@ static func untranslated_pivot_transform(player, def) -> Transform3D:
 
 
 
+## Perf: the four body frames share one stance basis and one locomotion weight. Each public
+## function used to rebuild the stance and re-ask the weight for every joint below it (a torso
+## frame cost 4 stance bases and 2-5 weight lookups; 1800 torso frames a second in a rally).
+## Same expressions, same order: results are unchanged.
+static func _stance(player) -> Basis:
+	return Basis(player._get_forehand_axis(), Vector3.UP, - player._get_forward_axis())
+
+static func _pelvis(stance: Basis, inv: Basis, def, turn: float) -> Transform3D:
+	return Transform3D(stance * Basis.from_euler(Vector3(0, -(def.hip_yaw_deg+turn), 0) * (PI / 180.0)) * inv, PELVIS_CENTER)
+
+static func _abdomen(stance: Basis, inv: Basis, def, pelvis: Transform3D) -> Transform3D:
+	var bend: Basis = stance * Basis.from_euler(Vector3( - def.spine_curve_deg * Dimensions.ABDOMEN_BEND_SHARE, 0, 0) * (PI / 180.0)) * inv
+	return pelvis * Transform3D(bend, Vector3(0, Dimensions.PELVIS_HALF_HEIGHT, 0))
+
+static func _waist(stance: Basis, inv: Basis, def, abdomen: Transform3D) -> Transform3D:
+	var bend: Basis = stance * Basis.from_euler(Vector3( - def.spine_curve_deg * (1.0 - Dimensions.ABDOMEN_BEND_SHARE), 0, 0) * (PI / 180.0)) * inv
+	return abdomen * Transform3D(bend, Vector3(0, Dimensions.ABDOMEN_LENGTH, 0))
+
+static func _torso(stance: Basis, inv: Basis, def, waist: Transform3D, counterturn: float) -> Transform3D:
+	var bend: Basis = stance * Basis.from_euler(Vector3( - (28.0 + def.torso_pitch_deg), - def.torso_yaw_deg + counterturn, def.torso_roll_deg) * (PI / 180.0)) * inv
+	return waist * Transform3D(bend, Vector3.ZERO) * Transform3D(Basis.IDENTITY, WAIST_TO_CHEST)
+
+static func _counterturn(player, weight: float) -> float:
+	return sin(deg_to_rad(player.leg_ik.locomotion_hip_yaw_deg))*30.0*weight if weight > 0.0 else 0.0
+
 static func pelvis_transform(player, def, use_locomotion: bool = true) -> Transform3D:
-	return Transform3D(_stance_rotation(player, Vector3(0, -(def.hip_yaw_deg+(locomotion_turn(player,def) if use_locomotion else 0.0)), 0)), PELVIS_CENTER)
+	var stance: Basis = _stance(player)
+	return _pelvis(stance, stance.inverse(), def, locomotion_turn(player,def) if use_locomotion else 0.0)
 
 static func abdomen_transform(player, def, use_locomotion: bool = true) -> Transform3D:
-	var bend: = _stance_rotation(player, Vector3( - def.spine_curve_deg * Dimensions.ABDOMEN_BEND_SHARE, 0, 0))
-	return pelvis_transform(player, def, use_locomotion) * Transform3D(bend, Vector3(0, Dimensions.PELVIS_HALF_HEIGHT, 0))
+	var stance: Basis = _stance(player)
+	var inv: Basis = stance.inverse()
+	return _abdomen(stance, inv, def, _pelvis(stance, inv, def, locomotion_turn(player,def) if use_locomotion else 0.0))
 
 static func waist_transform(player, def, use_locomotion: bool = true) -> Transform3D:
-	var bend: = _stance_rotation(player, Vector3( - def.spine_curve_deg * (1.0 - Dimensions.ABDOMEN_BEND_SHARE), 0, 0))
-	return abdomen_transform(player, def, use_locomotion) * Transform3D(bend, Vector3(0, Dimensions.ABDOMEN_LENGTH, 0))
+	var stance: Basis = _stance(player)
+	var inv: Basis = stance.inverse()
+	return _waist(stance, inv, def, _abdomen(stance, inv, def, _pelvis(stance, inv, def, locomotion_turn(player,def) if use_locomotion else 0.0)))
 
 static func torso_transform(player, def, use_locomotion: bool = true) -> Transform3D:
+	var stance: Basis = _stance(player)
+	var inv: Basis = stance.inverse()
 	var weight:float=locomotion_weight(player,def) if use_locomotion else 0.0
-	var counterturn: float = sin(deg_to_rad(player.leg_ik.locomotion_hip_yaw_deg))*30.0*weight if weight > 0.0 else 0.0
-	var bend: = _stance_rotation(player, Vector3( - (28.0 + def.torso_pitch_deg), - def.torso_yaw_deg + counterturn, def.torso_roll_deg))
-	return waist_transform(player, def, use_locomotion) * Transform3D(bend, Vector3.ZERO) * Transform3D(Basis.IDENTITY, WAIST_TO_CHEST)
+	var pelvis: Transform3D = _pelvis(stance, inv, def, _turn_for(player, def, weight))
+	return _torso(stance, inv, def, _waist(stance, inv, def, _abdomen(stance, inv, def, pelvis)), _counterturn(player, weight))
 
 static func shoulder_local(player, def, side: float) -> Vector3:
 	return player._get_forehand_axis() * side * Dimensions.SHOULDER_HALF_WIDTH + Vector3.UP * Dimensions.SHOULDER_ABOVE_CHEST + player._get_forward_axis() * clampf(def.shoulder_protraction_m, 0.0, 0.05)
@@ -234,10 +315,17 @@ static func shoulder_world(player, def, actual_body_transform = null, include_po
 
 static func apply(player, def) -> void :
 	if player.body_pivot == null: return
-	player.body_pivot.transform = pivot_transform(player, def)
-	player.body_pivot.set_meta("pose_body_position_applied", player.body_pivot.position - untranslated_pivot_transform(player, def).origin)
-	var chest_transform: Transform3D = torso_transform(player, def)
-	var pelvis: Transform3D = pelvis_transform(player, def)
+	var base_pivot: Transform3D = untranslated_pivot_transform(player, def)
+	var pivot: Transform3D = base_pivot
+	pivot.origin += position_offset(player, def)
+	player.body_pivot.transform = pivot
+	player.body_pivot.set_meta("pose_body_position_applied", player.body_pivot.position - base_pivot.origin)
+	var stance: Basis = _stance(player)
+	var inv: Basis = stance.inverse()
+	var weight: float = locomotion_weight(player, def)
+	var pelvis: Transform3D = _pelvis(stance, inv, def, _turn_for(player, def, weight))
+	var abdomen: Transform3D = _abdomen(stance, inv, def, pelvis)
+	var chest_transform: Transform3D = _torso(stance, inv, def, _waist(stance, inv, def, abdomen), _counterturn(player, weight))
 	var torso: Node3D = player.body_pivot.get_node_or_null("TorsoMesh")
 	if torso:
 		torso.transform = chest_transform
@@ -247,7 +335,7 @@ static func apply(player, def) -> void :
 	var hips: Node3D = player.body_pivot.get_node_or_null("HipsMesh")
 	if hips: hips.transform = pelvis
 	var skin = player.body_pivot.get_meta("articulated_torso") if player.body_pivot.has_meta("articulated_torso") else null
-	if skin: skin.update_frames(pelvis, abdomen_transform(player, def), chest_transform)
+	if skin: skin.update_frames(pelvis, abdomen, chest_transform)
 	for side in [1, -1]:
 		var arm = player.right_arm_node if side == 1 else player.left_arm_node
 		if arm:

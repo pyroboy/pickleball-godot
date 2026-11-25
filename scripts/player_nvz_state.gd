@@ -65,8 +65,22 @@ func update(player) -> void :
 	if both_outside: established_outside = true
 
 func can_volley(player) -> bool:
+	# Perf (PerfToggles.nvz_once_per_tick): the player's physics step scans the finished rig once a
+	# tick (endpoint_tick, player.refresh_contact_support). A question later in that tick, or at
+	# the start of the next one before anything has moved, reads that answer instead of scanning
+	# the same body again (was 2-3 scans a tick; a scan walks every body mesh near the kitchen).
+	if PerfToggles.nvz_once_per_tick and endpoint_tick >= 0:
+		var tick: int = Engine.get_physics_frames()
+		if endpoint_tick == tick or (endpoint_tick == tick - 1 and endpoint_root == player.global_position): return established_outside
 	update(player)
 	return established_outside
+
+## Physics tick and root position of the last scan made on the finished rig of a physics step.
+var endpoint_tick: int = -1
+var endpoint_root := Vector3.INF
+func mark_endpoint(player) -> void:
+	endpoint_tick = Engine.get_physics_frames()
+	endpoint_root = player.global_position
 
 static func ground_contacts(player) -> Array[Dictionary]:
 	var contacts: Array[Dictionary] = footprints(player)

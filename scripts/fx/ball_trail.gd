@@ -85,6 +85,14 @@ func _perf_physics_process(delta: float) -> void:
 		_clear_history()
 	_previous_position = position
 	_previous_delta = maxf(delta, 0.0)
+	var settings_for_blur: Node = get_node_or_null("/root/Settings")
+	if settings_for_blur != null and settings_for_blur.has_method("get_value"):
+		_blur_setting = float(settings_for_blur.call("get_value", BLUR_KEY, 1.0)) if bool(settings_for_blur.call("get_value", "video.blur_ball", true)) else 0.0
+		var holes: bool = bool(settings_for_blur.call("get_value", "video.ball_holes", true))
+		if holes != _holes_on:
+			_holes_on = holes
+			var materials: Array = _ball.get("blur_materials")
+			if materials != null and not materials.is_empty(): (materials[0] as ShaderMaterial).set_shader_parameter("holes", HOLES_DARKNESS if holes else 0.0)
 	if not _settings_allows_trail():
 		_clear_history()
 		return
@@ -108,6 +116,89 @@ func _perf_physics_process(delta: float) -> void:
 
 func _process(_delta: float) -> void:
 	_rebuild_mesh()
+	_place_blur(_delta)
+
+## Motion blur of the ball (shaders/ball_shape.gdshaderinc `motion`): in flight the ball is
+## drawn as an oblong, lengthened back along the way it was just drawn travelling by what it
+## covers in BLUR_SECONDS. Its front tip stays the real ball's front. A slow ball stays round.
+## Capped at BLUR_MAX_M; round while the ball is held, frozen for a hit stop, or the setting is 0.
+const BLUR_SECONDS := 1.0 / 95.0      # at strength 1: the oblong is this much of the ball's travel longer than the ball
+const BLUR_SPEED_FROM := 3.0          # m/s where the stretch starts
+const BLUR_SPEED_FULL := 7.0          # m/s where it is at full length
+const BLUR_MAX_M := 0.14              # longest extra length (the drawn ball is 0.11 m across)
+const BLUR_DEPTH_STRETCH := 0.7        # share of the missing on-screen length given back to a flight in depth
+const BLUR_DEPTH_STRETCH_MAX := 2.5    # at most this much longer
+const BLUR_KEY := "video.motion_smear"
+var _blur_setting: float = 1.0
+var _blur_shown := Vector3.ZERO
+
+var _blur_head := Vector3.INF      # where the ball was drawn last frame
+var _blur_velocity := Vector3.ZERO # the drawn ball's own velocity, lightly eased
+
+const HOLES_DARKNESS := 0.75   # shaders/ball_body.gdshader `holes`
+var _holes_on := true
+var _turn := Basis.IDENTITY   # the ball's accumulated spin, for the holes (shaders/ball_body.gdshader `turn`)
+
+## The drawn ball does not rotate with the body, so its holes are turned here. The game's own
+## spin is used when a shot has any (it is zero on most shots: 14 of 1,150 flight ticks on Hard,
+## none on Easy), otherwise the ball rolls forward along its flight like a ball with a little
+## topspin, at a rate the eye can follow (a real ball's 10-20 turns a second would only
+## flicker at 60 frames a second). It runs on game time, so in slow motion the ball turns
+## slowly. Nothing is turned while the ball is lengthened by motion blur: its holes are faded
+## out then, so the spin could not be seen anyway.
+const SPIN_PER_MPS := 1.6      # rad/s of shown roll per m/s of flight speed
+const SPIN_MIN := 2.5          # rad/s: a slow ball still visibly turns
+const SPIN_MAX := 12.0         # rad/s: under 2 turns a second
+const SPIN_HIDDEN_M := 0.07    # blur length from which the holes are faded out (shaders/ball_body.gdshader)
+func _turn_holes(delta: float) -> void:
+	if delta <= 0.0 or not _ball.is_in_play or _ball.is_time_frozen() or _blur_shown.length() > SPIN_HIDDEN_M: return
+	var spin: Vector3 = _ball.angular_velocity
+	if spin.length() < 1.0:
+		var velocity: Vector3 = _ball.linear_velocity
+		var level := Vector3(velocity.x, 0.0, velocity.z)
+		if level.length() < 0.3: return
+		spin = Vector3.UP.cross(level.normalized()) * clampf(velocity.length() * SPIN_PER_MPS, SPIN_MIN, SPIN_MAX)
+	var rate: float = minf(spin.length(), SPIN_MAX)
+	_turn = (Basis(spin.normalized(), rate * delta) * _turn).orthonormalized()
+	var materials: Array = _ball.get("blur_materials")
+	# The shader turns surface points into the ball's frame: the inverse of the ball's turn.
+	if materials != null and not materials.is_empty(): (materials[0] as ShaderMaterial).set_shader_parameter("turn", _turn.inverse())
+
+func _place_blur(delta: float) -> void:
+	if not is_instance_valid(_ball) or get_tree().paused: return   # paused: the ball keeps its blur as it was
+	_turn_holes(delta)
+	var blur: Array = _ball.get("blur_materials")
+	if blur == null or blur.is_empty(): return
+	# The drawn ball's own motion from frame to frame: it is there on every frame of a flight,
+	# through bounces and hits, and points along what the eye actually saw (the physics
+	# velocity turns a tick before the drawn ball does).
+	var head: Vector3 = _ball.get_meta("render_origin", _ball.get_global_transform_interpolated().origin)
+	var want := Vector3.ZERO
+	if _blur_setting > 0.0 and delta > 0.0 and _blur_head.is_finite() and _ball.is_in_play and not _ball.is_time_frozen():
+		var step: Vector3 = head - _blur_head
+		if step.length() <= Ball.MAX_SPEED * delta * 2.0 + Ball.BALL_RADIUS * 2.0:   # not a reset or teleport
+			_blur_velocity = _blur_velocity.lerp(step / delta, 0.6)
+			var speed: float = _blur_velocity.length()
+			var ease: float = clampf((speed - BLUR_SPEED_FROM) / (BLUR_SPEED_FULL - BLUR_SPEED_FROM), 0.0, 1.0)
+			if ease > 0.0:
+				# Stretch blur: a ball flying into the court moves little across the screen, so its
+				# streak is lengthened toward what the same speed would show sideways.
+				var stretch := 1.0
+				var cam: Camera3D = get_viewport().get_camera_3d()
+				if cam != null:
+					var seen: Vector3 = cam.global_transform.basis.inverse() * (_blur_velocity / speed)
+					var across: float = Vector2(seen.x, seen.y).length()
+					stretch = lerpf(1.0, minf(1.0 / maxf(across, 0.001), BLUR_DEPTH_STRETCH_MAX), BLUR_DEPTH_STRETCH)
+				# Slow motion: the exposure is real time, so the blur shrinks with the slow-down (the
+				# ball crosses less of the screen per frame) and is gone near a freeze.
+				var slow: float = clampf(Engine.time_scale, 0.0, 1.0)
+				want = _blur_velocity / speed * minf(speed * BLUR_SECONDS * _blur_setting * ease * stretch, BLUR_MAX_M * minf(stretch, 1.6)) * slow
+		else: _blur_velocity = Vector3.ZERO
+	else: _blur_velocity = Vector3.ZERO
+	_blur_head = head
+	if want.is_equal_approx(_blur_shown): return
+	_blur_shown = want
+	for material: ShaderMaterial in blur: material.set_shader_parameter("motion", want)
 
 func _exit_tree() -> void:
 	if RenderingServer.frame_pre_draw.is_connected(_before_draw):
@@ -137,7 +228,8 @@ func _before_draw() -> void:
 		_clear_history()
 
 func _rebuild_mesh() -> void :
-	visible = _place()
+	# The motion-blur streak replaces this short flat one while it is drawn.
+	visible = _place() and _blur_shown == Vector3.ZERO
 
 ## Places the streak for this frame; false when there is nothing to show.
 func _place() -> bool:

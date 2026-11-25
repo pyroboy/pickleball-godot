@@ -189,6 +189,9 @@ func _ready() -> void :
 	_posture_lib = PostureLibrary.instance()
 	_skeleton_applier = load("res://scripts/posture_skeleton_applier.gd").new(_player)
 	_offset_resolver = load("res://scripts/posture_offset_resolver.gd").new(_player)
+	# Perf: the resolver reads the poses from disk the first time it is asked (about 15 ms on the
+	# Mac). That was the first AI plan of the first rally; it now happens here, while the match loads.
+	_offset_resolver._get_posture_lib()
 	_commit_selector = load("res://scripts/posture_commit_selector.gd").new()
 	_init_posture_zones()
 
